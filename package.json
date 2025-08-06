@@ -3,6 +3,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
+  "imports": {
+    "#root/*": "./*",
+    "#util/*": "./src/util/*",
+    "#models/*": "./src/models/*",
+    "#controllers/*": "./src/controllers/*",
+    "#routes/*": "./src/routes/*",
+    "#middleware/*": "./src/middleware/*",
+    "#validations/*": "./src/validations/*",
+    "#config/*": "./src/config/*",
+    "#helpers/*": "./src/helpers/*"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/server.js",
@@ -13,11 +24,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.16.4"
+    "mongoose": "^8.16.4",
+    "zod": "^4.0.10"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
