@@ -1,0 +1,6 @@
+echo ":white_check_mark: Running pre-commit: formatting & linting staged files"
+# Format only staged files
+npm run format:staged || exit 1
+# Run Next.js lint
+npm run lint || exit 1
+echo ":white_check_mark: Pre-commit checks passed!"

@@ -1,0 +1,10 @@
+echo ":mag: Checking branch name..."
+BRANCH_NAME=$(git symbolic-ref --short HEAD)
+BRANCH_REGEX="^(bugfix|chore|enhancement|feature|hotfix|refactor)/[a-z0-9._-]+$"
+if ! echo "$BRANCH_NAME" | grep -Eq "$BRANCH_REGEX"; then
+  echo ":x: Invalid branch name: '$BRANCH_NAME'"
+  echo ""
+  echo "Branch name must match: 'bugfix/xxx', 'chore/xxx', 'enhancement/xxx', 'feature/xxx', 'hotfix/xxx', or 'refactor/xxx'" 
+  exit 1
+fi
+echo ":white_check_mark: Branch name is valid: '$BRANCH_NAME'"
