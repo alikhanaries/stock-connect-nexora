@@ -51,10 +51,6 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    availableSuppliers: {
-      type: [String],
-      default: [],
-    },
   },
   { timestamps: true }
 );
