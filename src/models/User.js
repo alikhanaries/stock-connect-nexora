@@ -1,12 +1,12 @@
-import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
   {
     email: {
       type: String,
-      required: [true, "Email is required!"],
-      unique: [true, "Email already exists!"],
+      required: [true, 'Email is required!'],
+      unique: [true, 'Email already exists!'],
       lowercase: true,
       trim: true,
       validate: {
@@ -18,22 +18,22 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Password is required!"],
-      minlength: [6, "Password must be at least 6 characters long"],
+      required: [true, 'Password is required!'],
+      minlength: [6, 'Password must be at least 6 characters long'],
       select: false,
     },
     firstName: {
       type: String,
-      required: [true, "First name is required"],
+      required: [true, 'First name is required'],
     },
     lastName: {
       type: String,
-      required: [true, "Last name is required"],
+      required: [true, 'Last name is required'],
     },
     role: {
       type: String,
-      enum: ["admin", "super_admin"],
-      required: [true, "Role is required!"],
+      enum: ['admin', 'super_admin'],
+      required: [true, 'Role is required!'],
       index: true,
     },
     isActive: {
@@ -47,13 +47,17 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
     lastLogin: Date,
+    isSupplierConnected: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
 
 // Password hashing middleware
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+userSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
 
   try {
     const salt = await bcrypt.genSalt(10);
@@ -69,10 +73,10 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   try {
     return await bcrypt.compare(candidatePassword, this.password);
   } catch (error) {
-    console.log("Error comparing password:", error?.message);
+    console.log('Error comparing password:', error?.message);
     return false;
   }
 };
 
-const User = mongoose.model("User", userSchema);
+const User = mongoose.model('User', userSchema);
 export default User;

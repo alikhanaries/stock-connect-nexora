@@ -8,8 +8,8 @@ export const generateToken = (payload, expiresIn = '6h') => {
 
 export const generateTokenResponse = (user, role) => {
   try {
-    const { _id, email, firstName, lastName } = user;
-    const payload = { id: _id, email, firstName, lastName, role };
+    const { _id, email, firstName, lastName, isSupplierConnected } = user;
+    const payload = { id: _id, email, firstName, lastName, role, isSupplierConnected };
 
     const token = generateToken(payload);
     const refreshToken = generateToken({ id: _id, type: 'refresh' }, '24h');
