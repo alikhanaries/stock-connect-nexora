@@ -22,7 +22,7 @@ export const generateTokenResponse = (user, role) => {
       tokenExpiryTime,
       refreshTokenExpiryTime,
       refreshToken,
-      user: payload,
+      ...payload,
     };
 
     return tokenResponse;
