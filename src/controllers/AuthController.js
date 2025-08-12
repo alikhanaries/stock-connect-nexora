@@ -57,6 +57,7 @@ export const register = async (req, res) => {
       firstName,
       lastName,
       role,
+      isSupplierConnected: false,
     });
 
     await newUser.save();
@@ -69,7 +70,7 @@ export const register = async (req, res) => {
     }
 
     // Respond with the success response and JWT token
-    res.status(201).json(formatSuccessResponse(tokenResponse));
+    res.status(201).json(formatSuccessResponse(tokenResponse, 'Registration successful.'));
   } catch (error) {
     errorHandler(error, res);
   }
