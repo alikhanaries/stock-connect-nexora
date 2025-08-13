@@ -1,5 +1,5 @@
 import User from '#models/User.js';
-import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
+import { formatErrorResponse } from '#util/responseFormatter.js';
 
 export const userData = async (req, res) => {
   try {
