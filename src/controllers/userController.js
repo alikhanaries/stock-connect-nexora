@@ -23,11 +23,9 @@ export const userData = async (req, res) => {
 export const userUpdate = async (req, res) => {
   try {
     const id = req.user._id;
-    console.log('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
     const { firstName, lastName, role, email, isActive } = req.body;
 
     const updatedUser = await User.findByIdAndUpdate(id, { firstName, lastName, role, email, isActive }, { new: true });
-    console.log('.......................................', updatedUser);
     if (!updatedUser) {
       return res.status(404).json(formatErrorResponse('User not found', 404));
     }
