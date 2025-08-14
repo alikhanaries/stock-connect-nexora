@@ -17,11 +17,13 @@ export const getUserData = async (req, res) => {
 export const userUpdate = async (req, res) => {
   try {
     const id = req.user._id;
-    const { firstName, lastName, email } = req.body;
+    const { firstName, lastName, email, phoneNumber } = req.body;
 
-    const updatedUser = await User.findByIdAndUpdate(id, { firstName, lastName, email }, { new: true }).select(
-      '-isDeleted'
-    );
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
+      { firstName, lastName, email, phoneNumber },
+      { new: true }
+    ).select('-isDeleted');
     if (!updatedUser) {
       return res.status(404).json(formatErrorResponse('User not found', 404));
     }

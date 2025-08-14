@@ -40,7 +40,7 @@ export const login = async (req, res) => {
 
 export const register = async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role } = req.body;
+    const { email, password, firstName, lastName, role, phoneNumber } = req.body;
 
     if (!email || !password || !firstName || !lastName || !role) {
       return res.status(400).json(formatErrorResponse('Missing inputs', 400));
@@ -58,6 +58,7 @@ export const register = async (req, res) => {
       lastName,
       role,
       isSupplierConnected: false,
+      phoneNumber,
     });
 
     // Generate JWT token

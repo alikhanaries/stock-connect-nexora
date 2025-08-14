@@ -30,6 +30,17 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Last name is required'],
     },
+    phoneNumber: {
+      type: String,
+      unique: [true, 'Phone number already exists!'],
+      trim: true,
+      validate: {
+        validator: function (v) {
+          return /^\d{10}$/.test(v);
+        },
+        message: (props) => `${props.value} is not a valid 10-digit phone number!`,
+      },
+    },
     role: {
       type: String,
       enum: ['admin', 'super_admin'],
