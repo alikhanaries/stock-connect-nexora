@@ -6,6 +6,7 @@
   "imports": {
     "#root/*": "./*",
     "#util/*": "./src/util/*",
+    "#service/*": "./src/service/*",
     "#models/*": "./src/models/*",
     "#controllers/*": "./src/controllers/*",
     "#routes/*": "./src/routes/*",
@@ -16,7 +17,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node src/server.js",
+    "start": "nodemon src/server.js",
     "dev": "nodemon src/server.js",
     "lint": "eslint src --fix",
     "prettier": "prettier . --ignore-path .prettierignore",
