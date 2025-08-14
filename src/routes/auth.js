@@ -1,12 +1,22 @@
-import express from "express";
-import { login, refreshToken, register } from "#controllers/AuthController.js";
-import { validateInput } from "#middleware/index.js";
-import { loginSchema, registerSchema } from "#validations/auth.js";
+import express from 'express';
+import {
+  login,
+  refreshToken,
+  register,
+  forgotPassword,
+  validateResetToken,
+  resetPassword,
+} from '#controllers/AuthController.js';
+import { validateInput } from '#middleware/index.js';
+import { loginSchema, registerSchema } from '#validations/auth.js';
 
 const router = express.Router();
 
-router.post("/login", validateInput(loginSchema), login);
-router.post("/register", validateInput(registerSchema), register);
-router.post("/refresh-token", refreshToken);
+router.post('/login', validateInput(loginSchema), login);
+router.post('/register', validateInput(registerSchema), register);
+router.post('/refresh-token', refreshToken);
+router.post('/forget-password', forgotPassword);
+router.post('/validate-reset-token', validateResetToken);
+router.post('/reset-password', resetPassword);
 
 export default router;
