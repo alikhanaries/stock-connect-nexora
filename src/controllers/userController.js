@@ -27,12 +27,33 @@ export const userUpdate = async (req, res) => {
     if (!updatedUser) {
       return res.status(404).json(formatErrorResponse('User not found', 404));
     }
-    res.status(201).json({
+    res.status(200).json({
       success: true,
       message: 'Opration successfully',
       data: updatedUser,
     });
   } catch (err) {
-    res.status(400).json(formatErrorResponse(err?.message || 'Failed to update user'));
+    res.status(500).json(formatErrorResponse(err?.message || 'Failed to update user'));
+  }
+};
+
+export const getAllUser = async (req, res) => {
+  try {
+    const user = await User.find({ isDeleted: false });
+    res.status(200).json(user);
+  } catch (err) {
+    res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
+  }
+};
+export const getUserId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await User.findById(id);
+    if (!data) {
+      return res.status(404).json(formatErrorResponse('User not found', 404));
+    }
+    res.status(200).json(data);
+  } catch (err) {
+    res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
   }
 };
