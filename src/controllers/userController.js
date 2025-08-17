@@ -39,7 +39,17 @@ export const userUpdate = async (req, res) => {
 
 export const getAllUser = async (req, res) => {
   try {
-    const user = await User.find({ isDeleted: false });
+    const { role, isActive } = req.query;
+    const filter = {
+      isDeleted: false,
+    };
+    if (role) {
+      filter.role = role;
+    }
+    if (isActive) {
+      filter.isActive = isActive;
+    }
+    const user = await User.find(filter);
     res.status(200).json(user);
   } catch (err) {
     res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
@@ -53,6 +63,24 @@ export const getUserId = async (req, res) => {
       return res.status(404).json(formatErrorResponse('User not found', 404));
     }
     res.status(200).json(data);
+  } catch (err) {
+    res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
+  }
+};
+
+export const searchByName = async (req, res) => {
+  try {
+    const { name } = req.query;
+    if (!name) {
+      return res.status(200).json([]);
+    }
+    const searchgex = new RegExp(name, 'i');
+
+    const user = await User.find({
+      isDeleted: false,
+      $or: [{ firstName: searchgex }, { lastName: searchgex }],
+    });
+    res.status(200).json(user);
   } catch (err) {
     res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
   }
