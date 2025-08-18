@@ -1,7 +1,7 @@
 import User from '#models/User.js';
 import { formatErrorResponse } from '#util/responseFormatter.js';
 
-export const getUserData = async (req, res) => {
+export const getUser = async (req, res) => {
   try {
     const id = req.user._id;
     const newUser = await User.findById(id).select('-isDeleted');
@@ -14,7 +14,7 @@ export const getUserData = async (req, res) => {
   }
 };
 
-export const userUpdate = async (req, res) => {
+export const updateUser = async (req, res) => {
   try {
     const id = req.user._id;
     const { firstName, lastName, email, phoneNumber } = req.body;
@@ -37,25 +37,44 @@ export const userUpdate = async (req, res) => {
   }
 };
 
-export const getAllUser = async (req, res) => {
+export const getAllUsers = async (req, res) => {
   try {
-    const { role, isActive } = req.query;
-    const filter = {
-      isDeleted: false,
-    };
+    const { role, active } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const size = parseInt(req.query.size) || 10;
+    const skip = (page - 1) * size;
+
+    const filter = { isDeleted: false };
     if (role) {
       filter.role = role;
     }
-    if (isActive) {
-      filter.isActive = isActive;
+    if (active) {
+      filter.active = active;
     }
-    const user = await User.find(filter);
-    res.status(200).json(user);
+    const totalElements = await User.countDocuments(filter);
+    const users = await User.find(filter).skip(skip).limit(size);
+    const response = {
+      content: users,
+      appliedFilters: {
+        ...(active && { active: active }),
+        ...(role && { type: role }),
+      },
+      page: page,
+      size: size,
+      totalElements: totalElements,
+      totalPages: Math.ceil(totalElements / size),
+      last: page >= Math.ceil(totalElements / size),
+      first: page === 1,
+      success: true,
+      status: 200,
+    };
+
+    res.status(200).json(response);
   } catch (err) {
     res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
   }
 };
-export const getUserId = async (req, res) => {
+export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     const data = await User.findById(id);
@@ -63,24 +82,6 @@ export const getUserId = async (req, res) => {
       return res.status(404).json(formatErrorResponse('User not found', 404));
     }
     res.status(200).json(data);
-  } catch (err) {
-    res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
-  }
-};
-
-export const searchByName = async (req, res) => {
-  try {
-    const { name } = req.query;
-    if (!name) {
-      return res.status(200).json([]);
-    }
-    const searchgex = new RegExp(name, 'i');
-
-    const user = await User.find({
-      isDeleted: false,
-      $or: [{ firstName: searchgex }, { lastName: searchgex }],
-    });
-    res.status(200).json(user);
   } catch (err) {
     res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
   }

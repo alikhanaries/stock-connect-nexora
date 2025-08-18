@@ -1,13 +1,12 @@
 import express from 'express';
 import { authMiddleware } from '#middleware/index.js';
-import { getAllUser, getUserData, getUserId, searchByName, userUpdate } from '#controllers/userController.js';
+import { getAllUsers, getUserById, getUser, updateUser } from '#controllers/userController.js';
 
 const user = express.Router();
 
-user.get('/', authMiddleware, getUserData);
-user.patch('/update', authMiddleware, userUpdate);
-user.get('/search', searchByName);
-user.get('/all', getAllUser);
-user.get('/:id', getUserId);
+user.get('/me', authMiddleware, getUser);
+user.patch('/me', authMiddleware, updateUser);
+user.get('/', getAllUsers);
+user.get('/:id', getUserById);
 
 export default user;

@@ -47,7 +47,7 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Role is required!'],
       index: true,
     },
-    isActive: {
+    active: {
       type: Boolean,
       default: true,
       index: true,
