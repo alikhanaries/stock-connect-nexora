@@ -1,7 +1,7 @@
 import User from '#models/User.js';
 import { formatErrorResponse } from '#util/responseFormatter.js';
 
-export const getUserData = async (req, res) => {
+export const getUser = async (req, res) => {
   try {
     const id = req.user._id;
     const newUser = await User.findById(id).select('-isDeleted');
@@ -14,7 +14,7 @@ export const getUserData = async (req, res) => {
   }
 };
 
-export const userUpdate = async (req, res) => {
+export const updateUser = async (req, res) => {
   try {
     const id = req.user._id;
     const { firstName, lastName, email, phoneNumber } = req.body;
@@ -37,7 +37,7 @@ export const userUpdate = async (req, res) => {
   }
 };
 
-export const getAllUser = async (req, res) => {
+export const getAllUsers = async (req, res) => {
   try {
     const user = await User.find({ isDeleted: false });
     res.status(200).json(user);
@@ -45,7 +45,7 @@ export const getAllUser = async (req, res) => {
     res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
   }
 };
-export const getUserId = async (req, res) => {
+export const getUserById = async (req, res) => {
   try {
     const { id } = req.params;
     const data = await User.findById(id);
