@@ -39,7 +39,7 @@ export const updateUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
-    const { role, active } = req.query;
+    const { role, active, name } = req.query;
     const page = parseInt(req.query.page) || 1;
     const size = parseInt(req.query.size) || 10;
     const skip = (page - 1) * size;
@@ -51,6 +51,11 @@ export const getAllUsers = async (req, res) => {
     if (active) {
       filter.active = active;
     }
+    if (name) {
+      const searchRegex = new RegExp(name, 'i');
+      filter.$or = [{ firstName: searchRegex }, { lastName: searchRegex }];
+    }
+
     const totalElements = await User.countDocuments(filter);
     const users = await User.find(filter).skip(skip).limit(size);
     const response = {
