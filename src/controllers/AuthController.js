@@ -1,7 +1,8 @@
 import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
-import { generateTokenResponse, decodeToken } from '#util/token.js';
+import { generateTokenResponse, decodeToken, generateResetToken } from '#util/token.js';
 import { errorHandler } from '#helpers/ErrorHandler.js';
+import crypto from 'crypto';
 
 export const login = async (req, res) => {
   try {
@@ -92,6 +93,74 @@ export const refreshToken = async (req, res) => {
 
     const tokenResponse = generateTokenResponse(user, user.role);
     res.json(formatSuccessResponse(tokenResponse));
+  } catch (error) {
+    errorHandler(error, res);
+  }
+};
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json(formatErrorResponse('Missing inputs', 400));
+    }
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json(formatErrorResponse(`user not found with given ${email}`, 400));
+
+    const { token, hashedToken } = generateResetToken();
+
+    if (!token || !hashedToken) {
+      return res.status(400).json(formatErrorResponse('unable to generate reset token', 400));
+    }
+
+    user.resetPasswordToken = hashedToken;
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
+    await user.save();
+
+    // In production, send `token` to user via email
+
+    res.json(formatSuccessResponse({ token }));
+  } catch (error) {
+    errorHandler(error, res);
+  }
+};
+
+export const validateResetToken = async (req, res) => {
+  try {
+    const { resetToken } = req.body;
+    if (!resetToken) {
+      return res.status(400).json(formatErrorResponse('require resetToken', 400));
+    }
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+    res.json(formatSuccessResponse({ valid: !!user }));
+  } catch (error) {
+    errorHandler(error, res);
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    if (!resetToken || !newPassword) {
+      return res.status(400).json(formatErrorResponse('Missing inputs', 400));
+    }
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const user = await User.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() },
+    });
+
+    if (!user) res.status(400).json(formatErrorResponse('invalid or expired token', 400));
+    user.password = newPassword;
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    await user.save();
+
+    res.json(formatSuccessResponse({}, 'password reset successful'));
   } catch (error) {
     errorHandler(error, res);
   }

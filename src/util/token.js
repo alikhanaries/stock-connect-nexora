@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { config } from '#config/config.js';
+import crypto from 'crypto';
 
 export const generateToken = (payload, expiresIn = '6h') => {
   const token = jwt.sign(payload, config.JWT_SECRET, { expiresIn });
@@ -35,6 +36,16 @@ export const decodeToken = (token) => {
   try {
     const decoded = jwt.verify(token, config.JWT_SECRET);
     return decoded;
+  } catch (error) {
+    return error && false;
+  }
+};
+
+export const generateResetToken = () => {
+  try {
+    const token = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    return { token, hashedToken };
   } catch (error) {
     return error && false;
   }
