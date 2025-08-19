@@ -60,14 +60,14 @@ export const register = async (req, res) => {
       isSupplierConnected: false,
       phoneNumber,
     });
-
+    await newUser.save();
     // Generate JWT token
     const tokenResponse = generateTokenResponse(newUser, newUser.role);
 
     if (!tokenResponse) {
       return res.status(500).json(formatErrorResponse('Error generating token', 500));
     }
-    await newUser.save();
+
     // Respond with the success response and JWT token
     res.status(201).json(formatSuccessResponse(tokenResponse, 'Registration successful.'));
   } catch (error) {

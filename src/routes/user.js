@@ -6,7 +6,7 @@ const user = express.Router();
 
 user.get('/me', authMiddleware, getUserById);
 user.patch('/me', authMiddleware, updateUser);
-user.get('/', getAllUsers);
-user.get('/:id', getUserById);
+user.get('/', authMiddleware, getAllUsers);
+user.get('/:id', authMiddleware, getUserById);
 
 export default user;
