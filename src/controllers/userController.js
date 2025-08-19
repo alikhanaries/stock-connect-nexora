@@ -1,14 +1,16 @@
 import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
+
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
+
 export const getUserById = async (req, res) => {
   try {
     const id = req.params.id || req.user._id;
-    const user = await User.findById(id).select(userSafeFields);
+    const user = await User.findById(id).select(userSafeFields).lean();
     if (!user) {
       return res.status(404).json(formatErrorResponse('User not found', 404));
     }
-    res.status(200).json(formatSuccessResponse(user.toObject(), 'User fetched successfully'));
+    res.status(200).json(formatSuccessResponse(user, 'User fetched successfully'));
   } catch (err) {
     res.status(400).json(formatErrorResponse(err?.message || 'Failed to fetch user data'));
   }
@@ -35,10 +37,12 @@ export const updateUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
-    const { role, active, name } = req.query;
-    const page = parseInt(req.query.page) || 1;
-    const size = parseInt(req.query.size) || 10;
-    const skip = (page - 1) * size;
+    const { role, active, name, page, size = 10 } = req.query;
+
+    const pageNum = parseInt(page);
+    const limit = parseInt(size);
+
+    const skip = (pageNum - 1) * limit;
 
     const filter = { isDeleted: false };
     if (role) {
@@ -57,19 +61,16 @@ export const getAllUsers = async (req, res) => {
       User.countDocuments(filter),
       User.find(filter).skip(skip).limit(size).select(userSafeFields),
     ]);
-    const pages = Math.ceil(totalElements / size);
     const response = {
       content: users,
       appliedFilters: {
         ...(active && { active: active }),
         ...(role && { role: role }),
       },
-      page: page,
+      page: pageNum,
       size: size,
       totalElements: totalElements,
-      totalPages: pages,
-      last: page >= pages,
-      first: page === 1,
+      totalPages: Math.ceil(totalElements / size),
       success: true,
       status: 200,
     };
