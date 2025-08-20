@@ -32,14 +32,9 @@ const userSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
+      required: [true, 'Phone number is required'],
       unique: [true, 'Phone number already exists!'],
       trim: true,
-      validate: {
-        validator: function (v) {
-          return /^\d{12}$/.test(v);
-        },
-        message: (props) => `${props.value} is not a valid 12-digit phone number!`,
-      },
     },
     role: {
       type: String,
