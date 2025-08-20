@@ -59,7 +59,7 @@ export const getAllUsers = async (req, res) => {
     }
     const [totalElements, users] = await Promise.all([
       User.countDocuments(filter),
-      User.find(filter).lean().skip(skip).limit(size).select(userSafeFields),
+      User.find(filter).skip(skip).limit(size).select(userSafeFields).lean(),
     ]);
     const response = {
       content: users,

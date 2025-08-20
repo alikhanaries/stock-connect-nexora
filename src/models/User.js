@@ -38,7 +38,7 @@ const userSchema = new mongoose.Schema(
         validator: function (v) {
           return /^\d{12}$/.test(v);
         },
-        message: (props) => `${props.value} is not a valid 10-digit phone number!`,
+        message: (props) => `${props.value} is not a valid 12-digit phone number!`,
       },
     },
     role: {
