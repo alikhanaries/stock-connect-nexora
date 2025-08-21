@@ -7,6 +7,10 @@ import { getAllChannelsFromChannelPartner } from '../controllers/channelControll
 const router = express.Router();
 
 // /* GET ALL CHANNEL LIST FROM CHANNEL PARTNER */
-router.get('/getAllChannelsFromChannelPartner', getAllChannelsFromChannelPartner);
+router.get(
+  '/getAllChannelsFromChannelPartner',
+  // getAllChannelsFromChannelPartner,  // IT IS COMMENTED FOR WHEN AUTHORIZATION KEY WILL BE ADDED
+  getAllChannelsFromChannelPartner
+);
 
 export default router;
