@@ -10,14 +10,14 @@ const AttributeSchema = new mongoose.Schema(
 
 const ProductSchema = new mongoose.Schema(
   {
-    parentProductId: { type: String },
+    parentProductId: { type: String, trim: true },
     parentProductSkuCode: { type: String, trim: true },
     productSkuCode: { type: String, trim: true },
     name: { type: String, required: true, trim: true },
     description: { type: String },
     brand: { type: String, trim: true },
     attributes: [AttributeSchema],
-    ean: { type: Number, trim: true, unique: true },
+    ean: { type: String, trim: true, unique: true },
     price: { type: Number, required: true },
     minPrice: { type: Number },
     maxPrice: { type: Number },
@@ -27,6 +27,10 @@ const ProductSchema = new mongoose.Schema(
       type: String,
       enum: ['STANDARD', 'REDUCED', 'ZERO'],
       default: 'STANDARD',
+    },
+    status: {
+      type: Boolean,
+      default: true,
     },
     shippingCost: { type: Number, default: 0 },
     shippingTime: { type: String },
