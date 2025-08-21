@@ -3,7 +3,7 @@ import * as Responses from '../helpers/response.js';
 import { errorLog } from '../middleware/errorLog.js';
 
 // GET ALL CHANNELS FROM CHANEL
-export const getAllChannelsFromChannelPartner = async (req, res, next) => {
+export const getAllChannelsFromChannelPartnerValidator = async (req, res, next) => {
   try {
     const headerSchema = Joi.object({
       headers: Joi.object({

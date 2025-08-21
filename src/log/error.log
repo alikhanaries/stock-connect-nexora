@@ -71,3 +71,7 @@ Stack Trace: ReferenceError: User is not defined
     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
     at async getAllChannelsFromChannelPartner (file:///D:/PROJECTS/STOCKBE/stock-connect-backend/src/controllers/channelController.js:9:20)
 
+Date: 21/08/2025, Time: 21:34
+Error: "headers.authorization" is required
+Stack Trace: ValidationError: "headers.authorization" is required
+
