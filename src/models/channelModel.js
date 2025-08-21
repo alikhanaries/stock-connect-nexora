@@ -22,7 +22,7 @@ const channelSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-     globalChannelName: {
+    globalChannelName: {
       type: String,
       default: null,
       required: true,
@@ -38,18 +38,18 @@ const channelSchema = new mongoose.Schema(
       index: true,
       default: true,
     },
-   
-     channelName: {
+
+    channelName: {
       type: String,
       default: null,
       required: true,
       index: true,
     },
     reference: {
-      type: String
+      type: String,
     },
 
-     isActive: {
+    isActive: {
       type: Boolean,
       required: true,
       default: false,
@@ -59,5 +59,5 @@ const channelSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-const Channel = mongoose.model('user', channelSchema);
+const Channel = mongoose.model('channels', channelSchema);
 export default Channel;
