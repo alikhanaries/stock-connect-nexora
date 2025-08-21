@@ -7,6 +7,8 @@ const incorrectPassword = 'The password you entered is incorrect. Please verify 
 //CHANNEL
 const channelsAddedSuccessfully = 'Channels added successfully';
 const errorMessage = 'Error in process';
+const channelsNotFound = 'Channels not found';
+const channelsFound = 'Channels found';
 export default {
   invalidUser,
   invaliToken,
@@ -16,4 +18,6 @@ export default {
   signInSuccess,
   channelsAddedSuccessfully,
   errorMessage,
+  channelsNotFound,
+  channelsFound,
 };

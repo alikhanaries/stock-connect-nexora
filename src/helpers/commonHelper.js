@@ -1,13 +1,7 @@
-import bcrypt from 'bcrypt';
+// FUNC TO EXCAPE REGEX
+export const escapeRegex = (string = '') => {
+  const escaped = string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regexPattern = `.*${escaped}.*`;
 
-const saltRounds = 10;
-
-/* FUNC TO GENERATE HASH PASSWORD */
-export const generateHashPassword = async (normalPassword) => {
-  return bcrypt.hashSync(normalPassword, saltRounds);
-};
-
-/* FUNC TO VERIFY PASSWORD */
-export const verifyPassword = async (plainPassword, hashPass) => {
-  return bcrypt.compareSync(plainPassword, hashPass);
+  return regexPattern;
 };
