@@ -1,10 +1,29 @@
 echo "🔍 Checking branch name..."
+
 BRANCH_NAME=$(git symbolic-ref --short HEAD)
-BRANCH_REGEX="^(bugfix|chore|enhancement|feature|hotfix|refactor)/[a-z0-9._-]+$"
-if ! echo "$BRANCH_NAME" | grep -Eq "$BRANCH_REGEX"; then
-  echo ":x: Invalid branch name: '$BRANCH_NAME'"
-  echo ""
-  echo "Branch name must match: 'bugfix/xxx', 'chore/xxx', 'enhancement/xxx', 'feature/xxx', 'hotfix/xxx', or 'refactor/xxx'" 
+
+if [ "$BRANCH_NAME" = "main" ] || [ "$BRANCH_NAME" = "develop" ]; then
+  echo "❌ Direct pushes to '$BRANCH_NAME' are not allowed."
+  echo "👉 Please open a PR instead of pushing directly."
   exit 1
 fi
+
+BRANCH_REGEX="^(fix|chore|enhancement|feat|hotfix|refactor)/[a-z0-9._-]+$"
+
+if ! echo "$BRANCH_NAME" | grep -Eq "$BRANCH_REGEX"; then
+  echo "❌ Invalid branch name: '$BRANCH_NAME'"
+  echo ""
+  echo "Branch name must follow the pattern:"
+  echo "  <type>/<name>"
+  echo ""
+  echo "Allowed types:"
+  echo " - fix/<name>"
+  echo " - chore/<name>"
+  echo " - enhancement/<name>"
+  echo " - feat/<name>"
+  echo " - hotfix/<name>"
+  echo " - refactor/<name>"
+  exit 1
+fi
+
 echo "✅ Branch name is valid: '$BRANCH_NAME'"

@@ -30,13 +30,19 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Last name is required'],
     },
+    phoneNumber: {
+      type: String,
+      required: [true, 'Phone number is required'],
+      unique: [true, 'Phone number already exists!'],
+      trim: true,
+    },
     role: {
       type: String,
       enum: ['admin', 'super_admin'],
       required: [true, 'Role is required!'],
       index: true,
     },
-    isActive: {
+    active: {
       type: Boolean,
       default: true,
       index: true,
