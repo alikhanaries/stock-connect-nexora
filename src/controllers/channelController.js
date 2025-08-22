@@ -1,7 +1,5 @@
 import channelService from '../service/channelService.js';
 import Responses from '../helpers/response.js';
-import messages from '../constants/constantMessages.js';
-import { errorLog } from '../middleware/errorLog.js';
 
 /**FUNC- FOR GET ALL CHANNEL LIST FROM CHANNEL PARTNER**/
 export const getAllChannelsFromChannelPartner = async (req, res) => {
@@ -10,10 +8,8 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
     if (!result.success) {
       return Responses.failResponse(req, res, null, result?.message, 200);
     }
-    return Responses.successResponse(req, res, null, messages.channelsAddedSuccessfully, 200);
+    return Responses.successResponse(req, res, null, 'Channels added successfully', 200);
   } catch (error) {
-    console.log(error);
-    errorLog(error);
     return Responses.errorResponse(req, res, error);
   }
 };
@@ -23,9 +19,8 @@ export const getAllChannels = async (req, res) => {
     const result = await channelService.getAllChannels(req.body, req.query);
 
     if (!result.success) {
-      // if no channels found, return 200 with empty array
-      if (result.message === messages.channelsNotFound) {
-        return Responses.successResponse(req, res, { data: [], totalCount: 0 }, messages.channelsNotFound, 200);
+      if (result.message === 'No channels found') {
+        return Responses.successResponse(req, res, { data: [], totalCount: 0 }, 'No channels found', 404);
       }
       // if actual error, return 500
       return Responses.errorResponse(req, res, result.message, 500);
@@ -35,8 +30,8 @@ export const getAllChannels = async (req, res) => {
     return Responses.successResponse(
       req,
       res,
-      { data: result.data, totalCount: result.totalCount },
-      messages.channelsFound,
+      { channels: result.data, totalCount: result.totalCount },
+      'Channels found',
       200
     );
   } catch (error) {

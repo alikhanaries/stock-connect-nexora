@@ -52,7 +52,7 @@ const channelSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       required: true,
-      default: false,
+      default: true,
     },
   },
   {

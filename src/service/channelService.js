@@ -1,6 +1,5 @@
 import { config } from '../config/config.js';
 import Channel from '../models/channelModel.js';
-import messages from '../constants/constantMessages.js';
 import { escapeRegex } from '../helpers/commonHelper.js';
 const { CHANNEL_ENGINE_URL } = config;
 
@@ -85,7 +84,7 @@ const getAllChannels = async (bodyData, queryData) => {
       .lean();
 
     if (!result.length) {
-      return { success: false, message: messages?.channelsNotFound, totalCount: 0 };
+      return { success: false, message: 'No channels found', totalCount: 0 };
     }
 
     return { success: true, data: result, totalCount };
