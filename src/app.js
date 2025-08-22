@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { corsOptions } from './config/cors.js';
 import apiRoutes from './routes/api.js';
+
 const app = express();
 
 app.use(express.json());
@@ -13,6 +14,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api', apiRoutes);
+
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
