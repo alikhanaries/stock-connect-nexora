@@ -1,5 +1,3 @@
-getAllChannelsFromChannelPartner;
-
 import express from 'express';
 import { getAllChannelsFromChannelPartner } from '../controllers/channelController.js';
 //import { getAllChannelsFromChannelPartnerValidator } from '../validators/channelValidator.js';
