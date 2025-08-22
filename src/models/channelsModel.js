@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-const channelSchema = new mongoose.Schema(
+const channelsSchema = new mongoose.Schema(
   {
     languageCode: {
       type: String,
@@ -50,5 +50,5 @@ const channelSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-const Channel = mongoose.model('channels', channelSchema);
+const Channel = mongoose.model('channels', channelsSchema);
 export default Channel;

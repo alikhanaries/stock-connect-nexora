@@ -1,5 +1,5 @@
 import { config } from '../config/config.js';
-import Channel from '../models/channelModel.js';
+import Channel from '../models/channelsModel.js';
 const { CHANNEL_ENGINE_URL } = config;
 
 /** FUNC - GET ALL CHANNEL LIST FROM CHANNEL PARTNER AND SAVE */

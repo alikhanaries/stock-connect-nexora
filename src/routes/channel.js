@@ -1,5 +1,5 @@
 import express from 'express';
-import { getAllChannelsFromChannelPartner } from '../controllers/ChannelController.js';
+import { getAllChannelsFromChannelPartner } from '../controllers/ChannelsController.js';
 import { authMiddleware } from '#middleware/index.js';
 
 const router = express.Router();
