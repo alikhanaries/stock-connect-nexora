@@ -1,5 +1,9 @@
 import express from 'express';
-import { getAllChannelsFromChannelPartner, getAllChannels } from '../controllers/ChannelController.js';
+import {
+  getAllChannelsFromChannelPartner,
+  getAllChannels,
+  saveUserChannelData,
+} from '../controllers/ChannelsController.js';
 import { authMiddleware } from '#middleware/index.js';
 
 const router = express.Router();
@@ -11,6 +15,12 @@ router.get(
   '/getAllChannels',
   //  authMiddleware,
   getAllChannels
+);
+// /* SAVE USER CHANNELS  */
+router.post(
+  '/saveUserChannelData',
+  //  authMiddleware,
+  saveUserChannelData
 );
 
 export default router;

@@ -1,6 +1,9 @@
 import { config } from '../config/config.js';
+import mongoose from 'mongoose';
 import Channel from '../models/Channel.js';
-
+import UserChannels from '../models/UserChannels.js';
+// Access ObjectId from mongoose
+const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_URL } = config;
 
 /** FUNC - GET ALL CHANNEL LIST FROM CHANNEL PARTNER AND SAVE */
@@ -71,16 +74,29 @@ const getAllChannels = async () => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-// const saveUserChannelData = async (userId, channelIds) => {
-//   try {
-//     // await UserChannels.save({
-//     //   userId: new ObjectId(userId),
-//     //   channelIds,
-//     // });
-//   } catch (err) {
-//     console.error('Error in getAllChannels:', err);
-//     return { success: false, message: err.message };
-//   }
-// };
+const saveUserChannelData = async (userId, channelIds) => {
+  try {
+    // Validate input
+    if (!userId || !Array.isArray(channelIds)) {
+      return { success: false, message: 'Invalid input data' };
+    }
 
-export default { getAllChannelsFromChannelPartner, getAllChannels };
+    // Either update existing doc or create new one
+    const updatedUserChannels = await UserChannels.findOneAndUpdate(
+      { userId: new ObjectId(userId) },
+      { $set: { channelIds: channelIds } },
+      { new: true, upsert: true } // upsert = create if not exists
+    );
+
+    return {
+      success: true,
+      message: 'Channels saved successfully',
+      data: updatedUserChannels,
+    };
+  } catch (err) {
+    console.error('Error in saveUserChannelData:', err);
+    return { success: false, message: err.message };
+  }
+};
+
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData };
