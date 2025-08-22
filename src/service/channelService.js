@@ -2,6 +2,7 @@ import { config } from '../config/config.js';
 import mongoose from 'mongoose';
 import Channel from '../models/Channel.js';
 import UserChannels from '../models/UserChannels.js';
+import { success } from 'zod';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_URL } = config;
@@ -33,6 +34,7 @@ const getAllChannelsFromChannelPartner = async () => {
         channelName: item.ChannelName,
         reference: item.Reference,
         isActive: true,
+        channelImageUrl: null,
       }))
     );
 
@@ -99,4 +101,59 @@ const saveUserChannelData = async (userId, channelIds) => {
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData };
+/** FUNC - GET USER CHANNEL LIST */
+export const getUserAllChannels = async (userId) => {
+  try {
+    const result = await UserChannels.aggregate([
+      {
+        $match: {
+          userId: new ObjectId(userId),
+          isActive: true,
+        },
+      },
+      {
+        $lookup: {
+          from: 'channels', // collection to join
+          localField: 'channelIds', // field in UserChannels
+          foreignField: '_id', // field in Channel
+          as: 'channelDetails',
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+          userId: 1,
+          createdAt: 1,
+          channelDetails: {
+            languageCode: 1,
+            channelImageUrl: 1,
+            countryCode: 1,
+            globalChannelId: 1,
+            globalChannelName: 1,
+            channelId: 1,
+            isEnabled: 1,
+            channelName: 1,
+            reference: 1,
+            isActive: 1,
+          },
+        },
+      },
+    ]);
+
+    if (!result.length) {
+      return {
+        success: false,
+      };
+    }
+
+    return {
+      success: true,
+      channelData: result[0],
+    };
+  } catch (err) {
+    console.error('Error in getUserAllChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData, getUserAllChannels };

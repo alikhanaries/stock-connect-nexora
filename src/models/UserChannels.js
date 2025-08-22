@@ -15,6 +15,12 @@ const userChannelsSchema = new mongoose.Schema(
         ref: 'Channel', // optional: reference to Channel model
       },
     ],
+    isActive: {
+      type: Boolean,
+      required: true,
+      default: true,
+      index: true,
+    },
   },
   { timestamps: true }
 );
