@@ -5,8 +5,8 @@ const userSafeFields = 'firstName lastName email phoneNumber role active created
 
 export const getUserById = async (req, res) => {
   try {
-    const id = req.params.id || req.user._id;
-    const user = await User.findById(id).select(userSafeFields).lean();
+    const id = req.params.id || req.user?._id;
+    const user = await User.findOne({ _id: id, isDeleted: false }).select(userSafeFields).lean();
     if (!user) {
       return res.status(404).json(formatErrorResponse('User not found', 404));
     }
@@ -19,13 +19,13 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const id = req.user._id;
-    const { firstName, lastName, email, phoneNumber } = req.body;
+    const { firstName, lastName, email, phoneNumber, active } = req.body;
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
-      { firstName, lastName, email, phoneNumber },
+      { firstName, lastName, email, phoneNumber, active },
       { new: true }
-    ).select('-isDeleted');
+    ).select(userSafeFields);
     if (!updatedUser) {
       return res.status(404).json(formatErrorResponse('User not found', 404));
     }
@@ -46,7 +46,7 @@ export const getAllUsers = async (req, res) => {
 
     const filter = { isDeleted: false };
     if (role) {
-      filter.role = role;
+      filter.role = role.toLowerCase();
     }
     if (active) {
       if (active === 'true' || active === 'false') {
