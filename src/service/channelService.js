@@ -70,4 +70,17 @@ const getAllChannels = async () => {
   }
 };
 
+/** FUNC - SAVE USER SELECTED CHANNEL DATA */
+// const saveUserChannelData = async (userId, channelIds) => {
+//   try {
+//     // await UserChannels.save({
+//     //   userId: new ObjectId(userId),
+//     //   channelIds,
+//     // });
+//   } catch (err) {
+//     console.error('Error in getAllChannels:', err);
+//     return { success: false, message: err.message };
+//   }
+// };
+
 export default { getAllChannelsFromChannelPartner, getAllChannels };
