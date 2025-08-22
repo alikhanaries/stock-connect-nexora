@@ -6,7 +6,7 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
   try {
     const result = await channelService.getAllChannelsFromChannelPartner();
     if (!result.success) {
-      return Responses.failResponse(req, res, null, result?.message, 200);
+      return Responses.failResponse(req, res, null, result?.message, 404);
     }
     return Responses.successResponse(req, res, null, 'Channels added successfully', 200);
   } catch (error) {
