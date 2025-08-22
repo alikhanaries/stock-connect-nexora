@@ -1,14 +1,5 @@
 import mongoose from 'mongoose';
-//   {
-//     "LanguageCode": "en",
-//     "CountryCode": "IN",
-//     "GlobalChannelId": 1733,
-//     "GlobalChannelName": "Amazon.in (v3)",
-//     "ChannelId": 2,
-//     "IsEnabled": false,
-//     "ChannelName": "Amazon.in (v3)",
-//     "Reference": null
-//   }
+
 const channelSchema = new mongoose.Schema(
   {
     languageCode: {

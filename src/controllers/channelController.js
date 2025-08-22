@@ -16,24 +16,13 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
 /** FUNC - Get all channel list from DB */
 export const getAllChannels = async (req, res) => {
   try {
-    const result = await channelService.getAllChannels(req.body, req.query);
+    const result = await channelService.getAllChannels();
 
-    if (!result.success) {
-      if (result.message === 'No channels found') {
-        return Responses.successResponse(req, res, { data: [], totalCount: 0 }, 'No channels found', 404);
-      }
-      // if actual error, return 500
-      return Responses.errorResponse(req, res, result.message, 500);
+    if (!result) {
+      return Responses.successResponse(req, res, null, 'No channels found', 404);
     }
 
-    // success response with filtered payload
-    return Responses.successResponse(
-      req,
-      res,
-      { channels: result.data, totalCount: result.totalCount },
-      'Channels found',
-      200
-    );
+    return Responses.successResponse(req, res, result, 'Channels found', 200);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     return Responses.errorResponse(req, res, error.message, 500);
