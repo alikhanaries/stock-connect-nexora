@@ -6,11 +6,11 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
   try {
     const result = await channelService.getAllChannelsFromChannelPartner();
     if (!result.success) {
-      return Responses.failResponse(req, res, null, result?.message, 200);
+      return Responses.failResponse(res, 'Failed to retrieve channels', 404);
     }
-    return Responses.successResponse(req, res, null, 'Channels added successfully', 200);
+    return Responses.successResponse(res, 'Channels saved successfully', 200);
   } catch (error) {
-    return Responses.errorResponse(req, res, error);
+    return Responses.errorResponse(res, error);
   }
 };
 /** FUNC - Get all channel list from DB */
@@ -19,10 +19,9 @@ export const getAllChannels = async (req, res) => {
     const result = await channelService.getAllChannels();
 
     if (!result) {
-      return Responses.successResponse(req, res, null, 'No channels found', 404);
+      return Responses.successResponse(res, 'No channels found', 404);
     }
-
-    return Responses.successResponse(req, res, result, 'Channels found', 200);
+    return Responses.successResponse(res, 'Channels found', 200, result);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     return Responses.errorResponse(req, res, error.message, 500);
