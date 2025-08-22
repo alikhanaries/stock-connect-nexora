@@ -79,3 +79,34 @@ export const getAllUsers = async (req, res) => {
     res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
   }
 };
+
+export const userUpdatePassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const userId = req.user?._id;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json(formatErrorResponse('Old and new passwords are required', 400));
+    }
+    if (oldPassword === newPassword) {
+      return res.status(400).json(formatErrorResponse('New password must be different from the old password', 400));
+    }
+
+    const user = await User.findOne({ _id: userId, isDeleted: false }).select('+password');
+    if (!user) {
+      return res.status(404).json(formatErrorResponse('User not found', 404));
+    }
+
+    const isMatch = await user.comparePassword(oldPassword);
+    if (!isMatch) {
+      return res.status(400).json(formatErrorResponse('Invalid old password', 400));
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    return res.status(200).json(formatSuccessResponse(null, 'Password updated successfully'));
+  } catch (error) {
+    return res.status(500).json(formatErrorResponse(error?.message || 'Failed to update password', 500));
+  }
+};
