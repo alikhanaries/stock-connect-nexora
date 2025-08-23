@@ -17,7 +17,6 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
 export const getAllChannels = async (req, res) => {
   try {
     const result = await channelService.getAllChannels();
-
     if (!result) {
       return Responses.successResponse(res, 'No channels found', 404);
     }

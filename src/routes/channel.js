@@ -7,10 +7,6 @@ const router = express.Router();
 // /* GET ALL CHANNEL LIST FROM CHANNEL PARTNER */
 router.get('/getAllChannelsFromChannelPartner', authMiddleware, getAllChannelsFromChannelPartner);
 // /* GET ALL CHANNEL LIST FROM DATABASE */
-router.get(
-  '/getAllChannels',
-  //  authMiddleware,
-  getAllChannels
-);
+router.get('/getAllChannels', authMiddleware, getAllChannels);
 
 export default router;
