@@ -1,5 +1,6 @@
 import { config } from '../config/config.js';
-import Channel from '../models/channelsModel.js';
+import Channel from '../models/Channel.js';
+
 const { CHANNEL_ENGINE_URL } = config;
 
 /** FUNC - GET ALL CHANNEL LIST FROM CHANNEL PARTNER AND SAVE */
@@ -28,6 +29,7 @@ const getAllChannelsFromChannelPartner = async () => {
         isEnabled: item.IsEnabled,
         channelName: item.ChannelName,
         reference: item.Reference,
+        isActive: true,
       }))
     );
 
@@ -51,4 +53,19 @@ const getAllChannelsFromChannelPartner = async () => {
   }
 };
 
-export default { getAllChannelsFromChannelPartner };
+/** FUNC - GET ALL CHANNEL LIST FROM DATABASE */
+const getAllChannels = async () => {
+  try {
+    // Get data
+    const result = await Channel.find({ isActive: true }).lean();
+    if (!result.length) {
+      return false;
+    }
+    return result;
+  } catch (err) {
+    console.error('Error in getAllChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+
+export default { getAllChannelsFromChannelPartner, getAllChannels };
