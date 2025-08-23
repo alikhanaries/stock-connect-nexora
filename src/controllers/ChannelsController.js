@@ -32,7 +32,6 @@ export const getAllChannels = async (req, res) => {
 /** FUNC - SAVE USER SELECTED CHANNEL IDS */
 export const saveUserChannelData = async (req, res) => {
   try {
-    console.log(req.body);
     const { userId, channelIds } = req.body;
 
     if (!userId || !Array.isArray(channelIds)) {
