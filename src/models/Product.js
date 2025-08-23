@@ -1,12 +1,5 @@
 import mongoose from 'mongoose';
-
-const AttributeSchema = new mongoose.Schema(
-  {
-    key: { type: String, trim: true },
-    value: { type: String, trim: true },
-  },
-  { _id: false }
-);
+import AttributeSchema from './Attribute.js';
 
 const ProductSchema = new mongoose.Schema(
   {
@@ -38,7 +31,7 @@ const ProductSchema = new mongoose.Schema(
     isFrozen: { type: Boolean, default: false },
     categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
     categoryTrail: { type: String },
-    marketPlace: { type: String },
+    marketPlace: [{ type: String, trim: true }],
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
   },
@@ -47,8 +40,8 @@ const ProductSchema = new mongoose.Schema(
 
 // Indexes for performance
 ProductSchema.index({ ean: 1 });
-ProductSchema.index({ productEanCode: 1 });
 ProductSchema.index({ parentProductSkuCode: 1 });
+ProductSchema.index({ productSkuCode: 1 });
 ProductSchema.index({ brand: 1 });
 ProductSchema.index({ name: 'text', brand: 'text', description: 'text' });
 
