@@ -1,0 +1,26 @@
+echo "🔍 Checking commit message format..."
+
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+REGEX="^(feat|fix|docs|style|refactor|test|chore): .+$"
+
+if ! echo "$COMMIT_MSG" | grep -Eq "$REGEX"; then
+  echo "❌ Invalid commit message:"
+  echo "  '$COMMIT_MSG'"
+  echo ""
+  echo "Commit message must follow the Conventional Commits format:"
+  echo "  <type>: <description>"
+  echo ""
+  echo "Allowed types:"
+  echo "  - feat:     new feature"
+  echo "  - fix:      bug fix"
+  echo "  - docs:     documentation changes"
+  echo "  - style:    formatting, missing semi-colons, etc. (no code changes)"
+  echo "  - refactor: code change that neither fixes a bug nor adds a feature"
+  echo "  - test:     adding/modifying tests"
+  echo "  - chore:    maintenance tasks (build, tooling, dependencies)"
+  exit 1
+fi
+
+echo "✅ Commit message format is valid"
