@@ -1,6 +1,7 @@
 import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
-
+import { getPagination } from '#helpers/PaginationHandler.js';
+import Responses from '#helpers/response.js';
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
 export const getUserById = async (req, res) => {
@@ -37,7 +38,7 @@ export const updateUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
-    const { role, active, name, page, size = 10 } = req.query;
+    const { role, active, search, page, size = 10 } = req.query;
 
     const pageNum = parseInt(page);
     const limit = parseInt(size);
@@ -53,24 +54,22 @@ export const getAllUsers = async (req, res) => {
         filter.active = active === 'true';
       }
     }
-    if (name) {
-      const searchRegex = new RegExp(name, 'i');
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
       filter.$or = [{ firstName: searchRegex }, { lastName: searchRegex }];
     }
     const [totalElements, users] = await Promise.all([
       User.countDocuments(filter),
       User.find(filter).skip(skip).limit(size).select(userSafeFields).lean(),
     ]);
+    const pagination = getPagination(totalElements, pageNum, limit);
     const response = {
       content: users,
       appliedFilters: {
         ...(active && { active: active }),
         ...(role && { role: role }),
       },
-      page: pageNum,
-      size: size,
-      totalElements: totalElements,
-      totalPages: Math.ceil(totalElements / size),
+      ...pagination,
       success: true,
       status: 200,
     };
@@ -86,27 +85,27 @@ export const userUpdatePassword = async (req, res) => {
     const userId = req.user?._id;
 
     if (!oldPassword || !newPassword) {
-      return res.status(400).json(formatErrorResponse('Old and new passwords are required', 400));
+      return Responses.failResponse(res, 'Old and new passwords are required', 400);
     }
     if (oldPassword === newPassword) {
-      return res.status(400).json(formatErrorResponse('New password must be different from the old password', 400));
+      return Responses.failResponse(res, 'New password must be different from the old password', 400);
     }
 
     const user = await User.findOne({ _id: userId, isDeleted: false }).select('+password');
     if (!user) {
-      return res.status(404).json(formatErrorResponse('User not found', 404));
+      return Responses.failResponse(res, 'User not found', 404);
     }
 
     const isMatch = await user.comparePassword(oldPassword);
     if (!isMatch) {
-      return res.status(400).json(formatErrorResponse('Invalid old password', 400));
+      return Responses.failResponse(res, 'Invalid old password', 400);
     }
-
     user.password = newPassword;
     await user.save();
 
-    return res.status(200).json(formatSuccessResponse(null, 'Password updated successfully'));
+    return Responses.successResponse(res, 'Password updated successfully', 200);
   } catch (error) {
-    return res.status(500).json(formatErrorResponse(error?.message || 'Failed to update password', 500));
+    console.error('userUpdatePassword Error:', error);
+    return Responses.errorResponse(res, error, 500);
   }
 };

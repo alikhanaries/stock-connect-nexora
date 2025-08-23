@@ -5,4 +5,5 @@ export const config = {
   PORT: process.env.PORT || 3000,
   DB_URL: process.env.DB_URL,
   JWT_SECRET: process.env.JWT_SECRET,
+  CHANNEL_ENGINE_URL: process.env.CHANNEL_ENGINE_URL,
 };
