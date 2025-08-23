@@ -1,5 +1,6 @@
 import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
+import { getPagination } from '#helpers/PaginationHandler.js';
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -37,7 +38,7 @@ export const updateUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
-    const { role, active, name, page, size = 10 } = req.query;
+    const { role, active, search, page, size = 10 } = req.query;
 
     const pageNum = parseInt(page);
     const limit = parseInt(size);
@@ -53,24 +54,22 @@ export const getAllUsers = async (req, res) => {
         filter.active = active === 'true';
       }
     }
-    if (name) {
-      const searchRegex = new RegExp(name, 'i');
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
       filter.$or = [{ firstName: searchRegex }, { lastName: searchRegex }];
     }
     const [totalElements, users] = await Promise.all([
       User.countDocuments(filter),
       User.find(filter).skip(skip).limit(size).select(userSafeFields).lean(),
     ]);
+    const pagination = getPagination(totalElements, pageNum, limit);
     const response = {
       content: users,
       appliedFilters: {
         ...(active && { active: active }),
         ...(role && { role: role }),
       },
-      page: pageNum,
-      size: size,
-      totalElements: totalElements,
-      totalPages: Math.ceil(totalElements / size),
+      ...pagination,
       success: true,
       status: 200,
     };
