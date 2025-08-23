@@ -2,7 +2,6 @@ import { config } from '../config/config.js';
 import mongoose from 'mongoose';
 import Channel from '../models/Channel.js';
 import UserChannels from '../models/UserChannels.js';
-import { success } from 'zod';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_URL } = config;
