@@ -4,6 +4,7 @@ import Channel from '../models/Channel.js';
 import UserChannels from '../models/UserChannels.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
+
 const { CHANNEL_ENGINE_URL } = config;
 
 /** FUNC - GET ALL CHANNEL LIST FROM CHANNEL PARTNER AND SAVE */
@@ -61,11 +62,9 @@ const getAllChannels = async () => {
   try {
     // Get data
     const result = await Channel.find({ isActive: true }).lean();
-
     if (!result.length) {
       return false;
     }
-
     return result;
   } catch (err) {
     console.error('Error in getAllChannels:', err);
