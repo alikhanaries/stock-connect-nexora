@@ -10,7 +10,7 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
     }
     return Responses.successResponse(res, 'Channels saved successfully', 200);
   } catch (error) {
-    return Responses.errorResponse(res, error);
+    return Responses.errorResponse(res, error, 500);
   }
 };
 /** FUNC - Get all channel list from DB */
@@ -23,8 +23,31 @@ export const getAllChannels = async (req, res) => {
     return Responses.successResponse(res, 'Channels found', 200, result);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
-    return Responses.errorResponse(req, res, error.message, 500);
+    return Responses.errorResponse(res, error.message, 500);
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels };
+/** FUNC - SAVE USER SELECTED CHANNEL IDS */
+export const saveUserChannelData = async (req, res) => {
+  try {
+    const { userId, channelIds } = req.body;
+
+    if (!userId || !Array.isArray(channelIds)) {
+      return Responses.failResponse(res, 'userId and channelIds are required', 400);
+    }
+
+    // Call the service to save channel data
+    const result = await channelService.saveUserChannelData(userId, channelIds);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || 'Failed to save channels', 500);
+    }
+
+    return Responses.successResponse(res, 'Channels saved successfully', 200, result.data);
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData };

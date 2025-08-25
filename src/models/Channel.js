@@ -5,6 +5,9 @@ const channelsSchema = new mongoose.Schema(
     languageCode: {
       type: String,
     },
+    channelImageUrl: {
+      type: String,
+    },
     countryCode: {
       type: String,
       index: true,
