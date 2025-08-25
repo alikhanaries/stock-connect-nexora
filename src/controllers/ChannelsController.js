@@ -52,7 +52,7 @@ export const saveUserChannelData = async (req, res) => {
 /** FUNC - GET USER ALL CHANNEL LIST */
 export const getAllUserChannels = async (req, res) => {
   try {
-    const result = await channelService.getUserAllChannels(req.params.userId);
+    const result = await channelService.getAllUserChannels(req.params.userId);
 
     if (!result) {
       return Responses.successResponse(res, 'No channels found', 404);
@@ -65,4 +65,4 @@ export const getAllUserChannels = async (req, res) => {
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData, getUserAllChannels };
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData, getAllUserChannels };

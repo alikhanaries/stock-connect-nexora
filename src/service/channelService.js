@@ -141,8 +141,8 @@ export const getAllUserChannels = async (userId) => {
       channelData: result[0],
     };
   } catch (err) {
-    console.error('Error in getUserAllChannels:', err);
+    console.error('Error in getAllUserChannels:', err);
     return { success: false, message: err.message };
   }
 };
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData, getUserAllChannels };
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData, getAllUserChannels };
