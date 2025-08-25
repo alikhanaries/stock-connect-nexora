@@ -33,7 +33,12 @@ const getAllChannelsFromChannelPartner = async () => {
         channelName: item.ChannelName,
         reference: item.Reference,
         isActive: true,
-        channelImageUrl: null,
+        channelImageUrl:
+          channelData.GlobalChannelId === 1733
+            ? 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/amazion1'
+            : channelData.GlobalChannelId === 1892
+              ? 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/noon'
+              : null,
       }))
     );
 
