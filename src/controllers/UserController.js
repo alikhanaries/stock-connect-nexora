@@ -79,7 +79,7 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-export const userUpdatePassword = async (req, res) => {
+export const updatePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
     const userId = req.user?._id;
@@ -92,6 +92,7 @@ export const userUpdatePassword = async (req, res) => {
     }
 
     const user = await User.findOne({ _id: userId, isDeleted: false }).select('+password');
+    console.log(user);
     if (!user) {
       return Responses.failResponse(res, 'User not found', 404);
     }
