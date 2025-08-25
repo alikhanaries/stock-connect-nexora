@@ -58,7 +58,7 @@ export const register = async (req, res) => {
       firstName,
       lastName,
       role,
-      isSupplierConnected: false,
+      isMarketplaceConnected: false,
       phoneNumber,
     });
     await newUser.save();
