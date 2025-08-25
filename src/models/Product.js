@@ -43,6 +43,9 @@ ProductSchema.index({ ean: 1 });
 ProductSchema.index({ parentProductSkuCode: 1 });
 ProductSchema.index({ productSkuCode: 1 });
 ProductSchema.index({ brand: 1 });
+ProductSchema.index({ categories: 1 });
+ProductSchema.index({ marketPlace: 1 });
+ProductSchema.index({ brand: 1, categories: 1 });
 ProductSchema.index({ name: 'text', brand: 'text', description: 'text' });
 
 const Product = mongoose.model('Product', ProductSchema);
