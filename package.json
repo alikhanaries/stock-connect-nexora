@@ -12,7 +12,8 @@
     "#middleware/*": "./src/middleware/*",
     "#validations/*": "./src/validations/*",
     "#config/*": "./src/config/*",
-    "#helpers/*": "./src/helpers/*"
+    "#helpers/*": "./src/helpers/*",
+    "#service/*": "./src/service/*"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
