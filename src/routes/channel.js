@@ -3,7 +3,7 @@ import {
   getAllChannelsFromChannelPartner,
   getAllChannels,
   saveUserChannelData,
-  getUserAllChannels,
+  getAllUserChannels,
 } from '../controllers/ChannelsController.js';
 import { authMiddleware } from '#middleware/index.js';
 
@@ -16,5 +16,5 @@ router.get('/getAllChannels', authMiddleware, getAllChannels);
 /* SAVE USER CHANNELS  */
 router.post('/saveUserChannelData', authMiddleware, saveUserChannelData);
 /* GET USER CHANNEL LIST */
-router.get('/getUserAllChannels/:userId', getUserAllChannels);
+router.get('/getUserAllChannels/:userId', getAllUserChannels);
 export default router;
