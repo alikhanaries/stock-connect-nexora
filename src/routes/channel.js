@@ -9,9 +9,9 @@ import { authMiddleware } from '#middleware/index.js';
 const router = express.Router();
 
 // /* GET ALL CHANNEL LIST FROM CHANNEL PARTNER */
-router.get('/getAllChannelsFromChannelPartner', getAllChannelsFromChannelPartner);
+router.get('/getAllChannelsFromChannelPartner', authMiddleware, getAllChannelsFromChannelPartner);
 // /* GET ALL CHANNEL LIST FROM DATABASE */
-router.get('/getAllChannels', getAllChannels);
+router.get('/getAllChannels', authMiddleware, getAllChannels);
 // /* SAVE USER CHANNELS  */
 router.post('/saveUserChannels', authMiddleware, saveUserChannels);
 
