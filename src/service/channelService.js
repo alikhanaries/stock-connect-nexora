@@ -99,7 +99,7 @@ const saveUserChannelData = async (userId, channelIds) => {
 };
 
 /** FUNC - GET USER CHANNEL LIST */
-export const getUserAllChannels = async (userId) => {
+export const getAllUserChannels = async (userId) => {
   try {
     const result = await UserChannels.aggregate([
       {
