@@ -73,7 +73,7 @@ const getAllChannels = async () => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-const saveUserChannelData = async (userId, channelIds) => {
+const saveUserChannels = async (userId, channelIds) => {
   try {
     // Validate input
     if (!userId || !Array.isArray(channelIds)) {
@@ -93,9 +93,9 @@ const saveUserChannelData = async (userId, channelIds) => {
       data: updatedUserChannels,
     };
   } catch (err) {
-    console.error('Error in saveUserChannelData:', err);
+    console.error('Error in saveUserChannels:', err);
     return { success: false, message: err.message };
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData };
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels };

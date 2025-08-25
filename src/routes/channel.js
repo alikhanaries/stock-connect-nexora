@@ -2,7 +2,7 @@ import express from 'express';
 import {
   getAllChannelsFromChannelPartner,
   getAllChannels,
-  saveUserChannelData,
+  saveUserChannels,
 } from '../controllers/ChannelsController.js';
 import { authMiddleware } from '#middleware/index.js';
 
@@ -13,6 +13,6 @@ router.get('/getAllChannelsFromChannelPartner', getAllChannelsFromChannelPartner
 // /* GET ALL CHANNEL LIST FROM DATABASE */
 router.get('/getAllChannels', getAllChannels);
 // /* SAVE USER CHANNELS  */
-router.post('/saveUserChannelData', authMiddleware, saveUserChannelData);
+router.post('/saveUserChannels', authMiddleware, saveUserChannels);
 
 export default router;
