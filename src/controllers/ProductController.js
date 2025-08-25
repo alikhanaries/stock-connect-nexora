@@ -3,7 +3,7 @@ import productService from '#service/productService.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const { products, pagination, appliedFilters } = await productService.fetcheProducts(req.query);
+    const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query);
 
     if (!products.length) {
       return failResponse(res, 'No products found', 404, {

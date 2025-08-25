@@ -2,7 +2,7 @@ import Product from '#models/Product.js';
 import '#models/Category.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 
-const fetcheProducts = async (query) => {
+const fetchProducts = async (query) => {
   const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
@@ -50,4 +50,4 @@ const fetcheProducts = async (query) => {
   };
 };
 
-export default { fetcheProducts };
+export default { fetchProducts };
