@@ -49,5 +49,20 @@ export const saveUserChannels = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+/** FUNC - GET USER ALL CHANNEL LIST */
+export const getAllUserChannels = async (req, res) => {
+  try {
+    const result = await channelService.getAllUserChannels(req.params.userId);
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels };
+    if (!result) {
+      return Responses.successResponse(res, 'No channels found', 404);
+    }
+
+    return Responses.successResponse(res, 'User channels found', 200, result?.channelData);
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };

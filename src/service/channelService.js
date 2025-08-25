@@ -98,4 +98,51 @@ const saveUserChannels = async (userId, channelIds) => {
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels };
+/** FUNC - GET USER CHANNEL LIST */
+export const getAllUserChannels = async (userId) => {
+  try {
+    const result = await UserChannels.aggregate([
+      {
+        $match: {
+          userId: new ObjectId(userId),
+          isActive: true,
+        },
+      },
+      {
+        $lookup: {
+          from: 'channels', // collection to join
+          localField: 'channelIds', // field in UserChannels
+          foreignField: '_id', // field in Channel
+          as: 'channelDetails',
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+          userId: 1,
+          channelDetails: {
+            _id: 1,
+            channelImageUrl: 1,
+            channelName: 1,
+          },
+        },
+      },
+    ]);
+
+    if (!result.length) {
+      return {
+        success: false,
+      };
+    }
+
+    return {
+      success: true,
+      channelData: result[0],
+    };
+  } catch (err) {
+    console.error('Error in getAllUserChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };
