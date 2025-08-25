@@ -3,12 +3,21 @@ import productService from '#service/productService.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const { products, pagination } = await productService.getProducts(req.query);
+    const { products, pagination, appliedFilters } = await productService.fetcheProducts(req.query);
 
     if (!products.length) {
-      return failResponse(res, 'No products found', 404, { content: [], ...pagination });
+      return failResponse(res, 'No products found', 404, {
+        content: [],
+        appliedFilters: appliedFilters || {},
+        ...pagination,
+      });
     }
-    return successResponse(res, 'Products fetched successfully', 200, { content: products, ...pagination });
+
+    return successResponse(res, 'Products fetched successfully', 200, {
+      content: products,
+      appliedFilters: appliedFilters || {},
+      ...pagination,
+    });
   } catch (err) {
     console.error('Error fetching products:', err);
     return errorResponse(res, err, 500);
