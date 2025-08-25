@@ -50,7 +50,7 @@ export const saveUserChannelData = async (req, res) => {
   }
 };
 /** FUNC - GET USER ALL CHANNEL LIST */
-export const getUserAllChannels = async (req, res) => {
+export const getAllUserChannels = async (req, res) => {
   try {
     const result = await channelService.getUserAllChannels(req.params.userId);
 
