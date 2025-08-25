@@ -61,12 +61,10 @@ const getAllChannelsFromChannelPartner = async () => {
 const getAllChannels = async () => {
   try {
     // Get data
-    const result = await Channel.find({ isActive: true }).lean();
-
+    const result = await Channel.find({ isActive: true }, { _id: 1, channelName: 1, channelImageUrl: 1 }).lean();
     if (!result.length) {
       return false;
     }
-
     return result;
   } catch (err) {
     console.error('Error in getAllChannels:', err);
