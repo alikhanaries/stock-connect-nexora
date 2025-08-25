@@ -73,7 +73,7 @@ const getAllChannels = async () => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-const saveUserChannelData = async (userId, channelIds) => {
+const saveUserChannels = async (userId, channelIds) => {
   try {
     // Validate input
     if (!userId || !Array.isArray(channelIds)) {
@@ -93,13 +93,13 @@ const saveUserChannelData = async (userId, channelIds) => {
       data: updatedUserChannels,
     };
   } catch (err) {
-    console.error('Error in saveUserChannelData:', err);
+    console.error('Error in saveUserChannels:', err);
     return { success: false, message: err.message };
   }
 };
 
 /** FUNC - GET USER CHANNEL LIST */
-export const getUserAllChannels = async (userId) => {
+export const getAllUserChannels = async (userId) => {
   try {
     const result = await UserChannels.aggregate([
       {
@@ -141,8 +141,8 @@ export const getUserAllChannels = async (userId) => {
       channelData: result[0],
     };
   } catch (err) {
-    console.error('Error in getUserAllChannels:', err);
+    console.error('Error in getAllUserChannels:', err);
     return { success: false, message: err.message };
   }
 };
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData, getUserAllChannels };
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };

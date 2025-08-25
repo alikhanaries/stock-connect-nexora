@@ -28,7 +28,7 @@ export const getAllChannels = async (req, res) => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL IDS */
-export const saveUserChannelData = async (req, res) => {
+export const saveUserChannels = async (req, res) => {
   try {
     const { userId, channelIds } = req.body;
 
@@ -37,7 +37,7 @@ export const saveUserChannelData = async (req, res) => {
     }
 
     // Call the service to save channel data
-    const result = await channelService.saveUserChannelData(userId, channelIds);
+    const result = await channelService.saveUserChannels(userId, channelIds);
 
     if (!result.success) {
       return Responses.failResponse(res, result.message || 'Failed to save channels', 500);
@@ -50,9 +50,9 @@ export const saveUserChannelData = async (req, res) => {
   }
 };
 /** FUNC - GET USER ALL CHANNEL LIST */
-export const getUserAllChannels = async (req, res) => {
+export const getAllUserChannels = async (req, res) => {
   try {
-    const result = await channelService.getUserAllChannels(req.params.userId);
+    const result = await channelService.getAllUserChannels(req.params.userId);
 
     if (!result) {
       return Responses.successResponse(res, 'No channels found', 404);
@@ -65,4 +65,4 @@ export const getUserAllChannels = async (req, res) => {
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannelData, getUserAllChannels };
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };
