@@ -4,7 +4,6 @@ import Channel from '../models/Channel.js';
 import UserChannels from '../models/UserChannels.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
-
 const { CHANNEL_ENGINE_URL } = config;
 
 /** FUNC - GET ALL CHANNEL LIST FROM CHANNEL PARTNER AND SAVE */
@@ -34,6 +33,7 @@ const getAllChannelsFromChannelPartner = async () => {
         channelName: item.ChannelName,
         reference: item.Reference,
         isActive: true,
+        channelImageUrl: null,
       }))
     );
 
@@ -61,7 +61,7 @@ const getAllChannelsFromChannelPartner = async () => {
 const getAllChannels = async () => {
   try {
     // Get data
-    const result = await Channel.find({ isActive: true }).lean();
+    const result = await Channel.find({ isActive: true }, { _id: 1, channelName: 1, channelImageUrl: 1 }).lean();
     if (!result.length) {
       return false;
     }
