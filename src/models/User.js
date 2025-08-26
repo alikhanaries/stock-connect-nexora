@@ -53,7 +53,7 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
     lastLogin: Date,
-    isSupplierConnected: {
+    isMarketplaceConnected: {
       type: Boolean,
       default: false,
     },

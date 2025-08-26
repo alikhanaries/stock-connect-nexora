@@ -2,6 +2,7 @@ import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import Responses from '#helpers/response.js';
+
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
 export const getUserById = async (req, res) => {
@@ -19,7 +20,7 @@ export const getUserById = async (req, res) => {
 
 export const updateUser = async (req, res) => {
   try {
-    const id = req.user._id;
+    const { id } = req.params;
     const { firstName, lastName, email, phoneNumber, active } = req.body;
 
     const updatedUser = await User.findByIdAndUpdate(
@@ -28,11 +29,11 @@ export const updateUser = async (req, res) => {
       { new: true }
     ).select(userSafeFields);
     if (!updatedUser) {
-      return res.status(404).json(formatErrorResponse('User not found', 404));
+      return Responses.failResponse(res, 'User not found', 404);
     }
-    res.status(200).json(formatSuccessResponse(updatedUser.toObject(), 'User updated successfully'));
-  } catch (err) {
-    res.status(500).json(formatErrorResponse(err?.message || 'Failed to update user'));
+    return Responses.successResponse(res, 'User updated successfully', 200, updatedUser.toObject());
+  } catch (error) {
+    return Responses.errorResponse(res, error);
   }
 };
 
@@ -79,6 +80,7 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+
 export const updatePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
@@ -108,5 +110,22 @@ export const updatePassword = async (req, res) => {
   } catch (error) {
     console.error('userUpdatePassword Error:', error);
     return Responses.errorResponse(res, error, 500);
+
+export const softDeleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const deletedUser = await User.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { $set: { isDeleted: true } },
+      { new: true }
+    );
+    if (!deletedUser) {
+      return Responses.failResponse(res, 'User not found', 404);
+    }
+    return Responses.successResponse(res, 'User deleted successfully', 200);
+  } catch (error) {
+    return Responses.errorResponse(res, error);
+
   }
 };

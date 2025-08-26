@@ -1,7 +1,11 @@
 import mongoose from 'mongoose';
+
 const channelsSchema = new mongoose.Schema(
   {
     languageCode: {
+      type: String,
+    },
+    channelImageUrl: {
       type: String,
     },
     countryCode: {
@@ -42,7 +46,7 @@ const channelsSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       required: true,
-      default: false,
+      default: true,
       index: true,
     },
   },

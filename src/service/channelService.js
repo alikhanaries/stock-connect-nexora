@@ -1,5 +1,9 @@
 import { config } from '../config/config.js';
-import Channel from '../models/channelsModel.js';
+import mongoose from 'mongoose';
+import Channel from '../models/Channel.js';
+import UserChannels from '../models/UserChannels.js';
+// Access ObjectId from mongoose
+const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_URL } = config;
 
 /** FUNC - GET ALL CHANNEL LIST FROM CHANNEL PARTNER AND SAVE */
@@ -28,6 +32,8 @@ const getAllChannelsFromChannelPartner = async () => {
         isEnabled: item.IsEnabled,
         channelName: item.ChannelName,
         reference: item.Reference,
+        isActive: true,
+        channelImageUrl: null,
       }))
     );
 
@@ -51,4 +57,92 @@ const getAllChannelsFromChannelPartner = async () => {
   }
 };
 
-export default { getAllChannelsFromChannelPartner };
+/** FUNC - GET ALL CHANNEL LIST FROM DATABASE */
+const getAllChannels = async () => {
+  try {
+    // Get data
+    const result = await Channel.find({ isActive: true }, { _id: 1, channelName: 1, channelImageUrl: 1 }).lean();
+    if (!result.length) {
+      return false;
+    }
+    return result;
+  } catch (err) {
+    console.error('Error in getAllChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+
+/** FUNC - SAVE USER SELECTED CHANNEL DATA */
+const saveUserChannels = async (userId, channelIds) => {
+  try {
+    // Validate input
+    if (!userId || !Array.isArray(channelIds)) {
+      return { success: false, message: 'Invalid input data' };
+    }
+
+    // Either update existing doc or create new one
+    const updatedUserChannels = await UserChannels.findOneAndUpdate(
+      { userId: new ObjectId(userId) },
+      { $set: { channelIds: channelIds } },
+      { new: true, upsert: true } // upsert = create if not exists
+    );
+
+    return {
+      success: true,
+      message: 'Channels saved successfully',
+      data: updatedUserChannels,
+    };
+  } catch (err) {
+    console.error('Error in saveUserChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+
+/** FUNC - GET USER CHANNEL LIST */
+export const getAllUserChannels = async (userId) => {
+  try {
+    const result = await UserChannels.aggregate([
+      {
+        $match: {
+          userId: new ObjectId(userId),
+          isActive: true,
+        },
+      },
+      {
+        $lookup: {
+          from: 'channels', // collection to join
+          localField: 'channelIds', // field in UserChannels
+          foreignField: '_id', // field in Channel
+          as: 'channelDetails',
+        },
+      },
+
+      {
+        $project: {
+          _id: 0,
+          userId: 1,
+          channelDetails: {
+            _id: 1,
+            channelImageUrl: 1,
+            channelName: 1,
+          },
+        },
+      },
+    ]);
+
+    if (!result.length) {
+      return {
+        success: false,
+      };
+    }
+
+    return {
+      success: true,
+      channelData: result[0],
+    };
+  } catch (err) {
+    console.error('Error in getAllUserChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };
