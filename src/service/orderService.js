@@ -1,11 +1,9 @@
 import Order from '#models/Order.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 
-const getAllOrders = async (req) => {
+const getAllOrders = async (query) => {
   try {
-    const { page = 1, size = 10, sort = 'newest' } = req.query;
-
-    const sortOrder = sort === 'newest' ? -1 : 1;
+    const { page = 1, size = 10, sort = 1 } = query;
 
     const pageNumber = parseInt(page);
     const limit = parseInt(size);
@@ -13,9 +11,9 @@ const getAllOrders = async (req) => {
 
     const [totalOrders, orders] = await Promise.all([
       Order.countDocuments(),
-      Order.find().skip(skip).limit(limit).sort({ createdAt: sortOrder }).lean(),
+      Order.find().skip(skip).limit(limit).sort({ createdAt: sort }).lean(),
     ]);
-    if (orders.length === 0) {
+    if (orders?.length === 0) {
       return {
         success: false,
       };
