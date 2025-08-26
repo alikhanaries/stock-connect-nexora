@@ -41,15 +41,28 @@ export const login = async (req, res) => {
 
 export const register = async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role, phoneNumber } = req.body;
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      role,
+      phoneNumber,
+      active,
+      isMarketplaceConnected = false,
+    } = req.body;
 
-    if (!email || !password || !firstName || !lastName || !role) {
-      return res.status(400).json(formatErrorResponse('Missing inputs', 400));
-    }
+    const existingUser = await User.findOne({
+      $or: [{ email }, { phoneNumber }],
+    });
 
-    const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json(formatErrorResponse('Email already exists', 400));
+      if (existingUser.email === email) {
+        return res.status(409).json(formatErrorResponse('Email already exists', 409));
+      }
+      if (existingUser.phoneNumber === phoneNumber) {
+        return res.status(409).json(formatErrorResponse('Phone number already exists', 409));
+      }
     }
 
     const newUser = new User({
@@ -58,10 +71,12 @@ export const register = async (req, res) => {
       firstName,
       lastName,
       role,
-      isMarketplaceConnected: false,
+      isMarketplaceConnected,
       phoneNumber,
+      active,
     });
     await newUser.save();
+
     // Generate JWT token
     const tokenResponse = generateTokenResponse(newUser, newUser.role);
 

@@ -12,4 +12,5 @@ export const registerSchema = z.object({
   lastName: z.string().min(1, 'Last name is required'),
   phoneNumber: z.string().min(1, 'Phone number is required'),
   role: z.enum(['admin', 'super_admin']),
+  active: z.boolean().optional(),
 });
