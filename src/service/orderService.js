@@ -12,7 +12,7 @@ const getAllOrders = async (query) => {
 
     const [totalOrders, orders] = await Promise.all([
       Order.countDocuments(),
-      Order.find().skip(skip).limit(limit).sort({ createdAt: sortDirection }).lean(),
+      Order.find().skip(skip).limit(limit).sort({ _id: sortDirection }).lean(),
     ]);
     if (orders?.length === 0) {
       return {
