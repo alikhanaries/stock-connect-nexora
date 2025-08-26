@@ -25,10 +25,12 @@ const userSchema = new mongoose.Schema(
     firstName: {
       type: String,
       required: [true, 'First name is required'],
+      index: true,
     },
     lastName: {
       type: String,
       required: [true, 'Last name is required'],
+      index: true,
     },
     phoneNumber: {
       type: String,

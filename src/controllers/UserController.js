@@ -67,7 +67,7 @@ export const getAllUsers = async (req, res) => {
     const response = {
       content: users,
       appliedFilters: {
-        ...(active && { active: active }),
+        ...(active && { active: active === 'true' }),
         ...(role && { role: role }),
       },
       ...pagination,
