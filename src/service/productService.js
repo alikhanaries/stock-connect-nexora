@@ -26,8 +26,11 @@ const fetchProducts = async (query) => {
   }
 
   // Search filter
-  if (search) filter.$text = { $search: search };
-
+  // if (search) filter.$text = { $search: search };
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    filter.$or = [{ name: regex }, { productSkuCode: regex }];
+  }
   // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
