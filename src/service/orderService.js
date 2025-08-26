@@ -8,10 +8,11 @@ const getAllOrders = async (query) => {
     const pageNumber = parseInt(page);
     const limit = parseInt(size);
     const skip = (pageNumber - 1) * limit;
+    const sortDirection = parseInt(sort);
 
     const [totalOrders, orders] = await Promise.all([
       Order.countDocuments(),
-      Order.find().skip(skip).limit(limit).sort({ createdAt: sort }).lean(),
+      Order.find().skip(skip).limit(limit).sort({ createdAt: sortDirection }).lean(),
     ]);
     if (orders?.length === 0) {
       return {
