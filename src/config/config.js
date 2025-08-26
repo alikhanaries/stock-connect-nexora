@@ -6,4 +6,6 @@ export const config = {
   DB_URL: process.env.DB_URL,
   JWT_SECRET: process.env.JWT_SECRET,
   CHANNEL_ENGINE_URL: process.env.CHANNEL_ENGINE_URL,
+  CHANNEL_ENGINE_BASE_URL: process.env.CHANNEL_ENGINE_BASE_URL,
+  CHANNEL_ENGINE_KEY: process.env.CHANNEL_ENGINE_KEY,
 };

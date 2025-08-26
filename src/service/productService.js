@@ -1,6 +1,8 @@
 import Product from '#models/Product.js';
 import '#models/Category.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { config } from '#config/config.js';
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY } = config;
 
 const fetchProducts = async (query) => {
   const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
@@ -50,4 +52,23 @@ const fetchProducts = async (query) => {
   };
 };
 
-export default { fetchProducts };
+export const pushProducts = async (products) => {
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(products),
+    });
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error('Error pushing products to ChannelEngine:', err);
+    return {
+      StatusCode: 500,
+      Success: false,
+      Message: err.message || 'Unexpected error occurred',
+    };
+  }
+};
+
+export default { fetchProducts, pushProducts };
