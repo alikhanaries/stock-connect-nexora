@@ -80,6 +80,37 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+
+export const updatePassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+    const userId = req.user?._id;
+
+    if (!oldPassword || !newPassword) {
+      return Responses.failResponse(res, 'Old and new passwords are required', 400);
+    }
+    if (oldPassword === newPassword) {
+      return Responses.failResponse(res, 'New password must be different from the old password', 400);
+    }
+
+    const user = await User.findOne({ _id: userId, isDeleted: false }).select('+password');
+    
+    if (!user) {
+      return Responses.failResponse(res, 'User not found', 404);
+    }
+
+    const isMatch = await user.comparePassword(oldPassword);
+    if (!isMatch) {
+      return Responses.failResponse(res, 'Invalid old password', 400);
+    }
+    user.password = newPassword;
+    await user.save();
+
+    return Responses.successResponse(res, 'Password updated successfully', 200);
+  } catch (error) {
+    console.error('userUpdatePassword Error:', error);
+    return Responses.errorResponse(res, error, 500);
+
 export const softDeleteUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -95,5 +126,6 @@ export const softDeleteUser = async (req, res) => {
     return Responses.successResponse(res, 'User deleted successfully', 200);
   } catch (error) {
     return Responses.errorResponse(res, error);
+
   }
 };
