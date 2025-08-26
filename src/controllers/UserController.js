@@ -80,7 +80,6 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-
 export const updatePassword = async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
@@ -94,7 +93,7 @@ export const updatePassword = async (req, res) => {
     }
 
     const user = await User.findOne({ _id: userId, isDeleted: false }).select('+password');
-    
+
     if (!user) {
       return Responses.failResponse(res, 'User not found', 404);
     }
@@ -110,6 +109,8 @@ export const updatePassword = async (req, res) => {
   } catch (error) {
     console.error('userUpdatePassword Error:', error);
     return Responses.errorResponse(res, error, 500);
+  }
+};
 
 export const softDeleteUser = async (req, res) => {
   try {
@@ -126,6 +127,5 @@ export const softDeleteUser = async (req, res) => {
     return Responses.successResponse(res, 'User deleted successfully', 200);
   } catch (error) {
     return Responses.errorResponse(res, error);
-
   }
 };
