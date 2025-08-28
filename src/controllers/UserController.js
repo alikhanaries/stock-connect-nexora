@@ -147,7 +147,7 @@ export const deleteSelectedUsers = async (req, res) => {
   try {
     const { ids } = req.body;
 
-    if (!Array.isArray(ids) || ids.length == 0) {
+    if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
     }
     const result = await userService.deleteSelectedUsers(ids);
