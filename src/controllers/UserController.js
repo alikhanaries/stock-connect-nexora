@@ -155,7 +155,7 @@ export const deleteMultipleUsers = async (req, res) => {
       },
       { $set: { isDeleted: true } }
     );
-    return Responses.successResponse(res, `${result.modifiedCount} users deleted successfully.`, 200);
+    return Responses.successResponse(res, `Successfully deleted ${result.modifiedCount} users.`, 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
   }
