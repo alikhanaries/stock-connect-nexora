@@ -23,3 +23,24 @@ export const getProducts = async (req, res) => {
     return errorResponse(res, err, 500);
   }
 };
+
+export const updateProductStatus = async (req, res) => {
+  try {
+    const { ids, active } = req.body;
+    if (!Array.isArray(ids) || !ids.length) {
+      return failResponse(res, 'Product IDs are required', 400);
+    }
+    if (typeof active !== 'boolean') {
+      return failResponse(res, 'Status must be true or false', 400);
+    }
+    const updatedCount = await productService.updateProductStatus(ids, active);
+    if (updatedCount === 0) {
+      return failResponse(res, 'No matching products found to update', 404);
+    }
+    const statusMessage = active ? 'Products activated successfully' : 'Products deactivated successfully';
+    return successResponse(res, statusMessage, 200);
+  } catch (err) {
+    console.error('Error updating product status:', err);
+    return errorResponse(res, err, 500);
+  }
+};

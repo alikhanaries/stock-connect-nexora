@@ -53,4 +53,10 @@ const fetchProducts = async (query) => {
   };
 };
 
-export default { fetchProducts };
+export const updateProductStatus = async (ids, active) => {
+  if (!ids.length) return 0;
+  const result = await Product.updateMany({ _id: { $in: ids } }, { $set: { status: active } });
+  return result.modifiedCount;
+};
+
+export default { fetchProducts, updateProductStatus };
