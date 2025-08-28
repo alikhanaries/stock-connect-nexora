@@ -12,7 +12,6 @@ const loadLocale = (lang) => {
   try {
     return JSON.parse(fs.readFileSync(path.join(__dirname, `../locales/${lang}.json`), 'utf-8'));
   } catch (err) {
-    console.error(`Missing locale file for ${lang}, falling back to EN`);
     return JSON.parse(fs.readFileSync(path.join(__dirname, '../locales/en.json'), 'utf-8'));
   }
 };
