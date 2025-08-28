@@ -1,12 +1,15 @@
 import channelService from '../service/channelService.js';
 import Responses from '../helpers/response.js';
-
+import mongoose from 'mongoose';
+import User from '../models/User.js';
+// Access ObjectId from mongoose
+const ObjectId = mongoose.Types.ObjectId;
 /**FUNC- FOR GET ALL CHANNEL LIST FROM CHANNEL PARTNER**/
 export const getAllChannelsFromChannelPartner = async (req, res) => {
   try {
     const result = await channelService.getAllChannelsFromChannelPartner();
     if (!result.success) {
-      return Responses.failResponse(res, 'Failed to retrieve channels', 404);
+      return Responses.successResponse(res, 'Failed to retrieve channels', 200);
     }
     return Responses.successResponse(res, 'Channels saved successfully', 200);
   } catch (error) {
@@ -18,7 +21,7 @@ export const getAllChannels = async (req, res) => {
   try {
     const result = await channelService.getAllChannels();
     if (!result) {
-      return Responses.successResponse(res, 'No channels found', 404);
+      return Responses.successResponse(res, 'No channels found', 200, []);
     }
     return Responses.successResponse(res, 'Channels found', 200, result);
   } catch (error) {
@@ -35,7 +38,16 @@ export const saveUserChannels = async (req, res) => {
     if (!userId || !Array.isArray(channelIds)) {
       return Responses.failResponse(res, 'userId and channelIds are required', 400);
     }
+    // Validate ObjectId format
+    if (!ObjectId.isValid(userId)) {
+      return Responses.failResponse(res, 'Invalid userId format', 400);
+    }
 
+    // Ensure user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return Responses.failResponse(res, 'User not found', 404);
+    }
     // Call the service to save channel data
     const result = await channelService.saveUserChannels(userId, channelIds);
 
@@ -55,7 +67,7 @@ export const getAllUserChannels = async (req, res) => {
     const result = await channelService.getAllUserChannels(req.params.userId);
 
     if (!result) {
-      return Responses.successResponse(res, 'No channels found', 404);
+      return Responses.successResponse(res, 'No channels found', 200, []);
     }
 
     return Responses.successResponse(res, 'User channels found', 200, result?.channelData);
