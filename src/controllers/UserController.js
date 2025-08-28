@@ -143,14 +143,14 @@ export const deleteAllUsers = async (req, res) => {
   }
 };
 
-export const deleteMultipleUsers = async (req, res) => {
+export const deleteSelectedUsers = async (req, res) => {
   try {
     const { ids } = req.body;
 
     if (!Array.isArray(ids) || ids.length == 0) {
       return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
     }
-    const result = await userService.deleteMultipleUsers(ids);
+    const result = await userService.deleteSelectedUsers(ids);
 
     return Responses.successResponse(res, `Successfully deleted ${result.modifiedCount} users.`, 200);
   } catch (error) {

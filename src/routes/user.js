@@ -7,7 +7,7 @@ import {
   updateUser,
   updatePassword,
   deleteAllUsers,
-  deleteMultipleUsers,
+  deleteSelectedUsers,
 } from '#controllers/UserController.js';
 
 const user = express.Router();
@@ -16,7 +16,7 @@ user.get('/me', authMiddleware, getUserById);
 user.get('/', authMiddleware, getAllUsers);
 user.patch('/update-password', authMiddleware, updatePassword);
 user.delete('/all', authMiddleware, deleteAllUsers);
-user.delete('/bulk', authMiddleware, deleteMultipleUsers);
+user.delete('/bulk', authMiddleware, deleteSelectedUsers);
 user.patch('/:id', authMiddleware, updateUser);
 user.get('/:id', authMiddleware, getUserById);
 user.delete('/:id', authMiddleware, softDeleteUser);

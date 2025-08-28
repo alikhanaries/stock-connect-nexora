@@ -11,7 +11,7 @@ const deleteAllUsers = async () => {
     return { success: false, message: err.message };
   }
 };
-const deleteMultipleUsers = async (ids) => {
+const deleteSelectedUsers = async (ids) => {
   try {
     const result = await User.updateMany(
       {
@@ -26,4 +26,4 @@ const deleteMultipleUsers = async (ids) => {
     return { success: false, message: err.message };
   }
 };
-export default { deleteAllUsers, deleteMultipleUsers };
+export default { deleteAllUsers, deleteSelectedUsers };
