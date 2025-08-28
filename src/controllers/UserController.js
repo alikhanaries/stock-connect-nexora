@@ -129,3 +129,34 @@ export const softDeleteUser = async (req, res) => {
     return Responses.errorResponse(res, error);
   }
 };
+
+export const deleteAllUsers = async (req, res) => {
+  try {
+    await User.updateMany({ isDeleted: false }, { $set: { isDeleted: true } });
+
+    return Responses.successResponse(res, 'All users have been deleted successfully.', 200);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const deleteMultipleUsers = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length == 0) {
+      return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
+    }
+
+    const result = await User.updateMany(
+      {
+        _id: { $in: ids },
+        isDeleted: false,
+      },
+      { $set: { isDeleted: true } }
+    );
+    return Responses.successResponse(res, `${result.modifiedCount} users deleted successfully.`, 200);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};
