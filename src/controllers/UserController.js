@@ -2,6 +2,7 @@ import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import Responses from '#helpers/response.js';
+import userService from '#service/userService.js';
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -132,8 +133,10 @@ export const softDeleteUser = async (req, res) => {
 
 export const deleteAllUsers = async (req, res) => {
   try {
-    await User.updateMany({ isDeleted: false }, { $set: { isDeleted: true } });
-
+    const result = await userService.deleteAllUsers();
+    if (!result.success) {
+      return Responses.failResponse(res, 'Failed to delete users', 404);
+    }
     return Responses.successResponse(res, 'All users have been deleted successfully.', 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
@@ -147,14 +150,8 @@ export const deleteMultipleUsers = async (req, res) => {
     if (!Array.isArray(ids) || ids.length == 0) {
       return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
     }
+    const result = await userService.deleteMultipleUsers(ids);
 
-    const result = await User.updateMany(
-      {
-        _id: { $in: ids },
-        isDeleted: false,
-      },
-      { $set: { isDeleted: true } }
-    );
     return Responses.successResponse(res, `Successfully deleted ${result.modifiedCount} users.`, 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
