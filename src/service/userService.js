@@ -13,9 +13,15 @@ const deleteAllUsers = async () => {
 };
 const deleteSelectedUsers = async (ids) => {
   try {
+    const existingUsers = await User.find({ _id: { $in: ids }, isDeleted: false }, { _id: 1 });
+    if (existingUsers.length === 0) {
+      return { success: false, message: 'No matching users found to delete.' };
+    }
+    const idsToDelete = existingUsers.map((user) => user._id);
+
     const result = await User.updateMany(
       {
-        _id: { $in: ids },
+        _id: { $in: idsToDelete },
         isDeleted: false,
       },
       { $set: { isDeleted: true } }

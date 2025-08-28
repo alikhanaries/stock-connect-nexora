@@ -152,6 +152,10 @@ export const deleteSelectedUsers = async (req, res) => {
     }
     const result = await userService.deleteSelectedUsers(ids);
 
+    if (result.success === false) {
+      return Responses.failResponse(res, result.message, 400);
+    }
+
     return Responses.successResponse(res, `Successfully deleted ${result.modifiedCount} users.`, 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
