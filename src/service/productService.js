@@ -53,9 +53,9 @@ const fetchProducts = async (query) => {
   };
 };
 
-export const updateProductStatus = async (ids, active) => {
+export const updateProductStatus = async (ids, status) => {
   if (!ids.length) return 0;
-  const result = await Product.updateMany({ _id: { $in: ids } }, { $set: { status: active } });
+  const result = await Product.updateMany({ _id: { $in: ids } }, { $set: { status: status } });
   return result.modifiedCount;
 };
 
