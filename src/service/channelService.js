@@ -74,7 +74,7 @@ const getAllChannels = async () => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-export const saveUserChannels = async (userId, channelIds) => {
+const saveUserChannels = async (userId, channelIds) => {
   try {
     // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(

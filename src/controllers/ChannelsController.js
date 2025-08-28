@@ -9,7 +9,7 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
   try {
     const result = await channelService.getAllChannelsFromChannelPartner();
     if (!result.success) {
-      return Responses.failResponse(res, 'Failed to retrieve channels', 404);
+      return Responses.successResponse(res, 'Failed to retrieve channels', 200);
     }
     return Responses.successResponse(res, 'Channels saved successfully', 200);
   } catch (error) {
@@ -21,7 +21,7 @@ export const getAllChannels = async (req, res) => {
   try {
     const result = await channelService.getAllChannels();
     if (!result) {
-      return Responses.successResponse(res, 'No channels found', 404);
+      return Responses.successResponse(res, 'No channels found', 200, []);
     }
     return Responses.successResponse(res, 'Channels found', 200, result);
   } catch (error) {
@@ -67,7 +67,7 @@ export const getAllUserChannels = async (req, res) => {
     const result = await channelService.getAllUserChannels(req.params.userId);
 
     if (!result) {
-      return Responses.successResponse(res, 'No channels found', 404);
+      return Responses.successResponse(res, 'No channels found', 200, []);
     }
 
     return Responses.successResponse(res, 'User channels found', 200, result?.channelData);
