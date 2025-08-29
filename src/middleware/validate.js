@@ -1,4 +1,5 @@
-import { ZodError } from "zod";
+import { ZodError } from 'zod';
+import Response from '#helpers/response.js';
 
 export const validateInput = (schema) => (req, res, next) => {
   try {
@@ -7,8 +8,9 @@ export const validateInput = (schema) => (req, res, next) => {
     next();
   } catch (error) {
     if (error instanceof ZodError) {
-      return res.status(400).json({ errors: error.errors });
+      const firstErrorMessage = error.issues[0]?.message || 'Invalid input';
+      return Response.failResponse(res, firstErrorMessage, 400);
     }
-    return res.status(400).json({ errors: "Invalid input" });
+    return Response.failResponse(res, 'An unexpected server error occurred', 500);
   }
 };

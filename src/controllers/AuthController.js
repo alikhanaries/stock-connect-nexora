@@ -3,6 +3,7 @@ import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormat
 import { generateTokenResponse, decodeToken, generateResetToken } from '#util/token.js';
 import { errorHandler } from '#helpers/ErrorHandler.js';
 import crypto from 'crypto';
+import Response from '#helpers/response.js';
 
 export const login = async (req, res) => {
   try {
@@ -52,16 +53,20 @@ export const register = async (req, res) => {
       isMarketplaceConnected = false,
     } = req.body;
 
+    if (!email || !password || !firstName || !lastName || !role || !phoneNumber) {
+      return Response.failResponse(res, 'Missing required fields', 409);
+    }
+
     const existingUser = await User.findOne({
       $or: [{ email }, { phoneNumber }],
     });
 
     if (existingUser) {
       if (existingUser.email === email) {
-        return res.status(409).json(formatErrorResponse('Email already exists', 409));
+        return Response.failResponse(res, 'Email already exists', 409);
       }
       if (existingUser.phoneNumber === phoneNumber) {
-        return res.status(409).json(formatErrorResponse('Phone number already exists', 409));
+        return Response.failResponse(res, 'Phone number already exists', 409);
       }
     }
 
@@ -77,17 +82,9 @@ export const register = async (req, res) => {
     });
     await newUser.save();
 
-    // Generate JWT token
-    const tokenResponse = generateTokenResponse(newUser, newUser.role);
-
-    if (!tokenResponse) {
-      return res.status(500).json(formatErrorResponse('Error generating token', 500));
-    }
-
-    // Respond with the success response and JWT token
-    res.status(201).json(formatSuccessResponse(tokenResponse, 'Registration successful.'));
+    return Response.successResponse(res, 'User Registerd successfully', 201);
   } catch (error) {
-    errorHandler(error, res);
+    return Response.errorResponse(res, error, 500);
   }
 };
 
