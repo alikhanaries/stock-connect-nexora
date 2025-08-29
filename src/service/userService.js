@@ -32,7 +32,7 @@ const deleteSelectedUsers = async (ids) => {
     return { success: false, message: err.message };
   }
 };
-const updateSelectedUserStatus = async (ids, status) => {
+const updateSelectedUserStatus = async (ids, active) => {
   const existingUsers = await User.find({ _id: { $in: ids }, isDeleted: false }, { _id: 1 });
 
   if (existingUsers.length === 0) {
@@ -45,7 +45,7 @@ const updateSelectedUserStatus = async (ids, status) => {
       _id: { $in: idsToUpdate },
       isDeleted: false,
     },
-    { $set: { active: status } }
+    { $set: { active: active } }
   );
   return result;
 };
