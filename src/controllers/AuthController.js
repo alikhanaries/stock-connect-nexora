@@ -12,7 +12,7 @@ export const login = async (req, res) => {
       return res.status(400).json(formatErrorResponse('Missing credentials', 400));
     }
 
-    const user = await User.findOne({ email, isDeleted: false }).select('+password');
+    const user = await User.findOne({ email, isDeleted: false, active: true }).select('+password');
 
     if (!user) {
       return res.status(400).json(formatErrorResponse('Invalid credentials', 400));
