@@ -117,11 +117,8 @@ export const softDeleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deletedUser = await User.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      { $set: { isDeleted: true } },
-      { new: true }
-    );
+    const deletedUser = await userService.deleteUserId(id);
+
     if (!deletedUser) {
       return Responses.failResponse(res, 'User not found', 404);
     }
