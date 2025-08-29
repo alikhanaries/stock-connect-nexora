@@ -54,7 +54,7 @@ export const register = async (req, res) => {
     } = req.body;
 
     if (!email || !password || !firstName || !lastName || !role || !phoneNumber) {
-      return Response.failResponse(res, 'Missing required fields', 409);
+      return Response.failResponse(res, 'Missing required fields', 400);
     }
 
     const existingUser = await User.findOne({
