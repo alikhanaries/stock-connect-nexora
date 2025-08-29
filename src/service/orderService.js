@@ -31,7 +31,7 @@ const getAllOrders = async (query) => {
     const pageNumber = Math.max(parseInt(query.page) || 1, 1);
     const limit = Math.max(parseInt(query.size) || 10, 1);
     const skip = (pageNumber - 1) * limit;
-    const sortDirection = parseInt(query.sort) || 1;
+    const sortDirection = query.sort === '-1' ? -1 : 1;
     const appliedFilters = {};
 
     const [totalOrders, orders] = await Promise.all([
