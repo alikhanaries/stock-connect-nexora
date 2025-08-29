@@ -161,3 +161,27 @@ export const deleteSelectedUsers = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const updateSelectedUserStatus = async (req, res) => {
+  try {
+    const { ids, status } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
+    }
+    if (typeof status !== 'boolean') {
+      return Responses.failResponse(res, 'Status must be a boolean (true or false).', 400);
+    }
+    const result = await userService.updateSelectedUserStatus(ids, status);
+
+    if (result.success === false) {
+      return Responses.failResponse(res, result.message, 400);
+    }
+
+    const statusMessage = status ? ' Users activated successfully' : ' Users deactivated successfully';
+
+    return Responses.successResponse(res, `${result.modifiedCount}` + statusMessage, 200);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};

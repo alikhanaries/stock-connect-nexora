@@ -32,4 +32,21 @@ const deleteSelectedUsers = async (ids) => {
     return { success: false, message: err.message };
   }
 };
-export default { deleteAllUsers, deleteSelectedUsers };
+const updateSelectedUserStatus = async (ids, status) => {
+  const existingUsers = await User.find({ _id: { $in: ids }, isDeleted: false }, { _id: 1 });
+
+  if (existingUsers.length === 0) {
+    return { success: false, message: 'No matching users found to Update.' };
+  }
+  const idsToUpdate = existingUsers.map((user) => user._id);
+
+  const result = await User.updateMany(
+    {
+      _id: { $in: idsToUpdate },
+      isDeleted: false,
+    },
+    { $set: { active: status } }
+  );
+  return result;
+};
+export default { deleteAllUsers, deleteSelectedUsers, updateSelectedUserStatus };
