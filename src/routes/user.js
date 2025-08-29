@@ -17,7 +17,7 @@ user.get('/me', authMiddleware, getUserById);
 user.get('/', authMiddleware, getAllUsers);
 user.patch('/update-password', authMiddleware, updatePassword);
 user.delete('/all', authMiddleware, deleteAllUsers);
-user.delete('/delete/bulk', authMiddleware, deleteSelectedUsers);
+user.delete('/bulk', authMiddleware, deleteSelectedUsers);
 user.patch('/update-active', authMiddleware, updateSelectedUserStatus);
 user.patch('/:id', authMiddleware, updateUser);
 user.get('/:id', authMiddleware, getUserById);
