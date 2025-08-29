@@ -22,7 +22,6 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('body', req.body);
 
     const { firstName, lastName, email, phoneNumber, active, role } = req.body;
 
