@@ -50,4 +50,13 @@ const getAllOrders = async (query) => {
   }
 };
 
-export default { getAllOrders };
+const getOrderById = async (id) => {
+  try {
+    const order = await Order.findById(id).select(SELECTED_FIELDS).lean();
+    return formatOrder(order);
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+};
+
+export default { getAllOrders, getOrderById };

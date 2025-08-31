@@ -25,3 +25,16 @@ export const getAllOrders = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+
+export const getOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await orderService.getOrderById(id);
+    if (!order) {
+      return Responses.failResponse(res, 'Order not found', 404);
+    }
+    return Responses.successResponse(res, 'Order fetched successfully', 200, order);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};
