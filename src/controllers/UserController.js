@@ -178,9 +178,9 @@ export const updateSelectedUserStatus = async (req, res) => {
       return Responses.failResponse(res, result.message, 400);
     }
 
-    const statusMessage = active ? ' Users activated successfully' : ' Users deactivated successfully';
+    const statusMessage = active ? 'Users activated' : 'Users deactivated';
 
-    return Responses.successResponse(res, `${result.modifiedCount}` + statusMessage, 200);
+    return Responses.successResponse(res, `${result.modifiedCount} ${statusMessage} successfully.`, 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
   }

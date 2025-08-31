@@ -1,4 +1,5 @@
 import User from '#models/User.js';
+import mongoose from 'mongoose';
 
 const deleteAllUsers = async () => {
   try {
@@ -33,16 +34,22 @@ const deleteSelectedUsers = async (ids) => {
   }
 };
 const updateSelectedUserStatus = async (ids, active) => {
+  if (!ids.every((id) => mongoose.Types.ObjectId.isValid(id))) {
+    return { success: false, message: 'Invalid user ID(s) provided.' };
+  }
   const existingUsers = await User.find({ _id: { $in: ids }, isDeleted: false }, { _id: 1 });
 
-  if (existingUsers.length === 0) {
-    return { success: false, message: 'No matching users found to Update.' };
+  if (existingUsers.length !== ids.length) {
+    const foundIds = new Set(existingUsers.map((user) => user._id.toString()));
+    const notFoundIds = ids.filter((id) => !foundIds.has(id));
+    return {
+      success: false,
+      message: `Could not find all users. The following ID(s) were not found: ${notFoundIds.join(', ')}`,
+    };
   }
-  const idsToUpdate = existingUsers.map((user) => user._id);
-
   const result = await User.updateMany(
     {
-      _id: { $in: idsToUpdate },
+      _id: { $in: ids },
       isDeleted: false,
     },
     { $set: { active: active } }
