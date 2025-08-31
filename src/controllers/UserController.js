@@ -22,11 +22,12 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, email, phoneNumber, active } = req.body;
+
+    const { firstName, lastName, email, phoneNumber, active, role } = req.body;
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
-      { firstName, lastName, email, phoneNumber, active },
+      { firstName, lastName, email, phoneNumber, active, role },
       { new: true }
     ).select(userSafeFields);
     if (!updatedUser) {
@@ -117,11 +118,8 @@ export const softDeleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deletedUser = await User.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      { $set: { isDeleted: true } },
-      { new: true }
-    );
+    const deletedUser = await userService.deleteUserId(id);
+
     if (!deletedUser) {
       return Responses.failResponse(res, 'User not found', 404);
     }

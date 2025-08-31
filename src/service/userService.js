@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 
 const deleteAllUsers = async () => {
   try {
-    await User.updateMany({ isDeleted: false }, { $set: { isDeleted: true } });
+    await User.updateMany({ isDeleted: false }, { $set: { isDeleted: true, active: false } });
     return {
       success: true,
     };
@@ -25,7 +25,7 @@ const deleteSelectedUsers = async (ids) => {
         _id: { $in: idsToDelete },
         isDeleted: false,
       },
-      { $set: { isDeleted: true } }
+      { $set: { isDeleted: true, active: false } }
     );
     return result;
   } catch (err) {
@@ -33,6 +33,7 @@ const deleteSelectedUsers = async (ids) => {
     return { success: false, message: err.message };
   }
 };
+
 const updateSelectedUserStatus = async (ids, active) => {
   if (!ids.every((id) => mongoose.Types.ObjectId.isValid(id))) {
     return { success: false, message: 'Invalid user ID(s) provided.' };
@@ -56,4 +57,17 @@ const updateSelectedUserStatus = async (ids, active) => {
   );
   return result;
 };
-export default { deleteAllUsers, deleteSelectedUsers, updateSelectedUserStatus };
+
+const deleteUserId = async (id) => {
+  try {
+    const deletedUser = await User.findOneAndUpdate(
+      { _id: id, isDeleted: false },
+      { $set: { isDeleted: true, active: false } },
+      { new: true }
+    );
+    return deletedUser;
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+};
+export default { deleteAllUsers, deleteSelectedUsers, deleteUserId,updateSelectedUserStatus };
