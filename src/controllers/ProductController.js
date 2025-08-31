@@ -1,5 +1,6 @@
 import { errorResponse, failResponse, successResponse } from '#helpers/response.js';
 import productService from '#service/productService.js';
+import mongoose from 'mongoose';
 
 export const getProducts = async (req, res) => {
   try {
@@ -29,6 +30,10 @@ export const updateProductStatus = async (req, res) => {
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, 'Product IDs are required', 400);
+    }
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return failResponse(res, `Invalid product IDs: ${invalidIds.join(', ')}`, 400);
     }
     if (typeof status !== 'boolean') {
       return failResponse(res, 'Status must be true or false', 400);
