@@ -1,5 +1,6 @@
 import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
+import mongoose from 'mongoose';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -29,6 +30,10 @@ export const getAllOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return Responses.failResponse(res, 'Invalid order ID format', 400);
+    }
     const order = await orderService.getOrderById(id);
     if (!order) {
       return Responses.failResponse(res, 'Order not found', 404);

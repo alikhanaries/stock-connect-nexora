@@ -10,6 +10,9 @@ const formatOrder = (order) => {
     quantity: totalQuantity,
     totalPrice: order.orderDetails?.totalInclVat || 0,
     customer,
+    orderDate: order.orderDate,
+    email: order.email,
+    phoneNumber: order.phoneNumber,
     status: order.status,
     platform: order.channelName,
   };
@@ -24,6 +27,9 @@ const SELECTED_FIELDS = [
   'skus.quantity',
   'orderDetails.totalInclVat',
   'channelName',
+  'orderDate',
+  'email',
+  'phoneNumber',
 ].join(' ');
 
 const getAllOrders = async (query) => {
@@ -51,12 +57,12 @@ const getAllOrders = async (query) => {
 };
 
 const getOrderById = async (id) => {
-  try {
-    const order = await Order.findById(id).select(SELECTED_FIELDS).lean();
-    return formatOrder(order);
-  } catch (err) {
-    return { success: false, message: err.message };
+  const order = await Order.findById(id).select(SELECTED_FIELDS).lean();
+  if (!order) {
+    return false;
   }
+  const formattedOrder = formatOrder(order);
+  return formattedOrder;
 };
 
 export default { getAllOrders, getOrderById };
