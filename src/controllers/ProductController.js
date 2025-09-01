@@ -16,3 +16,17 @@ export const getProducts = async (req, res) => {
     return errorResponse(res, error, 500);
   }
 };
+
+export const getTopSellingProduct = async (req, res) => {
+  try {
+    const limit = parseInt(req.query.size) || 5;
+
+    const topProducts = await productService.getTopSellingProduct(limit);
+
+    const message = topProducts.length ? 'Top-selling products fetched successfully' : 'No top-selling products found';
+    return successResponse(res, message, 200, topProducts);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    return errorResponse(res, error, 500);
+  }
+};

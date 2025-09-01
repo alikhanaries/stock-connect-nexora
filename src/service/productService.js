@@ -1,6 +1,7 @@
 import Product from '#models/Product.js';
 import '#models/Category.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import Order from '#models/Orders.js';
 
 const fetchProducts = async (query) => {
   const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
@@ -53,4 +54,49 @@ const fetchProducts = async (query) => {
   };
 };
 
-export default { fetchProducts };
+const getTopSellingProduct = async (limit) => {
+  try {
+    const topProducts = await Order.aggregate([
+      { $unwind: '$skus' },
+
+      {
+        $group: {
+          _id: '$skus.merchantProductNo',
+          totalQuantitySold: { $sum: '$skus.quantity' },
+        },
+      },
+
+      { $sort: { totalQuantitySold: -1 } },
+
+      { $limit: limit },
+
+      {
+        $lookup: {
+          from: Product.collection.name,
+          localField: '_id',
+          foreignField: 'productSkuCode',
+          as: 'productDetails',
+        },
+      },
+      {
+        $unwind: '$productDetails',
+      },
+
+      {
+        $project: {
+          _id: '$productDetails._id',
+          sku: '$_id',
+          totalQuantitySold: 1,
+          productName: '$productDetails.name',
+          imageUrl: '$productDetails.images',
+        },
+      },
+    ]);
+
+    return topProducts;
+  } catch (err) {
+    return { success: false, message: err.message };
+  }
+};
+
+export default { fetchProducts, getTopSellingProduct };
