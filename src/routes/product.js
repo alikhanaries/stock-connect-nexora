@@ -1,5 +1,6 @@
 import {
   getProducts,
+  pushProductToChannelEngine,
   uploadProductsFromGoogleSheet,
   uploadProductsFromCsvFile,
 } from '#controllers/ProductController.js';
@@ -18,10 +19,13 @@ productsRouter.post('/uploadProductsFromGoogleSheet', uploadProductsFromGoogleSh
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post(
   '/uploadProductsFromCsvFile',
-
   upload.single('file'),
   validateFile,
   uploadProductsFromCsvFile
 );
+
+
+productsRouter.get('/', authMiddleware,getProducts);
+productsRouter.get('/push-to-channelengine',authMiddleware, pushProductToChannelEngine);
 
 export default productsRouter;
