@@ -4,7 +4,7 @@ const ProductSchema = new mongoose.Schema(
   {
     parentProductId: { type: String, trim: true },
     parentProductSkuCode: { type: String, trim: true },
-    productSkuCode: { type: String, trim: true },
+    productSkuCode: { type: String, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
     description: { type: String },
     brand: { type: String, trim: true },
