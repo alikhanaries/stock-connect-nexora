@@ -5,13 +5,16 @@ const formatOrder = (order) => {
   const totalQuantity = order.skus?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
   const customer = `${order.billingAddress?.firstName || ''} ${order.billingAddress?.lastName || ''}`.trim();
 
+  // const skuNames = order.skus?.map((sku) => sku.description).filter(Boolean) ?? [];
   return {
     orderID: order.orderId,
     quantity: totalQuantity,
     totalPrice: order.orderDetails?.totalInclVat || 0,
     customer,
+    email: order.email,
     status: order.status,
     platform: order.channelName,
+    // skuName: skuNames,
   };
 };
 
@@ -24,6 +27,8 @@ const SELECTED_FIELDS = [
   'skus.quantity',
   'orderDetails.totalInclVat',
   'channelName',
+  'createdAt',
+  'email',
 ].join(' ');
 
 const getAllOrders = async (query) => {
@@ -32,11 +37,50 @@ const getAllOrders = async (query) => {
     const limit = Math.max(parseInt(query.size) || 10, 1);
     const skip = (pageNumber - 1) * limit;
     const sortDirection = query.sort === '-1' ? -1 : 1;
+    const search = query.search;
+    const toDate = query.toDate;
+    const fromDate = query.fromDate;
+    const status = query.status;
     const appliedFilters = {};
 
+    const filter = {};
+
+    //search filter
+    if (search) {
+      const regex = { $regex: search, $options: 'i' };
+
+      filter.$or = [
+        { orderId: regex },
+        { 'skus.description': regex },
+        { email: regex },
+        { 'billingAddress.firstName': regex },
+        { 'billingAddress.lastName': regex },
+      ];
+    }
+
+    //date filter
+    if (fromDate || toDate) {
+      filter.createdAt = {};
+
+      if (fromDate) {
+        filter.createdAt.$gte = new Date(fromDate);
+        appliedFilters.fromDate = fromDate;
+      }
+      if (toDate) {
+        filter.createdAt.$lte = new Date(toDate);
+        appliedFilters.toDate = toDate;
+      }
+    }
+
+    // status filter
+    if (status) {
+      filter.status = status;
+      appliedFilters.status = status;
+    }
+
     const [totalOrders, orders] = await Promise.all([
-      Order.countDocuments(),
-      Order.find().skip(skip).limit(limit).sort({ _id: sortDirection }).select(SELECTED_FIELDS).lean(),
+      Order.countDocuments(filter),
+      Order.find(filter).skip(skip).limit(limit).sort({ _id: sortDirection }).select(SELECTED_FIELDS).lean(),
     ]);
 
     return {
