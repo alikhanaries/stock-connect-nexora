@@ -1,6 +1,5 @@
-import { errorResponse, failResponse, successResponse } from '#helpers/response.js';
+import { errorResponse, successResponse } from '#helpers/response.js';
 import productService, { pushProductsFromDB } from '#service/productService.js';
-
 
 export const getProducts = async (req, res) => {
   try {
