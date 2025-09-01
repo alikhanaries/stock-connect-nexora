@@ -99,44 +99,45 @@ const pushBatch = async (batch, index) => {
 };
 
 // 🔹 Fetch products from DB in batches
-const fetchBatchesFromDB = async () => {
+async function* fetchBatchesFromDB() {
   let skip = 0;
-  const batches = [];
-
   while (true) {
     const products = await Product.find({ status: true }).skip(skip).limit(BATCH_SIZE).lean();
-
     if (!products.length) break;
-
-    batches.push(products.map(mapProductToChannelEngine));
+    yield products.map(mapProductToChannelEngine);
     skip += BATCH_SIZE;
   }
-
-  return batches;
-};
+}
 
 // 🔹 Push all products to CE
 export const pushProductsFromDB = async () => {
-  const batches = await fetchBatchesFromDB();
-  if (!batches.length) return { AcceptedCount: 0, RejectedCount: 0, ProductMessages: [] };
-
   const limit = pLimit(MAX_CONCURRENT);
+  const results = [];
 
-  const results = await Promise.allSettled(
-    batches.map((batch, index) =>
+  let index = 0;
+  for await (const batch of fetchBatchesFromDB()) {
+    results.push(
       limit(async () => {
         try {
           return await pushBatch(batch, index);
         } catch (err) {
           console.error(`❌ Batch ${index + 1} failed permanently:`, err);
-          return { AcceptedCount: 0, RejectedCount: batch.length, ProductMessages: [] };
+          return {
+            AcceptedCount: 0,
+            RejectedCount: batch.length,
+            ProductMessages: [],
+          };
         }
       })
-    )
-  );
+    );
+    index++;
+  }
+
+  // Wait for all limited promises to finish
+  const settled = await Promise.allSettled(results);
 
   // 🔹 Merge results
-  return results.reduce(
+  return settled.reduce(
     (acc, r) => {
       if (r.status === 'fulfilled') {
         acc.AcceptedCount += r.value.AcceptedCount;

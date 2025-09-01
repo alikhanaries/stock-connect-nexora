@@ -20,7 +20,7 @@ export const getProducts = async (req, res) => {
 
 export const pushProductToChannelEngine = async (req, res) => {
   try {
-    const maxProducts = parseInt(req.query.limit || '500', 10);
+    const maxProducts = Math.max(1, parseInt(req.query.limit || '500', 10));
 
     // 🔹 Background push (fire-and-forget)
     setImmediate(async () => {
