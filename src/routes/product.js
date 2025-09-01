@@ -1,7 +1,8 @@
 import {
   getProducts,
-  uploadProductsFromGoogleSheet,
-  uploadProductsFromCsvFile,
+  importProductsFromGoogleSheet,
+  importProductsFromCsvFile,
+  pushProductToChannelEngine,
 } from '#controllers/ProductController.js';
 import { authMiddleware, validateFile } from '#middleware/index.js';
 import express from 'express';
@@ -14,14 +15,9 @@ const productsRouter = express.Router();
 
 productsRouter.get('/', authMiddleware, getProducts);
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
-productsRouter.post('/uploadProductsFromGoogleSheet', uploadProductsFromGoogleSheet);
+productsRouter.post('/importProductsFromGoogleSheet', importProductsFromGoogleSheet);
 /* UPLOAD PRODUCTS FROM CSV FILE */
-productsRouter.post(
-  '/uploadProductsFromCsvFile',
+productsRouter.post('/importProductsFromCsvFile', upload.single('file'), validateFile, importProductsFromCsvFile);
 
-  upload.single('file'),
-  validateFile,
-  uploadProductsFromCsvFile
-);
-
+productsRouter.get('/push-to-channelengine', pushProductToChannelEngine);
 export default productsRouter;

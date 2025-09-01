@@ -3,8 +3,14 @@ import path from 'path';
 import fs from 'fs';
 
 const uploadDir = path.join(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (err) {
+  console.error('Error creating upload directory:', err);
+  throw err;
 }
 
 const storage = multer.diskStorage({
@@ -17,5 +23,5 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 export default upload;
