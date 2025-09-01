@@ -1,6 +1,7 @@
 import { config } from '../config/config.js';
 import mongoose from 'mongoose';
 import Channel from '../models/Channel.js';
+import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
@@ -80,25 +81,22 @@ const getAllChannels = async () => {
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
 const saveUserChannels = async (userId, channelIds) => {
   try {
-    // Validate input
-    if (!userId || !Array.isArray(channelIds)) {
-      return { success: false, message: 'Invalid input data' };
-    }
-
-    // Either update existing doc or create new one
+    // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(
       { userId: new ObjectId(userId) },
-      { $set: { channelIds: channelIds } },
-      { new: true, upsert: true } // upsert = create if not exists
+      { $set: { channelIds } },
+      { new: true, upsert: true }
     );
+
+    // Update user flag
+    await User.updateOne({ _id: new ObjectId(userId) }, { $set: { isMarketplaceConnected: true } });
 
     return {
       success: true,
-      message: 'Channels saved successfully',
       data: updatedUserChannels,
     };
   } catch (err) {
-    console.error('Error in saveUserChannels:', err);
+    console.error('Service error in saveUserChannels:', err);
     return { success: false, message: err.message };
   }
 };
