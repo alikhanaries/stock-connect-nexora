@@ -57,18 +57,18 @@ const fetchProducts = async (query) => {
   };
 };
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
+
 export const uploadProductsFromGoogleSheet = async (url) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
 
-    const batchSize = process.env.BATCH_SIZE || 500;
+    const batchSize = Number(process.env.BATCH_SIZE) || 500;
     let batch = [];
     let insertedCount = 0;
+    let updatedCount = 0;
     let invalidRowsCount = 0;
     let errorRows = [];
-    // Pre-fetch all existing EANs once
-    const existingEans = new Set((await Product.find({}, { ean: 1 }).lean()).map((p) => p.ean));
 
     const batchPromises = [];
 
@@ -80,61 +80,95 @@ export const uploadProductsFromGoogleSheet = async (url) => {
         .on('data', (row) => {
           rowIndex++;
 
-          // Skip empty rows
-          const isEmptyRow = Object.values(row).every(
-            (val) => val === null || val === undefined || String(val).trim() === ''
-          );
-          if (isEmptyRow) {
-            errorRows.push(rowIndex);
-            invalidRowsCount++;
-            return;
-          }
-
-          const product = mapRowToProduct(row, rowIndex);
-
-          // Skip if EAN exists
-          if (!product.ean || existingEans.has(product.ean)) {
-            invalidRowsCount++;
-            errorRows.push(rowIndex);
-            return;
-          }
-
-          existingEans.add(product.ean); // avoid duplicates in same CSV
-          batch.push(product);
-
-          if (batch.length >= batchSize) {
-            const toInsert = [...batch];
-            batch = [];
-
-            // Insert in parallel without awaiting
-            batchPromises.push(
-              Product.insertMany(toInsert, { ordered: false })
-                .then((res) => (insertedCount += res.length))
-                .catch((err) => console.error('Batch insert error:', err.message))
+          try {
+            // 1. Skip empty rows
+            const isEmptyRow = Object.values(row).every(
+              (val) => val === null || val === undefined || String(val).trim() === ''
             );
+            if (isEmptyRow) {
+              invalidRowsCount++;
+              errorRows.push(rowIndex);
+              return;
+            }
+
+            // 2. Map row
+            const product = mapRowToProduct(row, rowIndex);
+
+            // Skip if no productSkuCode
+            if (!product.productSkuCode) {
+              invalidRowsCount++;
+              errorRows.push(rowIndex);
+              return;
+            }
+
+            batch.push(product);
+
+            // 3. If batch full → process
+            if (batch.length >= batchSize) {
+              const toProcess = [...batch];
+              batch = [];
+
+              const ops = toProcess.map((product) => ({
+                updateOne: {
+                  filter: { productSkuCode: product.productSkuCode },
+                  update: { $set: product },
+                  upsert: true,
+                },
+              }));
+
+              batchPromises.push(
+                Product.bulkWrite(ops, { ordered: false })
+                  .then((res) => {
+                    insertedCount += res.upsertedCount || 0;
+                    updatedCount += res.modifiedCount || 0;
+                    console.log(`Batch upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
+                  })
+                  .catch((err) => console.error('Batch upsert error:', err.message))
+              );
+            }
+          } catch (err) {
+            console.error(`Row ${rowIndex} error:`, err.message);
+            invalidRowsCount++;
+            errorRows.push(rowIndex);
           }
         })
         .on('end', async () => {
-          // Insert any remaining batch
-          if (batch.length) {
-            batchPromises.push(
-              Product.insertMany(batch, { ordered: false })
-                .then((res) => (insertedCount += res.length))
-                .catch((err) => console.error('Final batch insert error:', err.message))
-            );
-          }
+          try {
+            // Process final batch
+            if (batch.length > 0) {
+              const ops = batch.map((product) => ({
+                updateOne: {
+                  filter: { productSkuCode: product.productSkuCode },
+                  update: { $set: product },
+                  upsert: true,
+                },
+              }));
 
-          // Wait for all batch inserts to finish in parallel
-          await Promise.all(batchPromises);
-          resolve();
+              batchPromises.push(
+                Product.bulkWrite(ops, { ordered: false })
+                  .then((res) => {
+                    insertedCount += res.upsertedCount || 0;
+                    updatedCount += res.modifiedCount || 0;
+                    console.log(`Final upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
+                  })
+                  .catch((err) => console.error('Final batch upsert error:', err.message))
+              );
+            }
+
+            await Promise.all(batchPromises);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
         })
         .on('error', reject);
     });
 
     return {
       success: true,
-      message: `Imported ${insertedCount} products, skipped ${invalidRowsCount} invalid/duplicate rows`,
+      message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
       insertedCount,
+      updatedCount,
       invalidRowsCount,
       errorRows,
     };
@@ -143,17 +177,17 @@ export const uploadProductsFromGoogleSheet = async (url) => {
     return { success: false, message: err.message };
   }
 };
+
 /* UPLOAD PRODUCTS FROM CSV FILE */
+
 export const uploadProductsFromCsvFile = async (filePath) => {
   try {
-    const batchSize = process.env.BATCH_SIZE || 500;
+    const batchSize = Number(process.env.BATCH_SIZE) || 500;
     let batch = [];
     let insertedCount = 0;
+    let updatedCount = 0;
     let invalidRowsCount = 0;
     let errorRows = [];
-
-    // Pre-fetch all existing EANs once
-    const existingEans = new Set((await Product.find({}, { ean: 1 }).lean()).map((p) => p.ean));
 
     const batchPromises = [];
 
@@ -179,25 +213,36 @@ export const uploadProductsFromCsvFile = async (filePath) => {
             // 2. Map row to product
             const product = mapRowToProduct(row, rowIndex);
 
-            // 3. Skip duplicates
-            if (!product.ean || existingEans.has(product.ean)) {
+            // Skip rows without productSkuCode
+            if (!product.productSkuCode) {
               invalidRowsCount++;
               errorRows.push(rowIndex);
               return;
             }
 
-            existingEans.add(product.ean); // avoid dupes in same CSV
             batch.push(product);
 
-            // 4. Batch insert
+            // 3. If batch size reached → process
             if (batch.length >= batchSize) {
-              const toInsert = [...batch];
+              const toProcess = [...batch];
               batch = [];
 
+              const ops = toProcess.map((product) => ({
+                updateOne: {
+                  filter: { productSkuCode: product.productSkuCode },
+                  update: { $set: product },
+                  upsert: true,
+                },
+              }));
+
               batchPromises.push(
-                Product.insertMany(toInsert, { ordered: false })
-                  .then((res) => (insertedCount += res.length))
-                  .catch((err) => console.error('Batch insert error:', err.message))
+                Product.bulkWrite(ops, { ordered: false })
+                  .then((res) => {
+                    insertedCount += res.upsertedCount || 0;
+                    updatedCount += res.modifiedCount || 0;
+                    console.log(`Batch upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
+                  })
+                  .catch((err) => console.error('Batch upsert error:', err.message))
               );
             }
           } catch (err) {
@@ -208,18 +253,30 @@ export const uploadProductsFromCsvFile = async (filePath) => {
         })
         .on('end', async () => {
           try {
-            // Insert any remaining batch
+            // Process final batch
             if (batch.length) {
+              const ops = batch.map((product) => ({
+                updateOne: {
+                  filter: { productSkuCode: product.productSkuCode },
+                  update: { $set: product },
+                  upsert: true,
+                },
+              }));
+
               batchPromises.push(
-                Product.insertMany(batch, { ordered: false })
-                  .then((res) => (insertedCount += res.length))
-                  .catch((err) => console.error('Final batch insert error:', err.message))
+                Product.bulkWrite(ops, { ordered: false })
+                  .then((res) => {
+                    insertedCount += res.upsertedCount || 0;
+                    updatedCount += res.modifiedCount || 0;
+                    console.log(`Final upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
+                  })
+                  .catch((err) => console.error('Final batch upsert error:', err.message))
               );
             }
 
             await Promise.all(batchPromises);
 
-            // Cleanup file
+            // Cleanup uploaded file
             fs.unlinkSync(filePath);
 
             resolve();
@@ -232,8 +289,9 @@ export const uploadProductsFromCsvFile = async (filePath) => {
 
     return {
       success: true,
-      message: `Imported ${insertedCount} products, skipped ${invalidRowsCount} invalid/duplicate rows`,
+      message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
       insertedCount,
+      updatedCount,
       invalidRowsCount,
       errorRows,
     };

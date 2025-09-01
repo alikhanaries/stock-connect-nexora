@@ -6,14 +6,6 @@ export const mapRowToProduct = (row) => {
     Object.entries(row).map(([key, value]) => [key.toLowerCase().trim(), value ? String(value).trim() : ''])
   );
 
-  const safeParse = (val) => {
-    try {
-      return val ? JSON.parse(val) : [];
-    } catch {
-      return [];
-    }
-  };
-
   return {
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode || null,
@@ -32,9 +24,9 @@ export const mapRowToProduct = (row) => {
     url: r.url || null,
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
-    attributes: safeParse(r.attributes),
+    attributes: r.attributes,
     categories: [],
-    marketPlace: r['market-place'] ? r['market-place'].split(',').map((m) => m.trim()) : [],
+    marketPlace: r.marketplace,
     images: r.images ? r.images.split(',').map((img) => img.trim()) : [],
     currentStockCount: r.stock ? parseInt(r.stock, 10) || 0 : 0,
     createdAt: new Date(),

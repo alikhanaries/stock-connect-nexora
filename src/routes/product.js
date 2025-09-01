@@ -14,13 +14,13 @@ const productsRouter = express.Router();
 
 productsRouter.get('/', authMiddleware, getProducts);
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
-productsRouter.post('/uploadProductsFromGoogleSheet', authMiddleware, uploadProductsFromGoogleSheet);
+productsRouter.post('/uploadProductsFromGoogleSheet', uploadProductsFromGoogleSheet);
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post(
   '/uploadProductsFromCsvFile',
-  authMiddleware,
-  validateFile,
+
   upload.single('file'),
+  validateFile,
   uploadProductsFromCsvFile
 );
 
