@@ -7,5 +7,5 @@ const productsRouter = express.Router();
 productsRouter.use(authMiddleware);
 
 productsRouter.get('/', getProducts);
-productsRouter.post('/push-to-channelengine', pushProductToChannelEngine);
+productsRouter.get('/push-to-channelengine', pushProductToChannelEngine);
 export default productsRouter;

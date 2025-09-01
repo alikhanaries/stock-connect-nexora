@@ -1,5 +1,5 @@
 import { errorResponse, failResponse, successResponse } from '#helpers/response.js';
-import productService from '#service/productService.js';
+import productService, { pushProductsFromDB } from '#service/productService.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -26,31 +26,22 @@ export const getProducts = async (req, res) => {
 
 export const pushProductToChannelEngine = async (req, res) => {
   try {
-    const products = req.body;
+    const maxProducts = parseInt(req.query.limit || '500', 10);
 
-    // Validate input
-    if (!Array.isArray(products) || products.length === 0) {
-      return failResponse(res, 'No products provided', 400);
-    }
+    // 🔹 Background push (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        await pushProductsFromDB(maxProducts);
+        console.log(`Background push completed for up to ${maxProducts} products`);
+      } catch (err) {
+        console.error('Background push error:', err);
+      }
+    });
 
-    const { Content: content = {} } = await productService.pushProducts(products);
-    const { AcceptedCount = 0, RejectedCount = 0 } = content;
-
-    // Decide response
-    if (AcceptedCount && !RejectedCount) {
-      return successResponse(res, 'All products pushed successfully', 200, content);
-    }
-
-    if (AcceptedCount && RejectedCount) {
-      return successResponse(res, 'Some products pushed successfully, some rejected', 207, content);
-    }
-
-    if (RejectedCount && !AcceptedCount) {
-      return failResponse(res, 'All products were rejected', 422, content);
-    }
-
-    // Nothing processed
-    return failResponse(res, 'No products processed', 400, content);
+    // 🔹 Return early
+    return successResponse(res, 'Products push started in background', 202, {
+      message: `Up to ${maxProducts} products will be pushed`,
+    });
   } catch (err) {
     console.error('Controller Error:', err);
     return errorResponse(res, err, 500);
