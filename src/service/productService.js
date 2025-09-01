@@ -65,7 +65,6 @@ const fetchProducts = async (query) => {
     appliedFilters,
   };
 };
-/* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 
 // 🔹 Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
@@ -292,5 +291,4 @@ export const importProductsFromCsvFile = async (filePath) => {
     return { success: false, message: err.message };
   }
 };
-
 export default { fetchProducts, pushProductsFromDB, importProductsFromCsvFile, importProductsFromGoogleSheet };

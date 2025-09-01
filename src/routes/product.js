@@ -19,5 +19,6 @@ productsRouter.post('/importProductsFromGoogleSheet', importProductsFromGoogleSh
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post('/importProductsFromCsvFile', upload.single('file'), validateFile, importProductsFromCsvFile);
 
-productsRouter.get('/push-to-channelengine', pushProductToChannelEngine);
+productsRouter.get('/push-to-channelengine', authMiddleware, pushProductToChannelEngine);
+
 export default productsRouter;
