@@ -1,4 +1,5 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
+import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
 
 export const getProducts = async (req, res) => {
@@ -86,5 +87,24 @@ export const pushProductToChannelEngine = async (req, res) => {
   } catch (err) {
     console.error('Controller Error:', err);
     return errorResponse(res, err, 500);
+  }
+};
+/* DELETE PRODUCT BY ID*/
+export const deleteProduct = async (req, res) => {
+  try {
+    const { prId } = req.params;
+    //Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(prId)) {
+      return failResponse(res, 'Invalid product ID', 400);
+    }
+    const result = await productService.deleteProduct(prId);
+    if (!result.success) {
+      return failResponse(res, result.message || 'Failed to delete product', 400);
+    }
+
+    return successResponse(res, 'Product deleted successfully', 200);
+  } catch (error) {
+    console.error('Error:', error);
+    return errorResponse(res, error);
   }
 };
