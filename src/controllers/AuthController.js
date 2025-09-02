@@ -3,6 +3,7 @@ import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormat
 import { generateTokenResponse, decodeToken, generateResetToken } from '#util/token.js';
 import { errorHandler } from '#helpers/ErrorHandler.js';
 import crypto from 'crypto';
+import Response from '#helpers/response.js';
 
 export const login = async (req, res) => {
   try {
@@ -12,7 +13,7 @@ export const login = async (req, res) => {
       return res.status(400).json(formatErrorResponse('Missing credentials', 400));
     }
 
-    const user = await User.findOne({ email, isDeleted: false }).select('+password');
+    const user = await User.findOne({ email, isDeleted: false, active: true }).select('+password');
 
     if (!user) {
       return res.status(400).json(formatErrorResponse('Invalid credentials', 400));
@@ -41,15 +42,32 @@ export const login = async (req, res) => {
 
 export const register = async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role, phoneNumber } = req.body;
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      role,
+      phoneNumber,
+      active,
+      isMarketplaceConnected = false,
+    } = req.body;
 
-    if (!email || !password || !firstName || !lastName || !role) {
-      return res.status(400).json(formatErrorResponse('Missing inputs', 400));
+    if (!email || !password || !firstName || !lastName || !role || !phoneNumber) {
+      return Response.failResponse(res, 'Missing required fields', 400);
     }
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({
+      $or: [{ email }, { phoneNumber }],
+    });
+
     if (existingUser) {
-      return res.status(400).json(formatErrorResponse('Email already exists', 400));
+      if (existingUser.email === email) {
+        return Response.failResponse(res, 'Email already exists', 409);
+      }
+      if (existingUser.phoneNumber === phoneNumber) {
+        return Response.failResponse(res, 'Phone number already exists', 409);
+      }
     }
 
     const newUser = new User({
@@ -58,21 +76,15 @@ export const register = async (req, res) => {
       firstName,
       lastName,
       role,
-      isMarketplaceConnected: false,
+      isMarketplaceConnected,
       phoneNumber,
+      active,
     });
     await newUser.save();
-    // Generate JWT token
-    const tokenResponse = generateTokenResponse(newUser, newUser.role);
 
-    if (!tokenResponse) {
-      return res.status(500).json(formatErrorResponse('Error generating token', 500));
-    }
-
-    // Respond with the success response and JWT token
-    res.status(201).json(formatSuccessResponse(tokenResponse, 'Registration successful.'));
+    return Response.successResponse(res, 'User Registerd successfully', 201);
   } catch (error) {
-    errorHandler(error, res);
+    return Response.errorResponse(res, error, 500);
   }
 };
 

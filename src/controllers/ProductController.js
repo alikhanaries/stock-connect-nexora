@@ -1,28 +1,90 @@
-import Product from '#models/Product.js';
-import '#models/Category.js';
-import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
-import { getPagination } from '#helpers/PaginationHandler.js';
+import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
+import productService, { pushProductsFromDB } from '#service/productService.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const size = Math.max(1, Number(req.query.size) || 10);
+    const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query);
+    const responseData = {
+      content: products || [],
+      appliedFilters: appliedFilters || {},
+      ...pagination,
+    };
+    const message = products.length ? 'Products fetched successfully' : 'No products found';
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    return errorResponse(res, error, 500);
+  }
+};
 
-    const [totalElements, products] = await Promise.all([
-      Product.countDocuments(),
-      Product.find()
-        .skip((page - 1) * size)
-        .limit(size)
-        .select('_id name status productSkuCode price msrp images currentStockCount createdAt categories')
-        .populate('categories', '_id name slug')
-        .lean(),
-    ]);
-    const pagination = getPagination(totalElements, page, size);
-    return res
-      .status(200)
-      .json(formatSuccessResponse({ content: products, ...pagination }, 'Products fetched successfully'));
+/* UPLOAD PRODUCTS FROM GOOGLE SHEET */
+export const importProductsFromGoogleSheet = async (req, res) => {
+  try {
+    if (!req.body.url) {
+      return failResponse(res, 'Google Sheet URL required', 400);
+    }
+    const { url } = req.body;
+    const result = await productService.importProductsFromGoogleSheet(url);
+    // Handle failure from service
+    if (!result?.success) {
+      return failResponse(res, result?.message || 'Error in upload', 500);
+    }
+
+    // Success response with details
+    return successResponse(res, result.message, 200, {
+      insertedCount: result.insertedCount,
+      invalidRowsCount: result.invalidRowsCount,
+      errorRows: result.errorRows,
+    });
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    return errorResponse(res, error.message);
+  }
+};
+
+/* UPLOAD PRODUCTS FROM CSV FILE */
+export const importProductsFromCsvFile = async (req, res) => {
+  try {
+    // Call service
+    const result = await productService.importProductsFromCsvFile(req.file.path);
+
+    // Handle failure from service
+    if (!result?.success) {
+      return failResponse(res, result?.message || 'Error in upload', 500);
+    }
+
+    // Success response with details
+    return successResponse(res, result.message, 200, {
+      insertedCount: result.insertedCount,
+      invalidRowsCount: result.invalidRowsCount,
+      errorRows: result.errorRows,
+    });
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    return errorResponse(res, error.message);
+  }
+};
+
+export const pushProductToChannelEngine = async (req, res) => {
+  try {
+    const maxProducts = Math.max(1, parseInt(req.query.limit || '500', 10));
+
+    // 🔹 Background push (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        await pushProductsFromDB(maxProducts);
+        console.log(`Background push completed for up to ${maxProducts} products`);
+      } catch (err) {
+        console.error('Background push error:', err);
+      }
+    });
+
+    // 🔹 Return early
+    return successResponse(res, 'Products push started in background', 202, {
+      message: `Up to ${maxProducts} products will be pushed`,
+    });
   } catch (err) {
-    console.error('Error fetching products:', err);
-    return res.status(500).json(formatErrorResponse('Failed to fetch products', 500, { error: err.message }));
+    console.error('Controller Error:', err);
+    return errorResponse(res, err, 500);
   }
 };

@@ -5,25 +5,32 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const supportedLangs = ['en', 'ar', 'cn', 'tr'];
+const supportedLangs = ['en', 'ar', 'zh', 'tr'];
 const defaultLang = 'en';
 
-// Load JSON files dynamically
-const loadLocale = (lang) => {
+const locales = {};
+
+supportedLangs.forEach((lang) => {
   try {
-    return JSON.parse(fs.readFileSync(path.join(__dirname, `../locales/${lang}.json`), 'utf-8'));
+    const filePath = path.join(__dirname, `../locales/${lang}.json`);
+    const data = fs.readFileSync(filePath, 'utf-8');
+    locales[lang] = JSON.parse(data);
   } catch (err) {
-    console.log(err);
-    console.error(`Missing locale file for ${lang}, falling back to EN`);
-    return JSON.parse(fs.readFileSync(path.join(__dirname, '../locales/en.json'), 'utf-8'));
+    console.error(`Failed to load locale for ${lang}:`, err.message);
+    locales[lang] = {}; // fallback to empty object
   }
+});
+
+export const loadLocale = (lang) => {
+  return locales[lang] || locales['en'] || {};
 };
 
 export const checkLanguage = (req, res, next) => {
   const lang = (req.headers['accept-language'] || defaultLang).toLowerCase();
+
   const chosenLang = supportedLangs.includes(lang) ? lang : defaultLang;
 
-  req.locale = loadLocale(chosenLang);
+  req.locale = locales[chosenLang] || locales[defaultLang];
   req.lang = chosenLang;
 
   next();
