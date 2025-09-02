@@ -5,6 +5,6 @@ import { authMiddleware } from '#middleware/index.js';
 const router = express.Router();
 
 router.get('/', authMiddleware, getAllOrders);
-router.use('/:id', authMiddleware, getOrderById);
+router.get('/:id', authMiddleware, getOrderById);
 
 export default router;
