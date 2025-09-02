@@ -33,14 +33,9 @@ const SELECTED_FIELDS = [
 
 const getAllOrders = async (query) => {
   try {
-    const pageNumber = Math.max(parseInt(query.page) || 1, 1);
-    const limit = Math.max(parseInt(query.size) || 10, 1);
-    const skip = (pageNumber - 1) * limit;
-    const sortDirection = query.sort === '-1' ? -1 : 1;
-    const search = query.search;
-    const toDate = query.toDate;
-    const fromDate = query.fromDate;
-    const status = query.status;
+    const { page = 1, size = 10, search, toDate, fromDate, status, sortOrder = 'asc', sortBy = '_id' } = query;
+    const skip = (page - 1) * size;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
 
     const filter = {};
@@ -80,13 +75,18 @@ const getAllOrders = async (query) => {
 
     const [totalOrders, orders] = await Promise.all([
       Order.countDocuments(filter),
-      Order.find(filter).skip(skip).limit(limit).sort({ _id: sortDirection }).select(SELECTED_FIELDS).lean(),
+      Order.find(filter)
+        .skip(skip)
+        .limit(size)
+        .sort({ [sortBy]: sortDirection })
+        .select(SELECTED_FIELDS)
+        .lean(),
     ]);
 
     return {
       data: orders.map(formatOrder),
       appliedFilters: appliedFilters,
-      pagination: getPagination(totalOrders, pageNumber, limit),
+      pagination: getPagination(totalOrders, page, size),
     };
   } catch (err) {
     console.error('Error fetching orders:', err.message);
