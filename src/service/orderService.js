@@ -10,6 +10,9 @@ const formatOrder = (order) => {
     quantity: totalQuantity,
     totalPrice: order.orderDetails?.totalInclVat || 0,
     customer,
+    orderDate: order.orderDate,
+    email: order.email,
+    phoneNumber: order.phoneNumber,
     status: order.status,
     platform: order.channelName,
   };
@@ -24,25 +27,68 @@ const SELECTED_FIELDS = [
   'skus.quantity',
   'orderDetails.totalInclVat',
   'channelName',
+  'orderDate',
+  'email',
+  'phoneNumber',
+  'createdAt',
 ].join(' ');
 
 const getAllOrders = async (query) => {
   try {
-    const pageNumber = Math.max(parseInt(query.page) || 1, 1);
-    const limit = Math.max(parseInt(query.size) || 10, 1);
-    const skip = (pageNumber - 1) * limit;
-    const sortDirection = query.sort === '-1' ? -1 : 1;
+    const { page = 1, size = 10, search, toDate, fromDate, status, sortOrder = 'asc', sortBy = '_id' } = query;
+    const skip = (page - 1) * size;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
 
+    const filter = {};
+
+    //search filter
+    if (search) {
+      const regex = { $regex: search, $options: 'i' };
+
+      filter.$or = [
+        { orderId: regex },
+        { 'skus.description': regex },
+        { email: regex },
+        { 'billingAddress.firstName': regex },
+        { 'billingAddress.lastName': regex },
+      ];
+    }
+
+    //date filter
+    if (fromDate || toDate) {
+      filter.createdAt = {};
+
+      if (fromDate) {
+        filter.createdAt.$gte = new Date(fromDate);
+        appliedFilters.fromDate = fromDate;
+      }
+      if (toDate) {
+        filter.createdAt.$lte = new Date(toDate);
+        appliedFilters.toDate = toDate;
+      }
+    }
+
+    // status filter
+    if (status) {
+      filter.status = status;
+      appliedFilters.status = status;
+    }
+
     const [totalOrders, orders] = await Promise.all([
-      Order.countDocuments(),
-      Order.find().skip(skip).limit(limit).sort({ _id: sortDirection }).select(SELECTED_FIELDS).lean(),
+      Order.countDocuments(filter),
+      Order.find(filter)
+        .skip(skip)
+        .limit(size)
+        .sort({ [sortBy]: sortDirection })
+        .select(SELECTED_FIELDS)
+        .lean(),
     ]);
 
     return {
       data: orders.map(formatOrder),
       appliedFilters: appliedFilters,
-      pagination: getPagination(totalOrders, pageNumber, limit),
+      pagination: getPagination(totalOrders, page, size),
     };
   } catch (err) {
     console.error('Error fetching orders:', err.message);
@@ -50,4 +96,13 @@ const getAllOrders = async (query) => {
   }
 };
 
-export default { getAllOrders };
+const getOrderById = async (id) => {
+  const order = await Order.findById(id).select(SELECTED_FIELDS).lean();
+  if (!order) {
+    return false;
+  }
+  const formattedOrder = formatOrder(order);
+  return formattedOrder;
+};
+
+export default { getAllOrders, getOrderById };
