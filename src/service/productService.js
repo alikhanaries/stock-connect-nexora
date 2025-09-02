@@ -154,7 +154,7 @@ export const pushProductsFromDB = async () => {
   );
 };
 
-const processCsvStream = async (stream, { deleteAfter, filePath } = {}) => {
+const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   let batch = [];
   let insertedCount = 0;
@@ -274,7 +274,7 @@ export const importProductsFromGoogleSheet = async (url) => {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processCsvStream(stream);
+    return await processImportStream(stream);
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
     return { success: false, message: err.message };
@@ -285,7 +285,7 @@ export const importProductsFromGoogleSheet = async (url) => {
 export const importProductsFromCsvFile = async (filePath) => {
   try {
     const stream = fs.createReadStream(filePath);
-    return await processCsvStream(stream, { deleteAfter: true, filePath });
+    return await processImportStream(stream, { deleteAfter: true, filePath });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     return { success: false, message: err.message };
