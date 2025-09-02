@@ -1,6 +1,10 @@
 import Product from '#models/Product.js';
 import '#models/Category.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { Readable } from 'stream';
+import csv from 'csv-parser';
+import fs from 'fs';
+import { mapRowToProduct } from '#utils/mapRowToProduct.js'; // your row mapper
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
@@ -150,4 +154,141 @@ export const pushProductsFromDB = async () => {
   );
 };
 
-export default { fetchProducts, pushProductsFromDB };
+const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
+  const batchSize = Number(process.env.BATCH_SIZE) || 500;
+  let batch = [];
+  let insertedCount = 0;
+  let updatedCount = 0;
+  let invalidRowsCount = 0;
+  let errorRows = [];
+  const batchPromises = [];
+
+  await new Promise((resolve, reject) => {
+    let rowIndex = 1;
+
+    stream
+      .pipe(csv())
+      .on('data', (row) => {
+        rowIndex++;
+        try {
+          // 1. Skip empty rows
+          const isEmptyRow = Object.values(row).every(
+            (val) => val === null || val === undefined || String(val).trim() === ''
+          );
+          if (isEmptyRow) {
+            invalidRowsCount++;
+            errorRows.push(rowIndex);
+            return;
+          }
+
+          // 2. Map row
+          const product = mapRowToProduct(row, rowIndex);
+
+          if (!product.productSkuCode) {
+            invalidRowsCount++;
+            errorRows.push(rowIndex);
+            return;
+          }
+
+          batch.push(product);
+
+          // 3. If batch full → upsert
+          if (batch.length >= batchSize) {
+            const toProcess = [...batch];
+            batch = [];
+
+            const ops = toProcess.map((p) => ({
+              updateOne: {
+                filter: { productSkuCode: p.productSkuCode },
+                update: { $set: p },
+                upsert: true,
+              },
+            }));
+
+            batchPromises.push(
+              Product.bulkWrite(ops, { ordered: false })
+                .then((res) => {
+                  insertedCount += res.upsertedCount || 0;
+                  updatedCount += res.modifiedCount || 0;
+                  console.log(`Batch upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
+                })
+                .catch((err) => console.error('Batch upsert error:', err.message))
+            );
+          }
+        } catch (err) {
+          console.error(`Row ${rowIndex} error:`, err.message);
+          invalidRowsCount++;
+          errorRows.push(rowIndex);
+        }
+      })
+      .on('end', async () => {
+        try {
+          if (batch.length) {
+            const ops = batch.map((p) => ({
+              updateOne: {
+                filter: { productSkuCode: p.productSkuCode },
+                update: { $set: p },
+                upsert: true,
+              },
+            }));
+
+            batchPromises.push(
+              Product.bulkWrite(ops, { ordered: false })
+                .then((res) => {
+                  insertedCount += res.upsertedCount || 0;
+                  updatedCount += res.modifiedCount || 0;
+                  console.log(`Final upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
+                })
+                .catch((err) => console.error('Final batch upsert error:', err.message))
+            );
+          }
+
+          await Promise.all(batchPromises);
+
+          // Cleanup uploaded file if needed
+          if (deleteAfter && filePath) {
+            fs.unlinkSync(filePath);
+          }
+
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      })
+      .on('error', reject);
+  });
+
+  return {
+    success: true,
+    message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
+    insertedCount,
+    updatedCount,
+    invalidRowsCount,
+    errorRows,
+  };
+};
+
+/* Google Sheet Import */
+export const importProductsFromGoogleSheet = async (url) => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
+    const stream = Readable.fromWeb(res.body);
+    return await processImportStream(stream);
+  } catch (err) {
+    console.error('Error in importProductsFromGoogleSheet:', err);
+    return { success: false, message: err.message };
+  }
+};
+
+/* CSV File Import */
+export const importProductsFromCsvFile = async (filePath) => {
+  try {
+    const stream = fs.createReadStream(filePath);
+    return await processImportStream(stream, { deleteAfter: true, filePath });
+  } catch (err) {
+    console.error('Error in importProductsFromCsvFile:', err);
+    return { success: false, message: err.message };
+  }
+};
+export default { fetchProducts, pushProductsFromDB, importProductsFromCsvFile, importProductsFromGoogleSheet };

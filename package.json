@@ -14,7 +14,7 @@
     "#validations/*": "./src/validations/*",
     "#config/*": "./src/config/*",
     "#helpers/*": "./src/helpers/*",
-    "#service/*": "./src/service/*"
+    "#utils/*": "./src/util/*"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
