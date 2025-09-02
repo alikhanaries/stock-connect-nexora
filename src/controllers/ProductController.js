@@ -23,7 +23,8 @@ export const getTopSellingProduct = async (req, res) => {
 
     const topProducts = await productService.getTopSellingProduct(limit);
 
-    const message = topProducts.length ? 'Top-selling products fetched successfully' : 'No top-selling products found';
+    const message =
+      topProducts.length > 0 ? 'Top-selling products fetched successfully' : 'No top-selling products found';
     return successResponse(res, message, 200, topProducts);
   } catch (error) {
     console.error('Error fetching products:', error);
