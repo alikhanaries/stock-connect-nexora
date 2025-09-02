@@ -311,10 +311,30 @@ const deleteProduct = async (prId) => {
   }
 };
 
+/* DELETE MULTIPLE PRODUCTS BY ID*/
+const deleteMultipleProducts = async (ids) => {
+  try {
+    const result = await Product.updateMany(
+      { _id: { $in: ids }, isDelete: { $ne: true } },
+      { $set: { isDelete: true } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return { success: false, message: 'Product not found' };
+    }
+
+    return { success: true, message: `${result.modifiedCount} products marked as deleted successfully` };
+  } catch (err) {
+    console.error('Service error in deleteMultipleProducts:', err);
+    return { success: false, message: err.message };
+  }
+};
+
 export default {
   fetchProducts,
   pushProductsFromDB,
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
   deleteProduct,
+  deleteMultipleProducts,
 };

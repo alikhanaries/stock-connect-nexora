@@ -3,6 +3,7 @@ import {
   pushProductToChannelEngine,
   importProductsFromGoogleSheet,
   importProductsFromCsvFile,
+  deleteMultipleProducts,
   deleteProduct,
 } from '#controllers/ProductController.js';
 import { authMiddleware, validateFile } from '#middleware/index.js';
@@ -25,5 +26,8 @@ productsRouter.post('/importProductsFromGoogleSheet', importProductsFromGoogleSh
 productsRouter.post('/importProductsFromCsvFile', upload.single('file'), validateFile, importProductsFromCsvFile);
 
 productsRouter.get('/push-to-channelengine', authMiddleware, pushProductToChannelEngine);
+
+/* DELETE MULTIPLE PRODUCTS BY ID*/
+productsRouter.delete('/deleteMultipleProducts', authMiddleware, deleteMultipleProducts);
 
 export default productsRouter;
