@@ -1,8 +1,9 @@
 import {
   getProducts,
-  pushProductToChannelEngine,
-  importProductsFromGoogleSheet,
   importProductsFromCsvFile,
+  importProductsFromGoogleSheet,
+  pushProductToChannelEngine,
+  updateProductStatus,
   deleteMultipleProducts,
   deleteProduct,
 } from '#controllers/ProductController.js';
@@ -27,6 +28,7 @@ productsRouter.post('/importProductsFromCsvFile', upload.single('file'), validat
 
 productsRouter.get('/push-to-channelengine', authMiddleware, pushProductToChannelEngine);
 
+productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete('/deleteMultipleProducts', authMiddleware, deleteMultipleProducts);
 
