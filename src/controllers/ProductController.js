@@ -1,5 +1,6 @@
-import { errorResponse, successResponse } from '#helpers/response.js';
+import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import productService, { pushProductsFromDB } from '#service/productService.js';
+import mongoose from 'mongoose';
 
 export const getProducts = async (req, res) => {
   try {
@@ -38,5 +39,31 @@ export const pushProductToChannelEngine = async (req, res) => {
   } catch (err) {
     console.error('Controller Error:', err);
     return errorResponse(res, err, 500);
+  }
+};
+
+/* DELETE MULTIPLE PRODUCTS BY ID*/
+export const deleteMultipleProducts = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return failResponse(res, 'Product IDs are required', 400);
+    }
+
+    // Validate all IDs
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length) {
+      return failResponse(res, `Invalid IDs: ${invalidIds.join(', ')}`, 400);
+    }
+    const result = await productService.deleteMultipleProducts(ids);
+    if (!result.success) {
+      return failResponse(res, result.message || 'Failed to delete product', 400);
+    }
+
+    return successResponse(res, result.message || 'Product deleted successfully', 200);
+  } catch (error) {
+    console.error('Error:', error);
+    return errorResponse(res, error);
   }
 };

@@ -34,6 +34,10 @@ const ProductSchema = new mongoose.Schema(
     marketPlace: [{ type: String, trim: true }],
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
+    isDelete: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
