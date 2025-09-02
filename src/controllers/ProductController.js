@@ -1,6 +1,6 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
-import productService from '#service/productService.js';
 import mongoose from 'mongoose';
+import productService, { pushProductsFromDB } from '#service/productService.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -18,6 +18,30 @@ export const getProducts = async (req, res) => {
   }
 };
 
+export const pushProductToChannelEngine = async (req, res) => {
+  try {
+    const maxProducts = Math.max(1, parseInt(req.query.limit || '500', 10));
+
+    // 🔹 Background push (fire-and-forget)
+    setImmediate(async () => {
+      try {
+        await pushProductsFromDB(maxProducts);
+        console.log(`Background push completed for up to ${maxProducts} products`);
+      } catch (err) {
+        console.error('Background push error:', err);
+      }
+    });
+
+    // 🔹 Return early
+    return successResponse(res, 'Products push started in background', 202, {
+      message: `Up to ${maxProducts} products will be pushed`,
+    });
+  } catch (err) {
+    console.error('Controller Error:', err);
+    return errorResponse(res, err, 500);
+  }
+};
+/* DELETE PRODUCT BY ID*/
 export const deleteProduct = async (req, res) => {
   try {
     const { prId } = req.params;
