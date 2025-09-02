@@ -1,8 +1,6 @@
-
-import { errorResponse, failResponse, successResponse } from '#helpers/response.js';
+import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
-
 
 export const getProducts = async (req, res) => {
   try {
@@ -94,7 +92,7 @@ export const pushProductToChannelEngine = async (req, res) => {
 
 export const updateProductStatus = async (req, res) => {
   try {
-    const { ids, status } = req.body;
+    const { ids, active } = req.body;
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, 'Product IDs are required', 400);
     }
@@ -102,17 +100,36 @@ export const updateProductStatus = async (req, res) => {
     if (invalidIds.length > 0) {
       return failResponse(res, `Invalid product IDs: ${invalidIds.join(', ')}`, 400);
     }
-    if (typeof status !== 'boolean') {
+    if (typeof active !== 'boolean') {
       return failResponse(res, 'Status must be true or false', 400);
     }
-    const updatedCount = await productService.updateProductStatus(ids, status);
+    const updatedCount = await productService.updateProductStatus(ids, active);
     if (updatedCount === 0) {
       return failResponse(res, 'No matching products found to update', 404);
     }
-    const statusMessage = status ? 'Products activated successfully' : 'Products deactivated successfully';
+    const statusMessage = active ? 'Products activated successfully' : 'Products deactivated successfully';
     return successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating product status:', err);
     return errorResponse(res, err, 500);
+  }
+};
+/* DELETE PRODUCT BY ID*/
+export const deleteProduct = async (req, res) => {
+  try {
+    const { prId } = req.params;
+    //Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(prId)) {
+      return failResponse(res, 'Invalid product ID', 400);
+    }
+    const result = await productService.deleteProduct(prId);
+    if (!result.success) {
+      return failResponse(res, result.message || 'Failed to delete product', 400);
+    }
+
+    return successResponse(res, 'Product deleted successfully', 200);
+  } catch (error) {
+    console.error('Error:', error);
+    return errorResponse(res, error);
   }
 };

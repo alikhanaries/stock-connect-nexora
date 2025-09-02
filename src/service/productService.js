@@ -1,15 +1,15 @@
-import Product from '#models/Product.js';
-import '#models/Category.js';
+import { config } from '#config/config.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import { Readable } from 'stream';
+import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
+import '#models/Category.js';
+import Product from '#models/Product.js';
+import { mapRowToProduct } from '#utils/mapRowToProduct.js'; // your row mapper
 import csv from 'csv-parser';
 import fs from 'fs';
-import { mapRowToProduct } from '#utils/mapRowToProduct.js'; // your row mapper
-import { config } from '#config/config.js';
+import pLimit from 'p-limit';
+import { Readable } from 'stream';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
-import pLimit from 'p-limit';
-import { mapProductToChannelEngine } from '#helpers/productMapper.js';
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
@@ -66,11 +66,10 @@ const fetchProducts = async (query) => {
   };
 };
 
-
-export const updateProductStatus = async (ids, status) => {
-  if (!ids.length) return 0;
-  const result = await Product.updateMany({ _id: { $in: ids } }, { $set: { status: status } });
-  return result.modifiedCount;
+export const updateProductStatus = async (ids, active) => {
+  if (!ids?.length) return 0;
+  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: active } }, { $set: { status: active } });
+  return result.modifiedCount || 0;
 };
 
 // 🔹 Retry helper with exponential backoff
@@ -160,7 +159,6 @@ export const pushProductsFromDB = async () => {
     { AcceptedCount: 0, RejectedCount: 0, ProductMessages: [] }
   );
 };
-
 
 const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
@@ -299,5 +297,31 @@ export const importProductsFromCsvFile = async (filePath) => {
     return { success: false, message: err.message };
   }
 };
-export default { fetchProducts,updateProductStatus, pushProductsFromDB,updateProductStatus, importProductsFromCsvFile, importProductsFromGoogleSheet };
 
+const deleteProduct = async (prId) => {
+  try {
+    const result = await Product.findByIdAndUpdate(
+      prId,
+      { isDelete: true },
+      { new: true } // return updated doc
+    );
+
+    if (!result) {
+      return { success: false, message: 'Product not found' };
+    }
+
+    return { success: true, data: result };
+  } catch (err) {
+    console.error('Service error in saveUserChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+
+export default {
+  fetchProducts,
+  pushProductsFromDB,
+  importProductsFromCsvFile,
+  importProductsFromGoogleSheet,
+  deleteProduct,
+  updateProductStatus,
+};
