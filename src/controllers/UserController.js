@@ -2,6 +2,7 @@ import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import Responses from '#helpers/response.js';
+import userService from '#service/userService.js';
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -21,11 +22,12 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, email, phoneNumber, active } = req.body;
+
+    const { firstName, lastName, email, phoneNumber, active, role } = req.body;
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
-      { firstName, lastName, email, phoneNumber, active },
+      { firstName, lastName, email, phoneNumber, active, role },
       { new: true }
     ).select(userSafeFields);
     if (!updatedUser) {
@@ -116,16 +118,68 @@ export const softDeleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deletedUser = await User.findOneAndUpdate(
-      { _id: id, isDeleted: false },
-      { $set: { isDeleted: true } },
-      { new: true }
-    );
+    const deletedUser = await userService.deleteUserId(id);
+
     if (!deletedUser) {
       return Responses.failResponse(res, 'User not found', 404);
     }
     return Responses.successResponse(res, 'User deleted successfully', 200);
   } catch (error) {
     return Responses.errorResponse(res, error);
+  }
+};
+
+export const deleteAllUsers = async (req, res) => {
+  try {
+    const result = await userService.deleteAllUsers();
+    if (!result.success) {
+      return Responses.failResponse(res, 'Failed to delete users', 404);
+    }
+    return Responses.successResponse(res, 'All users have been deleted successfully.', 200);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const deleteSelectedUsers = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
+    }
+    const result = await userService.deleteSelectedUsers(ids);
+
+    if (result.success === false) {
+      return Responses.failResponse(res, result.message, 400);
+    }
+
+    return Responses.successResponse(res, `Successfully deleted ${result.modifiedCount} users.`, 200);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const updateSelectedUserStatus = async (req, res) => {
+  try {
+    const { ids, active } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
+    }
+    if (typeof active !== 'boolean') {
+      return Responses.failResponse(res, 'Status must be a boolean (true or false).', 400);
+    }
+    const result = await userService.updateSelectedUserStatus(ids, active);
+
+    if (result.success === false) {
+      return Responses.failResponse(res, result.message, 400);
+    }
+
+    const statusMessage = active ? 'Users activated' : 'Users deactivated';
+
+    return Responses.successResponse(res, `${result.modifiedCount} ${statusMessage} successfully.`, 200);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
   }
 };
