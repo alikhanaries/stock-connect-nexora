@@ -1,0 +1,14 @@
+{
+  "SUCCESS": "Operation completed successfully",
+  "ERROR": "Something went wrong",
+  "NOT_FOUND": "Requested resource not found",
+  "INVALID_INPUT": "Invalid input provided",
+  "CHANNELS_FOUND_SUCCESS": "Channels Found",
+  "CHANNEL_FOUND_FAILED": "Failed to retrieve channels",
+  "CHANNEL_SAVED": "Channels saved successfully",
+  "NO_CHANNEL_FOUND": "No channel found",
+  "USERID_CHANNELID_REQUIRED": "userId and channelIds are required",
+  "CHANNEL_SAVE_FAILED": "Failed to save channels",
+  "CHANNEL_SAVED_SUCCESS": "Channels saved successfully",
+  "USER_CHANNELS_FOUND": "User channels found"
+}

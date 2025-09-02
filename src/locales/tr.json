@@ -1,0 +1,14 @@
+{
+  "SUCCESS": "İşlem başarıyla tamamlandı",
+  "ERROR": "Bir şeyler ters gitti",
+  "NOT_FOUND": "İstenen kaynak bulunamadı",
+  "INVALID_INPUT": "Geçersiz giriş sağlandı",
+  "CHANNELS_FOUND_SUCCESS": "Kanallar bulundu",
+  "CHANNEL_FOUND_FAILED": "Kanallar alınamadı",
+  "CHANNEL_SAVED": "Kanallar başarıyla kaydedildi",
+  "NO_CHANNEL_FOUND": "Kanal bulunamadı",
+  "USERID_CHANNELID_REQUIRED": "userId ve channelIds gereklidir",
+  "CHANNEL_SAVE_FAILED": "Kanallar kaydedilemedi",
+  "CHANNEL_SAVED_SUCCESS": "Kanallar başarıyla kaydedildi",
+  "USER_CHANNELS_FOUND": "Kullanıcı kanalları bulundu"
+}

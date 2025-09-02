@@ -1,0 +1,14 @@
+{
+  "SUCCESS": "تمت العملية بنجاح",
+  "ERROR": "حدث خطأ ما",
+  "NOT_FOUND": "المورد المطلوب غير موجود",
+  "INVALID_INPUT": "تم تقديم إدخال غير صالح",
+  "CHANNELS_FOUND_SUCCESS": "تم العثور على القنوات",
+  "CHANNEL_FOUND_FAILED": "فشل في استرجاع القنوات",
+  "CHANNEL_SAVED": "تم حفظ القنوات بنجاح",
+  "NO_CHANNEL_FOUND": "لم يتم العثور على أي قناة",
+  "USERID_CHANNELID_REQUIRED": "مطلوب userId و channelIds",
+  "CHANNEL_SAVE_FAILED": "فشل في حفظ القنوات",
+  "CHANNEL_SAVED_SUCCESS": "تم حفظ القنوات بنجاح",
+  "USER_CHANNELS_FOUND": "تم العثور على قنوات المستخدم"
+}
