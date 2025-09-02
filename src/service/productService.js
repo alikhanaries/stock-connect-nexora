@@ -9,7 +9,7 @@ import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 import pLimit from 'p-limit';
-import { mapProductToChannelEngine } from '#helpers/productMapper.js';
+import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
