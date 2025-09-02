@@ -291,4 +291,30 @@ export const importProductsFromCsvFile = async (filePath) => {
     return { success: false, message: err.message };
   }
 };
-export default { fetchProducts, pushProductsFromDB, importProductsFromCsvFile, importProductsFromGoogleSheet };
+
+const deleteProduct = async (prId) => {
+  try {
+    const result = await Product.findByIdAndUpdate(
+      prId,
+      { isDelete: true },
+      { new: true } // return updated doc
+    );
+
+    if (!result) {
+      return { success: false, message: 'Product not found' };
+    }
+
+    return { success: true, data: result };
+  } catch (err) {
+    console.error('Service error in saveUserChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+
+export default {
+  fetchProducts,
+  pushProductsFromDB,
+  importProductsFromCsvFile,
+  importProductsFromGoogleSheet,
+  deleteProduct,
+};
