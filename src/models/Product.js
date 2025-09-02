@@ -1,16 +1,15 @@
 import mongoose from 'mongoose';
-import AttributeSchema from './Attribute.js';
 
 const ProductSchema = new mongoose.Schema(
   {
     parentProductId: { type: String, trim: true },
     parentProductSkuCode: { type: String, trim: true },
-    productSkuCode: { type: String, trim: true },
+    productSkuCode: { type: String, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
     description: { type: String },
     brand: { type: String, trim: true },
-    attributes: [AttributeSchema],
-    ean: { type: String, trim: true, unique: true },
+    attributes: { type: String, trim: true },
+    ean: { type: String, trim: true, unique: false },
     price: { type: Number, required: true },
     minPrice: { type: Number },
     maxPrice: { type: Number },
@@ -31,7 +30,7 @@ const ProductSchema = new mongoose.Schema(
     isFrozen: { type: Boolean, default: false },
     categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
     categoryTrail: { type: String },
-    marketPlace: [{ type: String, trim: true }],
+    marketPlace: { type: String, trim: true },
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
     isDelete: {
