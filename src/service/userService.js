@@ -70,4 +70,4 @@ const deleteUserId = async (id) => {
     return { success: false, message: err.message };
   }
 };
-export default { deleteAllUsers, deleteSelectedUsers, deleteUserId,updateSelectedUserStatus };
+export default { deleteAllUsers, deleteSelectedUsers, deleteUserId, updateSelectedUserStatus };

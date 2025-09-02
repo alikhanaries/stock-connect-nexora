@@ -18,6 +18,54 @@ export const getProducts = async (req, res) => {
   }
 };
 
+/* UPLOAD PRODUCTS FROM GOOGLE SHEET */
+export const importProductsFromGoogleSheet = async (req, res) => {
+  try {
+    if (!req.body.url) {
+      return failResponse(res, 'Google Sheet URL required', 400);
+    }
+    const { url } = req.body;
+    const result = await productService.importProductsFromGoogleSheet(url);
+    // Handle failure from service
+    if (!result?.success) {
+      return failResponse(res, result?.message || 'Error in upload', 500);
+    }
+
+    // Success response with details
+    return successResponse(res, result.message, 200, {
+      insertedCount: result.insertedCount,
+      invalidRowsCount: result.invalidRowsCount,
+      errorRows: result.errorRows,
+    });
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    return errorResponse(res, error.message);
+  }
+};
+
+/* UPLOAD PRODUCTS FROM CSV FILE */
+export const importProductsFromCsvFile = async (req, res) => {
+  try {
+    // Call service
+    const result = await productService.importProductsFromCsvFile(req.file.path);
+
+    // Handle failure from service
+    if (!result?.success) {
+      return failResponse(res, result?.message || 'Error in upload', 500);
+    }
+
+    // Success response with details
+    return successResponse(res, result.message, 200, {
+      insertedCount: result.insertedCount,
+      invalidRowsCount: result.invalidRowsCount,
+      errorRows: result.errorRows,
+    });
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    return errorResponse(res, error.message);
+  }
+};
+
 export const pushProductToChannelEngine = async (req, res) => {
   try {
     const maxProducts = Math.max(1, parseInt(req.query.limit || '500', 10));
