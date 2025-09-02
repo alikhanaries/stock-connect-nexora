@@ -133,3 +133,29 @@ export const deleteProduct = async (req, res) => {
     return errorResponse(res, error);
   }
 };
+
+/* DELETE MULTIPLE PRODUCTS BY ID*/
+export const deleteMultipleProducts = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return failResponse(res, 'Product IDs are required', 400);
+    }
+
+    // Validate all IDs
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length) {
+      return failResponse(res, `Invalid IDs: ${invalidIds.join(', ')}`, 400);
+    }
+    const result = await productService.deleteMultipleProducts(ids);
+    if (!result.success) {
+      return failResponse(res, result.message || 'Failed to delete product', 400);
+    }
+
+    return successResponse(res, result.message || 'Product deleted successfully', 200);
+  } catch (error) {
+    console.error('Error:', error);
+    return errorResponse(res, error);
+  }
+};
