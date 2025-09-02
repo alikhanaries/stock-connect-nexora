@@ -32,6 +32,5 @@ export const checkLanguage = (req, res, next) => {
 
   req.locale = locales[chosenLang] || locales[defaultLang];
   req.lang = chosenLang;
-
   next();
 };
