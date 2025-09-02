@@ -101,7 +101,7 @@ const getTopSellingProduct = async (limit) => {
           sku: '$_id',
           totalQuantitySold: 1,
           productName: '$productDetails.name',
-          imageUrl: '$productDetails.images',
+          imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
         },
       },
     ]);
