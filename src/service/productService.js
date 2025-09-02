@@ -10,7 +10,7 @@ import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 import pLimit from 'p-limit';
-import { mapProductToChannelEngine } from '#helpers/productMapper.js';
+import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
@@ -336,10 +336,31 @@ export const importProductsFromCsvFile = async (filePath) => {
     return { success: false, message: err.message };
   }
 };
+
+const deleteProduct = async (prId) => {
+  try {
+    const result = await Product.findByIdAndUpdate(
+      prId,
+      { isDelete: true },
+      { new: true } // return updated doc
+    );
+
+    if (!result) {
+      return { success: false, message: 'Product not found' };
+    }
+
+    return { success: true, data: result };
+  } catch (err) {
+    console.error('Service error in saveUserChannels:', err);
+    return { success: false, message: err.message };
+  }
+};
+
 export default {
   fetchProducts,
-  getTopSellingProduct,
   pushProductsFromDB,
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
+  deleteProduct,
+  getTopSellingProduct
 };
