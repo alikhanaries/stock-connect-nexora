@@ -1,12 +1,29 @@
-import { getProducts, updateProductStatus,pushProductToChannelEngine } from '#controllers/ProductController.js';
-import { authMiddleware } from '#middleware/index.js';
+import {
+  getProducts,
+  updateProductStatus,
+  importProductsFromGoogleSheet,
+  importProductsFromCsvFile,
+  pushProductToChannelEngine,
+} from '#controllers/ProductController.js';
+import { authMiddleware, validateFile } from '#middleware/index.js';
 import express from 'express';
+
+import upload from '#helpers/FileHandler.js'; // the above multer setup
 
 const productsRouter = express.Router();
 
-productsRouter.use(authMiddleware);
+//productsRouter.use(authMiddleware);
+
+productsRouter.get('/', authMiddleware, getProducts);
+/* UPLOAD PRODUCTS FROM GOOGLE SHEET */
+productsRouter.post('/importProductsFromGoogleSheet', importProductsFromGoogleSheet);
+/* UPLOAD PRODUCTS FROM CSV FILE */
+productsRouter.post('/importProductsFromCsvFile', upload.single('file'), validateFile, importProductsFromCsvFile);
+
+productsRouter.get('/push-to-channelengine', authMiddleware, pushProductToChannelEngine);
 
 productsRouter.get('/', getProducts);
-productsRouter.patch('/update-status', updateProductStatus);
-productsRouter.get('/push-to-channelengine', pushProductToChannelEngine);
+productsRouter.patch('/update-status',authMiddleware, updateProductStatus);
+
+
 export default productsRouter;
