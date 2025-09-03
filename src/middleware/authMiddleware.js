@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '#models/User.js';
 import { config } from '#config/config.js';
+import Responses from '#helpers/response.js';
 
 export const authMiddleware = async (req, res, next) => {
   console.time('authMiddleware');
@@ -12,7 +13,7 @@ export const authMiddleware = async (req, res, next) => {
     }
 
     if (!token) {
-      return res.status(401).json({ message: 'Not authorized' });
+      return Responses.failResponse(res, 'Not authorized', 401);
     }
 
     try {
@@ -20,18 +21,18 @@ export const authMiddleware = async (req, res, next) => {
 
       const user = await User.findById(decoded.id);
       if (!user || user.isDeleted) {
-        return res.status(401).json({ message: 'User not found' });
+        return Responses.failResponse(res, 'User unauthorized', 403);
       }
       console.timeEnd('authMiddleware');
       req.user = user;
       next();
     } catch (error) {
       console.log('JWT verification error:', error.message);
-      return res.status(401).json({ message: 'Invalid token' });
+      return Responses.failResponse(res, 'Invalid Token', 401);
     }
   } catch (error) {
-    console.log('authMiddleware error:', error.message);
-    return res.status(500).json({ message: 'Server error' });
+    console.error('authMiddleware Error:', error);
+    return Responses.errorResponse(res, error, 500);
   }
 };
 
@@ -45,14 +46,12 @@ export const authorize = (...roles) => {
       }
       // Check if user role is included in the allowed roles
       if (!roles.includes(req.user.role)) {
-        return res.status(403).json({
-          message: `User role ${req.user.role} is not authorized to access this route`,
-        });
+        return Responses.errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
       }
       next();
     } catch (error) {
       console.log('authorize middleware error:', error.message);
-      return res.status(500).json({ message: 'Server error' });
+      return Responses.errorResponse(res, 'Server error', 500);
     }
   };
 };

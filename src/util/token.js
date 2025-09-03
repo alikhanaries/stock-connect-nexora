@@ -18,7 +18,7 @@ export const generateTokenResponse = (user, role) => {
     const refreshTokenExpiryTime = Date.now() + 1000 * 60 * 60 * 24;
 
     const tokenResponse = {
-      success: true,
+      // success: true,
       token,
       tokenExpiryTime,
       refreshTokenExpiryTime,
