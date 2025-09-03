@@ -8,39 +8,39 @@ const CustomerDetailsSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
-    Gender: {
+    gender: {
       type: String,
       enum: ['MALE', 'FEMALE', 'NOT_APPLICABLE'],
       default: 'NOT_APPLICABLE',
     },
-    FirstName: {
+    firstName: {
       type: String,
       required: [true, 'First name is required'],
       trim: true,
     },
-    LastName: {
+    lastName: {
       type: String,
       trim: true,
     },
-    Phone: {
+    phone: {
       type: String,
       trim: true,
     },
-    Email: {
+    email: {
       type: String,
       lowercase: true,
       trim: true,
       index: true,
     },
-    LanguageCode: {
+    languageCode: {
       type: String,
       trim: true,
     },
-    CompanyRegistrationNo: {
+    companyRegistrationNo: {
       type: String,
       trim: true,
     },
-    ChannelCustomerNo: {
+    channelCustomerNo: {
       type: String,
       trim: true,
     },
