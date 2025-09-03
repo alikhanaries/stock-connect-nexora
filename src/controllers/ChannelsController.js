@@ -77,4 +77,44 @@ export const getAllUserChannels = async (req, res) => {
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };
+export const updateUserChannelsStatus = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { channelIds, status } = req.body;
+    if (!Array.isArray(channelIds) || channelIds.length === 0) {
+      return Responses.failResponse(res, 'channelIds must be a non-empty array', 400);
+    }
+    for (const id of channelIds) {
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return Responses.failResponse(res, `Invalid channelId: ${id}`, 400);
+      }
+    }
+    const validStatuses = ['active', 'deactive', 'removed'];
+
+    if (!validStatuses.includes(status)) {
+      return Responses.failResponse(res, 'status must be one of active, deactive, or removed', 400);
+    }
+    const updatedCount = await channelService.updateUserChannelsStatus(userId, channelIds, status);
+
+    if (updatedCount === 0) {
+      return Responses.failResponse(res, 'No matching products found to update', 404);
+    }
+    const statusMessages = {
+      active: 'activated',
+      deactive: 'deactivated',
+      removed: 'removed',
+    };
+
+    return Responses.successResponse(res, `User channels ${statusMessages[status]} successfully`, 200);
+  } catch (error) {
+    console.error('Controller error in updateUserChannelsStatus:', error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+export default {
+  getAllChannelsFromChannelPartner,
+  getAllChannels,
+  saveUserChannels,
+  getAllUserChannels,
+  updateUserChannelsStatus,
+};
