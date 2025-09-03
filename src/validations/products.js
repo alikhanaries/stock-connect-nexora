@@ -1,7 +1,8 @@
 import { z, ZodError } from 'zod';
+import { languageTypes } from '#utils/languageTypes.js';
 import { errorResponse } from '#helpers/response.js';
 // Common language list
-const languageTypes = ['en', 'ar', 'zh', 'tr'];
+
 const validate = (parseFn) => async (req, res, next) => {
   try {
     await parseFn(req);
