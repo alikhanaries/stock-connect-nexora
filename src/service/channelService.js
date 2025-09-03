@@ -79,18 +79,18 @@ const getAllChannels = async () => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-const saveUserChannels = async (userId, channelIds) => {
+const saveUserChannels = async (userId, formattedChannels) => {
   try {
+    console.log('formattedChannels----------', formattedChannels);
     // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(
       { userId: new ObjectId(userId) },
-      { $set: { channelIds } },
+      { $set: { channelIds: formattedChannels } }, // ✅ correct structure
       { new: true, upsert: true }
     );
 
     // Update user flag
     await User.updateOne({ _id: new ObjectId(userId) }, { $set: { isMarketplaceConnected: true } });
-
     return {
       success: true,
       data: updatedUserChannels,
@@ -104,36 +104,84 @@ const saveUserChannels = async (userId, channelIds) => {
 /** FUNC - GET USER CHANNEL LIST */
 export const getAllUserChannels = async (userId) => {
   try {
+    const data = await UserChannels.find();
+    console.log(data);
+    const objectId = new mongoose.Types.ObjectId(userId);
+
     const result = await UserChannels.aggregate([
-      {
-        $match: {
-          userId: new ObjectId(userId),
-          isActive: true,
-        },
-      },
+      { $match: { userId: objectId, isActive: true } },
+
+      // Expand channelIds array
+      { $unwind: '$channelIds' },
+
+      // Lookup channel details to get channelId
       {
         $lookup: {
-          from: 'channels', // collection to join
-          localField: 'channelIds', // field in UserChannels
-          foreignField: '_id', // field in Channel
+          from: 'channels',
+          localField: 'channelIds.id', // _id of channel
+          foreignField: '_id',
           as: 'channelDetails',
         },
       },
+      { $unwind: '$channelDetails' },
 
+      // Lookup orders using channelId from Channels collection
+      {
+        $lookup: {
+          from: 'orders',
+          let: { channelId: '$channelDetails.channelId' },
+          pipeline: [{ $match: { $expr: { $eq: ['$channelId', '$$channelId'] } } }, { $count: 'ordersCount' }],
+          as: 'ordersInfo',
+        },
+      },
+      // Lookup products for this channel (marketplace = channelName)
+      {
+        $lookup: {
+          from: 'channelproducts',
+          let: { channelId: '$channelDetails.channelId' },
+          pipeline: [{ $match: { $expr: { $eq: ['$marketPlaceId', '$$channelId'] } } }, { $count: 'productsCount' }],
+
+          as: 'productsInfo',
+        },
+      },
+      // Project required fields
       {
         $project: {
           _id: 0,
           userId: 1,
-          channelDetails: {
-            _id: 1,
-            channelImageUrl: 1,
-            channelName: 1,
+          channel: {
+            _id: '$channelDetails._id',
+            channelName: '$channelDetails.channelName',
+            channelImageUrl: '$channelDetails.channelImageUrl',
+            status: '$channelIds.status',
+            createdAt: '$channelIds.createdAt',
+            channelId: '$channelDetails.channelId',
+            ordersCount: { $ifNull: [{ $arrayElemAt: ['$ordersInfo.ordersCount', 0] }, 0] },
+            productsCount: { $ifNull: [{ $arrayElemAt: ['$productsInfo.productsCount', 0] }, 0] },
           },
+        },
+      },
+
+      // Group channels per user
+      {
+        $group: {
+          _id: '$userId',
+          channelDetails: { $push: '$channel' },
+        },
+      },
+
+      // Final shape
+      {
+        $project: {
+          _id: 0,
+          userId: '$_id',
+          channelDetails: 1,
         },
       },
     ]);
 
-    if (!result.length) {
+    console.log('result-------', result);
+    if (result.length == 0) {
       return {
         success: false,
       };

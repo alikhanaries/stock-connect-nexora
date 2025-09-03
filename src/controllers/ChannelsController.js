@@ -42,14 +42,23 @@ export const saveUserChannels = async (req, res) => {
     if (!ObjectId.isValid(userId)) {
       return Responses.failResponse(res, 'Invalid userId format', 400);
     }
-
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
       return Responses.failResponse(res, 'User not found', 404);
     }
+    // Format incoming channelIds into schema shape
+    const formattedChannels = channelIds.map((id) => {
+      if (!ObjectId.isValid(id)) {
+        throw new Error(`Invalid channelId: ${id}`);
+      }
+      return {
+        id: new ObjectId(id),
+        status: 'ACTIVE', // default
+      };
+    });
     // Call the service to save channel data
-    const result = await channelService.saveUserChannels(userId, channelIds);
+    const result = await channelService.saveUserChannels(userId, formattedChannels);
 
     if (!result.success) {
       return Responses.failResponse(res, result.message || 'Failed to save channels', 500);
@@ -66,7 +75,7 @@ export const getAllUserChannels = async (req, res) => {
   try {
     const result = await channelService.getAllUserChannels(req.params.userId);
 
-    if (!result) {
+    if (!result.success) {
       return Responses.successResponse(res, 'No channels found', 200, []);
     }
 
