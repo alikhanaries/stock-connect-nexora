@@ -68,48 +68,44 @@ const fetchProducts = async (query) => {
 };
 
 const getTopSellingProduct = async (limit) => {
-  try {
-    const topProducts = await Order.aggregate([
-      { $unwind: '$skus' },
+  const topProducts = await Order.aggregate([
+    { $unwind: '$skus' },
 
-      {
-        $group: {
-          _id: '$skus.merchantProductNo',
-          totalQuantitySold: { $sum: '$skus.quantity' },
-        },
+    {
+      $group: {
+        _id: '$skus.merchantProductNo',
+        totalQuantitySold: { $sum: '$skus.quantity' },
       },
+    },
 
-      { $sort: { totalQuantitySold: -1 } },
+    { $sort: { totalQuantitySold: -1 } },
 
-      { $limit: limit },
+    { $limit: limit },
 
-      {
-        $lookup: {
-          from: Product.collection.name,
-          localField: '_id',
-          foreignField: 'productSkuCode',
-          as: 'productDetails',
-        },
+    {
+      $lookup: {
+        from: Product.collection.name,
+        localField: '_id',
+        foreignField: 'productSkuCode',
+        as: 'productDetails',
       },
-      {
-        $unwind: '$productDetails',
-      },
+    },
+    {
+      $unwind: '$productDetails',
+    },
 
-      {
-        $project: {
-          _id: '$productDetails._id',
-          sku: '$_id',
-          totalQuantitySold: 1,
-          productName: '$productDetails.name',
-          imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
-        },
+    {
+      $project: {
+        _id: '$productDetails._id',
+        sku: '$_id',
+        totalQuantitySold: 1,
+        productName: '$productDetails.name',
+        imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
       },
-    ]);
+    },
+  ]);
 
-    return topProducts;
-  } catch (err) {
-    return { success: false, message: err.message };
-  }
+  return topProducts;
 };
 // 🔹 Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
@@ -362,5 +358,5 @@ export default {
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
   deleteProduct,
-  getTopSellingProduct
+  getTopSellingProduct,
 };

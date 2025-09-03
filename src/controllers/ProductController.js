@@ -20,7 +20,8 @@ export const getProducts = async (req, res) => {
 
 export const getTopSellingProduct = async (req, res) => {
   try {
-    const limit = parseInt(req.query.size) || 5;
+    const size = parseInt(req.query.size, 10);
+    const limit = Number.isInteger(size) && size > 0 ? size : 5;
 
     const topProducts = await productService.getTopSellingProduct(limit);
 
