@@ -1,5 +1,6 @@
 import { config } from '#config/config.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import Order from '#models/Orders.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import '#models/Category.js';
 import Product from '#models/Product.js';
@@ -66,11 +67,53 @@ const fetchProducts = async (query) => {
   };
 };
 
+const getTopSellingProduct = async (limit) => {
+  const topProducts = await Order.aggregate([
+    { $unwind: '$skus' },
+
+    {
+      $group: {
+        _id: '$skus.merchantProductNo',
+        totalQuantitySold: { $sum: '$skus.quantity' },
+      },
+    },
+
+    { $sort: { totalQuantitySold: -1 } },
+
+    { $limit: limit },
+
+    {
+      $lookup: {
+        from: Product.collection.name,
+        localField: '_id',
+        foreignField: 'productSkuCode',
+        as: 'productDetails',
+      },
+    },
+    {
+      $unwind: '$productDetails',
+    },
+
+    {
+      $project: {
+        _id: '$productDetails._id',
+        sku: '$_id',
+        totalQuantitySold: 1,
+        productName: '$productDetails.name',
+        imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
+      },
+    },
+  ]);
+
+  return topProducts;
+};
+
 export const updateProductStatus = async (ids, active) => {
   if (!ids?.length) return 0;
   const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: active } }, { $set: { status: active } });
   return result.modifiedCount || 0;
 };
+
 
 // 🔹 Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
@@ -342,6 +385,7 @@ export default {
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
   deleteProduct,
+  getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
 };
