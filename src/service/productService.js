@@ -14,6 +14,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
 const MAX_RETRIES = 3;
+export const PRODUCT_STATUSES = ['active', 'deactive'];
 
 const fetchProducts = async (query) => {
   const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
@@ -21,14 +22,16 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = {};
+  const filter = { isDeleted: false };
   const appliedFilters = {};
 
   // Status filter
-  if (status !== undefined) {
-    const statusBool = status.toString().toLowerCase() === 'true';
-    filter.status = statusBool;
-    appliedFilters.status = statusBool;
+  if (status) {
+    const statusValue = status.toString().trim().toLowerCase();
+    if (PRODUCT_STATUSES.includes(statusValue)) {
+      filter.status = statusValue;
+      appliedFilters.status = statusValue;
+    }
   }
 
   // Price filter
@@ -66,9 +69,9 @@ const fetchProducts = async (query) => {
   };
 };
 
-export const updateProductStatus = async (ids, active) => {
+export const updateProductStatus = async (ids, status) => {
   if (!ids?.length) return 0;
-  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: active } }, { $set: { status: active } });
+  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: status } }, { $set: { status: status } });
   return result.modifiedCount || 0;
 };
 
@@ -112,7 +115,10 @@ const pushBatch = async (batch, index) => {
 async function* fetchBatchesFromDB() {
   let skip = 0;
   while (true) {
-    const products = await Product.find({ status: true }).skip(skip).limit(BATCH_SIZE).lean();
+    const products = await Product.find({ status: 'active', isDeleted: { $ne: true } })
+      .skip(skip)
+      .limit(BATCH_SIZE)
+      .lean();
     if (!products.length) break;
     yield products.map(mapProductToChannelEngine);
     skip += BATCH_SIZE;
@@ -302,7 +308,7 @@ const deleteProduct = async (prId) => {
   try {
     const result = await Product.findByIdAndUpdate(
       prId,
-      { isDelete: true },
+      { isDeleted: true },
       { new: true } // return updated doc
     );
 
@@ -321,8 +327,8 @@ const deleteProduct = async (prId) => {
 const deleteMultipleProducts = async (ids) => {
   try {
     const result = await Product.updateMany(
-      { _id: { $in: ids }, isDelete: { $ne: true } },
-      { $set: { isDelete: true } }
+      { _id: { $in: ids }, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true } }
     );
 
     if (result.modifiedCount === 0) {
