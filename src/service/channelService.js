@@ -88,7 +88,7 @@ const saveUserChannels = async (userId, channelIds) => {
       }
       return {
         id: new ObjectId(id),
-        status: 'ACTIVE', // default
+        status: 'active', // default
       };
     });
 
