@@ -86,7 +86,7 @@ const OrderSchema = new mongoose.Schema(
     orderShippingAddress: AddressSchema,
     orderBillingAddress: AddressSchema,
     orderCustomer: CustomerDetailsSchema,
-    orderpaymentDetails: PaymentDetailsSchema,
+    orderPaymentDetails: PaymentDetailsSchema,
   },
   { timestamps: true }
 );
