@@ -24,6 +24,16 @@ const OrderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      enum: [
+      'NEW',
+      'IN_PROGRESS',
+      'SHIPPED',
+      'CLOSED',
+      'CANCELLED',
+      'RETURNED',
+      'AWAITING_PAYMENT',
+      'REQUIRES_CORRECTION'
+    ],
       index: true,
     },
     globalChannelName: {
