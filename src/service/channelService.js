@@ -79,9 +79,19 @@ const getAllChannels = async () => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-const saveUserChannels = async (userId, formattedChannels) => {
+const saveUserChannels = async (userId, channelIds) => {
   try {
-    console.log('formattedChannels----------', formattedChannels);
+    // Format incoming channelIds into schema shape
+    const formattedChannels = channelIds.map((id) => {
+      if (!ObjectId.isValid(id)) {
+        throw new Error(`Invalid channelId: ${id}`);
+      }
+      return {
+        id: new ObjectId(id),
+        status: 'ACTIVE', // default
+      };
+    });
+
     // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(
       { userId: new ObjectId(userId) },
@@ -96,7 +106,7 @@ const saveUserChannels = async (userId, formattedChannels) => {
       data: updatedUserChannels,
     };
   } catch (err) {
-    console.error('Service error in saveUserChannels:', err);
+    console.error('Error in saveUserChannels:', err);
     return { success: false, message: err.message };
   }
 };
@@ -180,7 +190,6 @@ export const getAllUserChannels = async (userId) => {
       },
     ]);
 
-    console.log('result-------', result);
     if (result.length == 0) {
       return {
         success: false,

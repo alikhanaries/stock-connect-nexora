@@ -16,7 +16,7 @@ router.get('/getAllChannelsFromChannelPartner', authMiddleware, getAllChannelsFr
 // /* GET ALL CHANNEL LIST FROM DATABASE */
 router.get('/getAllChannels', authMiddleware, getAllChannels);
 // /* SAVE USER CHANNELS  */
-router.post('/saveUserChannels', authMiddleware, saveUserChannels);
+router.post('/saveUserChannels', saveUserChannels);
 /* GET USER CHANNEL LIST */
-router.get('/getAllUserChannels/:userId', authMiddleware, getAllUserChannels);
+router.get('/getAllUserChannels/:userId', getAllUserChannels);
 export default router;
