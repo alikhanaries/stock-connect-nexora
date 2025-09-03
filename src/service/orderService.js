@@ -51,7 +51,7 @@ const getAllOrders = async (query) => {
 
       filter.$or = [
         { orderId: regex },
-        { 'orderSkuList.description': regex },
+        { 'orderSkuList.skuList.description': regex },
         { 'orderCustomer.email': regex },
         { 'orderCustomer.firstName': regex },
         { 'orderCustomer.lastName': regex },
@@ -75,7 +75,7 @@ const getAllOrders = async (query) => {
 
     // status filter
     if (status) {
-      filter.status = status;
+      filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
       appliedFilters.status = status;
     }
 
@@ -88,8 +88,6 @@ const getAllOrders = async (query) => {
         .select(SELECTED_FIELDS)
         .lean(),
     ]);
-
-    console.log('orders', orders);
 
     return {
       data: orders.map(formatOrder),
