@@ -21,7 +21,7 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = {};
+  const filter = { isDeleted: false };
   const appliedFilters = {};
 
   // Status filter
@@ -302,7 +302,7 @@ const deleteProduct = async (prId) => {
   try {
     const result = await Product.findByIdAndUpdate(
       prId,
-      { isDelete: true },
+      { isDeleted: true },
       { new: true } // return updated doc
     );
 
@@ -321,8 +321,8 @@ const deleteProduct = async (prId) => {
 const deleteMultipleProducts = async (ids) => {
   try {
     const result = await Product.updateMany(
-      { _id: { $in: ids }, isDelete: { $ne: true } },
-      { $set: { isDelete: true } }
+      { _id: { $in: ids }, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true } }
     );
 
     if (result.modifiedCount === 0) {
