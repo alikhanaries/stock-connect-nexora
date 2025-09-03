@@ -21,9 +21,6 @@ export const getProducts = async (req, res) => {
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
-    if (!req.body.url) {
-      return failResponse(res, 'Google Sheet URL required', 400);
-    }
     const { url } = req.body;
     const result = await productService.importProductsFromGoogleSheet(url);
     // Handle failure from service
@@ -138,16 +135,6 @@ export const deleteProduct = async (req, res) => {
 export const deleteMultipleProducts = async (req, res) => {
   try {
     const { ids } = req.body;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return failResponse(res, 'Product IDs are required', 400);
-    }
-
-    // Validate all IDs
-    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
-    if (invalidIds.length) {
-      return failResponse(res, `Invalid IDs: ${invalidIds.join(', ')}`, 400);
-    }
     const result = await productService.deleteMultipleProducts(ids);
     if (!result.success) {
       return failResponse(res, result.message || 'Failed to delete product', 400);
