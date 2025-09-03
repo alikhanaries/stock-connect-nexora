@@ -10,8 +10,8 @@ const channelSubSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['ACTIVE', 'INACTIVE', 'REMOVED'],
-      default: 'ACTIVE',
+      enum: ['active', 'inactive', 'removed'],
+      default: 'active',
       required: true,
     },
   },
