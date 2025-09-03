@@ -1,4 +1,5 @@
 ## Installation
+
 Use NVM to use the recommended version
 
 ```
@@ -6,11 +7,13 @@ nvm use
 ```
 
 Install dependencies
+
 ```
-npm install
+yarn install
 ```
 
 Start the server
+
 ```
-npm start
+yarn start
 ```
