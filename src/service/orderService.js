@@ -28,8 +28,6 @@ const SELECTED_FIELDS = [
   'orderCustomer.email',
   'orderCustomer.phone',
   'orderSkuList.skuList',
-  'orderPaymentDetails.paymentMethod',
-  'orderPaymentDetails.currencyCode',
   'status',
   'channelName',
   'orderDate',
