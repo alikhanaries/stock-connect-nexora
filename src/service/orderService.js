@@ -2,34 +2,35 @@ import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 
 const formatOrder = (order) => {
-  const totalQuantity = order.skus?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const customer = `${order.billingAddress?.firstName || ''} ${order.billingAddress?.lastName || ''}`.trim();
+  const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
+  const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
+  const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
 
   return {
     orderID: order.orderId,
     quantity: totalQuantity,
-    totalPrice: order.orderDetails?.totalInclVat || 0,
+    totalPrice: totalPrice,
     customer,
-    orderDate: order.orderDate,
-    email: order.email,
-    phoneNumber: order.phoneNumber,
+    placedOn: order.orderDate,
+    email: order.orderCustomer?.email,
+    phoneNumber: order.orderCustomer?.phone,
     status: order.status,
     platform: order.channelName,
+    paymentMethod: order.paymentDetails?.paymentMethod,
+    currencyCode: order.paymentDetails?.currencyCode,
   };
 };
 
 const SELECTED_FIELDS = [
   'orderId',
-  'billingAddress.firstName',
-  'billingAddress.lastName',
-  'skus.description',
+  'orderCustomer.firstName',
+  'orderCustomer.lastName',
+  'orderCustomer.email',
+  'orderCustomer.phone',
+  'orderSkuList.skuList',
   'status',
-  'skus.quantity',
-  'orderDetails.totalInclVat',
   'channelName',
   'orderDate',
-  'email',
-  'phoneNumber',
   'createdAt',
 ].join(' ');
 
@@ -48,10 +49,11 @@ const getAllOrders = async (query) => {
 
       filter.$or = [
         { orderId: regex },
-        { 'skus.description': regex },
-        { email: regex },
-        { 'billingAddress.firstName': regex },
-        { 'billingAddress.lastName': regex },
+        { 'orderSkuList.skuList.description': regex },
+        { 'orderCustomer.email': regex },
+        { 'orderCustomer.firstName': regex },
+        { 'orderCustomer.lastName': regex },
+        { 'orderCustomer.phone': regex },
       ];
     }
 
@@ -71,7 +73,7 @@ const getAllOrders = async (query) => {
 
     // status filter
     if (status) {
-      filter.status = status;
+      filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
       appliedFilters.status = status;
     }
 
