@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 import AddressSchema from './OrderSchema/AddressSchema.js';
 import SkuSchema from './OrderSchema/SkuSchema.js';
-import CustomerDetailsSchema from './OrderSchema/CustomerDetails.js';
-import PaymentDetailsSchema from './OrderSchema/PaymentDetails.js';
+import CustomerDetailsSchema from './OrderSchema/CustomerDetailsSchema.js';
+import PaymentDetailsSchema from './OrderSchema/PaymentDetailsSchema.js';
 
 const OrderSchema = new mongoose.Schema(
   {
