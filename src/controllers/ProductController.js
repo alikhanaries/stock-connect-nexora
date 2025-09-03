@@ -104,6 +104,31 @@ export const pushProductToChannelEngine = async (req, res) => {
     return errorResponse(res, err, 500);
   }
 };
+
+export const updateProductStatus = async (req, res) => {
+  try {
+    const { ids, active } = req.body;
+    if (!Array.isArray(ids) || !ids.length) {
+      return failResponse(res, 'Product IDs are required', 400);
+    }
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return failResponse(res, `Invalid product IDs: ${invalidIds.join(', ')}`, 400);
+    }
+    if (typeof active !== 'boolean') {
+      return failResponse(res, 'Status must be true or false', 400);
+    }
+    const updatedCount = await productService.updateProductStatus(ids, active);
+    if (updatedCount === 0) {
+      return failResponse(res, 'No matching products found to update', 404);
+    }
+    const statusMessage = active ? 'Products activated successfully' : 'Products deactivated successfully';
+    return successResponse(res, statusMessage, 200);
+  } catch (err) {
+    console.error('Error updating product status:', err);
+    return errorResponse(res, err, 500);
+  }
+};
 /* DELETE PRODUCT BY ID*/
 export const deleteProduct = async (req, res) => {
   try {
@@ -118,6 +143,32 @@ export const deleteProduct = async (req, res) => {
     }
 
     return successResponse(res, 'Product deleted successfully', 200);
+  } catch (error) {
+    console.error('Error:', error);
+    return errorResponse(res, error);
+  }
+};
+
+/* DELETE MULTIPLE PRODUCTS BY ID*/
+export const deleteMultipleProducts = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return failResponse(res, 'Product IDs are required', 400);
+    }
+
+    // Validate all IDs
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length) {
+      return failResponse(res, `Invalid IDs: ${invalidIds.join(', ')}`, 400);
+    }
+    const result = await productService.deleteMultipleProducts(ids);
+    if (!result.success) {
+      return failResponse(res, result.message || 'Failed to delete product', 400);
+    }
+
+    return successResponse(res, result.message || 'Product deleted successfully', 200);
   } catch (error) {
     console.error('Error:', error);
     return errorResponse(res, error);

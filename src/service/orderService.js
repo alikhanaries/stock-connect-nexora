@@ -4,6 +4,7 @@ import { getPagination } from '#helpers/PaginationHandler.js';
 const formatOrder = (order) => {
   const totalQuantity = order.skus?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
   const customer = `${order.billingAddress?.firstName || ''} ${order.billingAddress?.lastName || ''}`.trim();
+
   return {
     orderID: order.orderId,
     quantity: totalQuantity,

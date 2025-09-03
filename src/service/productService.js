@@ -1,16 +1,16 @@
-import Product from '#models/Product.js';
-import '#models/Category.js';
+import { config } from '#config/config.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import Order from '#models/Orders.js';
-import { Readable } from 'stream';
+import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
+import '#models/Category.js';
+import Product from '#models/Product.js';
+import { mapRowToProduct } from '#utils/mapRowToProduct.js'; // your row mapper
 import csv from 'csv-parser';
 import fs from 'fs';
-import { mapRowToProduct } from '#utils/mapRowToProduct.js'; // your row mapper
-import { config } from '#config/config.js';
+import pLimit from 'p-limit';
+import { Readable } from 'stream';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
-import pLimit from 'p-limit';
-import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
@@ -107,6 +107,14 @@ const getTopSellingProduct = async (limit) => {
 
   return topProducts;
 };
+
+export const updateProductStatus = async (ids, active) => {
+  if (!ids?.length) return 0;
+  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: active } }, { $set: { status: active } });
+  return result.modifiedCount || 0;
+};
+
+
 // 🔹 Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
   try {
@@ -352,6 +360,25 @@ const deleteProduct = async (prId) => {
   }
 };
 
+/* DELETE MULTIPLE PRODUCTS BY ID*/
+const deleteMultipleProducts = async (ids) => {
+  try {
+    const result = await Product.updateMany(
+      { _id: { $in: ids }, isDelete: { $ne: true } },
+      { $set: { isDelete: true } }
+    );
+
+    if (result.modifiedCount === 0) {
+      return { success: false, message: 'Product not found' };
+    }
+
+    return { success: true, message: `${result.modifiedCount} products marked as deleted successfully` };
+  } catch (err) {
+    console.error('Service error in deleteMultipleProducts:', err);
+    return { success: false, message: err.message };
+  }
+};
+
 export default {
   fetchProducts,
   pushProductsFromDB,
@@ -359,4 +386,6 @@ export default {
   importProductsFromGoogleSheet,
   deleteProduct,
   getTopSellingProduct,
+  updateProductStatus,
+  deleteMultipleProducts,
 };
