@@ -7,6 +7,7 @@ const formatOrder = (order) => {
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
 
   return {
+    _id: order._id,
     orderID: order.orderId,
     quantity: totalQuantity,
     totalPrice: totalPrice,
@@ -22,6 +23,7 @@ const formatOrder = (order) => {
 };
 
 const SELECTED_FIELDS = [
+  '_id',
   'orderId',
   'orderCustomer.firstName',
   'orderCustomer.lastName',
