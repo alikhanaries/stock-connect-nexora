@@ -22,7 +22,9 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = {};
+  const filter = {
+    isDeleted: false,
+  };
   const appliedFilters = {};
 
   // Status filter
@@ -47,7 +49,7 @@ const fetchProducts = async (query) => {
   }
   // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
-
+  console.log('filter----------', filter);
   // Fetch total and products in parallel
   const [total, products] = await Promise.all([
     Product.countDocuments(filter),
@@ -113,7 +115,6 @@ export const updateProductStatus = async (ids, active) => {
   const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: active } }, { $set: { status: active } });
   return result.modifiedCount || 0;
 };
-
 
 // 🔹 Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
@@ -345,7 +346,7 @@ const deleteProduct = async (prId) => {
   try {
     const result = await Product.findByIdAndUpdate(
       prId,
-      { isDelete: true },
+      { isDeleted: true },
       { new: true } // return updated doc
     );
 
@@ -364,8 +365,8 @@ const deleteProduct = async (prId) => {
 const deleteMultipleProducts = async (ids) => {
   try {
     const result = await Product.updateMany(
-      { _id: { $in: ids }, isDelete: { $ne: true } },
-      { $set: { isDelete: true } }
+      { _id: { $in: ids }, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true } }
     );
 
     if (result.modifiedCount === 0) {
