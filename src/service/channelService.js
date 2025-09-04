@@ -148,4 +148,5 @@ export const getAllUserChannels = async (userId) => {
     return { success: false, message: err.message };
   }
 };
+
 export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };

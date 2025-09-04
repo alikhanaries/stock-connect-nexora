@@ -44,6 +44,7 @@ export const getOrderById = async (req, res) => {
   }
 };
 
+
 export const getOrderStats = async (req, res) => {
   try {
     const stats = await orderService.getOrderStats();
@@ -51,6 +52,35 @@ export const getOrderStats = async (req, res) => {
       return Responses.failResponse(res, 'Failed to get order status', 404);
     }
     return Responses.successResponse(res, 'Order status statistics fetched successfully', 200, stats);
+  }
+  catch(error){
+    return Responses.errorResponse(res, error, 500);
+  }
+}
+
+export const getSyncedOrders = async (req, res) => {
+  try {
+    const { success, data } = await orderService.getNewOrders();
+
+    if (!success) {
+      return Responses.errorResponse(res, 'No new orders found', 200);
+    }
+
+    if (data.length === 0) {
+      return Responses.successResponse(res, 'already upto date', 200, []);
+    }
+    const dataSavedInDb = await orderService.processOrders(data);
+
+    if (!dataSavedInDb.success) {
+      return Responses.errorResponse(res, dataSavedInDb.message, 500);
+    }
+    const message =
+      dataSavedInDb.data.upsertedCount.length > 0
+        ? `${dataSavedInDb.data.upsertedCount.length} new order(s) were synced successfully.`
+        : 'No new orders found. Displaying existing data.';
+    const response = await orderService.getAllOrders(req.query);
+
+    return Responses.successResponse(res, message, 200, response);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
   }
