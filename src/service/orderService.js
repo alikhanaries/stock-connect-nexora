@@ -1,35 +1,41 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import orderhelper from '#helpers/Order.js';
+import { config } from '#config/config.js';
+const { CHANNEL_ORDER_URL } = config;
 
 const formatOrder = (order) => {
-  const totalQuantity = order.skus?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const customer = `${order.billingAddress?.firstName || ''} ${order.billingAddress?.lastName || ''}`.trim();
+  const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
+  const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
+  const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
 
   return {
+    _id: order._id,
     orderID: order.orderId,
     quantity: totalQuantity,
-    totalPrice: order.orderDetails?.totalInclVat || 0,
+    totalPrice: totalPrice,
     customer,
-    orderDate: order.orderDate,
-    email: order.email,
-    phoneNumber: order.phoneNumber,
+    placedOn: order.orderDate,
+    email: order.orderCustomer?.email,
+    phoneNumber: order.orderCustomer?.phone,
     status: order.status,
     platform: order.channelName,
+    paymentMethod: order.paymentDetails?.paymentMethod,
+    currencyCode: order.paymentDetails?.currencyCode,
   };
 };
 
 const SELECTED_FIELDS = [
+  '_id',
   'orderId',
-  'billingAddress.firstName',
-  'billingAddress.lastName',
-  'skus.description',
+  'orderCustomer.firstName',
+  'orderCustomer.lastName',
+  'orderCustomer.email',
+  'orderCustomer.phone',
+  'orderSkuList.skuList',
   'status',
-  'skus.quantity',
-  'orderDetails.totalInclVat',
   'channelName',
   'orderDate',
-  'email',
-  'phoneNumber',
   'createdAt',
 ].join(' ');
 
@@ -48,10 +54,11 @@ const getAllOrders = async (query) => {
 
       filter.$or = [
         { orderId: regex },
-        { 'skus.description': regex },
-        { email: regex },
-        { 'billingAddress.firstName': regex },
-        { 'billingAddress.lastName': regex },
+        { 'orderSkuList.skuList.description': regex },
+        { 'orderCustomer.email': regex },
+        { 'orderCustomer.firstName': regex },
+        { 'orderCustomer.lastName': regex },
+        { 'orderCustomer.phone': regex },
       ];
     }
 
@@ -71,7 +78,7 @@ const getAllOrders = async (query) => {
 
     // status filter
     if (status) {
-      filter.status = status;
+      filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
       appliedFilters.status = status;
     }
 
@@ -97,12 +104,44 @@ const getAllOrders = async (query) => {
 };
 
 const getOrderById = async (id) => {
-  const order = await Order.findById(id).select(SELECTED_FIELDS).lean();
+  const order = await Order.findById(id).lean();
   if (!order) {
     return false;
   }
-  const formattedOrder = formatOrder(order);
-  return formattedOrder;
+  return order;
 };
 
-export default { getAllOrders, getOrderById };
+const processOrders = async (orders) => {
+  try {
+    const operations = orderhelper.sanitizeOrdersData(orders);
+    const result = await Order.bulkWrite(operations);
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('Error :', error.message);
+    return { success: false, message: error.message };
+  }
+};
+
+export async function getNewOrders() {
+  try {
+    const response = await fetch(CHANNEL_ORDER_URL);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    const data = await response.json();
+    if (!data?.Content?.length) {
+      return { success: false, message: 'No data received from ChannelEngine' };
+    }
+    return {
+      success: true,
+      data: data.Content,
+    };
+  } catch (error) {
+    console.error('Error fetching new orders from ChannelEngine:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+export default { getAllOrders, getOrderById, processOrders, getNewOrders };
