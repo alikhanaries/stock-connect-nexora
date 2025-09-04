@@ -10,4 +10,5 @@ export const config = {
   CHANNEL_ENGINE_KEY: process.env.CHANNEL_ENGINE_KEY,
   CHANNEL_ENGINE_BATCH_SIZE: process.env.CHANNEL_ENGINE_BATCH_SIZE,
   CHANNEL_ENGINE_MAX_CONCURRENT: process.env.CHANNEL_ENGINE_MAX_CONCURRENT,
+  CHANNEL_ORDER_URL: `https://${process.env.CHANNEL_ENGINE}.channelengine.net/api/v2/orders?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
 };
