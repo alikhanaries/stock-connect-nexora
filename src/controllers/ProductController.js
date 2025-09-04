@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
+import { errorLog } from '#middleware/index.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -171,6 +172,7 @@ export const deleteMultipleProducts = async (req, res) => {
     return successResponse(res, result.message || 'Product deleted successfully', 200);
   } catch (error) {
     console.error('Error:', error);
+    errorLog(error);
     return errorResponse(res, error);
   }
 };
