@@ -49,7 +49,6 @@ const fetchProducts = async (query) => {
   }
   // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
-  console.log('filter----------', filter);
   // Fetch total and products in parallel
   const [total, products] = await Promise.all([
     Product.countDocuments(filter),
