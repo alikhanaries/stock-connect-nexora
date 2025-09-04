@@ -149,6 +149,7 @@ export const getAllUserChannels = async (userId) => {
   }
 };
 
+
 export const updateUserChannelsStatus = async (userId, channelIds, status) => {
   try {
     const objectIds = channelIds.map((id) => new ObjectId(id));
@@ -173,3 +174,4 @@ export default {
   getAllUserChannels,
   updateUserChannelsStatus,
 };
+

@@ -1,5 +1,6 @@
 import { config } from '#config/config.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import Order from '#models/Orders.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import '#models/Category.js';
 import Product from '#models/Product.js';
@@ -21,7 +22,9 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = {};
+  const filter = {
+    isDeleted: false,
+  };
   const appliedFilters = {};
 
   // Status filter
@@ -46,7 +49,6 @@ const fetchProducts = async (query) => {
   }
   // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
-
   // Fetch total and products in parallel
   const [total, products] = await Promise.all([
     Product.countDocuments(filter),
@@ -64,6 +66,47 @@ const fetchProducts = async (query) => {
     pagination: getPagination(total, currentPage, limit),
     appliedFilters,
   };
+};
+
+const getTopSellingProduct = async (limit) => {
+  const topProducts = await Order.aggregate([
+    { $unwind: '$skus' },
+
+    {
+      $group: {
+        _id: '$skus.merchantProductNo',
+        totalQuantitySold: { $sum: '$skus.quantity' },
+      },
+    },
+
+    { $sort: { totalQuantitySold: -1 } },
+
+    { $limit: limit },
+
+    {
+      $lookup: {
+        from: Product.collection.name,
+        localField: '_id',
+        foreignField: 'productSkuCode',
+        as: 'productDetails',
+      },
+    },
+    {
+      $unwind: '$productDetails',
+    },
+
+    {
+      $project: {
+        _id: '$productDetails._id',
+        sku: '$_id',
+        totalQuantitySold: 1,
+        productName: '$productDetails.name',
+        imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
+      },
+    },
+  ]);
+
+  return topProducts;
 };
 
 export const updateProductStatus = async (ids, active) => {
@@ -302,7 +345,7 @@ const deleteProduct = async (prId) => {
   try {
     const result = await Product.findByIdAndUpdate(
       prId,
-      { isDelete: true },
+      { isDeleted: true },
       { new: true } // return updated doc
     );
 
@@ -321,8 +364,8 @@ const deleteProduct = async (prId) => {
 const deleteMultipleProducts = async (ids) => {
   try {
     const result = await Product.updateMany(
-      { _id: { $in: ids }, isDelete: { $ne: true } },
-      { $set: { isDelete: true } }
+      { _id: { $in: ids }, isDeleted: { $ne: true } },
+      { $set: { isDeleted: true } }
     );
 
     if (result.modifiedCount === 0) {
@@ -342,6 +385,7 @@ export default {
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
   deleteProduct,
+  getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
 };
