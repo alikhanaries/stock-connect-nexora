@@ -1,5 +1,5 @@
 import { z, ZodError } from 'zod';
-import { languageTypes } from '#utils/languageTypes.js';
+import { languageTypes } from '#constants/common.js';
 import { errorResponse } from '#helpers/response.js';
 // Common language list
 
