@@ -1,5 +1,6 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { statusMap } from '#constants/common.js';
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -109,4 +110,19 @@ const getOrderById = async (id) => {
   return formattedOrder;
 };
 
-export default { getAllOrders, getOrderById };
+const getOrderStats = async () => {
+  try {
+    const counts = await Promise.all(Object.keys(statusMap).map((status) => Order.countDocuments({ status })));
+
+    const stats = Object.values(statusMap).reduce((acc, key, i) => {
+      acc[key] = counts[i];
+      return acc;
+    }, {});
+
+    return stats;
+  } catch (error) {
+    console.error('Error getting order stats:', error.message);
+  }
+};
+
+export default { getAllOrders, getOrderById, getOrderStats };

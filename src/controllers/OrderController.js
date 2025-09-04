@@ -43,3 +43,15 @@ export const getOrderById = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const getOrderStats = async (req, res) => {
+  try {
+    const stats = await orderService.getOrderStats();
+    if (!stats) {
+      return Responses.failResponse(res, 'Failed to get order status', 404);
+    }
+    return Responses.successResponse(res, 'Order status statistics fetched successfully', 200, stats);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};
