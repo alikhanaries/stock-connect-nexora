@@ -1,5 +1,8 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import orderhelper from '#helpers/Order.js';
+import { config } from '#config/config.js';
+const { CHANNEL_ORDER_URL } = config;
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -101,12 +104,44 @@ const getAllOrders = async (query) => {
 };
 
 const getOrderById = async (id) => {
-  const order = await Order.findById(id).select(SELECTED_FIELDS).lean();
+  const order = await Order.findById(id).lean();
   if (!order) {
     return false;
   }
-  const formattedOrder = formatOrder(order);
-  return formattedOrder;
+  return order;
 };
 
-export default { getAllOrders, getOrderById };
+const processOrders = async (orders) => {
+  try {
+    const operations = orderhelper.sanitizeOrdersData(orders);
+    const result = await Order.bulkWrite(operations);
+
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('Error :', error.message);
+    return { success: false, message: error.message };
+  }
+};
+
+export async function getNewOrders() {
+  try {
+    const response = await fetch(CHANNEL_ORDER_URL);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    const data = await response.json();
+    if (!data?.Content?.length) {
+      return { success: false, message: 'No data received from ChannelEngine' };
+    }
+    return {
+      success: true,
+      data: data.Content,
+    };
+  } catch (error) {
+    console.error('Error fetching new orders from ChannelEngine:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+export default { getAllOrders, getOrderById, processOrders, getNewOrders };
