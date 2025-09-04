@@ -22,9 +22,8 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = {
-    isDeleted: false,
-  };
+
+  const filter = { isDeleted: false };
   const appliedFilters = {};
 
   // Status filter
