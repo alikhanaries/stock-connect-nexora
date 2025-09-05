@@ -1,4 +1,3 @@
-
 export const PRODUCT_STATUSES = ['active', 'deactive'];
 
 export const ORDER_STATUS_MAP = {
@@ -8,11 +7,11 @@ export const ORDER_STATUS_MAP = {
   REQUIRES_CORRECTION: 'REQUIRES_CORRECTION',
   IN_BACKORDER: 'IN_BACKORDER',
   SHIPPED: 'SHIPPED',
-  DELIVERED: 'DELIVERED',
   RETURNED: 'RETURNED',
   CANCELED: 'CANCELED',
   CLOSED: 'CLOSED',
   MANCO: 'MANCO',
+  IN_COMBI: 'IN_COMBI',
 };
 
 export const SELECTED_FIELDS = [
@@ -28,4 +27,3 @@ export const SELECTED_FIELDS = [
   'orderDate',
   'createdAt',
 ].join(' ');
-
