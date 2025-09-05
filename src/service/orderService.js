@@ -1,5 +1,6 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { ORDER_STATUS_MAP, SELECTED_FIELDS } from '#constants/common.js';
 import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ORDER_URL } = config;
@@ -24,20 +25,6 @@ const formatOrder = (order) => {
     currencyCode: order.paymentDetails?.currencyCode,
   };
 };
-
-const SELECTED_FIELDS = [
-  '_id',
-  'orderId',
-  'orderCustomer.firstName',
-  'orderCustomer.lastName',
-  'orderCustomer.email',
-  'orderCustomer.phone',
-  'orderSkuList.skuList',
-  'status',
-  'channelName',
-  'orderDate',
-  'createdAt',
-].join(' ');
 
 const getAllOrders = async (query) => {
   try {
@@ -111,12 +98,26 @@ const getOrderById = async (id) => {
   return order;
 };
 
+const getOrderStats = async () => {
+  try {
+    const statuses = Object.keys(ORDER_STATUS_MAP);
+    const counts = await Promise.all(statuses.map((status) => Order.countDocuments({ status })));
+    const stats = statuses.reduce((acc, status, i) => {
+      acc[status] = counts[i];
+      return acc;
+    }, {});
+    return stats;
+  } catch (error) {
+    console.error('Error getting order stats:', error.message);
+  }
+};
+
 const processOrders = async (orders) => {
   try {
     const operations = orderhelper.sanitizeOrdersData(orders);
     const result = await Order.bulkWrite(operations);
 
-    return { success: true, data: result };
+    return { success: true, data: { ...result } };
   } catch (error) {
     console.error('Error :', error.message);
     return { success: false, message: error.message };
@@ -144,4 +145,4 @@ export async function getNewOrders() {
   }
 }
 
-export default { getAllOrders, getOrderById, processOrders, getNewOrders };
+export default { getAllOrders, getOrderById, processOrders, getNewOrders, getOrderStats };
