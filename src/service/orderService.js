@@ -28,7 +28,17 @@ const formatOrder = (order) => {
 
 const getAllOrders = async (query) => {
   try {
-    const { page = 1, size = 10, search, toDate, fromDate, status, sortOrder = 'asc', sortBy = '_id' } = query;
+    const {
+      page = 1,
+      size = 10,
+      search,
+      toDate,
+      fromDate,
+      status,
+      sortOrder = 'asc',
+      sortBy = '_id',
+      platform = '',
+    } = query;
     const skip = (page - 1) * size;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
@@ -47,6 +57,12 @@ const getAllOrders = async (query) => {
         { 'orderCustomer.lastName': regex },
         { 'orderCustomer.phone': regex },
       ];
+    }
+
+    //platform filter
+    if (platform) {
+      filter.channelName = platform;
+      appliedFilters.platform = platform;
     }
 
     //date filter
