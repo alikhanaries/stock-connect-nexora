@@ -2,6 +2,7 @@ import channelService from '../service/channelService.js';
 import Responses from '../helpers/response.js';
 import mongoose from 'mongoose';
 import User from '../models/User.js';
+import { STATUS_MESSAGES, VALID_STATUSES } from '#constants/common.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
 /**FUNC- FOR GET ALL CHANNEL LIST FROM CHANNEL PARTNER**/
@@ -81,31 +82,18 @@ export const updateUserChannelsStatus = async (req, res) => {
   try {
     const userId = req.user._id;
     const { channelIds, status } = req.body;
-    if (!Array.isArray(channelIds) || channelIds.length === 0) {
-      return Responses.failResponse(res, 'channelIds must be a non-empty array', 400);
+    if (!Array.isArray(channelIds) || channelIds.length === 0 || channelIds.some((id) => !ObjectId.isValid(id))) {
+      return Responses.failResponse(res, 'One or more channelIds are invalid', 400);
     }
-    for (const id of channelIds) {
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return Responses.failResponse(res, `Invalid channelId: ${id}`, 400);
-      }
-    }
-    const validStatuses = ['active', 'deactive', 'removed'];
-
-    if (!validStatuses.includes(status)) {
+    if (!VALID_STATUSES.includes(status)) {
       return Responses.failResponse(res, 'status must be one of active, deactive, or removed', 400);
     }
     const updatedCount = await channelService.updateUserChannelsStatus(userId, channelIds, status);
 
     if (updatedCount === 0) {
-      return Responses.failResponse(res, 'No matching products found to update', 404);
+      return Responses.failResponse(res, 'No matching channels found to update', 404);
     }
-    const statusMessages = {
-      active: 'activated',
-      deactive: 'deactivated',
-      removed: 'removed',
-    };
-
-    return Responses.successResponse(res, `User channels ${statusMessages[status]} successfully`, 200);
+    return Responses.successResponse(res, `User channels ${STATUS_MESSAGES[status]} successfully`, 200);
   } catch (error) {
     console.error('Controller error in updateUserChannelsStatus:', error);
     return Responses.errorResponse(res, error.message, 500);
