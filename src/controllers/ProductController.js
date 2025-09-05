@@ -18,6 +18,21 @@ export const getProducts = async (req, res) => {
   }
 };
 
+export const getTopSellingProduct = async (req, res) => {
+  try {
+    const size = parseInt(req.query.size, 10);
+    const limit = Number.isInteger(size) && size > 0 ? size : 5;
+
+    const topProducts = await productService.getTopSellingProduct(limit);
+
+    const message =
+      topProducts.length > 0 ? 'Top-selling products fetched successfully' : 'No top-selling products found';
+    return successResponse(res, message, 200, topProducts);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    return errorResponse(res, error, 500);
+  }
+};
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {

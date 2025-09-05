@@ -1,6 +1,9 @@
 echo "✅ Running pre-commit: formatting & linting staged files"
+
 # Format only staged files
-npm run format:staged || exit 1
-# Run Next.js lint
-npm run lint || exit 1
+yarn format:staged || exit 1
+
+# Run Next.js lint (with auto-fix if possible)
+yarn lint || exit 1
+
 echo "✅ Pre-commit checks passed!"
