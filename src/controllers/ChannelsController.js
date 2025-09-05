@@ -43,12 +43,12 @@ export const saveUserChannels = async (req, res) => {
     if (!ObjectId.isValid(userId)) {
       return Responses.failResponse(res, 'Invalid userId format', 400);
     }
-
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
       return Responses.failResponse(res, 'User not found', 404);
     }
+
     // Call the service to save channel data
     const result = await channelService.saveUserChannels(userId, channelIds);
 
@@ -65,9 +65,21 @@ export const saveUserChannels = async (req, res) => {
 /** FUNC - GET USER ALL CHANNEL LIST */
 export const getAllUserChannels = async (req, res) => {
   try {
-    const result = await channelService.getAllUserChannels(req.params.userId);
+    const { userId } = req.params;
 
-    if (!result) {
+    // Validate ObjectId format
+    if (!ObjectId.isValid(userId)) {
+      return Responses.failResponse(res, 'Invalid userId format', 400);
+    }
+    // Ensure user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return Responses.failResponse(res, 'User not found', 404);
+    }
+
+    const result = await channelService.getAllUserChannels(userId);
+
+    if (!result.success) {
       return Responses.successResponse(res, 'No channels found', 200, []);
     }
 
