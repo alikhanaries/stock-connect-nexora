@@ -7,7 +7,7 @@ export const getAllOrders = async (req, res) => {
     const { data, appliedFilters, pagination } = await orderService.getAllOrders(req.query);
 
     if (!data.length) {
-      return Responses.failResponse(res, 'No Orders found', 404, {
+      return Responses.successResponse(res, 'No Orders found', 200, {
         content: [],
         appliedFilters: appliedFilters || {},
         ...pagination,
@@ -39,6 +39,18 @@ export const getOrderById = async (req, res) => {
       return Responses.failResponse(res, 'Order not found', 404);
     }
     return Responses.successResponse(res, 'Order fetched successfully', 200, order);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const getOrderStats = async (req, res) => {
+  try {
+    const stats = await orderService.getOrderStats();
+    if (!stats) {
+      return Responses.failResponse(res, 'Failed to get order status', 404);
+    }
+    return Responses.successResponse(res, 'Order status statistics fetched successfully', 200, stats);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
   }
