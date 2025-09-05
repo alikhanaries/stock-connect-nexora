@@ -1,3 +1,6 @@
+
+export const PRODUCT_STATUSES = ['active', 'deactive'];
+
 export const ORDER_STATUS_MAP = {
   NEW: 'NEW',
   IN_PROGRESS: 'IN_PROGRESS',
@@ -25,3 +28,4 @@ export const SELECTED_FIELDS = [
   'orderDate',
   'createdAt',
 ].join(' ');
+
