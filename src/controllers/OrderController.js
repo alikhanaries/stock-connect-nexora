@@ -71,3 +71,24 @@ export const getSyncedOrders = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const getWeeklyOrderComparison = async (req, res) => {
+  try {
+    const { period = 'week' } = req.query;
+    const lowercasedPeriod = period.toLowerCase();
+
+    if (!['week', 'month', 'year'].includes(lowercasedPeriod)) {
+      return Responses.failResponse(res, 'Invalid period. Please use "week", "month", or "year".', 400);
+    }
+
+    const response = await orderService.getWeeklyOrderComparison(lowercasedPeriod);
+    if (!response) {
+      return Responses.failResponse(res, 'Could not calculate order comparison data.', 404);
+    }
+
+    return Responses.successResponse(res, `${response.period} order comparison fetched successfully.`, 200, response);
+  } catch (error) {
+    console.error('Controller Error:', error.message);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};

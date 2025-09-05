@@ -144,4 +144,26 @@ export async function getNewOrders() {
   }
 }
 
-export default { getAllOrders, getOrderById, processOrders, getNewOrders };
+const getWeeklyOrderComparison = async (lowercasedPeriod) => {
+  const { currentPeriodStart, previousPeriodStart, previousPeriodEnd } = orderhelper.getPeriodDate(lowercasedPeriod);
+
+  const [currentCount, previousCount] = await Promise.all([
+    Order.countDocuments({ createdAt: { $gte: currentPeriodStart } }),
+    Order.countDocuments({ createdAt: { $gte: previousPeriodStart, $lte: previousPeriodEnd } }),
+  ]);
+
+  let percentageChange = 0;
+  if (previousCount > 0) {
+    percentageChange = ((currentCount - previousCount) / previousCount) * 100;
+  } else if (currentCount > 0) {
+    percentageChange = 100;
+  }
+  const response = {
+    totalOrders: currentCount - previousCount,
+    percentage: percentageChange,
+    period: lowercasedPeriod,
+  };
+  return response;
+};
+
+export default { getAllOrders, getOrderById, processOrders, getNewOrders, getWeeklyOrderComparison };
