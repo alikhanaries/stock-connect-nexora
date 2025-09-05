@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
-import productService, { PRODUCT_STATUSES, pushProductsFromDB } from '#service/productService.js';
+import productService, { pushProductsFromDB } from '#service/productService.js';
+import { PRODUCT_STATUSES } from '#constants/common.js';
 
 export const getProducts = async (req, res) => {
   try {
