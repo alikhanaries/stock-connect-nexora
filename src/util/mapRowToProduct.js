@@ -5,15 +5,18 @@ export const mapRowToProduct = (row) => {
   const r = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key.toLowerCase().trim(), value ? String(value).trim() : ''])
   );
-
+  // CHECK MANDATORY FIELD
+  if (!r.productskucode || !r.price) {
+    return;
+  }
   return {
     parentProductSkuCode: r.parentproductskucode || null,
-    productSkuCode: r.productskucode || null,
+    productSkuCode: r.productskucode,
     name: r.name || `Unnamed Product`,
     description: r.description || null,
     brand: r.brand || null,
     ean: r.ean || null, // should be unique
-    price: r.price ? parseFloat(r.price) : 0.01,
+    price: parseFloat(r.price),
     minPrice: r.minprice ? parseFloat(r.minprice) : null,
     maxPrice: r.maxprice ? parseFloat(r.maxprice) : null,
     msrp: r.msrp ? parseFloat(r.msrp) : null,

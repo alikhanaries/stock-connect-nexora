@@ -22,7 +22,6 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-
   const filter = { isDeleted: false };
   const appliedFilters = {};
 
@@ -232,7 +231,7 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
           // 2. Map row
           const product = mapRowToProduct(row, rowIndex);
 
-          if (!product.productSkuCode) {
+          if (!product) {
             invalidRowsCount++;
             errorRows.push(rowIndex);
             return;
