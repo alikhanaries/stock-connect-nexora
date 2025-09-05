@@ -61,7 +61,7 @@ const getAllOrders = async (query) => {
 
     //platform filter
     if (platform) {
-      filter.channelName = platform;
+      filter.channelName = { $regex: platform, $options: 'i' };
       appliedFilters.platform = platform;
     }
 
