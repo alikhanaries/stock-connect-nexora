@@ -61,12 +61,11 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.errorResponse(res, dataSavedInDb.message, 500);
     }
     const message =
-      dataSavedInDb.data.upsertedCount.length > 0
-        ? `${dataSavedInDb.data.upsertedCount.length} new order(s) were synced successfully.`
-        : 'No new orders found. Displaying existing data.';
-    const response = await orderService.getAllOrders(req.query);
+      dataSavedInDb.data.upsertedCount > 0
+        ? `${dataSavedInDb.data.upsertedCount} new order(s) were synced successfully.`
+        : 'No new orders found';
 
-    return Responses.successResponse(res, message, 200, response);
+    return Responses.successResponse(res, message, 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
   }

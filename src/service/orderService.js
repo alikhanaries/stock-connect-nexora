@@ -116,7 +116,7 @@ const processOrders = async (orders) => {
     const operations = orderhelper.sanitizeOrdersData(orders);
     const result = await Order.bulkWrite(operations);
 
-    return { success: true, data: result };
+    return { success: true, data: { ...result } };
   } catch (error) {
     console.error('Error :', error.message);
     return { success: false, message: error.message };
