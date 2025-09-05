@@ -1,4 +1,4 @@
-export const statusMap = {
+export const ORDER_STATUS_MAP = {
   NEW: 'NEW',
   IN_PROGRESS: 'IN_PROGRESS',
   AWAITING_PAYMENT: 'AWAITING_PAYMENT',
@@ -11,3 +11,17 @@ export const statusMap = {
   CLOSED: 'CLOSED',
   MANCO: 'MANCO',
 };
+
+export const SELECTED_FIELDS = [
+  '_id',
+  'orderId',
+  'orderCustomer.firstName',
+  'orderCustomer.lastName',
+  'orderCustomer.email',
+  'orderCustomer.phone',
+  'orderSkuList.skuList',
+  'status',
+  'channelName',
+  'orderDate',
+  'createdAt',
+].join(' ');
