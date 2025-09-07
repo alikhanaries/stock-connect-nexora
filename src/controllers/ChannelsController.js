@@ -60,7 +60,7 @@ export const getAllUserChannels = async (req, res) => {
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
-      return Responses.failResponse(res, 'User not found', 404);
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
 
     const result = await channelService.getAllUserChannels(userId);
