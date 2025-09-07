@@ -1,9 +1,7 @@
 import channelService from '../service/channelService.js';
 import Responses from '../helpers/response.js';
-import mongoose from 'mongoose';
 import User from '../models/User.js';
-// Access ObjectId from mongoose
-const ObjectId = mongoose.Types.ObjectId;
+
 /**FUNC- FOR GET ALL CHANNEL LIST FROM CHANNEL PARTNER**/
 export const getAllChannelsFromChannelPartner = async (req, res) => {
   try {
@@ -13,7 +11,7 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
     }
     return Responses.successResponse(res, 'Channels saved successfully', 200);
   } catch (error) {
-    return Responses.errorResponse(res, error, 500);
+    return Responses.errorResponse(res, error.message, 500);
   }
 };
 /** FUNC - Get all channel list from DB */
@@ -34,14 +32,6 @@ export const getAllChannels = async (req, res) => {
 export const saveUserChannels = async (req, res) => {
   try {
     const { userId, channelIds } = req.body;
-
-    if (!userId || !Array.isArray(channelIds)) {
-      return Responses.failResponse(res, 'userId and channelIds are required', 400);
-    }
-    // Validate ObjectId format
-    if (!ObjectId.isValid(userId)) {
-      return Responses.failResponse(res, 'Invalid userId format', 400);
-    }
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
@@ -66,10 +56,6 @@ export const getAllUserChannels = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Validate ObjectId format
-    if (!ObjectId.isValid(userId)) {
-      return Responses.failResponse(res, 'Invalid userId format', 400);
-    }
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
