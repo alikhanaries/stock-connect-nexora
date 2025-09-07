@@ -1,4 +1,4 @@
-export const LANGUAGE_CODES = ['en', 'ar', 'zh', 'tr'];
+export const LANGUAGE_CODES = ['en', 'ar', 'zh-cn', 'tr'];
 
 export const PRODUCT_STATUSES = ['active', 'deactive'];
 
