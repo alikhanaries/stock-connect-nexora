@@ -1,5 +1,6 @@
 import {
   getProducts,
+  getTopSellingProduct,
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
   pushProductToChannelEngine,
@@ -44,6 +45,7 @@ productsRouter.post(
 );
 
 productsRouter.get('/push-to-channelengine', authMiddleware, pushProductToChannelEngine);
+productsRouter.get('/top-product', authMiddleware, getTopSellingProduct);
 
 productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
 /* DELETE MULTIPLE PRODUCTS BY ID*/
