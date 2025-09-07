@@ -1,7 +1,7 @@
 export const convertGoogleSheetUrlToExport = async (url) => {
   try {
-    const isValiGoogleShhetUrl = isValidGoogleSheetUrl(url);
-    if (!isValiGoogleShhetUrl) {
+    const isValidUrl = isValidGoogleSheetUrl(url);
+    if (!isValidUrl) {
       return false;
     }
     const regex = /\/d\/([a-zA-Z0-9-_]+)/; // extract FILE_ID
