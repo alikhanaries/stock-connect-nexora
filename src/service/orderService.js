@@ -1,5 +1,9 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { ORDER_STATUS_MAP, SELECTED_FIELDS } from '#constants/common.js';
+import orderhelper from '#helpers/Order.js';
+import { config } from '#config/config.js';
+const { CHANNEL_ORDER_URL } = config;
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -22,23 +26,19 @@ const formatOrder = (order) => {
   };
 };
 
-const SELECTED_FIELDS = [
-  '_id',
-  'orderId',
-  'orderCustomer.firstName',
-  'orderCustomer.lastName',
-  'orderCustomer.email',
-  'orderCustomer.phone',
-  'orderSkuList.skuList',
-  'status',
-  'channelName',
-  'orderDate',
-  'createdAt',
-].join(' ');
-
 const getAllOrders = async (query) => {
   try {
-    const { page = 1, size = 10, search, toDate, fromDate, status, sortOrder = 'asc', sortBy = '_id' } = query;
+    const {
+      page = 1,
+      size = 10,
+      search,
+      toDate,
+      fromDate,
+      status,
+      sortOrder = 'asc',
+      sortBy = '_id',
+      platform = '',
+    } = query;
     const skip = (page - 1) * size;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
@@ -57,6 +57,12 @@ const getAllOrders = async (query) => {
         { 'orderCustomer.lastName': regex },
         { 'orderCustomer.phone': regex },
       ];
+    }
+
+    //platform filter
+    if (platform) {
+      filter.channelName = { $regex: platform, $options: 'i' };
+      appliedFilters.platform = platform;
     }
 
     //date filter
@@ -101,12 +107,58 @@ const getAllOrders = async (query) => {
 };
 
 const getOrderById = async (id) => {
-  const order = await Order.findById(id).select(SELECTED_FIELDS).lean();
+  const order = await Order.findById(id).lean();
   if (!order) {
     return false;
   }
-  const formattedOrder = formatOrder(order);
-  return formattedOrder;
+  return order;
 };
 
-export default { getAllOrders, getOrderById };
+const getOrderStats = async () => {
+  try {
+    const statuses = Object.keys(ORDER_STATUS_MAP);
+    const counts = await Promise.all(statuses.map((status) => Order.countDocuments({ status })));
+    const stats = statuses.reduce((acc, status, i) => {
+      acc[status] = counts[i];
+      return acc;
+    }, {});
+    return stats;
+  } catch (error) {
+    console.error('Error getting order stats:', error.message);
+  }
+};
+
+const processOrders = async (orders) => {
+  try {
+    const operations = orderhelper.sanitizeOrdersData(orders);
+    const result = await Order.bulkWrite(operations);
+
+    return { success: true, data: { ...result } };
+  } catch (error) {
+    console.error('Error :', error.message);
+    return { success: false, message: error.message };
+  }
+};
+
+export async function getNewOrders() {
+  try {
+    const response = await fetch(CHANNEL_ORDER_URL);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    const data = await response.json();
+    if (!data?.Content?.length) {
+      return { success: false, message: 'No data received from ChannelEngine' };
+    }
+    return {
+      success: true,
+      data: data.Content,
+    };
+  } catch (error) {
+    console.error('Error fetching new orders from ChannelEngine:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+export default { getAllOrders, getOrderById, processOrders, getNewOrders, getOrderStats };

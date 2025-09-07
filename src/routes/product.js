@@ -18,14 +18,20 @@ const productsRouter = express.Router();
 //productsRouter.use(authMiddleware);
 
 /* DELETE PRODUCT BY ID*/
-productsRouter.delete('/deleteProduct/:prId', deleteProduct);
+productsRouter.delete('/deleteProduct/:prId', checkLanguage, deleteProduct);
 
 productsRouter.get('/', authMiddleware, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
-productsRouter.post('/importProductsFromGoogleSheet', importProductsFromGoogleSheet);
+productsRouter.post('/importProductsFromGoogleSheet', checkLanguage, importProductsFromGoogleSheet);
 /* UPLOAD PRODUCTS FROM CSV FILE */
-productsRouter.post('/importProductsFromCsvFile', upload.single('file'), validateFile, importProductsFromCsvFile);
+productsRouter.post(
+  '/importProductsFromCsvFile',
+  checkLanguage,
+  upload.single('file'),
+  validateFile,
+  importProductsFromCsvFile
+);
 
 productsRouter.get('/push-to-channelengine', authMiddleware, pushProductToChannelEngine);
 productsRouter.get('/top-product', authMiddleware, getTopSellingProduct);
