@@ -14,7 +14,7 @@ export const convertGoogleSheetUrlToExport = async (url) => {
     const gidMatch = url.match(/gid=(\d+)/);
     const gid = gidMatch ? gidMatch[1] : 0;
 
-    return `https://docs.google.com/spreadsheets/d/${fileId}/export?format=csv&id=${fileId}&gid=${gid}`;
+    return `https://docs.google.com/spreadsheets/d/${fileId}/export?format=csv&gid=${gid}`;
   } catch (err) {
     console.error('Google Sheet URL conversion failed:', err.message);
     throw new Error('Invalid Google Sheet URL');

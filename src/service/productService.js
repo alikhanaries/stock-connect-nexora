@@ -9,6 +9,7 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
+import { PRODUCT_STATUSES } from '#constants/common.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -26,10 +27,12 @@ const fetchProducts = async (query) => {
   const appliedFilters = {};
 
   // Status filter
-  if (status !== undefined) {
-    const statusBool = status.toString().toLowerCase() === 'true';
-    filter.status = statusBool;
-    appliedFilters.status = statusBool;
+  if (status) {
+    const statusValue = status.toString().trim().toLowerCase();
+    if (PRODUCT_STATUSES.includes(statusValue)) {
+      filter.status = statusValue;
+      appliedFilters.status = statusValue;
+    }
   }
 
   // Price filter
@@ -107,9 +110,9 @@ const getTopSellingProduct = async (limit) => {
   return topProducts;
 };
 
-export const updateProductStatus = async (ids, active) => {
+export const updateProductStatus = async (ids, status) => {
   if (!ids?.length) return 0;
-  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: active } }, { $set: { status: active } });
+  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: status } }, { $set: { status: status } });
   return result.modifiedCount || 0;
 };
 
@@ -153,7 +156,10 @@ const pushBatch = async (batch, index) => {
 async function* fetchBatchesFromDB() {
   let skip = 0;
   while (true) {
-    const products = await Product.find({ status: true }).skip(skip).limit(BATCH_SIZE).lean();
+    const products = await Product.find({ status: 'active', isDeleted: { $ne: true } })
+      .skip(skip)
+      .limit(BATCH_SIZE)
+      .lean();
     if (!products.length) break;
     yield products.map(mapProductToChannelEngine);
     skip += BATCH_SIZE;
