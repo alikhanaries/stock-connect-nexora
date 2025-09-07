@@ -2,6 +2,7 @@ import { errorResponse, successResponse, failResponse } from '#helpers/response.
 import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
 import { errorLog } from '#middleware/index.js';
+import { PRODUCT_STATUSES } from '#constants/common.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -97,7 +98,7 @@ export const pushProductToChannelEngine = async (req, res) => {
     });
 
     // 🔹 Return early
-    return successResponse(res, 'Products push started in background', 202, {
+    return successResponse(res, 'Product push to store is in progress', 202, {
       message: `Up to ${maxProducts} products will be pushed`,
     });
   } catch (err) {
@@ -108,7 +109,7 @@ export const pushProductToChannelEngine = async (req, res) => {
 
 export const updateProductStatus = async (req, res) => {
   try {
-    const { ids, active } = req.body;
+    const { ids, status } = req.body;
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, 'Product IDs are required', 400);
     }
@@ -116,14 +117,16 @@ export const updateProductStatus = async (req, res) => {
     if (invalidIds.length > 0) {
       return failResponse(res, `Invalid product IDs: ${invalidIds.join(', ')}`, 400);
     }
-    if (typeof active !== 'boolean') {
-      return failResponse(res, 'Status must be true or false', 400);
+    const statusValue = status?.toString().toLowerCase();
+    if (!statusValue || !PRODUCT_STATUSES.includes(statusValue)) {
+      return failResponse(res, `Status must be one of: ${PRODUCT_STATUSES.join(', ')}`, 400);
     }
-    const updatedCount = await productService.updateProductStatus(ids, active);
+    const updatedCount = await productService.updateProductStatus(ids, status);
     if (updatedCount === 0) {
       return failResponse(res, 'No matching products found to update', 404);
     }
-    const statusMessage = active ? 'Products activated successfully' : 'Products deactivated successfully';
+    const statusMessage =
+      statusValue === 'active' ? 'Products activated successfully' : 'Products deactivated successfully';
     return successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating product status:', err);
