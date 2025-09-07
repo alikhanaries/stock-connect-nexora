@@ -1,14 +1,21 @@
 {
-  "SUCCESS": "تمت العملية بنجاح",
+  "SUCCESS": "تم إتمام العملية بنجاح",
   "ERROR": "حدث خطأ ما",
   "NOT_FOUND": "المورد المطلوب غير موجود",
   "INVALID_INPUT": "تم تقديم إدخال غير صالح",
   "CHANNELS_FOUND_SUCCESS": "تم العثور على القنوات",
   "CHANNEL_FOUND_FAILED": "فشل في استرجاع القنوات",
-  "CHANNEL_SAVED": "تم حفظ القنوات بنجاح",
   "NO_CHANNEL_FOUND": "لم يتم العثور على أي قناة",
   "USERID_CHANNELID_REQUIRED": "مطلوب userId و channelIds",
-  "CHANNEL_SAVE_FAILED": "فشل في حفظ القنوات",
+  "CHANNEL_SAVE_FAILED": "فشل حفظ القنوات",
   "CHANNEL_SAVED_SUCCESS": "تم حفظ القنوات بنجاح",
-  "USER_CHANNELS_FOUND": "تم العثور على قنوات المستخدم"
+  "USER_CHANNELS_FOUND": "تم العثور على قنوات المستخدم",
+  "USER_NOT_FOUND": "المستخدم غير موجود",
+  "PRODUCTIDS_REQUIRED": "مطلوب معرفات المنتجات",
+  "PRODUCT_DELETE_FAILED": "فشل حذف المنتج",
+  "PRODUCT_DELETE_SUCCESS": "تم حذف المنتج بنجاح",
+  "PRODUCT_IMPORT_ERROR": "حدث خطأ أثناء التحميل",
+  "PRODUCT_NOT_FOUND": "المنتج غير موجود",
+  "PRODUCT_MARKED_DELETED": "تم وضع علامة على المنتجات كمحذوفة بنجاح",
+  "FAILED_FETCHING_SHEET": "فشل في جلب الجدول"
 }

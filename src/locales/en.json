@@ -5,10 +5,17 @@
   "INVALID_INPUT": "Invalid input provided",
   "CHANNELS_FOUND_SUCCESS": "Channels Found",
   "CHANNEL_FOUND_FAILED": "Failed to retrieve channels",
-  "CHANNEL_SAVED": "Channels saved successfully",
   "NO_CHANNEL_FOUND": "No channel found",
   "USERID_CHANNELID_REQUIRED": "userId and channelIds are required",
   "CHANNEL_SAVE_FAILED": "Failed to save channels",
   "CHANNEL_SAVED_SUCCESS": "Channels saved successfully",
-  "USER_CHANNELS_FOUND": "User channels found"
+  "USER_CHANNELS_FOUND": "User channels found",
+  "USER_NOT_FOUND": "User not found",
+  "PRODUCTIDS_REQUIRED": "Product IDs are required",
+  "PRODUCT_DELETE_FAILED": "Failed to delete product",
+  "PRODUCT_DELETE_SUCCESS": "Product deleted successfully",
+  "PRODUCT_IMPORT_ERROR": "Error in upload",
+  "PRODUCT_NOT_FOUND": "Product not found",
+  "PRODUCT_MARKED_DELETED": "products marked as deleted successfully",
+  "FAILED_FETCHING_SHEET": "Failed to fetch sheet"
 }

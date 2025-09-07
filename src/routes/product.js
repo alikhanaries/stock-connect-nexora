@@ -8,7 +8,7 @@ import {
   deleteMultipleProducts,
   deleteProduct,
 } from '#controllers/ProductController.js';
-import { authMiddleware, validateFile } from '#middleware/index.js';
+import { authMiddleware, validateFile, checkLanguage } from '#middleware/index.js';
 import express from 'express';
 
 import upload from '#helpers/FileHandler.js'; // the above multer setup
@@ -32,6 +32,6 @@ productsRouter.get('/top-product', authMiddleware, getTopSellingProduct);
 
 productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
 /* DELETE MULTIPLE PRODUCTS BY ID*/
-productsRouter.delete('/deleteMultipleProducts', authMiddleware, deleteMultipleProducts);
+productsRouter.delete('/deleteMultipleProducts', checkLanguage, deleteMultipleProducts);
 
 export default productsRouter;

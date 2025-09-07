@@ -9,7 +9,6 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
-import { PRODUCT_STATUSES } from '#constants/common.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -23,16 +22,16 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = { isDeleted: false };
+  const filter = {
+    isDeleted: false,
+  };
   const appliedFilters = {};
 
   // Status filter
-  if (status) {
-    const statusValue = status.toString().trim().toLowerCase();
-    if (PRODUCT_STATUSES.includes(statusValue)) {
-      filter.status = statusValue;
-      appliedFilters.status = statusValue;
-    }
+  if (status !== undefined) {
+    const statusBool = status.toString().toLowerCase() === 'true';
+    filter.status = statusBool;
+    appliedFilters.status = statusBool;
   }
 
   // Price filter
@@ -110,9 +109,9 @@ const getTopSellingProduct = async (limit) => {
   return topProducts;
 };
 
-export const updateProductStatus = async (ids, status) => {
+export const updateProductStatus = async (ids, active) => {
   if (!ids?.length) return 0;
-  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: status } }, { $set: { status: status } });
+  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: active } }, { $set: { status: active } });
   return result.modifiedCount || 0;
 };
 
@@ -156,10 +155,7 @@ const pushBatch = async (batch, index) => {
 async function* fetchBatchesFromDB() {
   let skip = 0;
   while (true) {
-    const products = await Product.find({ status: 'active', isDeleted: { $ne: true } })
-      .skip(skip)
-      .limit(BATCH_SIZE)
-      .lean();
+    const products = await Product.find({ status: true }).skip(skip).limit(BATCH_SIZE).lean();
     if (!products.length) break;
     yield products.map(mapProductToChannelEngine);
     skip += BATCH_SIZE;
@@ -322,10 +318,10 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
 };
 
 /* Google Sheet Import */
-export const importProductsFromGoogleSheet = async (url) => {
+export const importProductsFromGoogleSheet = async (url, localLang) => {
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
+    if (!res.ok) throw new Error(`${localLang?.FAILED_FETCHING_SHEET}: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
     return await processImportStream(stream);
   } catch (err) {
@@ -345,7 +341,7 @@ export const importProductsFromCsvFile = async (filePath) => {
   }
 };
 
-const deleteProduct = async (prId) => {
+const deleteProduct = async (prId, localLang) => {
   try {
     const result = await Product.findByIdAndUpdate(
       prId,
@@ -354,7 +350,7 @@ const deleteProduct = async (prId) => {
     );
 
     if (!result) {
-      return { success: false, message: 'Product not found' };
+      return { success: false, message: localLang?.PRODUCT_NOT_FOUND };
     }
 
     return { success: true, data: result };
@@ -365,7 +361,7 @@ const deleteProduct = async (prId) => {
 };
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
-const deleteMultipleProducts = async (ids) => {
+const deleteMultipleProducts = async (ids, localLang) => {
   try {
     const result = await Product.updateMany(
       { _id: { $in: ids }, isDeleted: { $ne: true } },
@@ -373,10 +369,13 @@ const deleteMultipleProducts = async (ids) => {
     );
 
     if (result.modifiedCount === 0) {
-      return { success: false, message: 'Product not found' };
+      return { success: false, message: localLang?.PRODUCT_NOT_FOUND };
     }
 
-    return { success: true, message: `${result.modifiedCount} products marked as deleted successfully` };
+    return {
+      success: true,
+      message: `${result.modifiedCount} ${localLang?.PRODUCT_MARKED_DELETED}`,
+    };
   } catch (err) {
     console.error('Service error in deleteMultipleProducts:', err);
     return { success: false, message: err.message };

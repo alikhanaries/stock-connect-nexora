@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const supportedLangs = ['en', 'ar', 'zh', 'tr'];
+const supportedLangs = ['en', 'ar', 'zh-cn', 'tr'];
 const defaultLang = 'en';
 
 const locales = {};

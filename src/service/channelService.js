@@ -81,32 +81,22 @@ const getAllChannels = async () => {
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
 const saveUserChannels = async (userId, channelIds) => {
   try {
-    // Format incoming channelIds into schema shape
-    const formattedChannels = channelIds.map((id) => {
-      if (!ObjectId.isValid(id)) {
-        throw new Error(`Invalid channelId: ${id}`);
-      }
-      return {
-        id: new ObjectId(id),
-        status: 'active', // default
-      };
-    });
-
     // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(
       { userId: new ObjectId(userId) },
-      { $set: { channelIds: formattedChannels } }, // ✅ correct structure
+      { $set: { channelIds } },
       { new: true, upsert: true }
     );
 
     // Update user flag
     await User.updateOne({ _id: new ObjectId(userId) }, { $set: { isMarketplaceConnected: true } });
+
     return {
       success: true,
       data: updatedUserChannels,
     };
   } catch (err) {
-    console.error('Error in saveUserChannels:', err);
+    console.error('Service error in saveUserChannels:', err);
     return { success: false, message: err.message };
   }
 };
@@ -114,83 +104,36 @@ const saveUserChannels = async (userId, channelIds) => {
 /** FUNC - GET USER CHANNEL LIST */
 export const getAllUserChannels = async (userId) => {
   try {
-    const data = await UserChannels.find();
-    console.log(data);
-    const objectId = new mongoose.Types.ObjectId(userId);
-
     const result = await UserChannels.aggregate([
-      { $match: { userId: objectId, isActive: true } },
-
-      // Expand channelIds array
-      { $unwind: '$channelIds' },
-
-      // Lookup channel details to get channelId
+      {
+        $match: {
+          userId: new ObjectId(userId),
+          isActive: true,
+        },
+      },
       {
         $lookup: {
-          from: 'channels',
-          localField: 'channelIds.id', // _id of channel
-          foreignField: '_id',
+          from: 'channels', // collection to join
+          localField: 'channelIds', // field in UserChannels
+          foreignField: '_id', // field in Channel
           as: 'channelDetails',
         },
       },
-      { $unwind: '$channelDetails' },
 
-      // Lookup orders using channelId from Channels collection
-      {
-        $lookup: {
-          from: 'orders',
-          let: { channelId: '$channelDetails.channelId' },
-          pipeline: [{ $match: { $expr: { $eq: ['$channelId', '$$channelId'] } } }, { $count: 'ordersCount' }],
-          as: 'ordersInfo',
-        },
-      },
-      // Lookup products for this channel (marketplace = channelName)
-      {
-        $lookup: {
-          from: 'channelproducts',
-          let: { channelId: '$channelDetails.channelId' },
-          pipeline: [{ $match: { $expr: { $eq: ['$marketPlaceId', '$$channelId'] } } }, { $count: 'productsCount' }],
-
-          as: 'productsInfo',
-        },
-      },
-      // Project required fields
       {
         $project: {
           _id: 0,
           userId: 1,
-          channel: {
-            _id: '$channelDetails._id',
-            channelName: '$channelDetails.channelName',
-            channelImageUrl: '$channelDetails.channelImageUrl',
-            status: '$channelIds.status',
-            createdAt: '$channelIds.createdAt',
-            channelId: '$channelDetails.channelId',
-            ordersCount: { $ifNull: [{ $arrayElemAt: ['$ordersInfo.ordersCount', 0] }, 0] },
-            productsCount: { $ifNull: [{ $arrayElemAt: ['$productsInfo.productsCount', 0] }, 0] },
+          channelDetails: {
+            _id: 1,
+            channelImageUrl: 1,
+            channelName: 1,
           },
-        },
-      },
-
-      // Group channels per user
-      {
-        $group: {
-          _id: '$userId',
-          channelDetails: { $push: '$channel' },
-        },
-      },
-
-      // Final shape
-      {
-        $project: {
-          _id: 0,
-          userId: '$_id',
-          channelDetails: 1,
         },
       },
     ]);
 
-    if (result.length == 0) {
+    if (!result.length) {
       return {
         success: false,
       };
@@ -205,5 +148,4 @@ export const getAllUserChannels = async (userId) => {
     return { success: false, message: err.message };
   }
 };
-
 export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };

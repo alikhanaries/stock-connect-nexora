@@ -21,9 +21,8 @@ const ProductSchema = new mongoose.Schema(
       default: 'STANDARD',
     },
     status: {
-      type: String,
-      enum: ['active', 'deactive'],
-      default: 'active',
+      type: Boolean,
+      default: true,
     },
     shippingCost: { type: Number, default: 0 },
     shippingTime: { type: String },
