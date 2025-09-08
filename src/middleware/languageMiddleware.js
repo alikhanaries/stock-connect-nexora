@@ -1,16 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { LANGUAGE_CODES } from '#constants/common.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const supportedLangs = ['en', 'ar', 'zh', 'tr'];
 const defaultLang = 'en';
 
 const locales = {};
 
-supportedLangs.forEach((lang) => {
+LANGUAGE_CODES.forEach((lang) => {
   try {
     const filePath = path.join(__dirname, `../locales/${lang}.json`);
     const data = fs.readFileSync(filePath, 'utf-8');
@@ -26,9 +25,9 @@ export const loadLocale = (lang) => {
 };
 
 export const checkLanguage = (req, res, next) => {
-  const lang = (req.headers['accept-language'] || defaultLang).toLowerCase();
+  const lang = req.headers['accept-language'] || defaultLang;
 
-  const chosenLang = supportedLangs.includes(lang) ? lang : defaultLang;
+  const chosenLang = LANGUAGE_CODES.includes(lang) ? lang : defaultLang;
 
   req.locale = locales[chosenLang] || locales[defaultLang];
   req.lang = chosenLang;
