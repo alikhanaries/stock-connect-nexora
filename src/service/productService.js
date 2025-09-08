@@ -10,7 +10,7 @@ import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { PRODUCT_STATUSES } from '#constants/common.js';
-import ChannelProducts from '#models/ChannelProducts.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 import mongoose from 'mongoose';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
@@ -391,7 +391,7 @@ const getUnassignedProducts = async (userId, marketPlaceId, query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const assignedSkuCodes = await ChannelProducts.distinct('skuList.skuCode', {
+  const assignedSkuCodes = await UserChannelProducts.distinct('skuList.skuCode', {
     userId: new mongoose.Types.ObjectId(userId),
     marketPlaceId: Number(marketPlaceId),
     isActive: true,
