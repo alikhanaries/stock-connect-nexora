@@ -15,7 +15,7 @@
     "#config/*": "./src/config/*",
     "#helpers/*": "./src/helpers/*",
     "#utils/*": "./src/util/*",
-    "#constants": "./src/constants/*"
+    "#constants/*": "./src/constants/*"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",

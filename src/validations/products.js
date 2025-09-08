@@ -1,5 +1,5 @@
 import { z, ZodError } from 'zod';
-import { languageTypes } from '#constants/common.js';
+import { LANGUAGE_CODES } from '#constants/common.js';
 import { errorResponse } from '#helpers/response.js';
 // Common language list
 
@@ -31,10 +31,10 @@ export const headerSchema = z
       })
       .nonempty('accept-language cannot be empty')
       .superRefine((val, ctx) => {
-        if (!languageTypes.includes(val)) {
+        if (!LANGUAGE_CODES.includes(val)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: `Accept-Language '${val}' is not supported. Supported languages: ${languageTypes.join(', ')}`,
+            message: `Accept-Language '${val}' is not supported. Supported languages: ${LANGUAGE_CODES.join(', ')}`,
             path: ['accept-language'],
           });
         }
