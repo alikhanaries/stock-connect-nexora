@@ -171,7 +171,7 @@ const getWeeklyOrderComparison = async (lowercasedPeriod) => {
 
   let percentageChange = 0;
   if (previousCount > 0) {
-    percentageChange = ((currentCount - previousCount) / previousCount) * 100;
+    percentageChange = Math.round(((currentCount - previousCount) / previousCount) * 100);
   } else if (currentCount > 0) {
     percentageChange = 100;
   }

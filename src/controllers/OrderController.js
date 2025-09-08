@@ -1,6 +1,7 @@
 import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
 import mongoose from 'mongoose';
+import { VALID_PERIODS } from '#constants/common.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -88,8 +89,8 @@ export const getWeeklyOrderComparison = async (req, res) => {
     const { period = 'week' } = req.query;
     const lowercasedPeriod = period.toLowerCase();
 
-    if (!['week', 'month', 'year'].includes(lowercasedPeriod)) {
-      return Responses.failResponse(res, 'Invalid period. Please use "week", "month", or "year".', 400);
+    if (!VALID_PERIODS.includes(lowercasedPeriod)) {
+      return Responses.failResponse(res, `Invalid period. Please use one of: ${VALID_PERIODS.join(', ')}`, 400);
     }
 
     const response = await orderService.getWeeklyOrderComparison(lowercasedPeriod);
