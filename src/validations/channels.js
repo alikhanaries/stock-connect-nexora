@@ -1,18 +1,7 @@
-import { z, ZodError } from 'zod';
-import { errorResponse } from '#helpers/response.js';
+import { z } from 'zod';
+import { validate } from './validate.js';
 // Common language list
 import { LANGUAGE_CODES } from '#constants/common.js';
-const validate = (parseFn) => async (req, res, next) => {
-  try {
-    await parseFn(req);
-    return next();
-  } catch (error) {
-    console.error('Validation error:', error);
-    const message =
-      error instanceof ZodError ? error.issues[0]?.message || 'Invalid input' : error.message || 'Server Error';
-    return errorResponse(res, message, 400);
-  }
-};
 
 export const headerSchema = z
   .object({

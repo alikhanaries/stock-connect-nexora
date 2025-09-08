@@ -184,20 +184,18 @@ export const deleteMultipleProducts = async (req, res) => {
   }
 };
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-export const addUserChannelProducts = async (req, res) => {
+export const addProductsToUserChannel = async (req, res) => {
   try {
     const { userId, channelId, productsList } = req.body;
-    if (!userId || !channelId || !Array.isArray(productsList) || productsList.length === 0) {
-      return failResponse(res, 'Invalid request body', 400);
-    }
+
     // Check if user exists
     const user = await User.findById(userId);
     if (!user) {
-      return failResponse(res, 'User not found', 404);
+      return failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    await productService.addUserChannelProducts(userId, channelId, productsList);
+    await productService.addProductsToUserChannel(userId, channelId, productsList);
 
-    return successResponse(res, 'Products added successfully', 200);
+    return successResponse(res, req.locale.PRODUCT_ASSIGNED_SUCCESS, 200);
   } catch (error) {
     console.error('Error:', error);
     return errorResponse(res, error);
@@ -213,5 +211,5 @@ export default {
   updateProductStatus,
   deleteProduct,
   deleteMultipleProducts,
-  addUserChannelProducts,
+  addProductsToUserChannel,
 };

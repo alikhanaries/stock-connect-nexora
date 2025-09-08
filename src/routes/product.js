@@ -7,11 +7,12 @@ import {
   updateProductStatus,
   deleteMultipleProducts,
   deleteProduct,
-  addUserChannelProducts,
+  addProductsToUserChannel,
 } from '#controllers/ProductController.js';
+import { checkLanguage } from '#middleware/index.js';
 import { authMiddleware, validateFile } from '#middleware/index.js';
 import express from 'express';
-
+import { addProductsToUserChannelValidator } from '#validations/products.js';
 import upload from '#helpers/FileHandler.js'; // the above multer setup
 
 const productsRouter = express.Router();
@@ -35,6 +36,11 @@ productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete('/deleteMultipleProducts', authMiddleware, deleteMultipleProducts);
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-productsRouter.post('/addUserChannelProducts', addUserChannelProducts);
+productsRouter.post(
+  '/addProductsToUserChannel',
+  addProductsToUserChannelValidator,
+  checkLanguage,
+  addProductsToUserChannel
+);
 
 export default productsRouter;

@@ -384,7 +384,7 @@ const deleteMultipleProducts = async (ids) => {
   }
 };
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-const addUserChannelProducts = async (userId, channelId, skuList) => {
+const addProductsToUserChannel = async (userId, channelId, skuList) => {
   try {
     await UserChannelProducts.findOneAndUpdate(
       { userId, channelId },
@@ -406,5 +406,5 @@ export default {
   getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
-  addUserChannelProducts,
+  addProductsToUserChannel,
 };

@@ -1,14 +1,21 @@
 {
   "SUCCESS": "操作成功完成",
-  "ERROR": "发生错误",
-  "NOT_FOUND": "未找到请求的资源",
+  "ERROR": "发生了一些错误",
+  "NOT_FOUND": "请求的资源未找到",
   "INVALID_INPUT": "提供的输入无效",
-  "CHANNELS_FOUND_SUCCESS": "找到频道",
-  "CHANNEL_FOUND_FAILED": "获取频道失败",
-  "NO_CHANNEL_FOUND": "未找到任何频道",
-  "USERID_CHANNELID_REQUIRED": "需要 userId 和 channelIds",
-  "CHANNEL_SAVE_FAILED": "保存频道失败",
-  "CHANNEL_SAVED_SUCCESS": "频道保存成功",
-  "USER_CHANNELS_FOUND": "找到用户频道",
-  "USER_NOT_FOUND": "未找到用户"
+  "VALIDATION_ERROR": "验证失败",
+  "UNAUTHORIZED": "未授权的访问",
+  "FORBIDDEN": "禁止的操作",
+
+  "CHANNELS_FOUND_SUCCESS": "成功找到渠道",
+  "CHANNELS_RETRIEVE_FAILED": "获取渠道失败",
+  "NO_CHANNEL_FOUND": "未找到渠道",
+  "CHANNEL_SAVE_FAILED": "保存渠道失败",
+  "CHANNEL_SAVED_SUCCESS": "渠道保存成功",
+
+  "USER_CHANNELS_FOUND": "找到用户渠道",
+  "USER_NOT_FOUND": "未找到用户",
+
+  "PRODUCT_ASSIGNED_SUCCESS": "产品分配成功",
+  "PRODUCT_ASSIGNED_FAILED": "产品分配失败"
 }
