@@ -23,9 +23,10 @@ export const getProducts = async (req, res) => {
 export const getTopSellingProduct = async (req, res) => {
   try {
     const size = parseInt(req.query.size, 10);
+    const channelName = req.query.channel;
     const limit = Number.isInteger(size) && size > 0 ? size : 5;
 
-    const topProducts = await productService.getTopSellingProduct(limit);
+    const topProducts = await productService.getTopSellingProduct(limit, channelName);
 
     const message =
       topProducts.length > 0 ? 'Top-selling products fetched successfully' : 'No top-selling products found';

@@ -69,14 +69,24 @@ const fetchProducts = async (query) => {
   };
 };
 
-const getTopSellingProduct = async (limit) => {
+const getTopSellingProduct = async (limit, channelNameSearch) => {
+  const filter = {
+    status: { $in: ['NEW', 'COMPLETED', 'MANCO'] },
+  };
+  if (channelNameSearch) {
+    const searchRegex = new RegExp(channelNameSearch, 'i');
+    filter.channelName = searchRegex;
+  }
+
   const topProducts = await Order.aggregate([
-    { $unwind: '$orderSkuList' },
+    { $match: filter },
+    { $unwind: '$orderSkuList.skuList' },
 
     {
       $group: {
         _id: '$orderSkuList.skuList.merchantProductNo',
-        totalQuantitySold: { $sum: '$skus.quantity' },
+        totalQuantitySold: { $sum: '$orderSkuList.skuList.quantity' },
+        channelName: { $first: '$channelName' },
       },
     },
 
@@ -101,12 +111,14 @@ const getTopSellingProduct = async (limit) => {
         _id: '$productDetails._id',
         sku: '$_id',
         totalQuantitySold: 1,
+        channelName: 1,
         productName: '$productDetails.name',
         imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
       },
     },
   ]);
 
+  console.log('Top Products:', topProducts.length);
   return topProducts;
 };
 
