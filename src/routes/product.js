@@ -8,7 +8,7 @@ import {
   deleteMultipleProducts,
   deleteProduct,
 } from '#controllers/ProductController.js';
-import { authMiddleware, validateFile } from '#middleware/index.js';
+import { authMiddleware, validateFile, checkLanguage } from '#middleware/index.js';
 import {
   deleteMultipleProductsValidator,
   importProductsFromCsvFileValidator,
@@ -23,7 +23,7 @@ const productsRouter = express.Router();
 //productsRouter.use(authMiddleware);
 
 /* DELETE PRODUCT BY ID*/
-productsRouter.delete('/deleteProduct/:prId', deleteProduct);
+productsRouter.delete('/deleteProduct/:id', checkLanguage, authMiddleware, deleteProduct);
 
 productsRouter.get('/', authMiddleware, getProducts);
 
@@ -31,13 +31,16 @@ productsRouter.get('/', authMiddleware, getProducts);
 productsRouter.post(
   '/importProductsFromGoogleSheet',
   importProductsFromGoogleSheetValidator,
+  checkLanguage,
   authMiddleware,
   importProductsFromGoogleSheet
 );
+
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post(
   '/importProductsFromCsvFile',
   importProductsFromCsvFileValidator,
+  checkLanguage,
   authMiddleware,
   upload.single('file'),
   validateFile,
@@ -52,6 +55,7 @@ productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
 productsRouter.delete(
   '/deleteMultipleProducts',
   deleteMultipleProductsValidator,
+  checkLanguage,
   authMiddleware,
   deleteMultipleProducts
 );

@@ -2,7 +2,7 @@
   "SUCCESS": "تمت العملية بنجاح",
   "ERROR": "حدث خطأ ما",
   "NOT_FOUND": "المورد المطلوب غير موجود",
-  "INVALID_INPUT": "تم تقديم مدخلات غير صالحة",
+  "INVALID_INPUT": "تم إدخال بيانات غير صالحة",
   "CHANNELS_FOUND_SUCCESS": "تم العثور على القنوات",
   "CHANNEL_FOUND_FAILED": "فشل استرجاع القنوات",
   "NO_CHANNEL_FOUND": "لم يتم العثور على أي قناة",
@@ -10,5 +10,13 @@
   "CHANNEL_SAVE_FAILED": "فشل حفظ القنوات",
   "CHANNEL_SAVED_SUCCESS": "تم حفظ القنوات بنجاح",
   "USER_CHANNELS_FOUND": "تم العثور على قنوات المستخدم",
-  "USER_NOT_FOUND": "المستخدم غير موجود"
+  "USER_NOT_FOUND": "المستخدم غير موجود",
+  "PRODUCTIDS_REQUIRED": "معرّفات المنتجات مطلوبة",
+  "PRODUCT_DELETE_FAILED": "فشل في حذف المنتج",
+  "PRODUCT_DELETE_SUCCESS": "تم حذف المنتج بنجاح",
+  "PRODUCT_IMPORT_ERROR": "خطأ في التحميل",
+  "PRODUCT_NOT_FOUND": "المنتج غير موجود",
+  "PRODUCT_MARKED_DELETED": "تم وضع علامة محذوف على المنتجات بنجاح",
+  "FAILED_FETCHING_SHEET": "فشل في جلب الجدول",
+  "GOOGLE_SHEET_URL_REQUIRED": "رابط Google Sheet مطلوب"
 }
