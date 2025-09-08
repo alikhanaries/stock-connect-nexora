@@ -7,6 +7,7 @@ import {
   updateProductStatus,
   deleteMultipleProducts,
   deleteProduct,
+  getUserChannelProducts,
 } from '#controllers/ProductController.js';
 import { authMiddleware, validateFile, checkLanguage } from '#middleware/index.js';
 import {
@@ -60,4 +61,5 @@ productsRouter.delete(
   deleteMultipleProducts
 );
 
+productsRouter.get('/user-channel-products/:channelId', authMiddleware, getUserChannelProducts);
 export default productsRouter;

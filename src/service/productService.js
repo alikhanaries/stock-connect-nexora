@@ -4,12 +4,14 @@ import Order from '#models/Orders.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import '#models/Category.js';
 import Product from '#models/Product.js';
-import { mapRowToProduct } from '#utils/mapRowToProduct.js'; // your row mapper
+import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { PRODUCT_STATUSES } from '#constants/common.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
+import mongoose from 'mongoose';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -386,6 +388,90 @@ const deleteMultipleProducts = async (ids, locale) => {
   }
 };
 
+export const getUserChannelProducts = async (userId, channelId, query) => {
+  const { page = 1, size = 10, search, sortBy = 'createdAt', sortOrder = 'asc', status, minPrice, maxPrice } = query;
+  const currentPage = Math.max(1, Number(page));
+  const limit = Math.max(1, Number(size));
+  const appliedFilters = {};
+  const matchStage = {
+    userId: new mongoose.Types.ObjectId(userId),
+    channelId: Number(channelId),
+    isActive: true,
+  };
+  const pipeline = [
+    { $match: matchStage },
+    { $unwind: '$skuList' },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'skuList.skuCode',
+        foreignField: 'productSkuCode',
+        as: 'productDetails',
+      },
+    },
+    { $unwind: '$productDetails' },
+  ];
+
+  const matchProductStage = { 'productDetails.isDeleted': false };
+  if (status) {
+    const statusValue = status.toString().trim().toLowerCase();
+    if (PRODUCT_STATUSES.includes(statusValue)) {
+      matchProductStage['productDetails.status'] = statusValue;
+      appliedFilters.status = statusValue;
+    }
+  }
+  if (minPrice || maxPrice) {
+    matchProductStage['productDetails.price'] = {};
+    if (minPrice) matchProductStage['productDetails.price'].$gte = Number(minPrice);
+    if (maxPrice) matchProductStage['productDetails.price'].$lte = Number(maxPrice);
+    if (minPrice) appliedFilters.minPrice = Number(minPrice);
+    if (maxPrice) appliedFilters.maxPrice = Number(maxPrice);
+  }
+  if (search && search.trim() !== '') {
+    const regex = new RegExp(search, 'i');
+    matchProductStage.$or = [
+      { 'productDetails.name': regex },
+      { 'skuList.skuCode': regex },
+      { 'productDetails.productSkuCode': regex },
+    ];
+    appliedFilters.search = search;
+  }
+  pipeline.push({ $match: matchProductStage });
+  pipeline.push({ $sort: { [`productDetails.${sortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 } });
+  pipeline.push({
+    $facet: {
+      paginatedResults: [
+        { $skip: (currentPage - 1) * limit },
+        { $limit: limit },
+        {
+          $project: {
+            _id: '$productDetails._id',
+            name: '$productDetails.name',
+            productSkuCode: '$productDetails.productSkuCode',
+            price: '$productDetails.price',
+            msrp: '$productDetails.msrp',
+            status: '$productDetails.status',
+            images: '$productDetails.images',
+            currentStockCount: '$productDetails.currentStockCount',
+            createdAt: '$productDetails.createdAt',
+          },
+        },
+      ],
+      totalCount: [{ $count: 'count' }],
+    },
+  });
+
+  const result = await UserChannelProducts.aggregate(pipeline);
+  const total = result[0]?.totalCount[0]?.count || 0;
+  const products = result[0]?.paginatedResults || [];
+
+  return {
+    products,
+    pagination: getPagination(total, currentPage, limit),
+    appliedFilters,
+  };
+};
+
 export default {
   fetchProducts,
   pushProductsFromDB,
@@ -395,4 +481,5 @@ export default {
   getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
+  getUserChannelProducts,
 };

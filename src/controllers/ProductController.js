@@ -171,6 +171,31 @@ export const deleteMultipleProducts = async (req, res) => {
   }
 };
 
+export const getUserChannelProducts = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { channelId } = req.params;
+    if (!channelId) {
+      return errorResponse(res, 'channelId is required', 400);
+    }
+    const { products, pagination, appliedFilters } = await productService.getUserChannelProducts(
+      userId,
+      channelId,
+      req.query
+    );
+    const responseData = {
+      content: products || [],
+      appliedFilters: appliedFilters || {},
+      ...pagination,
+    };
+    const message = products?.length ? 'User channel products fetched successfully' : 'No user channel products found';
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Error fetching user channel products:', error);
+    return errorResponse(res, error, 500);
+  }
+};
+
 export default {
   getProducts,
   getTopSellingProduct,
@@ -180,4 +205,5 @@ export default {
   updateProductStatus,
   deleteProduct,
   deleteMultipleProducts,
+  getUserChannelProducts,
 };
