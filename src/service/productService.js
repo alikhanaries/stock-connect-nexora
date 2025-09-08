@@ -70,9 +70,7 @@ const fetchProducts = async (query) => {
 };
 
 const getTopSellingProduct = async (limit, channelNameSearch) => {
-  const filter = {
-    status: { $in: ['NEW', 'COMPLETED', 'MANCO'] },
-  };
+  const filter = {};
   if (channelNameSearch) {
     const searchRegex = new RegExp(channelNameSearch, 'i');
     filter.channelName = searchRegex;
