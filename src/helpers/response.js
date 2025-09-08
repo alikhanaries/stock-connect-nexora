@@ -22,7 +22,7 @@ export const errorResponse = (res, errorDesc, statusCode = 500) => {
   return res.status(statusCode).send({
     error: true,
     success: false,
-    message: errorDesc.message,
+    message: errorDesc,
     data: null,
   });
 };
