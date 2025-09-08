@@ -1,6 +1,8 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
+import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
+import { PRODUCT_STATUSES } from '#constants/common.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -40,7 +42,11 @@ export const importProductsFromGoogleSheet = async (req, res) => {
       return failResponse(res, 'Google Sheet URL required', 400);
     }
     const { url } = req.body;
-    const result = await productService.importProductsFromGoogleSheet(url);
+    const exportUrl = await convertGoogleSheetUrlToExport(url);
+    if (!exportUrl) {
+      return failResponse(res, 'Invalid url', 500);
+    }
+    const result = await productService.importProductsFromGoogleSheet(exportUrl);
     // Handle failure from service
     if (!result?.success) {
       return failResponse(res, result?.message || 'Error in upload', 500);
@@ -96,7 +102,7 @@ export const pushProductToChannelEngine = async (req, res) => {
     });
 
     // 🔹 Return early
-    return successResponse(res, 'Products push started in background', 202, {
+    return successResponse(res, 'Product push to store is in progress', 202, {
       message: `Up to ${maxProducts} products will be pushed`,
     });
   } catch (err) {
@@ -107,7 +113,7 @@ export const pushProductToChannelEngine = async (req, res) => {
 
 export const updateProductStatus = async (req, res) => {
   try {
-    const { ids, active } = req.body;
+    const { ids, status } = req.body;
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, 'Product IDs are required', 400);
     }
@@ -115,14 +121,16 @@ export const updateProductStatus = async (req, res) => {
     if (invalidIds.length > 0) {
       return failResponse(res, `Invalid product IDs: ${invalidIds.join(', ')}`, 400);
     }
-    if (typeof active !== 'boolean') {
-      return failResponse(res, 'Status must be true or false', 400);
+    const statusValue = status?.toString().toLowerCase();
+    if (!statusValue || !PRODUCT_STATUSES.includes(statusValue)) {
+      return failResponse(res, `Status must be one of: ${PRODUCT_STATUSES.join(', ')}`, 400);
     }
-    const updatedCount = await productService.updateProductStatus(ids, active);
+    const updatedCount = await productService.updateProductStatus(ids, status);
     if (updatedCount === 0) {
       return failResponse(res, 'No matching products found to update', 404);
     }
-    const statusMessage = active ? 'Products activated successfully' : 'Products deactivated successfully';
+    const statusMessage =
+      statusValue === 'active' ? 'Products activated successfully' : 'Products deactivated successfully';
     return successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating product status:', err);
@@ -173,4 +181,15 @@ export const deleteMultipleProducts = async (req, res) => {
     console.error('Error:', error);
     return errorResponse(res, error);
   }
+};
+
+export default {
+  getProducts,
+  getTopSellingProduct,
+  importProductsFromGoogleSheet,
+  importProductsFromCsvFile,
+  pushProductToChannelEngine,
+  updateProductStatus,
+  deleteProduct,
+  deleteMultipleProducts,
 };

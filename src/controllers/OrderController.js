@@ -7,7 +7,7 @@ export const getAllOrders = async (req, res) => {
     const { data, appliedFilters, pagination } = await orderService.getAllOrders(req.query);
 
     if (!data.length) {
-      return Responses.failResponse(res, 'No Orders found', 404, {
+      return Responses.successResponse(res, 'No Orders found', 200, {
         content: [],
         appliedFilters: appliedFilters || {},
         ...pagination,
@@ -44,6 +44,18 @@ export const getOrderById = async (req, res) => {
   }
 };
 
+export const getOrderStats = async (req, res) => {
+  try {
+    const stats = await orderService.getOrderStats();
+    if (!stats) {
+      return Responses.failResponse(res, 'Failed to get order status', 404);
+    }
+    return Responses.successResponse(res, 'Order status statistics fetched successfully', 200, stats);
+  } catch (error) {
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
 export const getSyncedOrders = async (req, res) => {
   try {
     const { success, data } = await orderService.getNewOrders();
@@ -61,12 +73,11 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.errorResponse(res, dataSavedInDb.message, 500);
     }
     const message =
-      dataSavedInDb.data.upsertedCount.length > 0
-        ? `${dataSavedInDb.data.upsertedCount.length} new order(s) were synced successfully.`
-        : 'No new orders found. Displaying existing data.';
-    const response = await orderService.getAllOrders(req.query);
+      dataSavedInDb.data.upsertedCount > 0
+        ? `${dataSavedInDb.data.upsertedCount} new order(s) were synced successfully.`
+        : 'No new orders found';
 
-    return Responses.successResponse(res, message, 200, response);
+    return Responses.successResponse(res, message, 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
   }
