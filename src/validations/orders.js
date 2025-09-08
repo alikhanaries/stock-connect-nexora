@@ -116,10 +116,8 @@ export const getAllOrdersValidator = validate(async (req) => {
       .transform((val) => (val ? val : '')),
   });
 
-  // Validate and parse query parameters
   const validatedQuery = querySchema.parse(req.query);
 
-  // Additional validation: fromDate should be before toDate if both are provided
   if (validatedQuery.fromDate && validatedQuery.toDate) {
     const fromDate = new Date(validatedQuery.fromDate);
     const toDate = new Date(validatedQuery.toDate);
@@ -128,8 +126,6 @@ export const getAllOrdersValidator = validate(async (req) => {
     }
   }
 
-  // Attach validated and transformed query parameters to request without reassigning req.query
-  // req.validatedQuery = validatedQuery;querySchema
   querySchema.parse(req.params);
 });
 
