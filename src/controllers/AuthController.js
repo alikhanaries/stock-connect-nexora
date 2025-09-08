@@ -15,7 +15,7 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email, isDeleted: false, active: true }).select('+password');
 
     if (!user) {
-      return Response.failResponse(res, 'No account found. Please register first.', 400);
+      return Response.failResponse(res, 'No account exists with this email. Please register to continue.', 400);
     }
 
     const isMatch = await user.comparePassword(password);
@@ -98,7 +98,7 @@ export const refreshToken = async (req, res) => {
 
     const user = await User.findById(decoded.id);
     if (!user || user.isDeleted) {
-      return Response.failResponse(res, 'User not found', 404);
+      return Response.failResponse(res, "We couldn't find a user with the provided details.", 404);
     }
 
     const tokenResponse = generateTokenResponse(user, user.role);
@@ -140,7 +140,7 @@ export const validateResetToken = async (req, res) => {
   try {
     const { resetToken } = req.body;
     if (!resetToken) {
-      return Response.failResponse(res, 'require resetToken', 400);
+      return Response.failResponse(res, 'A valid reset token is required to proceed.', 400);
     }
     const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
     const user = await User.findOne({
