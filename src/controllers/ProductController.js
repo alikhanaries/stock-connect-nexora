@@ -160,7 +160,6 @@ export const deleteMultipleProducts = async (req, res) => {
   try {
     const { ids } = req.body;
     const result = await productService.deleteMultipleProducts(ids, req.locale);
-    console.log(result);
     if (!result.success) {
       return failResponse(res, result.message || req.locale.PRODUCT_DELETE_FAILED, 400);
     }
