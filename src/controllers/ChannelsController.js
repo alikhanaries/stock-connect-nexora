@@ -7,9 +7,9 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
   try {
     const result = await channelService.getAllChannelsFromChannelPartner();
     if (!result.success) {
-      return Responses.successResponse(res, 'Failed to retrieve channels', 200);
+      return Responses.successResponse(res, req.locale.CHANNEL_FOUND_FAILED, 200);
     }
-    return Responses.successResponse(res, 'Channels saved successfully', 200);
+    return Responses.successResponse(res, req.locale.CHANNELS_SAVED_SUCCESSFULLY, 200);
   } catch (error) {
     return Responses.errorResponse(res, error.message, 500);
   }
@@ -35,17 +35,17 @@ export const saveUserChannels = async (req, res) => {
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
-      return Responses.failResponse(res, 'User not found', 404);
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
 
     // Call the service to save channel data
     const result = await channelService.saveUserChannels(userId, channelIds);
 
     if (!result.success) {
-      return Responses.failResponse(res, result.message || 'Failed to save channels', 500);
+      return Responses.failResponse(res, result.message || req.locale.CHANNEL_SAVE_FAILED, 500);
     }
 
-    return Responses.successResponse(res, 'Channels saved successfully', 200, result.data);
+    return Responses.successResponse(res, req.locale.CHANNEL_SAVED_SUCCESS, 200, result.data);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     return Responses.errorResponse(res, error.message, 500);
@@ -59,7 +59,7 @@ export const getAllUserChannels = async (req, res) => {
     // Ensure user exists
     const user = await User.findById(userId).lean();
     if (!user) {
-      return Responses.failResponse(res, 'User not found', 404);
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
 
     // Fetch channels from service
