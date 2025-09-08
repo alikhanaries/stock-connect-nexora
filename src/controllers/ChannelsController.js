@@ -61,18 +61,21 @@ export const getAllUserChannels = async (req, res) => {
     const { userId } = req.params;
 
     // Ensure user exists
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
 
-    const result = await channelService.getAllUserChannels(userId);
+    // Fetch channels from service
+    const result = await channelService.getAllUserChannels(userId, req.query);
 
-    if (!result.success) {
-      return Responses.successResponse(res, req.locale.NO_CHANNEL_FOUND, 200, []);
+    // If no channels found
+    if (!result.success || !result?.channelData?.contents?.length) {
+      return Responses.successResponse(res, 'No channels found', 200, []);
     }
 
-    return Responses.successResponse(res, req.locale.USER_CHANNELS_FOUND, 200, result?.channelData);
+    // Return found channels
+    return Responses.successResponse(res, 'User channels found', 200, result.channelData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     return Responses.errorResponse(res, error.message, 500);

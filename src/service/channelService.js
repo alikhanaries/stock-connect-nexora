@@ -112,93 +112,97 @@ const saveUserChannels = async (userId, channelIds) => {
 };
 
 /** FUNC - GET USER CHANNEL LIST */
-export const getAllUserChannels = async (userId) => {
+export const getAllUserChannels = async (userId, { page = 1, limit = 10, search = '' }) => {
   try {
-    const data = await UserChannels.find();
-    console.log(data);
     const objectId = new mongoose.Types.ObjectId(userId);
+    const skip = (page - 1) * limit;
+    const parsedLimit = parseInt(limit);
 
-    const result = await UserChannels.aggregate([
+    const pipeline = [
       { $match: { userId: objectId, isActive: true } },
 
-      // Expand channelIds array
+      // Expand channelIds
       { $unwind: '$channelIds' },
 
-      // Lookup channel details to get channelId
+      // Join channels collection
       {
         $lookup: {
           from: 'channels',
-          localField: 'channelIds.id', // _id of channel
+          localField: 'channelIds.id',
           foreignField: '_id',
           as: 'channelDetails',
         },
       },
       { $unwind: '$channelDetails' },
 
-      // Lookup orders using channelId from Channels collection
+      // Apply search filter if provided
+      ...(search ? [{ $match: { 'channelDetails.channelName': { $regex: search, $options: 'i' } } }] : []),
+
+      // Lookup orders count
       {
         $lookup: {
           from: 'orders',
           let: { channelId: '$channelDetails.channelId' },
-          pipeline: [{ $match: { $expr: { $eq: ['$channelId', '$$channelId'] } } }, { $count: 'ordersCount' }],
+          pipeline: [{ $match: { $expr: { $eq: ['$channelId', '$$channelId'] } } }, { $count: 'count' }],
           as: 'ordersInfo',
         },
       },
-      // Lookup products for this channel (marketplace = channelName)
+
+      // Lookup products count
       {
         $lookup: {
           from: 'channelproducts',
           let: { channelId: '$channelDetails.channelId' },
-          pipeline: [{ $match: { $expr: { $eq: ['$marketPlaceId', '$$channelId'] } } }, { $count: 'productsCount' }],
-
+          pipeline: [{ $match: { $expr: { $eq: ['$marketPlaceId', '$$channelId'] } } }, { $count: 'count' }],
           as: 'productsInfo',
         },
       },
-      // Project required fields
+
+      // Flatten fields
       {
         $project: {
           _id: 0,
           userId: 1,
           channel: {
             _id: '$channelDetails._id',
+            channelId: '$channelDetails.channelId',
             channelName: '$channelDetails.channelName',
             channelImageUrl: '$channelDetails.channelImageUrl',
             status: '$channelIds.status',
             createdAt: '$channelIds.createdAt',
-            channelId: '$channelDetails.channelId',
-            ordersCount: { $ifNull: [{ $arrayElemAt: ['$ordersInfo.ordersCount', 0] }, 0] },
-            productsCount: { $ifNull: [{ $arrayElemAt: ['$productsInfo.productsCount', 0] }, 0] },
+            ordersCount: { $ifNull: [{ $arrayElemAt: ['$ordersInfo.count', 0] }, 0] },
+            productsCount: { $ifNull: [{ $arrayElemAt: ['$productsInfo.count', 0] }, 0] },
           },
         },
       },
+    ];
 
-      // Group channels per user
-      {
-        $group: {
-          _id: '$userId',
-          channelDetails: { $push: '$channel' },
-        },
-      },
+    // First pipeline for paginated data
+    const dataPipeline = [...pipeline, { $skip: skip }, { $limit: parsedLimit }];
 
-      // Final shape
-      {
-        $project: {
-          _id: 0,
-          userId: '$_id',
-          channelDetails: 1,
-        },
-      },
+    // Second pipeline for total count
+    const countPipeline = [...pipeline, { $count: 'total' }];
+
+    const [channels, totalResult] = await Promise.all([
+      UserChannels.aggregate(dataPipeline),
+      UserChannels.aggregate(countPipeline),
     ]);
 
-    if (result.length == 0) {
-      return {
-        success: false,
-      };
+    const total = totalResult.length > 0 ? totalResult[0].total : 0;
+
+    if (total === 0) {
+      return { success: false, message: 'No channels found' };
     }
 
     return {
       success: true,
-      channelData: result[0],
+      channelData: {
+        userId,
+        total,
+        page: parseInt(page),
+        limit: parsedLimit,
+        contents: channels.map((ch) => ch.channel),
+      },
     };
   } catch (err) {
     console.error('Error in getAllUserChannels:', err);
