@@ -7,6 +7,7 @@ import {
   updateProductStatus,
   deleteMultipleProducts,
   deleteProduct,
+  listAvailableProducts,
 } from '#controllers/ProductController.js';
 import { authMiddleware, validateFile } from '#middleware/index.js';
 import express from 'express';
@@ -33,5 +34,7 @@ productsRouter.get('/top-product', authMiddleware, getTopSellingProduct);
 productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete('/deleteMultipleProducts', authMiddleware, deleteMultipleProducts);
+
+productsRouter.get('/list-available-products/:marketPlaceId', authMiddleware, listAvailableProducts);
 
 export default productsRouter;

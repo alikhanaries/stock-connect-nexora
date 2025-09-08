@@ -10,6 +10,8 @@ import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { PRODUCT_STATUSES } from '#constants/common.js';
+import ChannelProducts from '#models/ChannelProducts.js';
+import mongoose from 'mongoose';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -167,7 +169,7 @@ async function* fetchBatchesFromDB() {
 }
 
 // 🔹 Push all products to CE
-export const pushProductsFromDB = async () => {
+const pushProductsFromDB = async () => {
   const limit = pLimit(MAX_CONCURRENT);
   const results = [];
 
@@ -383,6 +385,65 @@ const deleteMultipleProducts = async (ids) => {
   }
 };
 
+const getUnassignedProducts = async (userId, marketPlaceId, query) => {
+  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+
+  const currentPage = Math.max(1, Number(page));
+  const limit = Math.max(1, Number(size));
+
+  const assignedSkuCodes = await ChannelProducts.distinct('skuList.skuCode', {
+    userId: new mongoose.Types.ObjectId(userId),
+    marketPlaceId: Number(marketPlaceId),
+    isActive: true,
+  });
+
+  const filter = { isDeleted: false };
+  const appliedFilters = {};
+
+  if (assignedSkuCodes.length > 0) filter.productSkuCode = { $nin: assignedSkuCodes };
+
+  // Status filter
+  if (status) {
+    const statusValue = status.toString().trim().toLowerCase();
+    if (PRODUCT_STATUSES.includes(statusValue)) {
+      filter.status = statusValue;
+      appliedFilters.status = statusValue;
+    }
+  }
+
+  // Price filter
+  if (minPrice || maxPrice) {
+    filter.price = {};
+    if (minPrice) ((filter.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
+    if (maxPrice) ((filter.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
+  }
+
+  // Search filter
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    filter.$or = [{ name: regex }, { productSkuCode: regex }];
+  }
+
+  // Sorting
+  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+  const [total, products] = await Promise.all([
+    Product.countDocuments(filter),
+    Product.find(filter)
+      .sort(sort)
+      .skip((currentPage - 1) * limit)
+      .limit(limit)
+      .select('_id name status productSkuCode price msrp images')
+      .lean(),
+  ]);
+
+  return {
+    products,
+    pagination: getPagination(total, currentPage, limit),
+    appliedFilters,
+  };
+};
+
 export default {
   fetchProducts,
   pushProductsFromDB,
@@ -392,4 +453,5 @@ export default {
   getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
+  getUnassignedProducts,
 };

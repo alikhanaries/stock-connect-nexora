@@ -1,6 +1,6 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
-import productService, { pushProductsFromDB } from '#service/productService.js';
+import productService from '#service/productService.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 
@@ -94,7 +94,7 @@ export const pushProductToChannelEngine = async (req, res) => {
     // 🔹 Background push (fire-and-forget)
     setImmediate(async () => {
       try {
-        await pushProductsFromDB(maxProducts);
+        await productService.pushProductsFromDB(maxProducts);
         console.log(`Background push completed for up to ${maxProducts} products`);
       } catch (err) {
         console.error('Background push error:', err);
@@ -180,6 +180,34 @@ export const deleteMultipleProducts = async (req, res) => {
   } catch (error) {
     console.error('Error:', error);
     return errorResponse(res, error);
+  }
+};
+
+export const listAvailableProducts = async (req, res) => {
+  try {
+    const { marketPlaceId } = req.params;
+    const userId = req.user?._id;
+    if (!marketPlaceId) {
+      return errorResponse(res, { message: 'marketPlaceId is required' }, 400);
+    }
+    const { products, pagination, appliedFilters } = await productService.getUnassignedProducts(
+      userId,
+      marketPlaceId,
+      req.query
+    );
+
+    const responseData = {
+      content: products || [],
+      appliedFilters: appliedFilters || {},
+      ...pagination,
+    };
+
+    const message = products.length ? 'Available products fetched successfully' : 'No products found';
+
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Error in listAvailableProducts:', error);
+    return errorResponse(res, error, 500);
   }
 };
 
