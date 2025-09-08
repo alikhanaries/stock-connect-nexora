@@ -25,7 +25,7 @@ export const loadLocale = (lang) => {
 };
 
 export const checkLanguage = (req, res, next) => {
-  const lang = (req.headers['accept-language'] || defaultLang).toLowerCase();
+  const lang = req.headers['accept-language'] || defaultLang;
 
   const chosenLang = LANGUAGE_CODES.includes(lang) ? lang : defaultLang;
 
