@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '#models/User.js';
 import { config } from '#config/config.js';
+import Responses from '#helpers/response.js';
 
 export const authMiddleware = async (req, res, next) => {
   console.time('authMiddleware');
@@ -10,28 +11,26 @@ export const authMiddleware = async (req, res, next) => {
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
     }
-
     if (!token) {
-      return res.status(401).json({ message: 'Not authorized' });
+      return Responses.failResponse(res, 'Authentication token is required', 401);
     }
-
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
 
-      const user = await User.findById(decoded.id);
+      const user = await User.findById(decoded.id).lean();
       if (!user || user.isDeleted) {
-        return res.status(401).json({ message: 'User not found' });
+        return Responses.failResponse(res, 'User not found', 401);
       }
       console.timeEnd('authMiddleware');
       req.user = user;
       next();
     } catch (error) {
       console.log('JWT verification error:', error.message);
-      return res.status(401).json({ message: 'Invalid token' });
+      return Responses.failResponse(res, 'User unauthorized', 401);
     }
   } catch (error) {
     console.log('authMiddleware error:', error.message);
-    return res.status(500).json({ message: 'Server error' });
+    return Responses.failResponse(res, 'Server error', 500);
   }
 };
 
