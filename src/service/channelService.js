@@ -206,4 +206,29 @@ export const getAllUserChannels = async (userId) => {
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };
+
+export const updateUserChannelsStatus = async (userId, channelIds, status) => {
+  try {
+    const objectIds = channelIds.map((id) => new ObjectId(id));
+
+    const result = await UserChannels.updateOne(
+      { userId: new ObjectId(userId) },
+      { $set: { 'channelIds.$[elem].status': status } },
+      {
+        arrayFilters: [{ 'elem.id': { $in: objectIds }, 'elem.status': { $ne: status } }],
+      }
+    );
+    return result.modifiedCount || 0;
+  } catch (err) {
+    console.error('Service error in update user channels status:', err);
+    throw new Error(err.message);
+  }
+};
+export default {
+  getAllChannelsFromChannelPartner,
+  getAllChannels,
+  saveUserChannels,
+  getAllUserChannels,
+  updateUserChannelsStatus,
+};
+
