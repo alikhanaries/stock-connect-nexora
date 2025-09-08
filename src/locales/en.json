@@ -18,5 +18,6 @@
   "PRODUCT_NOT_FOUND": "Product not found",
   "PRODUCT_MARKED_DELETED": "products marked as deleted successfully",
   "FAILED_FETCHING_SHEET": "Failed to fetch sheet",
-  "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL required"
+  "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL required",
+  "INVALID_URL": "Invalid url"
 }

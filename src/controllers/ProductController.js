@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
+import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 
 export const getProducts = async (req, res) => {
@@ -41,7 +42,12 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
-    const result = await productService.importProductsFromGoogleSheet(url);
+
+    const exportUrl = await convertGoogleSheetUrlToExport(url);
+    if (!exportUrl) {
+      return failResponse(res, req.locale.INVALID_URL, 500);
+    }
+    const result = await productService.importProductsFromGoogleSheet(exportUrl);
     // Handle failure from service
     if (!result?.success) {
       return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
@@ -164,4 +170,15 @@ export const deleteMultipleProducts = async (req, res) => {
     console.error('Error:', error);
     return errorResponse(res, error);
   }
+};
+
+export default {
+  getProducts,
+  getTopSellingProduct,
+  importProductsFromGoogleSheet,
+  importProductsFromCsvFile,
+  pushProductToChannelEngine,
+  updateProductStatus,
+  deleteProduct,
+  deleteMultipleProducts,
 };
