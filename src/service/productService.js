@@ -1,5 +1,6 @@
 import { config } from '#config/config.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 import Order from '#models/Orders.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import '#models/Category.js';
@@ -382,7 +383,20 @@ const deleteMultipleProducts = async (ids) => {
     return { success: false, message: err.message };
   }
 };
-
+/* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
+const addUserChannelProducts = async (userId, channelId, skuList) => {
+  try {
+    await UserChannelProducts.findOneAndUpdate(
+      { userId, channelId },
+      { $addToSet: { skuList: { $each: skuList } } }, // prevents duplicate SKUs
+      { upsert: true, new: true }
+    );
+    return true;
+  } catch (err) {
+    console.error('Service error in deleteMultipleProducts:', err);
+    throw new Error(err.message);
+  }
+};
 export default {
   fetchProducts,
   pushProductsFromDB,
@@ -392,4 +406,5 @@ export default {
   getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
+  addUserChannelProducts,
 };

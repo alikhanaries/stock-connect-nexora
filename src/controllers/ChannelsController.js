@@ -1,6 +1,7 @@
 import channelService from '../service/channelService.js';
 import Responses from '../helpers/response.js';
 import User from '../models/User.js';
+import mongoose from 'mongoose';
 import { STATUS_MESSAGES, VALID_STATUSES } from '#constants/common.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;

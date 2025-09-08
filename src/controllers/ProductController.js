@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
+import User from '../models/User.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -182,6 +183,26 @@ export const deleteMultipleProducts = async (req, res) => {
     return errorResponse(res, error);
   }
 };
+/* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
+export const addUserChannelProducts = async (req, res) => {
+  try {
+    const { userId, channelId, productsList } = req.body;
+    if (!userId || !channelId || !Array.isArray(productsList) || productsList.length === 0) {
+      return failResponse(res, 'Invalid request body', 400);
+    }
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return failResponse(res, 'User not found', 404);
+    }
+    await productService.addUserChannelProducts(userId, channelId, productsList);
+
+    return successResponse(res, 'Products added successfully', 200);
+  } catch (error) {
+    console.error('Error:', error);
+    return errorResponse(res, error);
+  }
+};
 
 export default {
   getProducts,
@@ -192,4 +213,5 @@ export default {
   updateProductStatus,
   deleteProduct,
   deleteMultipleProducts,
+  addUserChannelProducts,
 };
