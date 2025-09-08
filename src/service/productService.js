@@ -117,8 +117,6 @@ const getTopSellingProduct = async (limit, channelNameSearch) => {
       },
     },
   ]);
-
-  console.log('Top Products:', topProducts.length);
   return topProducts;
 };
 
