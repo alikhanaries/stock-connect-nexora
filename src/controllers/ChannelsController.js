@@ -60,9 +60,11 @@ export const getAllUserChannels = async (req, res) => {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
     const result = await channelService.getAllUserChannels(userId);
-    if (!result) {
+
+    if (!result.success) {
       return Responses.successResponse(res, req.locale.NO_CHANNEL_FOUND, 200, []);
     }
+
     return Responses.successResponse(res, req.locale.USER_CHANNELS_FOUND, 200, result?.channelData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
