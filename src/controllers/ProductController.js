@@ -141,9 +141,9 @@ export const updateProductStatus = async (req, res) => {
 /* DELETE PRODUCT BY ID*/
 export const deleteProduct = async (req, res) => {
   try {
-    const { prId } = req.params;
+    const { id } = req.params;
     //Validate ObjectId
-    const result = await productService.deleteProduct(prId, req.locale);
+    const result = await productService.deleteProduct(id, req.locale);
     if (!result.success) {
       return failResponse(res, result.message || req.locale.PRODUCT_DELETE_FAILED, 400);
     }

@@ -23,7 +23,7 @@ const productsRouter = express.Router();
 //productsRouter.use(authMiddleware);
 
 /* DELETE PRODUCT BY ID*/
-productsRouter.delete('/deleteProduct/:prId', checkLanguage, authMiddleware, deleteProduct);
+productsRouter.delete('/deleteProduct/:id', checkLanguage, authMiddleware, deleteProduct);
 
 productsRouter.get('/', authMiddleware, getProducts);
 

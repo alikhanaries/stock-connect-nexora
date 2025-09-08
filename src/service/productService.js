@@ -345,16 +345,16 @@ export const importProductsFromCsvFile = async (filePath) => {
   }
 };
 
-const deleteProduct = async (prId, localLang) => {
+const deleteProduct = async (id, locale) => {
   try {
     const result = await Product.findByIdAndUpdate(
-      prId,
+      id,
       { isDeleted: true },
       { new: true } // return updated doc
     );
 
     if (!result) {
-      return { success: false, message: localLang?.PRODUCT_NOT_FOUND };
+      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
 
     return { success: true, data: result };
@@ -365,7 +365,7 @@ const deleteProduct = async (prId, localLang) => {
 };
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
-const deleteMultipleProducts = async (ids, localLang) => {
+const deleteMultipleProducts = async (ids, locale) => {
   try {
     const result = await Product.updateMany(
       { _id: { $in: ids }, isDeleted: { $ne: true } },
@@ -373,12 +373,12 @@ const deleteMultipleProducts = async (ids, localLang) => {
     );
 
     if (result.modifiedCount === 0) {
-      return { success: false, message: localLang?.PRODUCT_NOT_FOUND };
+      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
 
     return {
       success: true,
-      message: `${result.modifiedCount} ${localLang?.PRODUCT_MARKED_DELETED}`,
+      message: `${result.modifiedCount} ${locale?.PRODUCT_MARKED_DELETED}`,
     };
   } catch (err) {
     console.error('Service error in deleteMultipleProducts:', err);
