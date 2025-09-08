@@ -71,11 +71,11 @@ const fetchProducts = async (query) => {
 
 const getTopSellingProduct = async (limit) => {
   const topProducts = await Order.aggregate([
-    { $unwind: '$skus' },
+    { $unwind: '$orderSkuList' },
 
     {
       $group: {
-        _id: '$skus.merchantProductNo',
+        _id: '$orderSkuList.skuList.merchantProductNo',
         totalQuantitySold: { $sum: '$skus.quantity' },
       },
     },
