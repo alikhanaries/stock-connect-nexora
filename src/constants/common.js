@@ -1,5 +1,4 @@
 
-
 // Define valid statuses for channels
 export const VALID_STATUSES = ['active', 'deactive', 'removed'];
 
@@ -7,8 +6,7 @@ export const VALID_STATUSES = ['active', 'deactive', 'removed'];
 export const STATUS_MESSAGES = { active: 'activated', deactive: 'deactivated', removed: 'removed' };
 
 
-
-export const LANGUAGE_CODES = ['en', 'ar', 'zh', 'tr'];
+export const LANGUAGE_CODES = ['en', 'ar', 'zh-CN', 'tr'];
 
 export const PRODUCT_STATUSES = ['active', 'deactive'];
 
