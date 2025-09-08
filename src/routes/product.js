@@ -9,6 +9,11 @@ import {
   deleteProduct,
 } from '#controllers/ProductController.js';
 import { authMiddleware, validateFile, checkLanguage } from '#middleware/index.js';
+import {
+  deleteMultipleProductsValidator,
+  importProductsFromCsvFileValidator,
+  importProductsFromGoogleSheetValidator,
+} from '#validations/products.js';
 import express from 'express';
 
 import upload from '#helpers/FileHandler.js'; // the above multer setup
@@ -23,10 +28,18 @@ productsRouter.delete('/deleteProduct/:prId', checkLanguage, authMiddleware, del
 productsRouter.get('/', authMiddleware, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
-productsRouter.post('/importProductsFromGoogleSheet', checkLanguage, authMiddleware, importProductsFromGoogleSheet);
+productsRouter.post(
+  '/importProductsFromGoogleSheet',
+  importProductsFromGoogleSheetValidator,
+  checkLanguage,
+  authMiddleware,
+  importProductsFromGoogleSheet
+);
+
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post(
   '/importProductsFromCsvFile',
+  importProductsFromCsvFileValidator,
   checkLanguage,
   authMiddleware,
   upload.single('file'),
@@ -39,6 +52,12 @@ productsRouter.get('/top-product', authMiddleware, getTopSellingProduct);
 
 productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
 /* DELETE MULTIPLE PRODUCTS BY ID*/
-productsRouter.delete('/deleteMultipleProducts', checkLanguage, authMiddleware, deleteMultipleProducts);
+productsRouter.delete(
+  '/deleteMultipleProducts',
+  deleteMultipleProductsValidator,
+  checkLanguage,
+  authMiddleware,
+  deleteMultipleProducts
+);
 
 export default productsRouter;
