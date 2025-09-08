@@ -7,16 +7,27 @@ import {
   getAllUserChannels,
 } from '../controllers/ChannelsController.js';
 import { authMiddleware } from '#middleware/index.js';
+import {
+  getAllChannelsFromChannelPartnerValidator,
+  getAllChannelsValidator,
+  getAllUserChannelsValidator,
+  saveUserChannelsValidator,
+} from '#validations/channels.js';
 
 const router = express.Router();
 // USE LANGIAGE MIDDLEWARE GLOBALLY FOR THIS ROUTE
 router.use(checkLanguage);
 // /* GET ALL CHANNEL LIST FROM CHANNEL PARTNER */
-router.get('/getAllChannelsFromChannelPartner', authMiddleware, getAllChannelsFromChannelPartner);
+router.get(
+  '/getAllChannelsFromChannelPartner',
+  getAllChannelsFromChannelPartnerValidator,
+  authMiddleware,
+  getAllChannelsFromChannelPartner
+);
 // /* GET ALL CHANNEL LIST FROM DATABASE */
-router.get('/getAllChannels', authMiddleware, getAllChannels);
+router.get('/getAllChannels', getAllChannelsValidator, authMiddleware, getAllChannels);
 // /* SAVE USER CHANNELS  */
-router.post('/addChannels', authMiddleware, saveUserChannels);
+router.post('/addChannels', saveUserChannelsValidator, authMiddleware, saveUserChannels);
 /* GET USER CHANNEL LIST */
-router.get('/getAllUserChannels/:userId', authMiddleware, getAllUserChannels);
+router.get('/getAllUserChannels/:userId', getAllUserChannelsValidator, authMiddleware, getAllUserChannels);
 export default router;

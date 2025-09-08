@@ -1,3 +1,4 @@
+export const LANGUAGE_CODES = ['en', 'ar', 'zh-CN', 'tr'];
 export const PRODUCT_STATUSES = ['active', 'deactive'];
 
 export const ORDER_STATUS_MAP = {

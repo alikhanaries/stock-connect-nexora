@@ -237,7 +237,7 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
           // 2. Map row
           const product = mapRowToProduct(row, rowIndex);
 
-          if (!product.productSkuCode) {
+          if (!product) {
             invalidRowsCount++;
             errorRows.push(rowIndex);
             return;
