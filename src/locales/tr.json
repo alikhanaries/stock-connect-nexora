@@ -10,6 +10,8 @@
   "CHANNELS_FOUND_SUCCESS": "Kanallar başarıyla bulundu",
   "CHANNELS_RETRIEVE_FAILED": "Kanallar alınamadı",
   "NO_CHANNEL_FOUND": "Kanal bulunamadı",
+  "CHANNEL_FOUND_FAILED": "Kanallar alınamadı",
+  "USERID_CHANNELID_REQUIRED": "userId ve channelIds gereklidir",
   "CHANNEL_SAVE_FAILED": "Kanallar kaydedilemedi",
   "CHANNEL_SAVED_SUCCESS": "Kanallar başarıyla kaydedildi",
 
@@ -17,5 +19,13 @@
   "USER_NOT_FOUND": "Kullanıcı bulunamadı",
 
   "PRODUCT_ASSIGNED_SUCCESS": "Ürün başarıyla atandı",
-  "PRODUCT_ASSIGNED_FAILED": "Ürün atanamadı"
+  "PRODUCT_ASSIGNED_FAILED": "Ürün atanamadı",
+  "PRODUCTIDS_REQUIRED": "Ürün kimlikleri gereklidir",
+  "PRODUCT_DELETE_FAILED": "Ürün silinemedi",
+  "PRODUCT_DELETE_SUCCESS": "Ürün başarıyla silindi",
+  "PRODUCT_IMPORT_ERROR": "Yükleme hatası",
+  "PRODUCT_NOT_FOUND": "Ürün bulunamadı",
+  "PRODUCT_MARKED_DELETED": "Ürünler başarıyla silinmiş olarak işaretlendi",
+  "FAILED_FETCHING_SHEET": "Tablo alınamadı",
+  "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL’si gerekli"
 }

@@ -17,5 +17,14 @@
   "USER_NOT_FOUND": "User not found",
 
   "PRODUCT_ASSIGNED_SUCCESS": "Product assigned successfully",
-  "PRODUCT_ASSIGNED_FAILED": "Failed to assign product"
+  "PRODUCT_ASSIGNED_FAILED": "Failed to assign product",
+  "PRODUCTIDS_REQUIRED": "Product IDs are required",
+  "PRODUCT_DELETE_FAILED": "Failed to delete product",
+  "PRODUCT_DELETE_SUCCESS": "Product deleted successfully",
+  "PRODUCT_IMPORT_ERROR": "Error in upload",
+  "PRODUCT_NOT_FOUND": "Product not found",
+  "PRODUCT_MARKED_DELETED": "products marked as deleted successfully",
+  "FAILED_FETCHING_SHEET": "Failed to fetch sheet",
+  "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL required",
+  "INVALID_URL": "Invalid url"
 }

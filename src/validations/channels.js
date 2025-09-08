@@ -41,6 +41,24 @@ export const getAllUserChannelsValidator = validate(async (req) => {
       .regex(/^[0-9a-fA-F]+$/, 'userId must be a hex string'),
   });
   paramsSchema.parse(req.params);
+  // validate query (for pagination + search)
+  const querySchema = z.object({
+    page: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 1))
+      .refine((val) => val > 0, { message: 'page must be greater than 0' }),
+
+    limit: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 10))
+      .refine((val) => val > 0 && val <= 100, { message: 'limit must be between 1 and 100' }),
+
+    search: z.string().optional(),
+  });
+
+  querySchema.parse(req.query);
 });
 // /* GET ALL CHANNEL LIST FROM CHANNEL PARTNER VALIDATOR */
 export const getAllChannelsFromChannelPartnerValidator = validate(async (req) => {
