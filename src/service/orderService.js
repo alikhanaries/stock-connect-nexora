@@ -161,7 +161,7 @@ export async function getNewOrders() {
   }
 }
 
-const getWeeklyOrderComparison = async (lowercasedPeriod) => {
+const getOrderComparison = async (lowercasedPeriod) => {
   const { currentPeriodStart, previousPeriodStart, previousPeriodEnd } = orderhelper.getPeriodDate(lowercasedPeriod);
 
   const [currentCount, previousCount] = await Promise.all([
@@ -183,4 +183,4 @@ const getWeeklyOrderComparison = async (lowercasedPeriod) => {
   return response;
 };
 
-export default { getAllOrders, getOrderById, processOrders, getNewOrders, getOrderStats, getWeeklyOrderComparison };
+export default { getAllOrders, getOrderById, processOrders, getNewOrders, getOrderStats, getOrderComparison };
