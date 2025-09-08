@@ -1,14 +1,22 @@
 {
   "SUCCESS": "操作成功完成",
   "ERROR": "发生错误",
-  "NOT_FOUND": "未找到请求的资源",
+  "NOT_FOUND": "请求的资源未找到",
   "INVALID_INPUT": "提供的输入无效",
   "CHANNELS_FOUND_SUCCESS": "找到频道",
   "CHANNEL_FOUND_FAILED": "获取频道失败",
-  "NO_CHANNEL_FOUND": "未找到任何频道",
-  "USERID_CHANNELID_REQUIRED": "需要 userId 和 channelIds",
+  "NO_CHANNEL_FOUND": "未找到频道",
+  "USERID_CHANNELID_REQUIRED": "需要提供 userId 和 channelIds",
   "CHANNEL_SAVE_FAILED": "保存频道失败",
   "CHANNEL_SAVED_SUCCESS": "频道保存成功",
   "USER_CHANNELS_FOUND": "找到用户频道",
-  "USER_NOT_FOUND": "未找到用户"
+  "USER_NOT_FOUND": "未找到用户",
+  "PRODUCTIDS_REQUIRED": "需要提供产品ID",
+  "PRODUCT_DELETE_FAILED": "删除产品失败",
+  "PRODUCT_DELETE_SUCCESS": "产品删除成功",
+  "PRODUCT_IMPORT_ERROR": "上传出错",
+  "PRODUCT_NOT_FOUND": "未找到产品",
+  "PRODUCT_MARKED_DELETED": "产品已成功标记为已删除",
+  "FAILED_FETCHING_SHEET": "获取表格失败",
+  "GOOGLE_SHEET_URL_REQUIRED": "需要提供 Google 表格链接"
 }

@@ -1,10 +1,8 @@
-
 // Define valid statuses for channels
 export const VALID_STATUSES = ['active', 'deactive', 'removed'];
 
 // Map status to display messages
 export const STATUS_MESSAGES = { active: 'activated', deactive: 'deactivated', removed: 'removed' };
-
 
 export const LANGUAGE_CODES = ['en', 'ar', 'zh-CN', 'tr'];
 
@@ -37,4 +35,3 @@ export const SELECTED_FIELDS = [
   'orderDate',
   'createdAt',
 ].join(' ');
-
