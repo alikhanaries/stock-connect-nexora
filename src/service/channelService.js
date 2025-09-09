@@ -121,31 +121,16 @@ export const getAllUserChannels = async (userId, query) => {
     const currentPage = Math.max(1, Number(page));
 
     const appliedFilters = {};
-    if (status) {
-      appliedFilters.status = status;
+    if (query?.status) {
+      appliedFilters.status = query?.status;
     }
-    const data = await UserChannels.aggregate([
-      {
-        $project: {
-          _id: 1, // keep the _id (or any other fields you want)
-          userId: 1, // example field
-          channelIds: {
-            $filter: {
-              input: '$channelIds',
-              as: 'channel',
-              cond: { $eq: ['$$channel.status', 'removed'] },
-            },
-          },
-        },
-      },
-    ]);
-    console.log('data', data[0]);
+
     const pipeline = [
       { $match: { userId: new ObjectId(userId), isActive: true } },
 
       { $unwind: '$channelIds' },
       // Fetch only removed channels
-      { $match: { 'channelIds.status': 'active' } },
+      { $match: { 'channelIds.status': status } },
 
       {
         $lookup: {
