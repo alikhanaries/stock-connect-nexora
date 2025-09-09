@@ -449,6 +449,9 @@ const addProductsToUserChannel = async (userId, channelId, productIds, locale) =
 
 export const getUserChannelProducts = async (userId, channelId, query) => {
   const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice } = query;
+  if (!userId) {
+    throw new Error('User ID is required');
+  }
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const appliedFilters = {};
@@ -496,7 +499,9 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
     appliedFilters.search = search;
   }
   pipeline.push({ $match: matchProductStage });
-  pipeline.push({ $sort: { [`productDetails.${sortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 } });
+  const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
+  const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : '_id';
+  pipeline.push({ $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 } });
   pipeline.push({
     $facet: {
       paginatedResults: [
