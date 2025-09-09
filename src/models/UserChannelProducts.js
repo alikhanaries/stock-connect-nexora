@@ -9,7 +9,7 @@ const skuListSchema = new mongoose.Schema(
       index: true,
     },
     skuId: {
-      type: Number,
+      type: String,
       required: true,
       index: true,
     },
@@ -20,7 +20,7 @@ const skuListSchema = new mongoose.Schema(
 // Main schema
 const channelProductsSchema = new mongoose.Schema(
   {
-    marketPlaceId: {
+    channelId: {
       type: Number,
       required: true,
       index: true,

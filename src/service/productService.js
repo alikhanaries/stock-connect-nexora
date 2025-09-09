@@ -1,5 +1,6 @@
 import { config } from '#config/config.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 import Order from '#models/Orders.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import '#models/Category.js';
@@ -385,7 +386,49 @@ const deleteMultipleProducts = async (ids, locale) => {
     return { success: false, message: err.message };
   }
 };
+/* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
+const addProductsToUserChannel = async (userId, channelId, productIds, locale) => {
+  try {
+    //  Check they exist in Product collection
+    const products = await Product.find(
+      { _id: { $in: productIds } },
+      { productSkuId: 1, productSkuCode: 1, _id: 1 }
+    ).lean();
 
+    if (products.length !== productIds.length) {
+      return {
+        success: false,
+        message: locale.PRODUCT_NOT_EXITS,
+      };
+    }
+
+    //  Prepare skuList objects
+    const skuList = products.map((p) => ({
+      skuId: p.productSkuId,
+      skuCode: p.productSkuCode,
+    }));
+
+    if (skuList.length === 0) {
+      return {
+        success: false,
+        message: locale.INVALID_PRODUCTS,
+      };
+    }
+
+    await UserChannelProducts.findOneAndUpdate(
+      { userId, channelId },
+      { $addToSet: { skuList: { $each: skuList } } },
+      { upsert: true, new: false }
+    );
+
+    return {
+      success: true,
+    };
+  } catch (err) {
+    console.error('Service error in deleteMultipleProducts:', err);
+    throw new Error(err.message);
+  }
+};
 export default {
   fetchProducts,
   pushProductsFromDB,
@@ -395,4 +438,5 @@ export default {
   getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
+  addProductsToUserChannel,
 };

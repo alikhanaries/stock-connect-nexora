@@ -3,14 +3,21 @@
   "ERROR": "Something went wrong",
   "NOT_FOUND": "Requested resource not found",
   "INVALID_INPUT": "Invalid input provided",
-  "CHANNELS_FOUND_SUCCESS": "Channels Found",
-  "CHANNEL_FOUND_FAILED": "Failed to retrieve channels",
+  "VALIDATION_ERROR": "Validation failed",
+  "UNAUTHORIZED": "Unauthorized access",
+  "FORBIDDEN": "Forbidden action",
+
+  "CHANNELS_FOUND_SUCCESS": "Channels found successfully",
+  "CHANNELS_RETRIEVE_FAILED": "Failed to retrieve channels",
   "NO_CHANNEL_FOUND": "No channel found",
-  "USERID_CHANNELID_REQUIRED": "userId and channelIds are required",
   "CHANNEL_SAVE_FAILED": "Failed to save channels",
   "CHANNEL_SAVED_SUCCESS": "Channels saved successfully",
+
   "USER_CHANNELS_FOUND": "User channels found",
   "USER_NOT_FOUND": "User not found",
+
+  "PRODUCT_ASSIGNED_SUCCESS": "Product assigned successfully",
+  "PRODUCT_ASSIGNED_FAILED": "Failed to assign product",
   "PRODUCTIDS_REQUIRED": "Product IDs are required",
   "PRODUCT_DELETE_FAILED": "Failed to delete product",
   "PRODUCT_DELETE_SUCCESS": "Product deleted successfully",
@@ -19,5 +26,7 @@
   "PRODUCT_MARKED_DELETED": "products marked as deleted successfully",
   "FAILED_FETCHING_SHEET": "Failed to fetch sheet",
   "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL required",
-  "INVALID_URL": "Invalid url"
+  "INVALID_URL": "Invalid url",
+  "PRODUCT_NOT_EXITS": "Some productIds do not exist in Product collection",
+  "INVALID_PRODUCTS": "No valid products found for given productIds"
 }
