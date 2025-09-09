@@ -1,6 +1,10 @@
 import channelService from '../service/channelService.js';
 import Responses from '../helpers/response.js';
 import User from '../models/User.js';
+import mongoose from 'mongoose';
+import { STATUS_MESSAGES, VALID_STATUSES } from '#constants/common.js';
+// Access ObjectId from mongoose
+const ObjectId = mongoose.Types.ObjectId;
 
 /**FUNC- FOR GET ALL CHANNEL LIST FROM CHANNEL PARTNER**/
 export const getAllChannelsFromChannelPartner = async (req, res) => {
@@ -57,22 +61,59 @@ export const getAllUserChannels = async (req, res) => {
     const { userId } = req.params;
 
     // Ensure user exists
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).lean();
     if (!user) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
 
-    const result = await channelService.getAllUserChannels(userId);
+    const { channelData, pagination, appliedFilters, success } = await channelService.getAllUserChannels(
+      userId,
+      req.query
+    );
 
-    if (!result.success) {
-      return Responses.successResponse(res, req.locale.NO_CHANNEL_FOUND, 200, []);
+    const responseData = {
+      content: channelData?.content || [],
+      appliedFilters: appliedFilters || {},
+      ...pagination,
+    };
+    // If no channels found
+    if (!success || !channelData?.content?.length) {
+      return Responses.successResponse(res, 'No channels found', 200, responseData);
     }
 
-    return Responses.successResponse(res, req.locale.USER_CHANNELS_FOUND, 200, result?.channelData);
+    // Return found channels
+    return Responses.successResponse(res, 'User channels found', 200, responseData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
 
-export default { getAllChannelsFromChannelPartner, getAllChannels, saveUserChannels, getAllUserChannels };
+export const updateUserChannelsStatus = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { channelIds, status } = req.body;
+    if (!Array.isArray(channelIds) || channelIds.length === 0 || channelIds.some((id) => !ObjectId.isValid(id))) {
+      return Responses.failResponse(res, 'One or more channelIds are invalid', 400);
+    }
+    if (!VALID_STATUSES.includes(status)) {
+      return Responses.failResponse(res, 'status must be one of active, deactive, or removed', 400);
+    }
+    const updatedCount = await channelService.updateUserChannelsStatus(userId, channelIds, status);
+
+    if (updatedCount === 0) {
+      return Responses.failResponse(res, 'No matching channels found to update', 404);
+    }
+    return Responses.successResponse(res, `User channels ${STATUS_MESSAGES[status]} successfully`, 200);
+  } catch (error) {
+    console.error('Controller error in updateUserChannelsStatus:', error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+export default {
+  getAllChannelsFromChannelPartner,
+  getAllChannels,
+  saveUserChannels,
+  getAllUserChannels,
+  updateUserChannelsStatus,
+};

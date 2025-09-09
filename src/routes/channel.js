@@ -5,6 +5,7 @@ import {
   getAllChannels,
   saveUserChannels,
   getAllUserChannels,
+  updateUserChannelsStatus,
 } from '../controllers/ChannelsController.js';
 import { authMiddleware } from '#middleware/index.js';
 import {
@@ -29,5 +30,9 @@ router.get('/getAllChannels', getAllChannelsValidator, authMiddleware, getAllCha
 // /* SAVE USER CHANNELS  */
 router.post('/addChannels', saveUserChannelsValidator, authMiddleware, saveUserChannels);
 /* GET USER CHANNEL LIST */
+
+router.patch('/update-user-channels-status', authMiddleware, updateUserChannelsStatus);
+
 router.get('/getAllUserChannels/:userId', getAllUserChannelsValidator, authMiddleware, getAllUserChannels);
+
 export default router;

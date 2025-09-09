@@ -1,5 +1,6 @@
 import { config } from '#config/config.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 import Order from '#models/Orders.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import '#models/Category.js';
@@ -9,7 +10,7 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
-import { PRODUCT_STATUSES } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -69,14 +70,31 @@ const fetchProducts = async (query) => {
   };
 };
 
-const getTopSellingProduct = async (limit) => {
+const getTopSellingProduct = async (limit, channelNameSearch) => {
+  const filter = {
+    status: { $in: ORDER_STATUS_MATCH },
+  };
+  if (channelNameSearch) {
+    const searchRegex = new RegExp(channelNameSearch, 'i');
+    filter.channelName = searchRegex;
+  }
+
   const topProducts = await Order.aggregate([
-    { $unwind: '$skus' },
+    { $match: filter },
+    {
+      $project: {
+        _id: 0,
+        channelName: 1,
+        orderSkuList: '$orderSkuList.skuList',
+      },
+    },
+    { $unwind: '$orderSkuList' },
 
     {
       $group: {
-        _id: '$skus.merchantProductNo',
-        totalQuantitySold: { $sum: '$skus.quantity' },
+        _id: '$orderSkuList.merchantProductNo',
+        totalQuantitySold: { $sum: '$orderSkuList.quantity' },
+        channelName: { $first: '$channelName' },
       },
     },
 
@@ -101,12 +119,12 @@ const getTopSellingProduct = async (limit) => {
         _id: '$productDetails._id',
         sku: '$_id',
         totalQuantitySold: 1,
+        channelName: 1,
         productName: '$productDetails.name',
         imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
       },
     },
-  ]);
-
+  ]).allowDiskUse(true);
   return topProducts;
 };
 
@@ -345,16 +363,16 @@ export const importProductsFromCsvFile = async (filePath) => {
   }
 };
 
-const deleteProduct = async (prId) => {
+const deleteProduct = async (id, locale) => {
   try {
     const result = await Product.findByIdAndUpdate(
-      prId,
+      id,
       { isDeleted: true },
       { new: true } // return updated doc
     );
 
     if (!result) {
-      return { success: false, message: 'Product not found' };
+      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
 
     return { success: true, data: result };
@@ -365,7 +383,7 @@ const deleteProduct = async (prId) => {
 };
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
-const deleteMultipleProducts = async (ids) => {
+const deleteMultipleProducts = async (ids, locale) => {
   try {
     const result = await Product.updateMany(
       { _id: { $in: ids }, isDeleted: { $ne: true } },
@@ -373,16 +391,61 @@ const deleteMultipleProducts = async (ids) => {
     );
 
     if (result.modifiedCount === 0) {
-      return { success: false, message: 'Product not found' };
+      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
 
-    return { success: true, message: `${result.modifiedCount} products marked as deleted successfully` };
+    return {
+      success: true,
+      message: `${result.modifiedCount} ${locale?.PRODUCT_MARKED_DELETED}`,
+    };
   } catch (err) {
     console.error('Service error in deleteMultipleProducts:', err);
     throw new Error(err.message); // force the catch block
   }
 };
+/* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
+const addProductsToUserChannel = async (userId, channelId, productIds, locale) => {
+  try {
+    //  Check they exist in Product collection
+    const products = await Product.find(
+      { _id: { $in: productIds } },
+      { productSkuId: 1, productSkuCode: 1, _id: 1 }
+    ).lean();
 
+    if (products.length !== productIds.length) {
+      return {
+        success: false,
+        message: locale.PRODUCT_NOT_EXITS,
+      };
+    }
+
+    //  Prepare skuList objects
+    const skuList = products.map((p) => ({
+      skuId: p.productSkuId,
+      skuCode: p.productSkuCode,
+    }));
+
+    if (skuList.length === 0) {
+      return {
+        success: false,
+        message: locale.INVALID_PRODUCTS,
+      };
+    }
+
+    await UserChannelProducts.findOneAndUpdate(
+      { userId, channelId },
+      { $addToSet: { skuList: { $each: skuList } } },
+      { upsert: true, new: false }
+    );
+
+    return {
+      success: true,
+    };
+  } catch (err) {
+    console.error('Service error in deleteMultipleProducts:', err);
+    throw new Error(err.message);
+  }
+};
 export default {
   fetchProducts,
   pushProductsFromDB,
@@ -392,4 +455,5 @@ export default {
   getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
+  addProductsToUserChannel,
 };
