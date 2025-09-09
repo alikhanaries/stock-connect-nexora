@@ -1,8 +1,10 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
+import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
+import User from '../models/User.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -23,9 +25,10 @@ export const getProducts = async (req, res) => {
 export const getTopSellingProduct = async (req, res) => {
   try {
     const size = parseInt(req.query.size, 10);
+    const channelName = req.query.channel;
     const limit = Number.isInteger(size) && size > 0 ? size : 5;
 
-    const topProducts = await productService.getTopSellingProduct(limit);
+    const topProducts = await productService.getTopSellingProduct(limit, channelName);
 
     const message =
       topProducts.length > 0 ? 'Top-selling products fetched successfully' : 'No top-selling products found';
@@ -170,6 +173,29 @@ export const deleteMultipleProducts = async (req, res) => {
     return errorResponse(res, error);
   }
 };
+/* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
+export const addProductsToUserChannel = async (req, res) => {
+  try {
+    const { channelId, productIds } = req.body;
+    const userId = req.user._id;
+    // Check if user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return failResponse(res, req.locale.USER_NOT_FOUND, 404);
+    }
+    const result = await productService.addProductsToUserChannel(userId, channelId, productIds, req.locale);
+
+    if (!result.success) {
+      return failResponse(res, result?.message, 404);
+    }
+
+    return successResponse(res, req.locale.PRODUCT_ASSIGNED_SUCCESS, 200);
+  } catch (error) {
+    console.error('Error:', error);
+    errorLog(error);
+    return errorResponse(res, error);
+  }
+};
 
 export const getUserChannelProducts = async (req, res) => {
   try {
@@ -206,4 +232,5 @@ export default {
   deleteProduct,
   deleteMultipleProducts,
   getUserChannelProducts,
+  addProductsToUserChannel,
 };

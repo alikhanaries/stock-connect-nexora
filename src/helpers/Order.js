@@ -142,4 +142,45 @@ const sanitizeOrdersData = (orders) => {
   });
 };
 
-export default { sanitizeOrdersData };
+const getPeriodDate = (lowercasedPeriod) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let currentPeriodStart, previousPeriodStart, previousPeriodEnd;
+
+  if (lowercasedPeriod === 'year') {
+    const year = today.getFullYear();
+
+    currentPeriodStart = new Date(year, 0, 1);
+
+    previousPeriodStart = new Date(year - 1, 0, 1);
+    previousPeriodEnd = new Date(year - 1, 11, 31, 23, 59, 59, 999);
+  } else if (lowercasedPeriod === 'month') {
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+
+    currentPeriodStart = new Date(currentYear, currentMonth, 1);
+
+    previousPeriodStart = new Date(currentYear, currentMonth - 1, 1);
+    previousPeriodEnd = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
+  } else if (lowercasedPeriod === 'week') {
+    const dayOfWeek = today.getDay();
+    const diffToMonday = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+
+    currentPeriodStart = new Date(today);
+    currentPeriodStart.setDate(diffToMonday);
+    currentPeriodStart.setHours(0, 0, 0, 0);
+
+    previousPeriodStart = new Date(currentPeriodStart);
+    previousPeriodStart.setDate(previousPeriodStart.getDate() - 7);
+
+    previousPeriodEnd = new Date(currentPeriodStart);
+    previousPeriodEnd.setMilliseconds(-1);
+  } else {
+    throw new Error(`Unsupported period: ${lowercasedPeriod}`);
+  }
+
+  return { currentPeriodStart, previousPeriodStart, previousPeriodEnd };
+};
+
+export default { sanitizeOrdersData, getPeriodDate };

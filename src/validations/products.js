@@ -1,46 +1,33 @@
-import { z, ZodError } from 'zod';
-import { LANGUAGE_CODES } from '#constants/common.js';
-import { errorResponse } from '#helpers/response.js';
-// Common language list
-
-const validate = (parseFn) => async (req, res, next) => {
-  try {
-    await parseFn(req);
-    return next();
-  } catch (error) {
-    console.error('Validation error:', error);
-    const message =
-      error instanceof ZodError ? error.issues[0]?.message || 'Invalid input' : error.message || 'Server Error';
-    return errorResponse(res, message, 400);
-  }
-};
-
-export const headerSchema = z
-  .object({
-    authorization: z
-      .string({
-        required_error: 'Authorization header is required',
-        invalid_type_error: 'Authorization must be a string',
-      })
-      //.nonempty('accept-language cannot be empty'),
-      .nonempty('Authorization header cannot be empty'),
-    'accept-language': z
-      .string({
-        required_error: 'Accept-Language header is required',
-        invalid_type_error: 'Accept-Language must be a string',
-      })
-      .nonempty('accept-language cannot be empty')
-      .superRefine((val, ctx) => {
-        if (!LANGUAGE_CODES.includes(val)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Accept-Language '${val}' is not supported. Supported languages: ${LANGUAGE_CODES.join(', ')}`,
-            path: ['accept-language'],
-          });
-        }
+import { z } from 'zod';
+import { headerSchema } from './headerSchema.js';
+import { validate } from './validate.js';
+// /* SAVE USER CHANNELS VALIDATOR */
+export const addProductsToUserChannelValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  // Body schema
+  const bodySchema = z
+    .object({
+      channelId: z.number({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a number',
       }),
-  })
-  .passthrough();
+      productIds: z
+        .array(
+          z
+            .string()
+            .length(24, 'productId must be exactly 24 characters') // ensures fixed length
+            .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format') // ensures valid hex
+        )
+        .nonempty('productIds cannot be empty')
+        .refine(
+          (ids) => new Set(ids).size === ids.length, // ensures uniqueness
+          { message: 'Duplicate productIds are not allowed' }
+        ),
+    })
+    .strict();
+
+  bodySchema.parse(req.body);
+});
 
 // /* IMPORT PRODUCT BY GOOGLE SHEET VALIDATOR */
 export const importProductsFromGoogleSheetValidator = validate(async (req) => {

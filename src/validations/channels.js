@@ -1,18 +1,7 @@
-import { z, ZodError } from 'zod';
-import { errorResponse } from '#helpers/response.js';
+import { z } from 'zod';
+import { validate } from './validate.js';
 // Common language list
 import { LANGUAGE_CODES } from '#constants/common.js';
-const validate = (parseFn) => async (req, res, next) => {
-  try {
-    await parseFn(req);
-    return next();
-  } catch (error) {
-    console.error('Validation error:', error);
-    const message =
-      error instanceof ZodError ? error.issues[0]?.message || 'Invalid input' : error.message || 'Server Error';
-    return errorResponse(res, message, 400);
-  }
-};
 
 export const headerSchema = z
   .object({
@@ -67,6 +56,12 @@ export const getAllUserChannelsValidator = validate(async (req) => {
       .refine((val) => val > 0 && val <= 100, { message: 'limit must be between 1 and 100' }),
 
     search: z.string().optional(),
+
+    status: z.enum(['active', 'inactive', 'removed']).optional().default('active'),
+
+    sortBy: z.enum(['channelName', 'createdAt', 'ordersCount', 'productsCount']).optional().default('createdAt'),
+
+    sortOrder: z.enum(['asc', 'desc']).optional().default('asc'),
   });
 
   querySchema.parse(req.query);
