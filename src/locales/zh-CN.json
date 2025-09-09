@@ -7,8 +7,10 @@
   "UNAUTHORIZED": "未授权访问",
   "FORBIDDEN": "禁止的操作",
 
-  "CHANNELS_FOUND_SUCCESS": "成功找到频道",
   "CHANNELS_RETRIEVE_FAILED": "获取频道失败",
+  "CHANNELS_FOUND_SUCCESS": "找到频道",
+  "CHANNEL_FOUND_FAILED": "获取频道失败",
+  "CHANNEL_SAVED": "频道保存成功",
   "NO_CHANNEL_FOUND": "未找到频道",
   "CHANNEL_SAVE_FAILED": "保存频道失败",
   "CHANNEL_SAVED_SUCCESS": "频道保存成功",
