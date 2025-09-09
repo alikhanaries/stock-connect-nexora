@@ -1,6 +1,8 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
+import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
+import { PRODUCT_STATUSES } from '#constants/common.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -18,17 +20,37 @@ export const getProducts = async (req, res) => {
   }
 };
 
+export const getTopSellingProduct = async (req, res) => {
+  try {
+    const size = parseInt(req.query.size, 10);
+    const limit = Number.isInteger(size) && size > 0 ? size : 5;
+
+    const topProducts = await productService.getTopSellingProduct(limit);
+
+    const message =
+      topProducts.length > 0 ? 'Top-selling products fetched successfully' : 'No top-selling products found';
+    return successResponse(res, message, 200, topProducts);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    return errorResponse(res, error, 500);
+  }
+};
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
-    if (!req.body.url) {
-      return failResponse(res, 'Google Sheet URL required', 400);
-    }
     const { url } = req.body;
-    const result = await productService.importProductsFromGoogleSheet(url);
+    if (!req.body.url) {
+      return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
+    }
+
+    const exportUrl = await convertGoogleSheetUrlToExport(url);
+    if (!exportUrl) {
+      return failResponse(res, req.locale.INVALID_URL, 500);
+    }
+    const result = await productService.importProductsFromGoogleSheet(exportUrl);
     // Handle failure from service
     if (!result?.success) {
-      return failResponse(res, result?.message || 'Error in upload', 500);
+      return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
     }
 
     // Success response with details
@@ -51,7 +73,7 @@ export const importProductsFromCsvFile = async (req, res) => {
 
     // Handle failure from service
     if (!result?.success) {
-      return failResponse(res, result?.message || 'Error in upload', 500);
+      return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
     }
 
     // Success response with details
@@ -92,7 +114,7 @@ export const pushProductToChannelEngine = async (req, res) => {
 
 export const updateProductStatus = async (req, res) => {
   try {
-    const { ids, active } = req.body;
+    const { ids, status } = req.body;
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, 'Product IDs are required', 400);
     }
@@ -100,14 +122,16 @@ export const updateProductStatus = async (req, res) => {
     if (invalidIds.length > 0) {
       return failResponse(res, `Invalid product IDs: ${invalidIds.join(', ')}`, 400);
     }
-    if (typeof active !== 'boolean') {
-      return failResponse(res, 'Status must be true or false', 400);
+    const statusValue = status?.toString().toLowerCase();
+    if (!statusValue || !PRODUCT_STATUSES.includes(statusValue)) {
+      return failResponse(res, `Status must be one of: ${PRODUCT_STATUSES.join(', ')}`, 400);
     }
-    const updatedCount = await productService.updateProductStatus(ids, active);
+    const updatedCount = await productService.updateProductStatus(ids, status);
     if (updatedCount === 0) {
       return failResponse(res, 'No matching products found to update', 404);
     }
-    const statusMessage = active ? 'Products activated successfully' : 'Products deactivated successfully';
+    const statusMessage =
+      statusValue === 'active' ? 'Products activated successfully' : 'Products deactivated successfully';
     return successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating product status:', err);
@@ -117,17 +141,14 @@ export const updateProductStatus = async (req, res) => {
 /* DELETE PRODUCT BY ID*/
 export const deleteProduct = async (req, res) => {
   try {
-    const { prId } = req.params;
+    const { id } = req.params;
     //Validate ObjectId
-    if (!mongoose.Types.ObjectId.isValid(prId)) {
-      return failResponse(res, 'Invalid product ID', 400);
-    }
-    const result = await productService.deleteProduct(prId);
+    const result = await productService.deleteProduct(id, req.locale);
     if (!result.success) {
-      return failResponse(res, result.message || 'Failed to delete product', 400);
+      return failResponse(res, result.message || req.locale.PRODUCT_DELETE_FAILED, 400);
     }
 
-    return successResponse(res, 'Product deleted successfully', 200);
+    return successResponse(res, result.message || req.locale.PRODUCT_DELETE_SUCCESS, 200);
   } catch (error) {
     console.error('Error:', error);
     return errorResponse(res, error);
@@ -138,24 +159,25 @@ export const deleteProduct = async (req, res) => {
 export const deleteMultipleProducts = async (req, res) => {
   try {
     const { ids } = req.body;
-
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return failResponse(res, 'Product IDs are required', 400);
-    }
-
-    // Validate all IDs
-    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
-    if (invalidIds.length) {
-      return failResponse(res, `Invalid IDs: ${invalidIds.join(', ')}`, 400);
-    }
-    const result = await productService.deleteMultipleProducts(ids);
+    const result = await productService.deleteMultipleProducts(ids, req.locale);
     if (!result.success) {
-      return failResponse(res, result.message || 'Failed to delete product', 400);
+      return failResponse(res, result.message || req.locale.PRODUCT_DELETE_FAILED, 400);
     }
 
-    return successResponse(res, result.message || 'Product deleted successfully', 200);
+    return successResponse(res, result.message || req.locale.PRODUCT_DELETE_SUCCESS, 200);
   } catch (error) {
     console.error('Error:', error);
     return errorResponse(res, error);
   }
+};
+
+export default {
+  getProducts,
+  getTopSellingProduct,
+  importProductsFromGoogleSheet,
+  importProductsFromCsvFile,
+  pushProductToChannelEngine,
+  updateProductStatus,
+  deleteProduct,
+  deleteMultipleProducts,
 };

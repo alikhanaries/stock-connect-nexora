@@ -11,15 +11,13 @@ export const authMiddleware = async (req, res, next) => {
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
     }
-
     if (!token) {
-      return Responses.failResponse(res, 'Not authorized', 401);
+      return Responses.failResponse(res, 'Authentication token is required', 401);
     }
-
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
 
-      const user = await User.findById(decoded.id);
+      const user = await User.findById(decoded.id).lean();
       if (!user || user.isDeleted) {
         return Responses.failResponse(res, 'User unauthorized', 403);
       }
@@ -28,11 +26,11 @@ export const authMiddleware = async (req, res, next) => {
       next();
     } catch (error) {
       console.log('JWT verification error:', error.message);
-      return Responses.failResponse(res, 'Invalid Token', 401);
+      return Responses.failResponse(res, 'User unauthorized', 401);
     }
   } catch (error) {
-    console.error('authMiddleware Error:', error);
-    return Responses.errorResponse(res, error, 500);
+    console.log('authMiddleware error:', error.message);
+    return Responses.failResponse(res, 'Server error', 500);
   }
 };
 

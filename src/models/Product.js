@@ -21,8 +21,9 @@ const ProductSchema = new mongoose.Schema(
       default: 'STANDARD',
     },
     status: {
-      type: Boolean,
-      default: true,
+      type: String,
+      enum: ['active', 'deactive'],
+      default: 'active',
     },
     shippingCost: { type: Number, default: 0 },
     shippingTime: { type: String },
@@ -33,9 +34,10 @@ const ProductSchema = new mongoose.Schema(
     marketPlace: { type: String, trim: true },
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
-    isDelete: {
+    isDeleted: {
       type: Boolean,
       default: false,
+      required: true,
     },
   },
   { timestamps: true }
