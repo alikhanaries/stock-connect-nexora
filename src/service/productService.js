@@ -10,6 +10,7 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
+import mongoose from 'mongoose';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
@@ -185,7 +186,7 @@ async function* fetchBatchesFromDB() {
 }
 
 // 🔹 Push all products to CE
-export const pushProductsFromDB = async () => {
+const pushProductsFromDB = async () => {
   const limit = pLimit(MAX_CONCURRENT);
   const results = [];
 
@@ -411,7 +412,6 @@ const addProductsToUserChannel = async (userId, channelId, productIds, locale) =
       { _id: { $in: productIds } },
       { productSkuId: 1, productSkuCode: 1, _id: 1 }
     ).lean();
-
     if (products.length !== productIds.length) {
       return {
         success: false,
@@ -446,6 +446,67 @@ const addProductsToUserChannel = async (userId, channelId, productIds, locale) =
     throw new Error(err.message);
   }
 };
+
+const getUserUnassignedProducts = async (userId, channelId, query) => {
+  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
+  const currentPage = Math.max(1, Number(page));
+  const limit = Math.max(1, Number(size));
+  const assignedSku = await UserChannelProducts.findOne(
+    { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId), isActive: true },
+    { 'skuList.skuCode': 1 }
+  ).lean();
+
+  const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
+
+  const filter = { isDeleted: false };
+  const appliedFilters = {};
+
+  if (assignedSkuCodes.length > 0) {
+    filter.productSkuCode = { $nin: assignedSkuCodes };
+  }
+
+  if (status) {
+    const statusValue = status.toString().trim().toLowerCase();
+    if (PRODUCT_STATUSES.includes(statusValue)) {
+      filter.status = statusValue;
+      appliedFilters.status = statusValue;
+    }
+  }
+
+  if (minPrice || maxPrice) {
+    filter.price = {};
+    if (minPrice) {
+      filter.price.$gte = Number(minPrice);
+      appliedFilters.minPrice = filter.price.$gte;
+    }
+    if (maxPrice) {
+      filter.price.$lte = Number(maxPrice);
+      appliedFilters.maxPrice = filter.price.$lte;
+    }
+  }
+
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    filter.$or = [{ name: regex }, { productSkuCode: regex }];
+  }
+
+  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+  const total = await Product.countDocuments(filter);
+  const products = await Product.find(filter)
+    .sort(sort)
+    .skip((currentPage - 1) * limit)
+    .limit(limit)
+    .select('_id name status productSkuCode price msrp images')
+    .lean();
+
+  return {
+    products,
+    pagination: getPagination(total, currentPage, limit),
+    appliedFilters,
+  };
+};
+
 export default {
   fetchProducts,
   pushProductsFromDB,
@@ -455,5 +516,6 @@ export default {
   getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
+  getUserUnassignedProducts,
   addProductsToUserChannel,
 };
