@@ -1,6 +1,7 @@
 import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
 import mongoose from 'mongoose';
+import { VALID_PERIODS } from '#constants/common.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -80,5 +81,26 @@ export const getSyncedOrders = async (req, res) => {
     return Responses.successResponse(res, message, 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const getOrderComparison = async (req, res) => {
+  try {
+    const { period = 'week' } = req.query;
+    const lowercasedPeriod = period.toLowerCase();
+
+    if (!VALID_PERIODS.includes(lowercasedPeriod)) {
+      return Responses.failResponse(res, `Invalid period. Please use one of: ${VALID_PERIODS.join(', ')}`, 400);
+    }
+
+    const response = await orderService.getOrderComparison(lowercasedPeriod);
+    if (!response) {
+      return Responses.failResponse(res, 'Could not calculate order comparison data.', 404);
+    }
+
+    return Responses.successResponse(res, `${response.period} order comparison fetched successfully.`, 200, response);
+  } catch (error) {
+    console.error('Controller Error:', error.message);
+    return Responses.errorResponse(res, error.message, 500);
   }
 };

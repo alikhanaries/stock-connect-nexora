@@ -8,6 +8,7 @@ import {
   importProductsFromGoogleSheet,
   pushProductToChannelEngine,
   updateProductStatus,
+  addProductsToUserChannel,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import {
@@ -16,7 +17,7 @@ import {
   importProductsFromGoogleSheetValidator,
 } from '#validations/products.js';
 import express from 'express';
-
+import { addProductsToUserChannelValidator } from '#validations/products.js';
 import upload from '#helpers/FileHandler.js'; // the above multer setup
 
 const productsRouter = express.Router();
@@ -60,7 +61,15 @@ productsRouter.delete(
   authMiddleware,
   deleteMultipleProducts
 );
+/* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
+productsRouter.post(
+  '/addProductsToUserChannel',
+  addProductsToUserChannelValidator,
+  checkLanguage,
+  authMiddleware,
+  addProductsToUserChannel
+);
 
-productsRouter.get('/list-available-products/:marketPlaceId', authMiddleware, getUserUnassignedProducts);
+productsRouter.get('/get-user-unassigned-products/:channelId', authMiddleware, getUserUnassignedProducts);
 
 export default productsRouter;

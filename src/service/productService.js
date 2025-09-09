@@ -1,5 +1,6 @@
 import { config } from '#config/config.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 import Order from '#models/Orders.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import '#models/Category.js';
@@ -9,9 +10,8 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
-import { PRODUCT_STATUSES } from '#constants/common.js';
-import UserChannelProducts from '#models/UserChannelProducts.js';
 import mongoose from 'mongoose';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -71,14 +71,31 @@ const fetchProducts = async (query) => {
   };
 };
 
-const getTopSellingProduct = async (limit) => {
+const getTopSellingProduct = async (limit, channelNameSearch) => {
+  const filter = {
+    status: { $in: ORDER_STATUS_MATCH },
+  };
+  if (channelNameSearch) {
+    const searchRegex = new RegExp(channelNameSearch, 'i');
+    filter.channelName = searchRegex;
+  }
+
   const topProducts = await Order.aggregate([
-    { $unwind: '$skus' },
+    { $match: filter },
+    {
+      $project: {
+        _id: 0,
+        channelName: 1,
+        orderSkuList: '$orderSkuList.skuList',
+      },
+    },
+    { $unwind: '$orderSkuList' },
 
     {
       $group: {
-        _id: '$skus.merchantProductNo',
-        totalQuantitySold: { $sum: '$skus.quantity' },
+        _id: '$orderSkuList.merchantProductNo',
+        totalQuantitySold: { $sum: '$orderSkuList.quantity' },
+        channelName: { $first: '$channelName' },
       },
     },
 
@@ -103,12 +120,12 @@ const getTopSellingProduct = async (limit) => {
         _id: '$productDetails._id',
         sku: '$_id',
         totalQuantitySold: 1,
+        channelName: 1,
         productName: '$productDetails.name',
         imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
       },
     },
-  ]);
-
+  ]).allowDiskUse(true);
   return topProducts;
 };
 
@@ -332,7 +349,7 @@ export const importProductsFromGoogleSheet = async (url) => {
     return await processImportStream(stream);
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message); // force the catch block
   }
 };
 
@@ -343,7 +360,7 @@ export const importProductsFromCsvFile = async (filePath) => {
     return await processImportStream(stream, { deleteAfter: true, filePath });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message); // force the catch block
   }
 };
 
@@ -362,7 +379,7 @@ const deleteProduct = async (id, locale) => {
     return { success: true, data: result };
   } catch (err) {
     console.error('Service error in saveUserChannels:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message); // force the catch block
   }
 };
 
@@ -384,30 +401,62 @@ const deleteMultipleProducts = async (ids, locale) => {
     };
   } catch (err) {
     console.error('Service error in deleteMultipleProducts:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message); // force the catch block
+  }
+};
+/* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
+const addProductsToUserChannel = async (userId, channelId, productIds, locale) => {
+  try {
+    //  Check they exist in Product collection
+    const products = await Product.find(
+      { _id: { $in: productIds } },
+      { productSkuId: 1, productSkuCode: 1, _id: 1 }
+    ).lean();
+    if (products.length !== productIds.length) {
+      return {
+        success: false,
+        message: locale.PRODUCT_NOT_EXITS,
+      };
+    }
+
+    //  Prepare skuList objects
+    const skuList = products.map((p) => ({
+      skuId: p.productSkuId,
+      skuCode: p.productSkuCode,
+    }));
+
+    if (skuList.length === 0) {
+      return {
+        success: false,
+        message: locale.INVALID_PRODUCTS,
+      };
+    }
+
+    await UserChannelProducts.findOneAndUpdate(
+      { userId, channelId },
+      { $addToSet: { skuList: { $each: skuList } } },
+      { upsert: true, new: false }
+    );
+
+    return {
+      success: true,
+    };
+  } catch (err) {
+    console.error('Service error in deleteMultipleProducts:', err);
+    throw new Error(err.message);
   }
 };
 
-const getUserUnassignedProducts = async (userId, marketPlaceId, query) => {
+const getUserUnassignedProducts = async (userId, channelId, query) => {
   const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
-
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
+  const assignedSku = await UserChannelProducts.findOne(
+    { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId), isActive: true },
+    { 'skuList.skuCode': 1 }
+  ).lean();
 
-  const assignedSku = await UserChannelProducts.aggregate([
-    {
-      $match: {
-        userId: new mongoose.Types.ObjectId(userId),
-        marketPlaceId: Number(marketPlaceId),
-        isActive: true,
-      },
-    },
-    { $unwind: '$skuList' },
-    { $group: { _id: null, skuCodes: { $addToSet: '$skuList.skuCode' } } },
-    { $project: { _id: 0, skuCodes: 1 } },
-  ]);
-
-  const assignedSkuCodes = assignedSku.length > 0 ? assignedSku[0].skuCodes : [];
+  const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
 
   const filter = { isDeleted: false };
   const appliedFilters = {};
@@ -468,4 +517,5 @@ export default {
   updateProductStatus,
   deleteMultipleProducts,
   getUserUnassignedProducts,
+  addProductsToUserChannel,
 };
