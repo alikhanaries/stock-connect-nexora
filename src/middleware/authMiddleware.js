@@ -34,15 +34,12 @@ export const authMiddleware = async (req, res, next) => {
   }
 };
 
-// Role-based authorization
-export const authorize = (...roles) => {
+export const roleAuthorize = (roles) => {
   return (req, res, next) => {
     try {
-      // bypass superadmin role check
-      if (req.user.role === 'super_admin') {
+      if (req.user.role === 'platform_master') {
         return next();
       }
-      // Check if user role is included in the allowed roles
       if (!roles.includes(req.user.role)) {
         return Responses.errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
       }
