@@ -7,6 +7,7 @@ export const STATUS_MESSAGES = { active: 'activated', deactive: 'deactivated', r
 export const LANGUAGE_CODES = ['en', 'ar', 'zh-CN', 'tr'];
 
 export const PRODUCT_STATUSES = ['active', 'deactive'];
+export const ORDER_STATUS_MATCH = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'CLOSED'];
 
 export const ORDER_STATUS_MAP = {
   NEW: 'NEW',

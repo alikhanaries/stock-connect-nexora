@@ -10,7 +10,7 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
-import { PRODUCT_STATUSES } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -70,14 +70,31 @@ const fetchProducts = async (query) => {
   };
 };
 
-const getTopSellingProduct = async (limit) => {
+const getTopSellingProduct = async (limit, channelNameSearch) => {
+  const filter = {
+    status: { $in: ORDER_STATUS_MATCH },
+  };
+  if (channelNameSearch) {
+    const searchRegex = new RegExp(channelNameSearch, 'i');
+    filter.channelName = searchRegex;
+  }
+
   const topProducts = await Order.aggregate([
-    { $unwind: '$skus' },
+    { $match: filter },
+    {
+      $project: {
+        _id: 0,
+        channelName: 1,
+        orderSkuList: '$orderSkuList.skuList',
+      },
+    },
+    { $unwind: '$orderSkuList' },
 
     {
       $group: {
-        _id: '$skus.merchantProductNo',
-        totalQuantitySold: { $sum: '$skus.quantity' },
+        _id: '$orderSkuList.merchantProductNo',
+        totalQuantitySold: { $sum: '$orderSkuList.quantity' },
+        channelName: { $first: '$channelName' },
       },
     },
 
@@ -102,12 +119,12 @@ const getTopSellingProduct = async (limit) => {
         _id: '$productDetails._id',
         sku: '$_id',
         totalQuantitySold: 1,
+        channelName: 1,
         productName: '$productDetails.name',
         imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
       },
     },
-  ]);
-
+  ]).allowDiskUse(true);
   return topProducts;
 };
 
