@@ -174,8 +174,8 @@ export const deleteMultipleProducts = async (req, res) => {
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 export const addProductsToUserChannel = async (req, res) => {
   try {
-    const { userId, channelId, productsList } = req.body;
-
+    const { channelId, productsList } = req.body;
+    const userId = req.user._id;
     // Check if user exists
     const user = await User.findById(userId);
     if (!user) {

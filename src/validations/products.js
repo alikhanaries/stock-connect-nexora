@@ -7,19 +7,10 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
   // Body schema
   const bodySchema = z
     .object({
-      userId: z
-        .string({
-          required_error: 'userId is required',
-          invalid_type_error: 'userId must be a string',
-        })
-        .length(24, 'userId must be 24 characters long')
-        .regex(/^[0-9a-fA-F]+$/, 'userId must be a hex string'),
-
       channelId: z.number({
         required_error: 'channelId is required',
         invalid_type_error: 'channelId must be a number',
       }),
-
       productsList: z
         .array(
           z.object({
