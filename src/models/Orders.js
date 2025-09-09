@@ -91,6 +91,7 @@ const OrderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+OrderSchema.index({ status: 1, createdAt: -1 });
 const Order = mongoose.model('ChannelEngineOrder', OrderSchema);
 
 export default Order;
