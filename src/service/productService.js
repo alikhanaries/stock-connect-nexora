@@ -348,7 +348,7 @@ export const importProductsFromGoogleSheet = async (url) => {
     return await processImportStream(stream);
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message); // force the catch block
   }
 };
 
@@ -359,7 +359,7 @@ export const importProductsFromCsvFile = async (filePath) => {
     return await processImportStream(stream, { deleteAfter: true, filePath });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message); // force the catch block
   }
 };
 
@@ -378,7 +378,7 @@ const deleteProduct = async (id, locale) => {
     return { success: true, data: result };
   } catch (err) {
     console.error('Service error in saveUserChannels:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message); // force the catch block
   }
 };
 
@@ -400,7 +400,7 @@ const deleteMultipleProducts = async (ids, locale) => {
     };
   } catch (err) {
     console.error('Service error in deleteMultipleProducts:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message); // force the catch block
   }
 };
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */

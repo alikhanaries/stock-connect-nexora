@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService, { pushProductsFromDB } from '#service/productService.js';
+import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import User from '../models/User.js';
@@ -191,6 +192,7 @@ export const addProductsToUserChannel = async (req, res) => {
     return successResponse(res, req.locale.PRODUCT_ASSIGNED_SUCCESS, 200);
   } catch (error) {
     console.error('Error:', error);
+    errorLog(error);
     return errorResponse(res, error);
   }
 };
