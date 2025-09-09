@@ -1,6 +1,7 @@
 import { config } from '../config/config.js';
 import mongoose from 'mongoose';
 import Channel from '../models/Channel.js';
+import { getPagination } from '#helpers/PaginationHandler.js';
 import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
 // Access ObjectId from mongoose
@@ -112,19 +113,40 @@ const saveUserChannels = async (userId, channelIds) => {
 };
 
 /** FUNC - GET USER CHANNEL LIST */
-export const getAllUserChannels = async (userId, { page = 1, limit = 10, search = '' }) => {
+export const getAllUserChannels = async (userId, query) => {
   try {
-    const objectId = new mongoose.Types.ObjectId(userId);
+    const { page = 1, limit = 10, status = 'active', search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
     const skip = (page - 1) * limit;
     const parsedLimit = parseInt(limit);
+    const currentPage = Math.max(1, Number(page));
 
+    const appliedFilters = {};
+    if (status) {
+      appliedFilters.status = status;
+    }
+    const data = await UserChannels.aggregate([
+      {
+        $project: {
+          _id: 1, // keep the _id (or any other fields you want)
+          userId: 1, // example field
+          channelIds: {
+            $filter: {
+              input: '$channelIds',
+              as: 'channel',
+              cond: { $eq: ['$$channel.status', 'removed'] },
+            },
+          },
+        },
+      },
+    ]);
+    console.log('data', data[0]);
     const pipeline = [
-      { $match: { userId: objectId, isActive: true } },
+      { $match: { userId: new ObjectId(userId), isActive: true } },
 
-      // Expand channelIds
       { $unwind: '$channelIds' },
+      // Fetch only removed channels
+      { $match: { 'channelIds.status': 'active' } },
 
-      // Join channels collection
       {
         $lookup: {
           from: 'channels',
@@ -135,10 +157,9 @@ export const getAllUserChannels = async (userId, { page = 1, limit = 10, search 
       },
       { $unwind: '$channelDetails' },
 
-      // Apply search filter if provided
       ...(search ? [{ $match: { 'channelDetails.channelName': { $regex: search, $options: 'i' } } }] : []),
 
-      // Lookup orders count
+      // Orders count
       {
         $lookup: {
           from: 'orders',
@@ -148,7 +169,7 @@ export const getAllUserChannels = async (userId, { page = 1, limit = 10, search 
         },
       },
 
-      // Lookup products count
+      // Products count
       {
         $lookup: {
           from: 'channelproducts',
@@ -158,7 +179,6 @@ export const getAllUserChannels = async (userId, { page = 1, limit = 10, search 
         },
       },
 
-      // Flatten fields
       {
         $project: {
           _id: 0,
@@ -175,6 +195,8 @@ export const getAllUserChannels = async (userId, { page = 1, limit = 10, search 
           },
         },
       },
+
+      { $sort: { [`channel.${sortBy}`]: sortOrder === 'asc' ? 1 : -1 } },
     ];
 
     // First pipeline for paginated data
@@ -189,20 +211,17 @@ export const getAllUserChannels = async (userId, { page = 1, limit = 10, search 
     ]);
 
     const total = totalResult.length > 0 ? totalResult[0].total : 0;
-
-    if (total === 0) {
-      return { success: false, message: 'No channels found' };
-    }
-
     return {
-      success: true,
+      success: total === 0 ? false : true,
       channelData: {
         userId,
         total,
         page: parseInt(page),
         limit: parsedLimit,
-        contents: channels.map((ch) => ch.channel),
+        content: channels.map((ch) => ch.channel),
       },
+      pagination: getPagination(total, currentPage, limit),
+      appliedFilters,
     };
   } catch (err) {
     console.error('Error in getAllUserChannels:', err);

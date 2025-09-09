@@ -67,6 +67,12 @@ export const getAllUserChannelsValidator = validate(async (req) => {
       .refine((val) => val > 0 && val <= 100, { message: 'limit must be between 1 and 100' }),
 
     search: z.string().optional(),
+
+    status: z.enum(['active', 'inactive', 'removed']).optional().default('active'),
+
+    sortBy: z.enum(['channelName', 'createdAt', 'ordersCount', 'productsCount']).optional().default('createdAt'),
+
+    sortOrder: z.enum(['asc', 'desc']).optional().default('asc'),
   });
 
   querySchema.parse(req.query);
