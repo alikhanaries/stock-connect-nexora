@@ -21,7 +21,6 @@ export const headerSchema = z
         required_error: 'Authorization header is required',
         invalid_type_error: 'Authorization must be a string',
       })
-      // .nonempty('accept-language cannot be empty2'),
       .nonempty('Authorization header cannot be empty'),
 
     'accept-language': z
