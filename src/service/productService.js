@@ -9,7 +9,7 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
-import { PRODUCT_STATUSES } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -71,7 +71,7 @@ const fetchProducts = async (query) => {
 
 const getTopSellingProduct = async (limit, channelNameSearch) => {
   const filter = {
-    status: { $in: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'CLOSED'] },
+    status: { $in: ORDER_STATUS_MATCH },
   };
   if (channelNameSearch) {
     const searchRegex = new RegExp(channelNameSearch, 'i');
