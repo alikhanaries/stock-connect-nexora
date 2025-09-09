@@ -19,7 +19,7 @@ export const authMiddleware = async (req, res, next) => {
 
       const user = await User.findById(decoded.id).lean();
       if (!user || user.isDeleted) {
-        return Responses.failResponse(res, 'User not found', 401);
+        return Responses.failResponse(res, 'User unauthorized', 403);
       }
       console.timeEnd('authMiddleware');
       req.user = user;
@@ -44,14 +44,12 @@ export const authorize = (...roles) => {
       }
       // Check if user role is included in the allowed roles
       if (!roles.includes(req.user.role)) {
-        return res.status(403).json({
-          message: `User role ${req.user.role} is not authorized to access this route`,
-        });
+        return Responses.errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
       }
       next();
     } catch (error) {
       console.log('authorize middleware error:', error.message);
-      return res.status(500).json({ message: 'Server error' });
+      return Responses.errorResponse(res, 'Server error', 500);
     }
   };
 };
