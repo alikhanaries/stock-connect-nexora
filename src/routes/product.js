@@ -1,16 +1,17 @@
 import {
+  deleteMultipleProducts,
+  deleteProduct,
   getProducts,
   getTopSellingProduct,
+  getUserUnassignedProducts,
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
   pushProductToChannelEngine,
   updateProductStatus,
-  deleteMultipleProducts,
-  deleteProduct,
   getUserChannelProducts,
   addProductsToUserChannel,
 } from '#controllers/ProductController.js';
-import { authMiddleware, validateFile, checkLanguage } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import {
   deleteMultipleProductsValidator,
   importProductsFromCsvFileValidator,
@@ -71,4 +72,7 @@ productsRouter.post(
 );
 
 productsRouter.get('/user-channel-products/:channelId', authMiddleware, getUserChannelProducts);
+
+productsRouter.get('/get-user-unassigned-products/:channelId', authMiddleware, getUserUnassignedProducts);
+
 export default productsRouter;
