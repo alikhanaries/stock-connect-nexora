@@ -171,14 +171,14 @@ export const deleteMultipleProducts = async (req, res) => {
   }
 };
 
-export const getUnassignedProducts = async (req, res) => {
+export const getUserUnassignedProducts = async (req, res) => {
   try {
     const { marketPlaceId } = req.params;
     const userId = req.user?._id;
     if (!marketPlaceId) {
       return errorResponse(res, { message: 'marketPlaceId is required' }, 400);
     }
-    const { products, pagination, appliedFilters } = await productService.getUnassignedProducts(
+    const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
       userId,
       marketPlaceId,
       req.query
@@ -208,5 +208,5 @@ export default {
   updateProductStatus,
   deleteProduct,
   deleteMultipleProducts,
-  getUnassignedProducts,
+  getUserUnassignedProducts,
 };

@@ -3,7 +3,7 @@ import {
   deleteProduct,
   getProducts,
   getTopSellingProduct,
-  getUnassignedProducts,
+  getUserUnassignedProducts,
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
   pushProductToChannelEngine,
@@ -61,6 +61,6 @@ productsRouter.delete(
   deleteMultipleProducts
 );
 
-productsRouter.get('/list-available-products/:marketPlaceId', authMiddleware, getUnassignedProducts);
+productsRouter.get('/list-available-products/:marketPlaceId', authMiddleware, getUserUnassignedProducts);
 
 export default productsRouter;

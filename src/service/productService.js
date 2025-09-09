@@ -388,24 +388,34 @@ const deleteMultipleProducts = async (ids, locale) => {
   }
 };
 
-const getUnassignedProducts = async (userId, marketPlaceId, query) => {
-  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+const getUserUnassignedProducts = async (userId, marketPlaceId, query) => {
+  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const assignedSkuCodes = await UserChannelProducts.distinct('skuList.skuCode', {
-    userId: new mongoose.Types.ObjectId(userId),
-    marketPlaceId: Number(marketPlaceId),
-    isActive: true,
-  });
+  const assignedSku = await UserChannelProducts.aggregate([
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
+        marketPlaceId: Number(marketPlaceId),
+        isActive: true,
+      },
+    },
+    { $unwind: '$skuList' },
+    { $group: { _id: null, skuCodes: { $addToSet: '$skuList.skuCode' } } },
+    { $project: { _id: 0, skuCodes: 1 } },
+  ]);
+
+  const assignedSkuCodes = assignedSku.length > 0 ? assignedSku[0].skuCodes : [];
 
   const filter = { isDeleted: false };
   const appliedFilters = {};
 
-  if (assignedSkuCodes.length > 0) filter.productSkuCode = { $nin: assignedSkuCodes };
+  if (assignedSkuCodes.length > 0) {
+    filter.productSkuCode = { $nin: assignedSkuCodes };
+  }
 
-  // Status filter
   if (status) {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
@@ -414,31 +424,32 @@ const getUnassignedProducts = async (userId, marketPlaceId, query) => {
     }
   }
 
-  // Price filter
   if (minPrice || maxPrice) {
     filter.price = {};
-    if (minPrice) ((filter.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
-    if (maxPrice) ((filter.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
+    if (minPrice) {
+      filter.price.$gte = Number(minPrice);
+      appliedFilters.minPrice = filter.price.$gte;
+    }
+    if (maxPrice) {
+      filter.price.$lte = Number(maxPrice);
+      appliedFilters.maxPrice = filter.price.$lte;
+    }
   }
 
-  // Search filter
   if (search) {
     const regex = new RegExp(search, 'i');
     filter.$or = [{ name: regex }, { productSkuCode: regex }];
   }
 
-  // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-  const [total, products] = await Promise.all([
-    Product.countDocuments(filter),
-    Product.find(filter)
-      .sort(sort)
-      .skip((currentPage - 1) * limit)
-      .limit(limit)
-      .select('_id name status productSkuCode price msrp images')
-      .lean(),
-  ]);
+  const total = await Product.countDocuments(filter);
+  const products = await Product.find(filter)
+    .sort(sort)
+    .skip((currentPage - 1) * limit)
+    .limit(limit)
+    .select('_id name status productSkuCode price msrp images')
+    .lean();
 
   return {
     products,
@@ -456,5 +467,5 @@ export default {
   getTopSellingProduct,
   updateProductStatus,
   deleteMultipleProducts,
-  getUnassignedProducts,
+  getUserUnassignedProducts,
 };
