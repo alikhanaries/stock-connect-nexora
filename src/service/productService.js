@@ -389,7 +389,7 @@ const deleteMultipleProducts = async (ids, locale) => {
 };
 
 export const getUserChannelProducts = async (userId, channelId, query) => {
-  const { page = 1, size = 10, search, sortBy = 'createdAt', sortOrder = 'asc', status, minPrice, maxPrice } = query;
+  const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const appliedFilters = {};
