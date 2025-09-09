@@ -8,6 +8,7 @@ import {
   importProductsFromGoogleSheet,
   pushProductToChannelEngine,
   updateProductStatus,
+  getUserChannelProducts,
   addProductsToUserChannel,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
@@ -69,6 +70,8 @@ productsRouter.post(
   authMiddleware,
   addProductsToUserChannel
 );
+
+productsRouter.get('/user-channel-products/:channelId', authMiddleware, getUserChannelProducts);
 
 productsRouter.get('/get-user-unassigned-products/:channelId', authMiddleware, getUserUnassignedProducts);
 
