@@ -80,12 +80,19 @@ const getTopSellingProduct = async (limit, channelNameSearch) => {
 
   const topProducts = await Order.aggregate([
     { $match: filter },
-    { $unwind: '$orderSkuList.skuList' },
+    {
+      $project: {
+        _id: 0,
+        channelName: 1,
+        orderSkuList: '$orderSkuList.skuList',
+      },
+    },
+    { $unwind: '$orderSkuList' },
 
     {
       $group: {
-        _id: '$orderSkuList.skuList.merchantProductNo',
-        totalQuantitySold: { $sum: '$orderSkuList.skuList.quantity' },
+        _id: '$orderSkuList.merchantProductNo',
+        totalQuantitySold: { $sum: '$orderSkuList.quantity' },
         channelName: { $first: '$channelName' },
       },
     },
@@ -116,7 +123,7 @@ const getTopSellingProduct = async (limit, channelNameSearch) => {
         imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
       },
     },
-  ]);
+  ]).allowDiskUse(true);
   return topProducts;
 };
 
