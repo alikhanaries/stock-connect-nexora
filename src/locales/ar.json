@@ -2,17 +2,15 @@
   "SUCCESS": "تمت العملية بنجاح",
   "ERROR": "حدث خطأ ما",
   "NOT_FOUND": "المورد المطلوب غير موجود",
+  "INVALID_INPUT": "تم تقديم إدخال غير صالح",
   "VALIDATION_ERROR": "فشل التحقق",
   "UNAUTHORIZED": "وصول غير مصرح به",
   "FORBIDDEN": "إجراء محظور",
 
-  "CHANNELS_RETRIEVE_FAILED": "فشل في جلب القنوات",
-  "INVALID_INPUT": "تم إدخال بيانات غير صالحة",
-  "CHANNELS_FOUND_SUCCESS": "تم العثور على القنوات",
-  "CHANNEL_FOUND_FAILED": "فشل استرجاع القنوات",
-  "NO_CHANNEL_FOUND": "لم يتم العثور على أي قناة",
-  "USERID_CHANNELID_REQUIRED": "معرّف المستخدم ومعرّفات القنوات مطلوبة",
-  "CHANNEL_SAVE_FAILED": "فشل حفظ القنوات",
+  "CHANNELS_FOUND_SUCCESS": "تم العثور على القنوات بنجاح",
+  "CHANNELS_RETRIEVE_FAILED": "فشل في استرجاع القنوات",
+  "NO_CHANNEL_FOUND": "لم يتم العثور على قناة",
+  "CHANNEL_SAVE_FAILED": "فشل في حفظ القنوات",
   "CHANNEL_SAVED_SUCCESS": "تم حفظ القنوات بنجاح",
 
   "USER_CHANNELS_FOUND": "تم العثور على قنوات المستخدم",
@@ -25,7 +23,10 @@
   "PRODUCT_DELETE_SUCCESS": "تم حذف المنتج بنجاح",
   "PRODUCT_IMPORT_ERROR": "خطأ في التحميل",
   "PRODUCT_NOT_FOUND": "المنتج غير موجود",
-  "PRODUCT_MARKED_DELETED": "تم وضع علامة محذوف على المنتجات بنجاح",
-  "FAILED_FETCHING_SHEET": "فشل في جلب الجدول",
-  "GOOGLE_SHEET_URL_REQUIRED": "رابط Google Sheet مطلوب"
+  "PRODUCT_MARKED_DELETED": "تم وضع علامة محذوفة على المنتجات بنجاح",
+  "FAILED_FETCHING_SHEET": "فشل في جلب الصفحة",
+  "GOOGLE_SHEET_URL_REQUIRED": "رابط جدول Google مطلوب",
+  "INVALID_URL": "رابط غير صالح",
+  "PRODUCT_NOT_EXITS": "بعض معرّفات المنتجات غير موجودة في مجموعة المنتجات",
+  "INVALID_PRODUCTS": "لم يتم العثور على منتجات صالحة لمعرفات المنتجات المقدمة"
 }

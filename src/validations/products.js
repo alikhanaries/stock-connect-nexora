@@ -11,20 +11,18 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
         required_error: 'channelId is required',
         invalid_type_error: 'channelId must be a number',
       }),
-      productsList: z
+      productIds: z
         .array(
-          z.object({
-            skuCode: z.string({
-              required_error: 'skuCode is required',
-              invalid_type_error: 'skuCode must be a string',
-            }),
-            skuId: z.string({
-              required_error: 'skuId is required',
-              invalid_type_error: 'skuId must be a string',
-            }),
-          })
+          z
+            .string()
+            .length(24, 'productId must be exactly 24 characters') // ensures fixed length
+            .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format') // ensures valid hex
         )
-        .nonempty('productsList cannot be empty'),
+        .nonempty('productIds cannot be empty')
+        .refine(
+          (ids) => new Set(ids).size === ids.length, // ensures uniqueness
+          { message: 'Duplicate productIds are not allowed' }
+        ),
     })
     .strict();
 

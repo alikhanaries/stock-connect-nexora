@@ -26,5 +26,7 @@
   "PRODUCT_MARKED_DELETED": "products marked as deleted successfully",
   "FAILED_FETCHING_SHEET": "Failed to fetch sheet",
   "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL required",
-  "INVALID_URL": "Invalid url"
+  "INVALID_URL": "Invalid url",
+  "PRODUCT_NOT_EXITS": "Some productIds do not exist in Product collection",
+  "INVALID_PRODUCTS": "No valid products found for given productIds"
 }

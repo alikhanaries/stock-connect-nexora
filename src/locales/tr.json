@@ -1,17 +1,15 @@
 {
   "SUCCESS": "İşlem başarıyla tamamlandı",
-  "ERROR": "Bir şeyler yanlış gitti",
+  "ERROR": "Bir şeyler ters gitti",
   "NOT_FOUND": "İstenen kaynak bulunamadı",
-  "INVALID_INPUT": "Geçersiz girdi sağlandı",
-  "VALIDATION_ERROR": "Doğrulama başarısız oldu",
+  "INVALID_INPUT": "Geçersiz giriş sağlandı",
+  "VALIDATION_ERROR": "Doğrulama başarısız",
   "UNAUTHORIZED": "Yetkisiz erişim",
-  "FORBIDDEN": "Yasak işlem",
+  "FORBIDDEN": "Yasaklanmış işlem",
 
   "CHANNELS_FOUND_SUCCESS": "Kanallar başarıyla bulundu",
   "CHANNELS_RETRIEVE_FAILED": "Kanallar alınamadı",
   "NO_CHANNEL_FOUND": "Kanal bulunamadı",
-  "CHANNEL_FOUND_FAILED": "Kanallar alınamadı",
-  "USERID_CHANNELID_REQUIRED": "userId ve channelIds gereklidir",
   "CHANNEL_SAVE_FAILED": "Kanallar kaydedilemedi",
   "CHANNEL_SAVED_SUCCESS": "Kanallar başarıyla kaydedildi",
 
@@ -20,12 +18,15 @@
 
   "PRODUCT_ASSIGNED_SUCCESS": "Ürün başarıyla atandı",
   "PRODUCT_ASSIGNED_FAILED": "Ürün atanamadı",
-  "PRODUCTIDS_REQUIRED": "Ürün kimlikleri gereklidir",
+  "PRODUCTIDS_REQUIRED": "Ürün kimlikleri gerekli",
   "PRODUCT_DELETE_FAILED": "Ürün silinemedi",
   "PRODUCT_DELETE_SUCCESS": "Ürün başarıyla silindi",
   "PRODUCT_IMPORT_ERROR": "Yükleme hatası",
   "PRODUCT_NOT_FOUND": "Ürün bulunamadı",
-  "PRODUCT_MARKED_DELETED": "Ürünler başarıyla silinmiş olarak işaretlendi",
-  "FAILED_FETCHING_SHEET": "Tablo alınamadı",
-  "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL’si gerekli"
+  "PRODUCT_MARKED_DELETED": "Ürünler başarıyla silindi olarak işaretlendi",
+  "FAILED_FETCHING_SHEET": "Sayfa alınamadı",
+  "GOOGLE_SHEET_URL_REQUIRED": "Google Sayfa URL'si gerekli",
+  "INVALID_URL": "Geçersiz URL",
+  "PRODUCT_NOT_EXITS": "Bazı ürün kimlikleri Ürün koleksiyonunda bulunmamaktadır",
+  "INVALID_PRODUCTS": "Verilen ürün kimlikleri için geçerli ürün bulunamadı"
 }

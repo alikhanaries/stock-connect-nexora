@@ -387,14 +387,43 @@ const deleteMultipleProducts = async (ids, locale) => {
   }
 };
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-const addProductsToUserChannel = async (userId, channelId, skuList) => {
+const addProductsToUserChannel = async (userId, channelId, productIds, locale) => {
   try {
+    //  Check they exist in Product collection
+    const products = await Product.find(
+      { _id: { $in: productIds } },
+      { productSkuId: 1, productSkuCode: 1, _id: 1 }
+    ).lean();
+
+    if (products.length !== productIds.length) {
+      return {
+        success: false,
+        message: locale.PRODUCT_NOT_EXITS,
+      };
+    }
+
+    //  Prepare skuList objects
+    const skuList = products.map((p) => ({
+      skuId: p.productSkuId,
+      skuCode: p.productSkuCode,
+    }));
+
+    if (skuList.length === 0) {
+      return {
+        success: false,
+        message: locale.INVALID_PRODUCTS,
+      };
+    }
+
     await UserChannelProducts.findOneAndUpdate(
       { userId, channelId },
-      { $addToSet: { skuList: { $each: skuList } } }, // prevents duplicate SKUs
-      { upsert: true, new: true }
+      { $addToSet: { skuList: { $each: skuList } } },
+      { upsert: true, new: false }
     );
-    return true;
+
+    return {
+      success: true,
+    };
   } catch (err) {
     console.error('Service error in deleteMultipleProducts:', err);
     throw new Error(err.message);
