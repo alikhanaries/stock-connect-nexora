@@ -131,7 +131,7 @@ export const updateProductStatus = async (req, res) => {
       return failResponse(res, 'No matching products found to update', 404);
     }
     const statusMessage =
-      statusValue === 'active' ? 'Products activated successfully' : 'Products deactivated successfully';
+      statusValue === 'active' ? 'Products activated successfully' : 'Products inactivated successfully';
     return successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating product status:', err);
