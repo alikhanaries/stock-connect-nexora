@@ -1,10 +1,10 @@
+import { ROLES_BASED_USER_CRETATION } from '#constants/common.js';
+
 const userRoleBasedAccess = (creatorRole, newUserRole) => {
-  if (creatorRole === 'seller_admin') {
-    return false;
-  } else if (creatorRole === 'brand_super_admin' && newUserRole === 'platform_master') {
-    return false;
+  if (ROLES_BASED_USER_CRETATION[creatorRole]) {
+    return ROLES_BASED_USER_CRETATION[creatorRole].includes(newUserRole);
   }
-  return true;
+  return false;
 };
 
 export default { userRoleBasedAccess };

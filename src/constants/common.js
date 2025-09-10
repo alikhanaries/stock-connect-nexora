@@ -8,6 +8,12 @@ export const LANGUAGE_CODES = ['en', 'ar', 'zh-CN', 'tr'];
 
 export const PRODUCT_STATUSES = ['active', 'deactive'];
 
+export const ROLES_BASED_USER_CRETATION = {
+  platform_master: ['platform_master', 'brand_super_admin', 'seller_admin'],
+  brand_super_admin: ['brand_super_admin', 'seller_admin'],
+  seller_admin: [],
+};
+
 export const ORDER_STATUS_MAP = {
   NEW: 'NEW',
   IN_PROGRESS: 'IN_PROGRESS',
