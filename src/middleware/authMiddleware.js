@@ -34,7 +34,7 @@ export const authMiddleware = async (req, res, next) => {
   }
 };
 
-export const roleAuthorize = (roles) => {
+export const authorize = (roles) => {
   return (req, res, next) => {
     try {
       if (req.user.role === 'platform_master') {
