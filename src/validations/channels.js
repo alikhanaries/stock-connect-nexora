@@ -78,30 +78,20 @@ export const getAllChannelsValidator = validate(async (req) => {
 export const saveUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
   // Body schema
+
   const bodySchema = z
     .object({
-      userId: z
-        .string({
-          required_error: 'userId is required',
-          invalid_type_error: 'userId must be a string',
-        })
-        .refine((val) => val.length === 24, {
-          message: 'userId must be 24 characters long',
-        })
-        .refine((val) => /^[0-9a-fA-F]+$/.test(val), {
-          message: 'userId must be a hex string',
-        }),
-
-      channelIds: z
+      ids: z
         .array(
-          z
-            .string()
-            .length(24, 'Each channelId must be 24 characters') // ObjectId length
-            .regex(/^[0-9a-fA-F]+$/, 'Each channelId must be a hex string')
+          z.union([
+            z.number().int().positive('channelId must be a positive integer'),
+            z.string().regex(/^\d+$/, 'channelId must be a number string'),
+          ])
         )
         .min(1, 'channelIds must not be empty')
-        .refine((arr) => new Set(arr).size === arr.length, 'channelIds must be unique'),
+        .refine((arr) => new Set(arr.map(String)).size === arr.length, 'channelIds must be unique'),
     })
     .strict();
+
   bodySchema.parse(req.body);
 });

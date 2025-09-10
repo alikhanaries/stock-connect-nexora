@@ -88,7 +88,7 @@ const saveUserChannels = async (userId, channelIds) => {
         throw new Error(`Invalid channelId: ${id}`);
       }
       return {
-        id: new ObjectId(id),
+        id,
         status: 'active', // default
       };
     });
@@ -136,7 +136,7 @@ export const getAllUserChannels = async (userId, query) => {
         $lookup: {
           from: 'channels',
           localField: 'channelIds.id',
-          foreignField: '_id',
+          foreignField: 'channelId',
           as: 'channelDetails',
         },
       },

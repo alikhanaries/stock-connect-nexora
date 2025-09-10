@@ -4,8 +4,9 @@ import mongoose from 'mongoose';
 const channelSubSchema = new mongoose.Schema(
   {
     id: {
-      type: mongoose.Schema.Types.ObjectId,
+      type: Number,
       required: true,
+      index: true,
       ref: 'Channel',
     },
     status: {
@@ -13,6 +14,7 @@ const channelSubSchema = new mongoose.Schema(
       enum: ['active', 'inactive', 'removed'],
       default: 'active',
       required: true,
+      index: true,
     },
   },
   { _id: false, timestamps: true } // 👈 disables auto _id for subdocuments
