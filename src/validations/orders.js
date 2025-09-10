@@ -1,7 +1,7 @@
 import { z, ZodError } from 'zod';
 import { errorResponse } from '#helpers/response.js';
 // Common language list
-import { LANGUAGE_CODES, ORDER_STATUS_MAP } from '#constants/common.js';
+import { LANGUAGE_CODES, ORDER_STATUS_MAP, VALID_PERIODS } from '#constants/common.js';
 const validate = (parseFn) => async (req, res, next) => {
   try {
     await parseFn(req);
@@ -137,4 +137,20 @@ export const getOrderByIdValidator = validate(async (req) => {
       .regex(/^[0-9a-fA-F]+$/, 'order id must be a hex string'),
   });
   paramsSchema.parse(req.params);
+});
+
+export const getOrderComparisonValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const comparisonOrderQuerySchema = z.object({
+    period: z
+      .string()
+      .optional()
+      .default('week')
+      .transform((val) => val.toLowerCase())
+      .refine((val) => VALID_PERIODS.includes(val), {
+        message: `Invalid period. Please use one of: ${VALID_PERIODS.join(', ')}`,
+      }),
+  });
+
+  comparisonOrderQuerySchema.parse(req.query);
 });
