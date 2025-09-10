@@ -12,6 +12,8 @@ export const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   phoneNumber: z.string().min(1, 'Phone number is required'),
-  role: z.enum(USER_ROLES),
+  role: z.enum(USER_ROLES, {
+    message: `Invalid role. Please select one of: ${USER_ROLES.join(', ')}`,
+  }),
   active: z.boolean().optional(),
 });
