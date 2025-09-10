@@ -2,6 +2,8 @@ import { z, ZodError } from 'zod';
 import { errorResponse } from '#helpers/response.js';
 // Common language list
 import { LANGUAGE_CODES, USER_ROLES } from '#constants/common.js';
+
+const allowedRoles = Object.values(USER_ROLES);
 import mongoose from 'mongoose';
 const validate = (parseFn) => async (req, res, next) => {
   try {
@@ -148,10 +150,9 @@ export const updateUserValidator = validate(async (req) => {
       .regex(/^\d{10}$/, 'Phone number must be exactly 10 digits')
       .optional(),
     active: z.boolean().optional(),
-
     role: z
-      .enum(USER_ROLES, {
-        message: `Invalid role. Please select one of: ${USER_ROLES.join(', ')}`,
+      .enum(allowedRoles, {
+        message: `Invalid role. Please select one of: ${allowedRoles.join(', ')}`,
       })
       .optional(),
   });
