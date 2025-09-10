@@ -97,7 +97,7 @@ export const updateUserChannelsStatus = async (req, res) => {
       return Responses.failResponse(res, 'One or more channelIds are invalid', 400);
     }
     if (!VALID_STATUSES.includes(status)) {
-      return Responses.failResponse(res, 'status must be one of active, deactive, or removed', 400);
+      return Responses.failResponse(res, `status must be one of: ${VALID_STATUSES.join(', ')}`, 400);
     }
     const updatedCount = await channelService.updateUserChannelsStatus(userId, channelIds, status);
 
