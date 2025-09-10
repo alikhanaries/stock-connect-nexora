@@ -1,18 +1,7 @@
-import { z, ZodError } from 'zod';
-import { errorResponse } from '#helpers/response.js';
+import { z } from 'zod';
+import { validate } from './validate.js';
 // Common language list
-import { languageTypes } from '#constants/common.js';
-const validate = (parseFn) => async (req, res, next) => {
-  try {
-    await parseFn(req);
-    return next();
-  } catch (error) {
-    console.error('Validation error:', error);
-    const message =
-      error instanceof ZodError ? error.issues[0]?.message || 'Invalid input' : error.message || 'Server Error';
-    return errorResponse(res, message, 400);
-  }
-};
+import { LANGUAGE_CODES } from '#constants/common.js';
 
 export const headerSchema = z
   .object({
@@ -31,10 +20,10 @@ export const headerSchema = z
       })
       .nonempty('accept-language cannot be empty')
       .superRefine((val, ctx) => {
-        if (!languageTypes.includes(val)) {
+        if (!LANGUAGE_CODES.includes(val)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: `Accept-Language '${val}' is not supported. Supported languages: ${languageTypes.join(', ')}`,
+            message: `Accept-Language '${val}' is not supported. Supported languages: ${LANGUAGE_CODES.join(', ')}`,
             path: ['accept-language'],
           });
         }
@@ -52,6 +41,30 @@ export const getAllUserChannelsValidator = validate(async (req) => {
       .regex(/^[0-9a-fA-F]+$/, 'userId must be a hex string'),
   });
   paramsSchema.parse(req.params);
+  // validate query (for pagination + search)
+  const querySchema = z.object({
+    page: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 1))
+      .refine((val) => val > 0, { message: 'page must be greater than 0' }),
+
+    limit: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 10))
+      .refine((val) => val > 0 && val <= 100, { message: 'limit must be between 1 and 100' }),
+
+    search: z.string().optional(),
+
+    status: z.enum(['active', 'inactive', 'removed']).optional().default('active'),
+
+    sortBy: z.enum(['channelName', 'createdAt', 'ordersCount', 'productsCount']).optional().default('createdAt'),
+
+    sortOrder: z.enum(['asc', 'desc']).optional().default('asc'),
+  });
+
+  querySchema.parse(req.query);
 });
 // /* GET ALL CHANNEL LIST FROM CHANNEL PARTNER VALIDATOR */
 export const getAllChannelsFromChannelPartnerValidator = validate(async (req) => {
