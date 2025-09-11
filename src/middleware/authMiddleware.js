@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import User from '#models/User.js';
 import { config } from '#config/config.js';
 import Responses from '#helpers/response.js';
+import { USER_ROLES } from '#constants/common.js';
 
 export const authMiddleware = async (req, res, next) => {
   console.time('authMiddleware');
@@ -37,7 +38,7 @@ export const authMiddleware = async (req, res, next) => {
 export const authorize = (roles) => {
   return (req, res, next) => {
     try {
-      if (req.user.role === 'platform_master') {
+      if (req.user.role === USER_ROLES.PLATFORM_MASTER) {
         return next();
       }
       if (!roles.includes(req.user.role)) {
