@@ -596,6 +596,27 @@ const getUserUnassignedProducts = async (userId, channelId, query) => {
   };
 };
 
+const unlinkProductFromChannel = async (userId, channelId, ids) => {
+  try {
+    const products = await Product.find(
+      {
+        _id: { $in: ids.map((id) => new mongoose.Types.ObjectId(id)) },
+      },
+      { productSkuCode: 1 }
+    ).lean();
+    const skuCodes = products.map((p) => p.productSkuCode);
+    if (!skuCodes.length) return 0;
+    const result = await UserChannelProducts.updateOne(
+      { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId) },
+      { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
+    );
+    return result.modifiedCount || 0;
+  } catch (err) {
+    console.error('Service error in unlinkProductFromChannel:', err);
+    throw new Error(err.message);
+  }
+};
+
 export default {
   fetchProducts,
   pushProductsFromDB,
@@ -608,4 +629,5 @@ export default {
   getUserChannelProducts,
   getUserUnassignedProducts,
   addProductsToUserChannel,
+  unlinkProductFromChannel,
 };
