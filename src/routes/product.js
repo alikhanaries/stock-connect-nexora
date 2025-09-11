@@ -63,8 +63,8 @@ productsRouter.delete(
   deleteMultipleProducts
 );
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-productsRouter.post(
-  '/addProductsToUserChannel',
+productsRouter.put(
+  '/addProductsToUserChannel/:id',
   addProductsToUserChannelValidator,
   checkLanguage,
   authMiddleware,

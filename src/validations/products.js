@@ -4,29 +4,38 @@ import { validate } from './validate.js';
 // /* SAVE USER CHANNELS VALIDATOR */
 export const addProductsToUserChannelValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  // Body schema
+
+  // Validate body
   const bodySchema = z
     .object({
-      channelId: z.number({
-        required_error: 'channelId is required',
-        invalid_type_error: 'channelId must be a number',
-      }),
-      productIds: z
+      ids: z
         .array(
           z
             .string()
-            .length(24, 'productId must be exactly 24 characters') // ensures fixed length
-            .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format') // ensures valid hex
+            .length(24, 'productId must be exactly 24 characters') // ObjectId length
+            .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format') // hex validation
         )
         .nonempty('productIds cannot be empty')
         .refine(
-          (ids) => new Set(ids).size === ids.length, // ensures uniqueness
+          (ids) => new Set(ids).size === ids.length, // check for uniqueness
           { message: 'Duplicate productIds are not allowed' }
         ),
     })
     .strict();
 
+  // Validate params
+  const paramsSchema = z.object({
+    id: z
+      .string({
+        required_error: 'id is required',
+        invalid_type_error: 'id must be a string',
+      })
+      .regex(/^\d+$/, 'id must be a number string')
+      .transform((val) => parseInt(val, 10)),
+  });
+
   bodySchema.parse(req.body);
+  paramsSchema.parse(req.params);
 });
 
 // /* IMPORT PRODUCT BY GOOGLE SHEET VALIDATOR */

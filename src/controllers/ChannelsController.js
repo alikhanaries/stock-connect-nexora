@@ -21,11 +21,14 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
 /** FUNC - Get all channel list from DB */
 export const getAllChannels = async (req, res) => {
   try {
-    const result = await channelService.getAllChannels();
-    if (!result) {
-      return Responses.successResponse(res, req.locale.NO_CHANNEL_FOUND, 200);
-    }
-    return Responses.successResponse(res, req.locale.CHANNELS_FOUND_SUCCESS, 200, result);
+    const { channels, pagination, appliedFilters } = await channelService.getAllChannels(req.query);
+    const responseData = {
+      content: channels || [],
+      appliedFilters: appliedFilters || {},
+      ...(pagination || {}),
+    };
+    const message = channels && channels.length > 0 ? req.locale.CHANNELS_FOUND_SUCCESS : req.locale.NO_CHANNEL_FOUND;
+    return Responses.successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     return Responses.errorResponse(res, error.message, 500);
