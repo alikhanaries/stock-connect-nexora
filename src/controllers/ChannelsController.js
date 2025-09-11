@@ -25,7 +25,7 @@ export const getAllChannels = async (req, res) => {
     const responseData = {
       content: channels || [],
       appliedFilters: appliedFilters || {},
-      pagination: pagination || {},
+      ...(pagination || {}),
     };
     const message = channels && channels.length > 0 ? req.locale.CHANNELS_FOUND_SUCCESS : req.locale.NO_CHANNEL_FOUND;
     return Responses.successResponse(res, message, 200, responseData);
