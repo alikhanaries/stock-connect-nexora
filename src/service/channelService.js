@@ -214,15 +214,13 @@ export const getAllUserChannels = async (userId, query) => {
   }
 };
 
-export const updateUserChannelsStatus = async (userId, channelIds, status) => {
+export const updateUserChannelsStatus = async (userId, ids, status) => {
   try {
-    const objectIds = channelIds.map((id) => new ObjectId(id));
-
     const result = await UserChannels.updateOne(
       { userId: new ObjectId(userId) },
       { $set: { 'channelIds.$[elem].status': status } },
       {
-        arrayFilters: [{ 'elem.id': { $in: objectIds }, 'elem.status': { $ne: status } }],
+        arrayFilters: [{ 'elem.id': { $in: ids }, 'elem.status': { $ne: status } }],
       }
     );
     return result.modifiedCount || 0;
