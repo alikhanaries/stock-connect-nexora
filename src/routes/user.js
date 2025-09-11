@@ -22,14 +22,19 @@ import {
 const user = express.Router();
 
 user.get('/me', checkLanguage, authMiddleware, getUserById);
-user.get('/', checkLanguage, getAllUsersValidator, authMiddleware, getAllUsers);
-user.patch('/update-password', checkLanguage, updatePasswordValidator, authMiddleware, updatePassword);
+user.get('/', getAllUsersValidator, checkLanguage, authMiddleware, getAllUsers);
+user.patch('/update-password', updatePasswordValidator, checkLanguage, authMiddleware, updatePassword);
 user.delete('/all', checkLanguage, authMiddleware, deleteAllUsers);
-user.delete('/bulk', checkLanguage, bulkDeleteUsersValidator, authMiddleware, deleteSelectedUsers);
-user.patch('/update-status', checkLanguage, updateSelectedUserStatusValidator, authMiddleware, updateSelectedUserStatus);
-user.patch('/:id', checkLanguage, updateUserValidator, authMiddleware, updateUser);
-user.get('/:id', checkLanguage, userIdValidator, authMiddleware, getUserById);
-user.delete('/:id', checkLanguage, userIdValidator, authMiddleware, softDeleteUser);
-
+user.delete('/bulk', bulkDeleteUsersValidator, checkLanguage, authMiddleware, deleteSelectedUsers);
+user.patch(
+  '/update-status',
+  updateSelectedUserStatusValidator,
+  checkLanguage,
+  authMiddleware,
+  updateSelectedUserStatus
+);
+user.patch('/:id', updateUserValidator, checkLanguage, authMiddleware, updateUser);
+user.get('/:id', userIdValidator, checkLanguage, authMiddleware, getUserById);
+user.delete('/:id', userIdValidator, checkLanguage, authMiddleware, softDeleteUser);
 
 export default user;
