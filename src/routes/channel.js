@@ -28,7 +28,7 @@ router.get(
 // /* GET ALL CHANNEL LIST FROM DATABASE */
 router.get('/getAllChannels', getAllChannelsValidator, authMiddleware, getAllChannels);
 // /* SAVE USER CHANNELS  */
-router.post('/addChannels', saveUserChannelsValidator, authMiddleware, saveUserChannels);
+router.put('/addChannels', saveUserChannelsValidator, authMiddleware, saveUserChannels);
 /* GET USER CHANNEL LIST */
 
 router.patch('/update-user-channels-status', authMiddleware, updateUserChannelsStatus);

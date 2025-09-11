@@ -38,7 +38,8 @@ export const getAllChannels = async (req, res) => {
 /** FUNC - SAVE USER SELECTED CHANNEL IDS */
 export const saveUserChannels = async (req, res) => {
   try {
-    const { userId, channelIds } = req.body;
+    const { ids } = req.body;
+    const userId = req.user._id;
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
@@ -46,7 +47,7 @@ export const saveUserChannels = async (req, res) => {
     }
 
     // Call the service to save channel data
-    const result = await channelService.saveUserChannels(userId, channelIds);
+    const result = await channelService.saveUserChannels(userId, ids);
 
     if (!result.success) {
       return Responses.failResponse(res, result.message || req.locale.CHANNEL_SAVE_FAILED, 500);
