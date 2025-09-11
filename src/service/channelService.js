@@ -82,7 +82,7 @@ const getAllChannels = async (query) => {
     const total = await Channel.countDocuments(mongoQuery);
 
     // Fetch paginated channels
-    const channels = await Channel.find(mongoQuery, { _id: 1, channelName: 1, channelImageUrl: 1 })
+    const channels = await Channel.find(mongoQuery, { _id: 1, channelName: 1, channelImageUrl: 1, channelId: 1 })
       .sort({ [sortBy]: sortOrder === 'asc' ? 1 : -1 })
       .skip((currentPage - 1) * parsedLimit)
       .limit(parsedLimit)
