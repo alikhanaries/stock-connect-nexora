@@ -54,13 +54,7 @@ export const register = async (req, res) => {
     } = req.body;
     const creatorRole = req.user.role;
 
-    if (!email || !password || !firstName || !lastName || !role || !phoneNumber) {
-      return Response.failResponse(res, 'Missing required fields', 400);
-    }
-
-    const access = userHelper.userRoleBasedAccess(creatorRole, role);
-
-    if (!access) {
+    if (!userHelper.userRoleBasedAccess(creatorRole, role)) {
       return Response.failResponse(res, 'You do not have permission to create this user role', 403);
     }
 
