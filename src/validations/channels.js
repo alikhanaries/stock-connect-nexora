@@ -73,6 +73,30 @@ export const getAllChannelsFromChannelPartnerValidator = validate(async (req) =>
 // /* GET ALL CHANNEL LIST FROM DATABASE VALIDATOR */
 export const getAllChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
+
+  // Schema for req.query
+  const querySchema = z.object({
+    page: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 1))
+      .refine((val) => val > 0, { message: 'page must be greater than 0' }),
+
+    limit: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 10))
+      .refine((val) => val > 0 && val <= 100, { message: 'limit must be between 1 and 100' }),
+
+    search: z.string().optional().default(''),
+
+    sortOrder: z
+      .string()
+      .optional()
+      .default('asc')
+      .refine((val) => val === 'asc' || val === 'desc', { message: 'sortOrder must be "asc" or "desc"' }),
+  });
+  querySchema.parse(req.query);
 });
 // /* SAVE USER CHANNELS VALIDATOR */
 export const saveUserChannelsValidator = validate(async (req) => {

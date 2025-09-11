@@ -18,7 +18,7 @@ export const errorLog = async (error) => {
   const dateOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
   const timeOptions = { hour: '2-digit', minute: '2-digit' };
 
-  const currentDate = new Date().toISOString();
+  const currentDate = new Date();
   const formattedDate = currentDate.toLocaleDateString('en-GB', dateOptions);
   const formattedTime = currentDate.toLocaleTimeString('en-GB', timeOptions);
 
