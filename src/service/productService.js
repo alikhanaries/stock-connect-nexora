@@ -606,7 +606,7 @@ const unlinkProductFromChannel = async (userId, channelId, ids) => {
     ).lean();
     const skuCodes = products.map((p) => p.productSkuCode);
     if (!skuCodes.length) return 0;
-    const result = await UserChannelProducts.updateOne(
+    const result = await UserChannelProducts.updateMany(
       { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId) },
       { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
     );
