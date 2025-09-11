@@ -1,5 +1,5 @@
 import express from 'express';
-import { authMiddleware } from '#middleware/index.js';
+import { authMiddleware, checkLanguage } from '#middleware/index.js';
 import {
   getAllUsers,
   getUserById,
@@ -13,14 +13,14 @@ import {
 
 const user = express.Router();
 
-user.get('/me', authMiddleware, getUserById);
-user.get('/', authMiddleware, getAllUsers);
-user.patch('/update-password', authMiddleware, updatePassword);
-user.delete('/all', authMiddleware, deleteAllUsers);
-user.delete('/bulk', authMiddleware, deleteSelectedUsers);
-user.patch('/update-status', authMiddleware, updateSelectedUserStatus);
-user.patch('/:id', authMiddleware, updateUser);
-user.get('/:id', authMiddleware, getUserById);
-user.delete('/:id', authMiddleware, softDeleteUser);
+user.get('/me', checkLanguage, authMiddleware, getUserById);
+user.get('/', checkLanguage, authMiddleware, getAllUsers);
+user.patch('/update-password', checkLanguage, authMiddleware, updatePassword);
+user.delete('/all', checkLanguage, authMiddleware, deleteAllUsers);
+user.delete('/bulk', checkLanguage, authMiddleware, deleteSelectedUsers);
+user.patch('/update-status', checkLanguage, authMiddleware, updateSelectedUserStatus);
+user.patch('/:id', checkLanguage, authMiddleware, updateUser);
+user.get('/:id', checkLanguage, authMiddleware, getUserById);
+user.delete('/:id', checkLanguage, authMiddleware, softDeleteUser);
 
 export default user;
