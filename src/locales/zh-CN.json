@@ -14,10 +14,10 @@
   "NO_CHANNEL_FOUND": "未找到频道",
   "CHANNEL_SAVE_FAILED": "保存频道失败",
   "CHANNEL_SAVED_SUCCESS": "频道保存成功",
-
+  "CHANNELID_REQUIRED": "需要频道ID",
   "USER_CHANNELS_FOUND": "找到用户频道",
   "USER_NOT_FOUND": "未找到用户",
-
+  "USERID_REQUIRED": "需要用户ID",
   "PRODUCT_ASSIGNED_SUCCESS": "产品分配成功",
   "PRODUCT_ASSIGNED_FAILED": "产品分配失败",
   "PRODUCTIDS_REQUIRED": "需要产品ID",
@@ -30,5 +30,8 @@
   "GOOGLE_SHEET_URL_REQUIRED": "需要提供 Google 表格链接",
   "INVALID_URL": "无效的链接",
   "PRODUCT_NOT_EXITS": "某些产品ID在产品集合中不存在",
-  "INVALID_PRODUCTS": "未找到与提供的产品ID对应的有效产品"
+  "INVALID_PRODUCTS": "未找到与提供的产品ID对应的有效产品",
+  "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "产品已成功从渠道解除关联",
+  "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "产品从渠道解除关联失败",
+  "NO_MATCHING_PRODUCTS_FOUND": "未找到可更新的匹配产品"
 }
