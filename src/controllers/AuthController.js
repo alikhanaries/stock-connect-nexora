@@ -3,6 +3,7 @@ import { generateTokenResponse, decodeToken, generateResetToken } from '#util/to
 import { errorHandler } from '#helpers/ErrorHandler.js';
 import crypto from 'crypto';
 import Response from '#helpers/response.js';
+import userHelper from '#helpers/User.js';
 
 export const login = async (req, res) => {
   try {
@@ -51,9 +52,10 @@ export const register = async (req, res) => {
       active,
       isMarketplaceConnected = false,
     } = req.body;
+    const creatorRole = req.user.role;
 
-    if (!email || !password || !firstName || !lastName || !role || !phoneNumber) {
-      return Response.failResponse(res, 'Missing required fields', 400);
+    if (!userHelper.userRoleBasedAccess(creatorRole, role)) {
+      return Response.failResponse(res, 'You do not have permission to create this user role', 403);
     }
 
     const existingUser = await User.findOne({

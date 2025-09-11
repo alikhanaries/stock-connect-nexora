@@ -176,14 +176,15 @@ export const deleteMultipleProducts = async (req, res) => {
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 export const addProductsToUserChannel = async (req, res) => {
   try {
-    const { channelId, productIds } = req.body;
+    const { ids } = req.body;
+    const { id } = req.params;
     const userId = req.user._id;
     // Check if user exists
     const user = await User.findById(userId);
     if (!user) {
       return failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    const result = await productService.addProductsToUserChannel(userId, channelId, productIds, req.locale);
+    const result = await productService.addProductsToUserChannel(userId, id, ids, req.locale);
 
     if (!result.success) {
       return failResponse(res, result?.message, 404);

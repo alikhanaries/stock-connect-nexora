@@ -442,7 +442,7 @@ const addProductsToUserChannel = async (userId, channelId, productIds, locale) =
       success: true,
     };
   } catch (err) {
-    console.error('Service error in deleteMultipleProducts:', err);
+    console.error('Service error in addProductsToUserChannel:', err);
     throw new Error(err.message);
   }
 };
