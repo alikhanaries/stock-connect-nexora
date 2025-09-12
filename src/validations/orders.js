@@ -25,12 +25,11 @@ export const headerSchema = z
 
     'accept-language': z
       .string({
-        required_error: 'Accept-Language header is required',
         invalid_type_error: 'Accept-Language must be a string',
       })
-      .nonempty('accept-language cannot be empty')
+      .optional()
       .superRefine((val, ctx) => {
-        if (!LANGUAGE_CODES.includes(val)) {
+        if (val && !LANGUAGE_CODES.includes(val)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Accept-Language '${val}' is not supported. Supported languages: ${LANGUAGE_CODES.join(', ')}`,
@@ -86,6 +85,7 @@ export const getAllOrdersValidator = validate(async (req) => {
     status: z
       .string()
       .optional()
+      .transform((val) => val?.toUpperCase())
       .refine((val) => !val || Object.values(ORDER_STATUS_MAP).includes(val), {
         message: `status must be one of: ${Object.values(ORDER_STATUS_MAP).join(', ')}`,
       }),
