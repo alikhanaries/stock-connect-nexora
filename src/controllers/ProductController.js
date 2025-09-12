@@ -255,6 +255,30 @@ export const getUserUnassignedProducts = async (req, res) => {
     return errorResponse(res, error, 500);
   }
 };
+export const unlinkProductFromChannel = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { channelId } = req.params;
+    const { ids } = req.body;
+    if (!userId) {
+      return errorResponse(res, { message: req.locale.USERID_REQUIRED }, 400);
+    }
+    if (!channelId) {
+      return errorResponse(res, { message: req.locale.CHANNELID_REQUIRED }, 400);
+    }
+    if (!Array.isArray(ids) || !ids.length) {
+      return failResponse(res, req.locale.PRODUCTIDS_REQUIRED, 400);
+    }
+    const updatedCount = await productService.unlinkProductFromChannel(userId, channelId, ids);
+    if (updatedCount === 0) {
+      return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND, 404);
+    }
+    return successResponse(res, req.locale.PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS, 200);
+  } catch (error) {
+    console.error('Error:', error);
+    return errorResponse(res, error);
+  }
+};
 
 export default {
   getProducts,
@@ -268,4 +292,5 @@ export default {
   getUserChannelProducts,
   getUserUnassignedProducts,
   addProductsToUserChannel,
+  unlinkProductFromChannel,
 };

@@ -29,10 +29,11 @@
   "USER_CHANNEL_PRODUCTS_FETCHED_SUCCESSFULLY": "تم جلب منتجات قنوات المستخدم بنجاح",
   "NO_USER_CHANNEL_PRODUCTS_FOUND": "لم يتم العثور على منتجات قنوات المستخدم",
   "AVAILABLE_PRODUCTS_FETCHED_SUCCESSFULLY": "تم جلب المنتجات المتاحة بنجاح",
+  "CHANNELID_REQUIRED": "معرّف القناة مطلوب",
 
   "USER_CHANNELS_FOUND": "تم العثور على قنوات المستخدم",
   "USER_NOT_FOUND": "المستخدم غير موجود",
-
+  "USERID_REQUIRED": "معرّف المستخدم مطلوب",
   "PRODUCT_ASSIGNED_SUCCESS": "تم تعيين المنتج بنجاح",
   "PRODUCT_ASSIGNED_FAILED": "فشل في تعيين المنتج",
   "PRODUCTIDS_REQUIRED": "معرّفات المنتجات مطلوبة",
@@ -45,5 +46,8 @@
   "GOOGLE_SHEET_URL_REQUIRED": "رابط جدول Google مطلوب",
   "INVALID_URL": "رابط غير صالح",
   "PRODUCT_NOT_EXITS": "بعض معرّفات المنتجات غير موجودة في مجموعة المنتجات",
-  "INVALID_PRODUCTS": "لم يتم العثور على منتجات صالحة لمعرفات المنتجات المقدمة"
+  "INVALID_PRODUCTS": "لم يتم العثور على منتجات صالحة لمعرفات المنتجات المقدمة",
+  "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "تم فصل المنتج من القناة بنجاح",
+  "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "فشل فصل المنتج من القناة",
+  "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث"
 }

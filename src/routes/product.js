@@ -10,6 +10,7 @@ import {
   updateProductStatus,
   getUserChannelProducts,
   addProductsToUserChannel,
+  unlinkProductFromChannel,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import {
@@ -72,12 +73,7 @@ productsRouter.put(
 );
 
 productsRouter.get('/user-channel-products/:channelId', checkLanguage, authMiddleware, getUserChannelProducts);
-
-productsRouter.get(
-  '/get-user-unassigned-products/:channelId',
-  checkLanguage,
-  authMiddleware,
-  getUserUnassignedProducts
-);
+productsRouter.get('/get-user-unassigned-products/:channelId',checkLanguage,authMiddleware,getUserUnassignedProducts);
+productsRouter.delete('/unlink-product-from-channel/:channelId',checkLanguage,authMiddleware,unlinkProductFromChannel);
 
 export default productsRouter;
