@@ -1,11 +1,7 @@
-import channelService from '../service/channelService.js';
+import { STATUS_MESSAGES, VALID_STATUSES } from '#constants/common.js';
 import Responses from '../helpers/response.js';
 import User from '../models/User.js';
-import mongoose from 'mongoose';
-import { STATUS_MESSAGES, VALID_STATUSES } from '#constants/common.js';
-// Access ObjectId from mongoose
-const ObjectId = mongoose.Types.ObjectId;
-
+import channelService from '../service/channelService.js';
 /**FUNC- FOR GET ALL CHANNEL LIST FROM CHANNEL PARTNER**/
 export const getAllChannelsFromChannelPartner = async (req, res) => {
   try {
@@ -38,7 +34,8 @@ export const getAllChannels = async (req, res) => {
 /** FUNC - SAVE USER SELECTED CHANNEL IDS */
 export const saveUserChannels = async (req, res) => {
   try {
-    const { userId, channelIds } = req.body;
+    const { ids } = req.body;
+    const userId = req.user._id;
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
@@ -46,7 +43,7 @@ export const saveUserChannels = async (req, res) => {
     }
 
     // Call the service to save channel data
-    const result = await channelService.saveUserChannels(userId, channelIds);
+    const result = await channelService.saveUserChannels(userId, ids);
 
     if (!result.success) {
       return Responses.failResponse(res, result.message || req.locale.CHANNEL_SAVE_FAILED, 500);
@@ -95,14 +92,14 @@ export const getAllUserChannels = async (req, res) => {
 export const updateUserChannelsStatus = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { channelIds, status } = req.body;
-    if (!Array.isArray(channelIds) || channelIds.length === 0 || channelIds.some((id) => !ObjectId.isValid(id))) {
-      return Responses.failResponse(res, 'One or more channelIds are invalid', 400);
+    const { ids, status } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return Responses.failResponse(res, 'One or more ids are invalid', 400);
     }
     if (!VALID_STATUSES.includes(status)) {
       return Responses.failResponse(res, `status must be one of: ${VALID_STATUSES.join(', ')}`, 400);
     }
-    const updatedCount = await channelService.updateUserChannelsStatus(userId, channelIds, status);
+    const updatedCount = await channelService.updateUserChannelsStatus(userId, ids, status);
 
     if (updatedCount === 0) {
       return Responses.failResponse(res, 'No matching channels found to update', 404);

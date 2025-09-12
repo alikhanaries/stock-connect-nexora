@@ -12,7 +12,7 @@
   "NO_CHANNEL_FOUND": "لم يتم العثور على قناة",
   "CHANNEL_SAVE_FAILED": "فشل في حفظ القنوات",
   "CHANNEL_SAVED_SUCCESS": "تم حفظ القنوات بنجاح",
-
+  "CHANNELID_REQUIRED": "معرّف القناة مطلوب",
   "USER_CHANNELS_FOUND": "تم العثور على قنوات المستخدم",
   "USER_NOT_FOUND": "المستخدم غير موجود",
   "USER_FETCHED_SUCCESSFULLY": "تم جلب المستخدم بنجاح",
@@ -43,6 +43,8 @@
   "INVALID_PERIOD": "فترة غير صالحة. يرجى استخدام واحدة مما يلي:",
   "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "تم جلب مقارنة الطلبات بنجاح.",
 
+
+  "USERID_REQUIRED": "معرّف المستخدم مطلوب",
   "PRODUCT_ASSIGNED_SUCCESS": "تم تعيين المنتج بنجاح",
   "PRODUCT_ASSIGNED_FAILED": "فشل في تعيين المنتج",
   "PRODUCTIDS_REQUIRED": "معرّفات المنتجات مطلوبة",
@@ -55,5 +57,8 @@
   "GOOGLE_SHEET_URL_REQUIRED": "رابط جدول Google مطلوب",
   "INVALID_URL": "رابط غير صالح",
   "PRODUCT_NOT_EXITS": "بعض معرّفات المنتجات غير موجودة في مجموعة المنتجات",
-  "INVALID_PRODUCTS": "لم يتم العثور على منتجات صالحة لمعرفات المنتجات المقدمة"
+  "INVALID_PRODUCTS": "لم يتم العثور على منتجات صالحة لمعرفات المنتجات المقدمة",
+  "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "تم فصل المنتج من القناة بنجاح",
+  "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "فشل فصل المنتج من القناة",
+  "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث"
 }

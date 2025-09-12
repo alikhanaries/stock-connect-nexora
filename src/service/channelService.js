@@ -108,7 +108,7 @@ const saveUserChannels = async (userId, channelIds) => {
         throw new Error(`Invalid channelId: ${id}`);
       }
       return {
-        id: new ObjectId(id),
+        id,
         status: 'active', // default
       };
     });
@@ -156,7 +156,7 @@ export const getAllUserChannels = async (userId, query) => {
         $lookup: {
           from: 'channels',
           localField: 'channelIds.id',
-          foreignField: '_id',
+          foreignField: 'channelId',
           as: 'channelDetails',
         },
       },
@@ -234,15 +234,13 @@ export const getAllUserChannels = async (userId, query) => {
   }
 };
 
-export const updateUserChannelsStatus = async (userId, channelIds, status) => {
+export const updateUserChannelsStatus = async (userId, ids, status) => {
   try {
-    const objectIds = channelIds.map((id) => new ObjectId(id));
-
     const result = await UserChannels.updateOne(
       { userId: new ObjectId(userId) },
       { $set: { 'channelIds.$[elem].status': status } },
       {
-        arrayFilters: [{ 'elem.id': { $in: objectIds }, 'elem.status': { $ne: status } }],
+        arrayFilters: [{ 'elem.id': { $in: ids }, 'elem.status': { $ne: status } }],
       }
     );
     return result.modifiedCount || 0;

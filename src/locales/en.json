@@ -12,7 +12,7 @@
   "NO_CHANNEL_FOUND": "No channel found",
   "CHANNEL_SAVE_FAILED": "Failed to save channels",
   "CHANNEL_SAVED_SUCCESS": "Channels saved successfully",
-
+  "CHANNELID_REQUIRED": "channelId is required",
   "USER_CHANNELS_FOUND": "User channels found",
   "USER_NOT_FOUND": "User not found",
   "USER_FETCHED_SUCCESSFULLY": "User fetched successfully",
@@ -42,6 +42,7 @@
   "INVALID_PERIOD": "Invalid period. Please use one of:",
   "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "order comparison fetched successfully.",
 
+  "USERID_REQUIRED": "User ID is required",
   "PRODUCT_ASSIGNED_SUCCESS": "Product assigned successfully",
   "PRODUCT_ASSIGNED_FAILED": "Failed to assign product",
   "PRODUCTIDS_REQUIRED": "Product IDs are required",
@@ -54,5 +55,8 @@
   "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL required",
   "INVALID_URL": "Invalid url",
   "PRODUCT_NOT_EXITS": "Some productIds do not exist in Product collection",
-  "INVALID_PRODUCTS": "No valid products found for given productIds"
+  "INVALID_PRODUCTS": "No valid products found for given productIds",
+  "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "Product unlinked from channel successfully",
+  "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Failed to unlink product from channel",
+  "NO_MATCHING_PRODUCTS_FOUND": "No matching products found to update"
 }
