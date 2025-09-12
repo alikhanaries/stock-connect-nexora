@@ -6,15 +6,14 @@ import {
   getOrderStats,
   getOrderComparison,
 } from '#controllers/OrderController.js';
-
-import { authMiddleware } from '#middleware/index.js';
+import { authMiddleware, checkLanguage } from '#middleware/index.js';
 import { getAllOrdersValidator, getOrderByIdValidator, getOrderComparisonValidator } from '#validations/orders.js';
 const router = express.Router();
 
-router.get('/', getAllOrdersValidator, authMiddleware, getAllOrders);
-router.get('/stats', authMiddleware, getOrderStats);
-router.get('/sync-orders', authMiddleware, getSyncedOrders);
-router.get('/comparision', getOrderComparisonValidator, authMiddleware, getOrderComparison);
-router.get('/:id', getOrderByIdValidator, authMiddleware, getOrderById);
+router.get('/', getAllOrdersValidator, checkLanguage, authMiddleware, getAllOrders);
+router.get('/stats', checkLanguage, authMiddleware, getOrderStats);
+router.get('/sync-orders', checkLanguage, authMiddleware, getSyncedOrders);
+router.get('/comparision', getOrderComparisonValidator, checkLanguage, authMiddleware, getOrderComparison);
+router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, getOrderById);
 
 export default router;
