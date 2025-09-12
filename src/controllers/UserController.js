@@ -11,11 +11,11 @@ export const getUserById = async (req, res) => {
     const id = req.params.id || req.user?._id;
     const user = await User.findOne({ _id: id, isDeleted: false }).select(userSafeFields).lean();
     if (!user) {
-      return res.status(404).json(formatErrorResponse('User not found', 404));
+      return res.status(404).json(formatErrorResponse(req.locale.USER_NOT_FOUND, 404));
     }
-    res.status(200).json(formatSuccessResponse(user, 'User fetched successfully'));
+    res.status(200).json(formatSuccessResponse(user, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
-    res.status(400).json(formatErrorResponse(err?.message || 'Failed to fetch user data'));
+    res.status(400).json(formatErrorResponse(err?.message || req.locale.FAILED_TO_FETCH_USER_DATA));
   }
 };
 
@@ -31,9 +31,9 @@ export const updateUser = async (req, res) => {
       { new: true }
     ).select(userSafeFields);
     if (!updatedUser) {
-      return Responses.failResponse(res, 'User not found', 404);
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    return Responses.successResponse(res, 'User updated successfully', 200, updatedUser.toObject());
+    return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, updatedUser.toObject());
   } catch (error) {
     return Responses.errorResponse(res, error);
   }
@@ -76,40 +76,41 @@ export const getAllUsers = async (req, res) => {
       success: true,
       status: 200,
     };
-    res.status(200).json(formatSuccessResponse(response, 'User fetched successfully'));
+    res.status(200).json(formatSuccessResponse(response, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
-    res.status(500).json(formatErrorResponse(err?.message || 'Failed to fetch user'));
+    res.status(500).json(formatErrorResponse(err?.message || req.locale.FAILED_TO_FETCH_USER_DATA));
   }
 };
 
 export const updatePassword = async (req, res) => {
+  console.log('updatePassword called');
   try {
     const { oldPassword, newPassword } = req.body;
     const userId = req.user?._id;
 
     if (!oldPassword || !newPassword) {
-      return Responses.failResponse(res, 'Old and new passwords are required', 400);
+      return Responses.failResponse(res, req.locale.OLD_AND_NEW_PASSWORDS_REQUIRED, 400);
     }
     if (oldPassword === newPassword) {
-      return Responses.failResponse(res, 'New password must be different from the old password', 400);
+      return Responses.failResponse(res, req.locale.NEW_PASSWORD_MUST_BE_DIFFERENT, 400);
     }
 
     const user = await User.findOne({ _id: userId, isDeleted: false }).select('+password');
 
     if (!user) {
-      return Responses.failResponse(res, 'User not found', 404);
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
 
     const isMatch = await user.comparePassword(oldPassword);
     if (!isMatch) {
-      return Responses.failResponse(res, 'Invalid old password', 400);
+      return Responses.failResponse(res, req.locale.INVALID_OLD_PASSWORD, 400);
     }
     user.password = newPassword;
     await user.save();
 
-    return Responses.successResponse(res, 'Password updated successfully', 200);
+    return Responses.successResponse(res, req.locale.PASSWORD_UPDATED_SUCCESSFULLY, 200);
   } catch (error) {
-    console.error('userUpdatePassword Error:', error);
+    console.error('userUpdatePassword Error', error);
     return Responses.errorResponse(res, error, 500);
   }
 };
@@ -121,9 +122,9 @@ export const softDeleteUser = async (req, res) => {
     const deletedUser = await userService.deleteUserId(id);
 
     if (!deletedUser) {
-      return Responses.failResponse(res, 'User not found', 404);
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    return Responses.successResponse(res, 'User deleted successfully', 200);
+    return Responses.successResponse(res, req.locale.USER_DELETED_SUCCESSFULLY, 200);
   } catch (error) {
     return Responses.errorResponse(res, error);
   }
@@ -133,9 +134,9 @@ export const deleteAllUsers = async (req, res) => {
   try {
     const result = await userService.deleteAllUsers();
     if (!result.success) {
-      return Responses.failResponse(res, 'Failed to delete users', 404);
+      return Responses.failResponse(res, req.locale.FAILED_TO_DELETE_USERS, 404);
     }
-    return Responses.successResponse(res, 'All users have been deleted successfully.', 200);
+    return Responses.successResponse(res, req.locale.ALL_USERS_DELETED_SUCCESSFULLY, 200);
   } catch (error) {
     return Responses.errorResponse(res, error, 500);
   }
@@ -146,7 +147,7 @@ export const deleteSelectedUsers = async (req, res) => {
     const { ids } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
-      return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
+      return Responses.failResponse(res, req.locale.PROVIDE_ARRAY_OF_USER_IDS, 400);
     }
     const result = await userService.deleteSelectedUsers(ids);
 
@@ -165,10 +166,10 @@ export const updateSelectedUserStatus = async (req, res) => {
     const { ids, active } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
-      return Responses.failResponse(res, 'Please provide an array of user IDs.', 400);
+      return Responses.failResponse(res, req.locale.PROVIDE_ARRAY_OF_USER_IDS, 400);
     }
     if (typeof active !== 'boolean') {
-      return Responses.failResponse(res, 'Status must be a boolean (true or false).', 400);
+      return Responses.failResponse(res, req.locale.STATUS_MUST_BE_BOOLEAN, 400);
     }
     const result = await userService.updateSelectedUserStatus(ids, active);
 
@@ -176,7 +177,7 @@ export const updateSelectedUserStatus = async (req, res) => {
       return Responses.failResponse(res, result.message, 400);
     }
 
-    const statusMessage = active ? 'Users activated' : 'Users inactivated';
+    const statusMessage = active ? req.locale.USERS_ACTIVATED : req.locale.USERS_INACTIVATED;
 
     return Responses.successResponse(res, `${result.modifiedCount} ${statusMessage} successfully.`, 200);
   } catch (error) {

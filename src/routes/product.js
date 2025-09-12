@@ -10,6 +10,7 @@ import {
   updateProductStatus,
   getUserChannelProducts,
   addProductsToUserChannel,
+  unlinkProductFromChannel,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import {
@@ -37,7 +38,9 @@ const productsRouter = express.Router();
 /* DELETE PRODUCT BY ID*/
 productsRouter.delete('/deleteProduct/:id', deleteProductValidator, checkLanguage, authMiddleware, deleteProduct);
 
-productsRouter.get('/', getProductsValidator, authMiddleware, getProducts);
+productsRouter.get('/', getProductsValidator,checkLanguage, authMiddleware, getProducts);
+
+
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 productsRouter.post(
@@ -62,12 +65,14 @@ productsRouter.post(
 productsRouter.get(
   '/push-to-channelengine',
   pushProductsToChannelEngineValidator,
+  checkLanguage,
   authMiddleware,
   pushProductToChannelEngine
 );
-productsRouter.get('/top-product', getTopSellingProductValidator, authMiddleware, getTopSellingProduct);
+productsRouter.get('/top-product', getTopSellingProductValidator,checkLanguage, authMiddleware, getTopSellingProduct);
 
-productsRouter.patch('/update-status', updateProductStatusValidator, authMiddleware, updateProductStatus);
+productsRouter.patch('/update-status', updateProductStatusValidator,checkLanguage, authMiddleware, updateProductStatus);
+
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete(
   '/deleteMultipleProducts',
@@ -88,6 +93,7 @@ productsRouter.put(
 productsRouter.get(
   '/user-channel-products/:channelId',
   getUserChannelProductsValidator,
+  checkLanguage,
   authMiddleware,
   getUserChannelProducts
 );
@@ -95,8 +101,11 @@ productsRouter.get(
 productsRouter.get(
   '/get-user-unassigned-products/:channelId',
   getUserUnassignedProductsValidator,
+  checkLanguage,
   authMiddleware,
   getUserUnassignedProducts
 );
+
+productsRouter.delete('/unlink-product-from-channel/:channelId',checkLanguage,authMiddleware,unlinkProductFromChannel);
 
 export default productsRouter;

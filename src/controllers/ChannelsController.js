@@ -78,11 +78,11 @@ export const getAllUserChannels = async (req, res) => {
     };
     // If no channels found
     if (!success || !channelData?.content?.length) {
-      return Responses.successResponse(res, 'No channels found', 200, responseData);
+      return Responses.successResponse(res, req.locale.NO_CHANNEL_FOUND, 200, responseData);
     }
 
     // Return found channels
-    return Responses.successResponse(res, 'User channels found', 200, responseData);
+    return Responses.successResponse(res, req.locale.USER_CHANNELS_FOUND, 200, responseData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     return Responses.errorResponse(res, error.message, 500);
@@ -94,15 +94,15 @@ export const updateUserChannelsStatus = async (req, res) => {
     const userId = req.user._id;
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
-      return Responses.failResponse(res, 'One or more ids are invalid', 400);
+      return Responses.failResponse(res, req.locale.INVALID_IDS, 400);
     }
     if (!VALID_STATUSES.includes(status)) {
-      return Responses.failResponse(res, `status must be one of: ${VALID_STATUSES.join(', ')}`, 400);
+      return Responses.failResponse(res, `${req.locale.STATUS_MUST_BE_ONE_OF} ${VALID_STATUSES.join(', ')}`, 400);
     }
     const updatedCount = await channelService.updateUserChannelsStatus(userId, ids, status);
 
     if (updatedCount === 0) {
-      return Responses.failResponse(res, 'No matching channels found to update', 404);
+      return Responses.failResponse(res, req.locale.NO_MATCHING_CHANNELS_FOUND_TO_UPDATE, 404);
     }
     return Responses.successResponse(res, `User channels ${STATUS_MESSAGES[status]} successfully`, 200);
   } catch (error) {
