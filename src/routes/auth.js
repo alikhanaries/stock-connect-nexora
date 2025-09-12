@@ -7,13 +7,16 @@ import {
   validateResetToken,
   resetPassword,
 } from '#controllers/AuthController.js';
-import { validateInput } from '#middleware/index.js';
+import { authMiddleware, authorize, validateInput } from '#middleware/index.js';
 import { loginSchema, registerSchema } from '#validations/auth.js';
+import { USER_ROLES } from '#constants/common.js';
+
+const allowedRoles = Object.values(USER_ROLES);
 
 const router = express.Router();
 
 router.post('/login', validateInput(loginSchema), login);
-router.post('/register', validateInput(registerSchema), register);
+router.post('/register', authMiddleware, authorize(allowedRoles), validateInput(registerSchema), register);
 router.post('/refresh-token', refreshToken);
 router.post('/forget-password', forgotPassword);
 router.post('/validate-reset-token', validateResetToken);
