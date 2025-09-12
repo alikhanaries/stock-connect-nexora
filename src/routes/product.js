@@ -18,7 +18,16 @@ import {
   importProductsFromGoogleSheetValidator,
 } from '#validations/products.js';
 import express from 'express';
-import { addProductsToUserChannelValidator } from '#validations/products.js';
+import {
+  addProductsToUserChannelValidator,
+  getProductsValidator,
+  getUserUnassignedProductsValidator,
+  getUserChannelProductsValidator,
+  pushProductsToChannelEngineValidator,
+  deleteProductValidator,
+  getTopSellingProductValidator,
+  updateProductStatusValidator,
+} from '#validations/products.js';
 import upload from '#helpers/FileHandler.js'; // the above multer setup
 
 const productsRouter = express.Router();
@@ -26,9 +35,9 @@ const productsRouter = express.Router();
 //productsRouter.use(authMiddleware);
 
 /* DELETE PRODUCT BY ID*/
-productsRouter.delete('/deleteProduct/:id', checkLanguage, authMiddleware, deleteProduct);
+productsRouter.delete('/deleteProduct/:id', deleteProductValidator, checkLanguage, authMiddleware, deleteProduct);
 
-productsRouter.get('/', authMiddleware, getProducts);
+productsRouter.get('/', getProductsValidator, authMiddleware, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 productsRouter.post(
@@ -50,10 +59,15 @@ productsRouter.post(
   importProductsFromCsvFile
 );
 
-productsRouter.get('/push-to-channelengine', authMiddleware, pushProductToChannelEngine);
-productsRouter.get('/top-product', authMiddleware, getTopSellingProduct);
+productsRouter.get(
+  '/push-to-channelengine',
+  pushProductsToChannelEngineValidator,
+  authMiddleware,
+  pushProductToChannelEngine
+);
+productsRouter.get('/top-product', getTopSellingProductValidator, authMiddleware, getTopSellingProduct);
 
-productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
+productsRouter.patch('/update-status', updateProductStatusValidator, authMiddleware, updateProductStatus);
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete(
   '/deleteMultipleProducts',
@@ -71,8 +85,18 @@ productsRouter.put(
   addProductsToUserChannel
 );
 
-productsRouter.get('/user-channel-products/:channelId', authMiddleware, getUserChannelProducts);
+productsRouter.get(
+  '/user-channel-products/:channelId',
+  getUserChannelProductsValidator,
+  authMiddleware,
+  getUserChannelProducts
+);
 
-productsRouter.get('/get-user-unassigned-products/:channelId', authMiddleware, getUserUnassignedProducts);
+productsRouter.get(
+  '/get-user-unassigned-products/:channelId',
+  getUserUnassignedProductsValidator,
+  authMiddleware,
+  getUserUnassignedProducts
+);
 
 export default productsRouter;
