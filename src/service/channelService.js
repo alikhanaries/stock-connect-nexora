@@ -73,7 +73,7 @@ const getAllChannels = async (query) => {
     const currentPage = Math.max(parseInt(page) || 1, 1);
 
     // Build Mongo query
-    const mongoQuery = { isActive: true };
+    const mongoQuery = {};
     if (search) {
       mongoQuery.channelName = { $regex: search, $options: 'i' };
     }
@@ -135,7 +135,7 @@ const saveUserChannels = async (userId, channelIds) => {
 /** FUNC - GET USER CHANNEL LIST */
 export const getAllUserChannels = async (userId, query) => {
   try {
-    const { page = 1, limit = 10, status = 'active', search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+    const { page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
     const skip = (page - 1) * limit;
     const parsedLimit = parseInt(limit);
     const currentPage = Math.max(1, Number(page));
@@ -146,7 +146,7 @@ export const getAllUserChannels = async (userId, query) => {
     }
 
     const pipeline = [
-      { $match: { userId: new ObjectId(userId), isActive: true } },
+      { $match: { userId: new ObjectId(userId) } },
 
       { $unwind: '$channelIds' },
       // Fetch only removed channels

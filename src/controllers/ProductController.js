@@ -205,12 +205,13 @@ export const getUserChannelProducts = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, 'channelId is required', 400);
     }
-    const { products, pagination, appliedFilters } = await productService.getUserChannelProducts(
+    const { channel, products, pagination, appliedFilters } = await productService.getUserChannelProducts(
       userId,
       channelId,
       req.query
     );
     const responseData = {
+      channel: channel,
       content: products || [],
       appliedFilters: appliedFilters || {},
       ...pagination,
