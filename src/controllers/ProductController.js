@@ -117,7 +117,7 @@ export const pushProductToChannelEngine = async (req, res) => {
     });
   } catch (err) {
     console.error('Controller Error:', err);
-    errorLog(error);
+    errorLog(err);
     return errorResponse(res, err, 500);
   }
 };
@@ -147,7 +147,7 @@ export const updateProductStatus = async (req, res) => {
     return successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating product status:', err);
-    errorLog(error);
+    errorLog(err);
     return errorResponse(res, err, 500);
   }
 };
