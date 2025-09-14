@@ -1,6 +1,7 @@
 import User from '#models/User.js';
 import { generateTokenResponse, decodeToken, generateResetToken } from '#util/token.js';
 import { errorHandler } from '#helpers/ErrorHandler.js';
+import { errorLog } from '#middleware/index.js';
 import crypto from 'crypto';
 import Response from '#helpers/response.js';
 import userHelper from '#helpers/User.js';
@@ -36,6 +37,7 @@ export const login = async (req, res) => {
   } catch (error) {
     // errorHandler(error, res);
     console.error('userLogin Error:', error);
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
@@ -85,6 +87,7 @@ export const register = async (req, res) => {
 
     return Response.successResponse(res, 'User Registerd successfully', 201);
   } catch (error) {
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
@@ -106,6 +109,7 @@ export const refreshToken = async (req, res) => {
     const tokenResponse = generateTokenResponse(user, user.role);
     return Response.successResponse(res, 'refresh token', 200, tokenResponse);
   } catch (error) {
+    errorLog(error);
     errorHandler(error, res);
   }
 };
@@ -134,6 +138,7 @@ export const forgotPassword = async (req, res) => {
     return Response.successResponse(res, 'email varification successful', 200, { token });
   } catch (error) {
     console.error('Forget password error', error);
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
@@ -152,6 +157,7 @@ export const validateResetToken = async (req, res) => {
     return Response.successResponse(res, 'reset-token generation successful', 200, { valid: !!user });
   } catch (error) {
     console.error('reset-token generation error', error);
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
@@ -180,6 +186,7 @@ export const resetPassword = async (req, res) => {
     return Response.successResponse(res, 'password reset successful', 200);
   } catch (error) {
     console.error('reset-password error', error);
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
