@@ -190,7 +190,7 @@ const pushProductsFromChannel = async (channelId) => {
   const results = [];
 
   // 1️⃣ Get assigned SKUs for this channel
-  const channelProducts = await UserChannelProducts.find({ channelId }).lean();
+  const channelProducts = await UserChannelProducts.find({ channelId }, { 'skuList.skuCode': 1, _id: 0 }).lean();
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
 
   if (!skuCodes.length) {
