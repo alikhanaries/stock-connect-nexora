@@ -10,6 +10,7 @@ import {
   updateProductStatus,
   getUserChannelProducts,
   addProductsToUserChannel,
+  unlinkProductFromChannel,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import {
@@ -28,7 +29,7 @@ const productsRouter = express.Router();
 /* DELETE PRODUCT BY ID*/
 productsRouter.delete('/deleteProduct/:id', checkLanguage, authMiddleware, deleteProduct);
 
-productsRouter.get('/', authMiddleware, getProducts);
+productsRouter.get('/', checkLanguage, authMiddleware, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 productsRouter.post(
@@ -50,10 +51,10 @@ productsRouter.post(
   importProductsFromCsvFile
 );
 
-productsRouter.get('/push-to-channelengine', authMiddleware, pushProductToChannelEngine);
-productsRouter.get('/top-product', authMiddleware, getTopSellingProduct);
+productsRouter.get('/push-to-channelengine', checkLanguage, authMiddleware, pushProductToChannelEngine);
+productsRouter.get('/top-product', checkLanguage, authMiddleware, getTopSellingProduct);
 
-productsRouter.patch('/update-status', authMiddleware, updateProductStatus);
+productsRouter.patch('/update-status', checkLanguage, authMiddleware, updateProductStatus);
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete(
   '/deleteMultipleProducts',
@@ -63,16 +64,16 @@ productsRouter.delete(
   deleteMultipleProducts
 );
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-productsRouter.post(
-  '/addProductsToUserChannel',
+productsRouter.put(
+  '/addProductsToUserChannel/:id',
   addProductsToUserChannelValidator,
   checkLanguage,
   authMiddleware,
   addProductsToUserChannel
 );
 
-productsRouter.get('/user-channel-products/:channelId', authMiddleware, getUserChannelProducts);
-
-productsRouter.get('/get-user-unassigned-products/:channelId', authMiddleware, getUserUnassignedProducts);
+productsRouter.get('/user-channel-products/:channelId', checkLanguage, authMiddleware, getUserChannelProducts);
+productsRouter.get('/get-user-unassigned-products/:channelId',checkLanguage,authMiddleware,getUserUnassignedProducts);
+productsRouter.delete('/unlink-product-from-channel/:channelId',checkLanguage,authMiddleware,unlinkProductFromChannel);
 
 export default productsRouter;

@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { USER_ROLES } from '#constants/common.js';
+const roles = Object.values(USER_ROLES);
 
 const userSchema = new mongoose.Schema(
   {
@@ -40,7 +42,7 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'super_admin'],
+      enum: roles,
       required: [true, 'Role is required!'],
       index: true,
     },

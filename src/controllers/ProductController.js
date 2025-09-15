@@ -14,7 +14,7 @@ export const getProducts = async (req, res) => {
       appliedFilters: appliedFilters || {},
       ...pagination,
     };
-    const message = products.length ? 'Products fetched successfully' : 'No products found';
+    const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
     return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error fetching products:', error);
@@ -31,7 +31,9 @@ export const getTopSellingProduct = async (req, res) => {
     const topProducts = await productService.getTopSellingProduct(limit, channelName);
 
     const message =
-      topProducts.length > 0 ? 'Top-selling products fetched successfully' : 'No top-selling products found';
+      topProducts.length > 0
+        ? req.locale.TOP_SELLING_PRODUCTS_FETCHED_SUCCESSFULLY
+        : req.locale.NO_TOP_SELLING_PRODUCTS_FOUND;
     return successResponse(res, message, 200, topProducts);
   } catch (error) {
     console.error('Error fetching products:', error);
@@ -106,7 +108,7 @@ export const pushProductToChannelEngine = async (req, res) => {
     });
 
     // 🔹 Return early
-    return successResponse(res, 'Products push started in background', 202, {
+    return successResponse(res, req.locale.PRODUCTS_PUSH_STARTED, 202, {
       message: `Up to ${maxProducts} products will be pushed`,
     });
   } catch (err) {
@@ -119,22 +121,24 @@ export const updateProductStatus = async (req, res) => {
   try {
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || !ids.length) {
-      return failResponse(res, 'Product IDs are required', 400);
+      return failResponse(res, req.locale.PRODUCT_IDS_REQUIRED, 400);
     }
     const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
     if (invalidIds.length > 0) {
-      return failResponse(res, `Invalid product IDs: ${invalidIds.join(', ')}`, 400);
+      return failResponse(res, `${req.locale.INVALID_PRODUCT_IDS} ${invalidIds.join(', ')}`, 400);
     }
     const statusValue = status?.toString().toLowerCase();
     if (!statusValue || !PRODUCT_STATUSES.includes(statusValue)) {
-      return failResponse(res, `Status must be one of: ${PRODUCT_STATUSES.join(', ')}`, 400);
+      return failResponse(res, `${req.locale.STATUS_MUST_BE_ONE_OF} ${PRODUCT_STATUSES.join(', ')}`, 400);
     }
     const updatedCount = await productService.updateProductStatus(ids, status);
     if (updatedCount === 0) {
-      return failResponse(res, 'No matching products found to update', 404);
+      return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
     }
     const statusMessage =
-      statusValue === 'active' ? 'Products activated successfully' : 'Products inactivated successfully';
+      statusValue === 'active'
+        ? req.locale.PRODUCTS_ACTIVATED_SUCCESSFULLY
+        : req.locale.PRODUCTS_INACTIVATED_SUCCESSFULLY;
     return successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating product status:', err);
@@ -176,14 +180,15 @@ export const deleteMultipleProducts = async (req, res) => {
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 export const addProductsToUserChannel = async (req, res) => {
   try {
-    const { channelId, productIds } = req.body;
+    const { ids } = req.body;
+    const { id } = req.params;
     const userId = req.user._id;
     // Check if user exists
     const user = await User.findById(userId);
     if (!user) {
       return failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    const result = await productService.addProductsToUserChannel(userId, channelId, productIds, req.locale);
+    const result = await productService.addProductsToUserChannel(userId, id, ids, req.locale);
 
     if (!result.success) {
       return failResponse(res, result?.message, 404);
@@ -202,7 +207,7 @@ export const getUserChannelProducts = async (req, res) => {
     const userId = req.user?._id;
     const { channelId } = req.params;
     if (!channelId) {
-      return errorResponse(res, 'channelId is required', 400);
+      return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
     }
     const { products, pagination, appliedFilters } = await productService.getUserChannelProducts(
       userId,
@@ -214,7 +219,9 @@ export const getUserChannelProducts = async (req, res) => {
       appliedFilters: appliedFilters || {},
       ...pagination,
     };
-    const message = products?.length ? 'User channel products fetched successfully' : 'No user channel products found';
+    const message = products?.length
+      ? req.locale.USER_CHANNEL_PRODUCTS_FETCHED_SUCCESSFULLY
+      : req.locale.NO_USER_CHANNEL_PRODUCTS_FOUND;
     return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error fetching user channel products:', error);
@@ -227,7 +234,7 @@ export const getUserUnassignedProducts = async (req, res) => {
     const { channelId } = req.params;
     const userId = req.user?._id;
     if (!channelId) {
-      return errorResponse(res, { message: 'channelId is required' }, 400);
+      return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
     const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
       userId,
@@ -240,12 +247,36 @@ export const getUserUnassignedProducts = async (req, res) => {
       appliedFilters: appliedFilters || {},
       ...pagination,
     };
-    const message = products.length ? 'Available products fetched successfully' : 'No products found';
+    const message = products.length ? req.locale.AVAILABLE_PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
 
     return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error in getUserUnassignedProducts:', error);
     return errorResponse(res, error, 500);
+  }
+};
+export const unlinkProductFromChannel = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { channelId } = req.params;
+    const { ids } = req.body;
+    if (!userId) {
+      return errorResponse(res, { message: req.locale.USERID_REQUIRED }, 400);
+    }
+    if (!channelId) {
+      return errorResponse(res, { message: req.locale.CHANNELID_REQUIRED }, 400);
+    }
+    if (!Array.isArray(ids) || !ids.length) {
+      return failResponse(res, req.locale.PRODUCTIDS_REQUIRED, 400);
+    }
+    const updatedCount = await productService.unlinkProductFromChannel(userId, channelId, ids);
+    if (updatedCount === 0) {
+      return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND, 404);
+    }
+    return successResponse(res, req.locale.PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS, 200);
+  } catch (error) {
+    console.error('Error:', error);
+    return errorResponse(res, error);
   }
 };
 
@@ -261,4 +292,5 @@ export default {
   getUserChannelProducts,
   getUserUnassignedProducts,
   addProductsToUserChannel,
+  unlinkProductFromChannel,
 };

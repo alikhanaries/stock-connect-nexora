@@ -65,17 +65,37 @@ const getAllChannelsFromChannelPartner = async () => {
 };
 
 /** FUNC - GET ALL CHANNEL LIST FROM DATABASE */
-const getAllChannels = async () => {
+const getAllChannels = async (query) => {
   try {
-    // Get data
-    const result = await Channel.find({ isActive: true }, { _id: 1, channelName: 1, channelImageUrl: 1 }).lean();
-    if (!result.length) {
-      return false;
+    const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', appliedFilters = {} } = query;
+
+    const parsedLimit = Math.min(Math.max(parseInt(size) || 10, 1), 100); // max 100 per page
+    const currentPage = Math.max(parseInt(page) || 1, 1);
+
+    // Build Mongo query
+    const mongoQuery = { isActive: true };
+    if (search) {
+      mongoQuery.channelName = { $regex: search, $options: 'i' };
     }
-    return result;
+
+    // Count total channels
+    const total = await Channel.countDocuments(mongoQuery);
+
+    // Fetch paginated channels
+    const channels = await Channel.find(mongoQuery, { _id: 1, channelName: 1, channelImageUrl: 1, channelId: 1 })
+      .sort({ [sortBy]: sortOrder === 'asc' ? 1 : -1 })
+      .skip((currentPage - 1) * parsedLimit)
+      .limit(parsedLimit)
+      .lean();
+
+    return {
+      channels,
+      pagination: getPagination(total, currentPage, parsedLimit),
+      appliedFilters,
+    };
   } catch (err) {
     console.error('Error in getAllChannels:', err);
-    return { success: false, message: err.message };
+    throw new Error(err.message);
   }
 };
 
@@ -88,7 +108,7 @@ const saveUserChannels = async (userId, channelIds) => {
         throw new Error(`Invalid channelId: ${id}`);
       }
       return {
-        id: new ObjectId(id),
+        id,
         status: 'active', // default
       };
     });
@@ -136,7 +156,7 @@ export const getAllUserChannels = async (userId, query) => {
         $lookup: {
           from: 'channels',
           localField: 'channelIds.id',
-          foreignField: '_id',
+          foreignField: 'channelId',
           as: 'channelDetails',
         },
       },
@@ -214,15 +234,13 @@ export const getAllUserChannels = async (userId, query) => {
   }
 };
 
-export const updateUserChannelsStatus = async (userId, channelIds, status) => {
+export const updateUserChannelsStatus = async (userId, ids, status) => {
   try {
-    const objectIds = channelIds.map((id) => new ObjectId(id));
-
     const result = await UserChannels.updateOne(
       { userId: new ObjectId(userId) },
       { $set: { 'channelIds.$[elem].status': status } },
       {
-        arrayFilters: [{ 'elem.id': { $in: objectIds }, 'elem.status': { $ne: status } }],
+        arrayFilters: [{ 'elem.id': { $in: ids }, 'elem.status': { $ne: status } }],
       }
     );
     return result.modifiedCount || 0;
