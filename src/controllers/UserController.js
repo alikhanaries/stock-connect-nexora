@@ -1,6 +1,7 @@
 import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
 
@@ -15,6 +16,7 @@ export const getUserById = async (req, res) => {
     }
     res.status(200).json(formatSuccessResponse(user, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
+    errorLog(err);
     res.status(400).json(formatErrorResponse(err?.message || req.locale.FAILED_TO_FETCH_USER_DATA));
   }
 };
@@ -35,6 +37,7 @@ export const updateUser = async (req, res) => {
     }
     return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, updatedUser.toObject());
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error);
   }
 };
@@ -78,6 +81,7 @@ export const getAllUsers = async (req, res) => {
     };
     res.status(200).json(formatSuccessResponse(response, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
+    errorLog(err);
     res.status(500).json(formatErrorResponse(err?.message || req.locale.FAILED_TO_FETCH_USER_DATA));
   }
 };
@@ -111,6 +115,7 @@ export const updatePassword = async (req, res) => {
     return Responses.successResponse(res, req.locale.PASSWORD_UPDATED_SUCCESSFULLY, 200);
   } catch (error) {
     console.error('userUpdatePassword Error', error);
+    errorLog(error);
     return Responses.errorResponse(res, error, 500);
   }
 };
@@ -126,6 +131,7 @@ export const softDeleteUser = async (req, res) => {
     }
     return Responses.successResponse(res, req.locale.USER_DELETED_SUCCESSFULLY, 200);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error);
   }
 };
@@ -138,6 +144,7 @@ export const deleteAllUsers = async (req, res) => {
     }
     return Responses.successResponse(res, req.locale.ALL_USERS_DELETED_SUCCESSFULLY, 200);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error, 500);
   }
 };
@@ -157,6 +164,7 @@ export const deleteSelectedUsers = async (req, res) => {
 
     return Responses.successResponse(res, `Successfully deleted ${result.modifiedCount} users.`, 200);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error, 500);
   }
 };
@@ -181,6 +189,7 @@ export const updateSelectedUserStatus = async (req, res) => {
 
     return Responses.successResponse(res, `${result.modifiedCount} ${statusMessage} successfully.`, 200);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error, 500);
   }
 };
