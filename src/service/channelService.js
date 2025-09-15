@@ -135,23 +135,22 @@ const saveUserChannels = async (userId, channelIds) => {
 /** FUNC - GET USER CHANNEL LIST */
 export const getAllUserChannels = async (userId, query) => {
   try {
-    const { page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+    const { page = 1, limit = 10, status = 'active', search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
     const skip = (page - 1) * limit;
     const parsedLimit = parseInt(limit);
     const currentPage = Math.max(1, Number(page));
-
     const appliedFilters = {};
     if (query?.status) {
       appliedFilters.status = query?.status;
     }
 
+    const baseMatch = {
+      userId: new ObjectId(userId),
+      ...(status ? { 'channelIds.status': status } : { 'channelIds.status': { $in: ['active', 'inactive'] } }),
+    };
     const pipeline = [
-      { $match: { userId: new ObjectId(userId) } },
-
+      { $match: baseMatch },
       { $unwind: '$channelIds' },
-      // Fetch only removed channels
-      { $match: { 'channelIds.status': status } },
-
       {
         $lookup: {
           from: 'channels',
@@ -161,9 +160,7 @@ export const getAllUserChannels = async (userId, query) => {
         },
       },
       { $unwind: '$channelDetails' },
-
       ...(search ? [{ $match: { 'channelDetails.channelName': { $regex: search, $options: 'i' } } }] : []),
-
       // Orders count
       {
         $lookup: {
@@ -173,17 +170,18 @@ export const getAllUserChannels = async (userId, query) => {
           as: 'ordersInfo',
         },
       },
-
       // Products count
       {
         $lookup: {
-          from: 'channelproducts',
+          from: 'userchannelproducts', // :point_left: collection name (check in Mongo, likely lowercased plural)
           let: { channelId: '$channelDetails.channelId' },
-          pipeline: [{ $match: { $expr: { $eq: ['$marketPlaceId', '$$channelId'] } } }, { $count: 'count' }],
+          pipeline: [
+            { $match: { $expr: { $eq: ['$channelId', '$$channelId'] }, isActive: true } },
+            { $project: { count: { $size: '$skuList' } } },
+          ],
           as: 'productsInfo',
         },
       },
-
       {
         $project: {
           _id: 0,
@@ -200,21 +198,16 @@ export const getAllUserChannels = async (userId, query) => {
           },
         },
       },
-
       { $sort: { [`channel.${sortBy}`]: sortOrder === 'asc' ? 1 : -1 } },
     ];
-
     // First pipeline for paginated data
     const dataPipeline = [...pipeline, { $skip: skip }, { $limit: parsedLimit }];
-
     // Second pipeline for total count
     const countPipeline = [...pipeline, { $count: 'total' }];
-
     const [channels, totalResult] = await Promise.all([
       UserChannels.aggregate(dataPipeline),
       UserChannels.aggregate(countPipeline),
     ]);
-
     const total = totalResult.length > 0 ? totalResult[0].total : 0;
     return {
       success: total === 0 ? false : true,
@@ -249,6 +242,7 @@ export const updateUserChannelsStatus = async (userId, ids, status) => {
     throw new Error(err.message);
   }
 };
+
 export default {
   getAllChannelsFromChannelPartner,
   getAllChannels,

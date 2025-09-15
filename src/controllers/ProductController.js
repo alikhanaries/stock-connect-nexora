@@ -201,6 +201,10 @@ export const addProductsToUserChannel = async (req, res) => {
 export const getUserChannelProducts = async (req, res) => {
   try {
     const userId = req.user?._id;
+
+    if (!userId) {
+      return failResponse(res, 'User ID is required', 400);
+    }
     const { channelId } = req.params;
     if (!channelId) {
       return errorResponse(res, 'channelId is required', 400);
