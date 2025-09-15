@@ -18,6 +18,7 @@ export const getProducts = async (req, res) => {
     return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error fetching products:', error);
+    errorLog(error);
     return errorResponse(res, error, 500);
   }
 };
@@ -37,6 +38,7 @@ export const getTopSellingProduct = async (req, res) => {
     return successResponse(res, message, 200, topProducts);
   } catch (error) {
     console.error('Error fetching products:', error);
+    errorLog(error);
     return errorResponse(res, error, 500);
   }
 };
@@ -66,6 +68,7 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     });
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return errorResponse(res, error.message);
   }
 };
@@ -89,6 +92,7 @@ export const importProductsFromCsvFile = async (req, res) => {
     });
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return errorResponse(res, error.message);
   }
 };
@@ -103,6 +107,7 @@ export const pushProductToChannelEngine = async (req, res) => {
     return successResponse(res, `${result.AcceptedCount} ${req.locale.PRODUCTS_PUSH_STARTED}`, 202);
   } catch (err) {
     console.error('Controller Error:', err);
+    errorLog(err);
     return errorResponse(res, err, 500);
   }
 };
@@ -132,6 +137,7 @@ export const updateProductStatus = async (req, res) => {
     return successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating product status:', err);
+    errorLog(err);
     return errorResponse(res, err, 500);
   }
 };
@@ -148,6 +154,7 @@ export const deleteProduct = async (req, res) => {
     return successResponse(res, result.message || req.locale.PRODUCT_DELETE_SUCCESS, 200);
   } catch (error) {
     console.error('Error:', error);
+    errorLog(error);
     return errorResponse(res, error);
   }
 };
@@ -164,6 +171,7 @@ export const deleteMultipleProducts = async (req, res) => {
     return successResponse(res, result.message || req.locale.PRODUCT_DELETE_SUCCESS, 200);
   } catch (error) {
     console.error('Error:', error);
+    errorLog(error);
     return errorResponse(res, error);
   }
 };
@@ -220,6 +228,7 @@ export const getUserChannelProducts = async (req, res) => {
     return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error fetching user channel products:', error);
+    errorLog(error);
     return errorResponse(res, error, 500);
   }
 };
@@ -247,6 +256,7 @@ export const getUserUnassignedProducts = async (req, res) => {
     return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error in getUserUnassignedProducts:', error);
+    errorLog(error);
     return errorResponse(res, error, 500);
   }
 };
@@ -271,6 +281,7 @@ export const unlinkProductFromChannel = async (req, res) => {
     return successResponse(res, req.locale.PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS, 200);
   } catch (error) {
     console.error('Error:', error);
+    errorLog(error);
     return errorResponse(res, error);
   }
 };

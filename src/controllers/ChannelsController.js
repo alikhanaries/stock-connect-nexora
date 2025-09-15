@@ -1,6 +1,7 @@
 import { STATUS_MESSAGES, VALID_STATUSES } from '#constants/common.js';
 import Responses from '../helpers/response.js';
 import User from '../models/User.js';
+import { errorLog } from '#middleware/index.js';
 import channelService from '../service/channelService.js';
 /**FUNC- FOR GET ALL CHANNEL LIST FROM CHANNEL PARTNER**/
 export const getAllChannelsFromChannelPartner = async (req, res) => {
@@ -11,6 +12,7 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
     }
     return Responses.successResponse(res, req.locale.CHANNELS_SAVED_SUCCESSFULLY, 200);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -27,6 +29,7 @@ export const getAllChannels = async (req, res) => {
     return Responses.successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -52,6 +55,7 @@ export const saveUserChannels = async (req, res) => {
     return Responses.successResponse(res, req.locale.CHANNEL_SAVED_SUCCESS, 200, result.data);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -85,6 +89,7 @@ export const getAllUserChannels = async (req, res) => {
     return Responses.successResponse(res, req.locale.USER_CHANNELS_FOUND, 200, responseData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -107,6 +112,7 @@ export const updateUserChannelsStatus = async (req, res) => {
     return Responses.successResponse(res, `User channels ${STATUS_MESSAGES[status]} successfully`, 200);
   } catch (error) {
     console.error('Controller error in updateUserChannelsStatus:', error);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
