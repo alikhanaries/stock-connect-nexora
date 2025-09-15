@@ -12,6 +12,7 @@ import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import mongoose from 'mongoose';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
+import Channel from '#models/Channel.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -20,7 +21,17 @@ const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
 const MAX_RETRIES = 3;
 
 const fetchProducts = async (query) => {
-  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+  const {
+    page = 1,
+    size = 10,
+    status,
+    productSkuCode,
+    minPrice,
+    maxPrice,
+    search,
+    sortBy = 'createdAt',
+    sortOrder = 'asc',
+  } = query;
 
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
@@ -36,6 +47,10 @@ const fetchProducts = async (query) => {
       appliedFilters.status = statusValue;
     }
   }
+  if (productSkuCode) {
+    filter.productSkuCode = productSkuCode;
+    appliedFilters.productSkuCode = productSkuCode;
+  }
 
   // Price filter
   if (minPrice || maxPrice) {
@@ -45,7 +60,6 @@ const fetchProducts = async (query) => {
   }
 
   // Search filter
-  // if (search) filter.$text = { $search: search };
   if (search) {
     const regex = new RegExp(search, 'i');
     filter.$or = [{ name: regex }, { productSkuCode: regex }];
@@ -449,17 +463,22 @@ const addProductsToUserChannel = async (userId, channelId, productIds, locale) =
 
 export const getUserChannelProducts = async (userId, channelId, query) => {
   const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice } = query;
-  if (!userId) {
-    throw new Error('User ID is required');
-  }
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const appliedFilters = {};
+
   const matchStage = {
     userId: new mongoose.Types.ObjectId(userId),
     channelId: Number(channelId),
-    isActive: true,
   };
+
+  // ✅ Step 1: Fetch channel details separately (before product pipeline)
+  const channelDetails = await Channel.findOne(
+    { channelId: Number(channelId) },
+    { channelId: 1, channelName: 1, _id: 0 }
+  ).lean();
+
+  // ✅ Step 2: Build product pipeline
   const pipeline = [
     { $match: matchStage },
     { $unwind: '$skuList' },
@@ -475,6 +494,7 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
   ];
 
   const matchProductStage = { 'productDetails.isDeleted': false };
+
   if (status) {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
@@ -482,6 +502,7 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
       appliedFilters.status = statusValue;
     }
   }
+
   if (minPrice || maxPrice) {
     matchProductStage['productDetails.price'] = {};
     if (minPrice) matchProductStage['productDetails.price'].$gte = Number(minPrice);
@@ -489,6 +510,7 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
     if (minPrice) appliedFilters.minPrice = Number(minPrice);
     if (maxPrice) appliedFilters.maxPrice = Number(maxPrice);
   }
+
   if (search && search.trim() !== '') {
     const regex = new RegExp(search, 'i');
     matchProductStage.$or = [
@@ -498,10 +520,16 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
     ];
     appliedFilters.search = search;
   }
+
   pipeline.push({ $match: matchProductStage });
+
   const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
   const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : '_id';
-  pipeline.push({ $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 } });
+
+  pipeline.push({
+    $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
+  });
+
   pipeline.push({
     $facet: {
       paginatedResults: [
@@ -525,11 +553,14 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
     },
   });
 
+  // ✅ Step 3: Run aggregation
   const result = await UserChannelProducts.aggregate(pipeline);
   const total = result[0]?.totalCount[0]?.count || 0;
   const products = result[0]?.paginatedResults || [];
 
+  // ✅ Final Response with channel outside products
   return {
+    channel: channelDetails,
     products,
     pagination: getPagination(total, currentPage, limit),
     appliedFilters,
