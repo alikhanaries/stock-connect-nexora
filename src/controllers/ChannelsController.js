@@ -110,10 +110,33 @@ export const updateUserChannelsStatus = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+
+export const removeUserChannels = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { ids } = req.body;
+    if (!userId) {
+      return Responses.failResponse(res, req.locale.USERID_REQUIRED, 400);
+    }
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return Responses.failResponse(res, req.locale.INVALID_IDS, 400);
+    }
+    const result = await channelService.removeUserChannels(userId, ids);
+    if (result.deletedChannels === 0 && result.deletedProducts === 0) {
+      return Responses.failResponse(res, req.locale.NO_CHANNEL_FOUND, 404);
+    }
+    return Responses.successResponse(res, req.locale.USER_CHANNELS_REMOVED_SUCCESSFULLY, 200);
+  } catch (error) {
+    console.error('Controller error in removeUserChannels:', error);
+    return Responses.errorResponse(res, error.message || 'Internal Server Error', 500);
+  }
+};
+
 export default {
   getAllChannelsFromChannelPartner,
   getAllChannels,
   saveUserChannels,
   getAllUserChannels,
   updateUserChannelsStatus,
+  removeUserChannels,
 };

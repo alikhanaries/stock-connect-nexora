@@ -7,6 +7,7 @@
   "UNAUTHORIZED": "وصول غير مصرح به",
   "FORBIDDEN": "إجراء محظور",
 
+  "USER_CHANNELS_REMOVED_SUCCESSFULLY": "لم يتم العثور على قنوات مطابقة للتحديث",
   "CHANNELS_FOUND_SUCCESS": "تم العثور على القنوات بنجاح",
   "CHANNELS_RETRIEVE_FAILED": "فشل في استرجاع القنوات",
   "NO_CHANNEL_FOUND": "لم يتم العثور على قناة",
@@ -60,7 +61,6 @@
   "NEW_ORDERS_SYNCED_SUCCESSFULLY": "تمت مزامنة الطلبات الجديدة بنجاح.",
   "INVALID_PERIOD": "فترة غير صالحة. يرجى استخدام واحدة مما يلي:",
   "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "تم جلب مقارنة الطلبات بنجاح.",
-
 
   "USERID_REQUIRED": "معرّف المستخدم مطلوب",
   "PRODUCT_ASSIGNED_SUCCESS": "تم تعيين المنتج بنجاح",

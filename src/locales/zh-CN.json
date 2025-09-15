@@ -7,6 +7,7 @@
   "UNAUTHORIZED": "未授权访问",
   "FORBIDDEN": "禁止的操作",
 
+  "USER_CHANNELS_REMOVED_SUCCESSFULLY": "用户渠道已成功删除",
   "CHANNELS_RETRIEVE_FAILED": "获取频道失败",
   "CHANNELS_FOUND_SUCCESS": "找到频道",
   "CHANNEL_FOUND_FAILED": "获取频道失败",

@@ -4,6 +4,7 @@ import Channel from '../models/Channel.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_URL } = config;
@@ -243,10 +244,38 @@ export const updateUserChannelsStatus = async (userId, ids, status) => {
   }
 };
 
+export const removeUserChannels = async (userId, ids) => {
+  if (!ids || !ids.length) {
+    return { deletedChannels: 0, deletedProducts: 0 };
+  }
+  try {
+    // Remove from UserChannels
+    const channelResult = await UserChannels.updateMany(
+      { userId: new ObjectId(userId) },
+      { $pull: { channelIds: { id: { $in: ids } } } }
+    );
+
+    // Delete related products
+    const productResult = await UserChannelProducts.deleteMany({
+      userId: new ObjectId(userId),
+      channelId: { $in: ids },
+    });
+
+    return {
+      deletedChannels: channelResult?.modifiedCount || 0,
+      deletedProducts: productResult?.deletedCount || 0,
+    };
+  } catch (err) {
+    console.error('Service error in removeUserChannels:', err);
+    throw new Error('Failed to remove user channels. Please try again.');
+  }
+};
+
 export default {
   getAllChannelsFromChannelPartner,
   getAllChannels,
   saveUserChannels,
   getAllUserChannels,
   updateUserChannelsStatus,
+  removeUserChannels,
 };
