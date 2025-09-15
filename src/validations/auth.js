@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { validate } from './validate.js';
 import { LANGUAGE_CODES, USER_ROLES } from '#constants/common.js';
+import mongoose from 'mongoose';
 const allowedRoles = Object.values(USER_ROLES);
 
 const emailSchema = z
@@ -43,6 +44,10 @@ const phoneSchema = z
   .max(15, 'Phone number must not exceed 15 digits')
   .regex(/^[+]?[\d\s\-()]+$/, 'Invalid phone number format')
   .trim();
+
+const objectIdSchema = z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
+  message: 'Invalid ID format',
+});
 
 export const headerSchema = z
   .object({
@@ -93,16 +98,20 @@ export const registerValidator = validate(async (req) => {
         required_error: 'Role is required',
         invalid_type_error: `Invalid role. Please select one of: ${allowedRoles.join(', ')}`,
       }),
-      active: z
-        .boolean({
-          invalid_type_error: 'Active must be a boolean',
-        })
-        .optional()
-        .default(true),
+      active: z.boolean({ invalid_type_error: 'Active must be a boolean' }).optional().default(true),
+      sellerId: objectIdSchema.optional(),
     })
-    .strict();
+    .superRefine((data, ctx) => {
+      if (data.role !== USER_ROLES.PLATFORM_MASTER && !data.sellerId) {
+        ctx.addIssue({
+          path: ['sellerId'],
+          message: 'Seller ID is required for this role.',
+          code: z.ZodIssueCode.custom,
+        });
+      }
+    });
 
-  bodySchema.parse(req.body);
+  await bodySchema.parseAsync(req.body);
 });
 
 export const resetTokenValidator = validate(async (req) => {
