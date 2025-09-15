@@ -51,7 +51,12 @@ productsRouter.post(
   importProductsFromCsvFile
 );
 
-productsRouter.get('/push-to-channelengine', checkLanguage, authMiddleware, pushProductToChannelEngine);
+productsRouter.get(
+  '/push-product-to-channelengine/:channelId',
+  checkLanguage,
+  authMiddleware,
+  pushProductToChannelEngine
+);
 productsRouter.get('/top-product', checkLanguage, authMiddleware, getTopSellingProduct);
 
 productsRouter.patch('/update-status', checkLanguage, authMiddleware, updateProductStatus);
@@ -73,7 +78,17 @@ productsRouter.put(
 );
 
 productsRouter.get('/user-channel-products/:channelId', checkLanguage, authMiddleware, getUserChannelProducts);
-productsRouter.get('/get-user-unassigned-products/:channelId',checkLanguage,authMiddleware,getUserUnassignedProducts);
-productsRouter.delete('/unlink-product-from-channel/:channelId',checkLanguage,authMiddleware,unlinkProductFromChannel);
+productsRouter.get(
+  '/get-user-unassigned-products/:channelId',
+  checkLanguage,
+  authMiddleware,
+  getUserUnassignedProducts
+);
+productsRouter.delete(
+  '/unlink-product-from-channel/:channelId',
+  checkLanguage,
+  authMiddleware,
+  unlinkProductFromChannel
+);
 
 export default productsRouter;

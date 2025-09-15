@@ -185,33 +185,46 @@ const pushBatch = async (batch, index) => {
   });
 };
 
-// 🔹 Fetch products from DB in batches
-async function* fetchBatchesFromDB() {
-  let skip = 0;
-  while (true) {
-    const products = await Product.find({ status: 'active', isDeleted: { $ne: true } })
-      .skip(skip)
-      .limit(BATCH_SIZE)
-      .lean();
-    if (!products.length) break;
-    yield products.map(mapProductToChannelEngine);
-    skip += BATCH_SIZE;
-  }
-}
-
-// 🔹 Push all products to CE
-const pushProductsFromDB = async () => {
+const pushProductsFromChannel = async (channelId) => {
   const limit = pLimit(MAX_CONCURRENT);
   const results = [];
 
+  // 1️⃣ Get assigned SKUs for this channel
+  const channelProducts = await UserChannelProducts.find({ channelId }).lean();
+  const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
+
+  if (!skuCodes.length) {
+    console.warn(`No products found for channel ${channelId}`);
+    return { AcceptedCount: 0, RejectedCount: 0, ProductMessages: [] };
+  }
+
+  // 2️⃣ Fetch products by SKU in batches
+  async function* fetchBatchesByChannel() {
+    let skip = 0;
+    while (true) {
+      const products = await Product.find({
+        productSkuCode: { $in: skuCodes },
+        status: 'active',
+        isDeleted: { $ne: true },
+      })
+        .skip(skip)
+        .limit(BATCH_SIZE)
+        .lean();
+      if (!products.length) break;
+      yield products.map(mapProductToChannelEngine);
+      skip += BATCH_SIZE;
+    }
+  }
+
+  // 3️⃣ Push batches
   let index = 0;
-  for await (const batch of fetchBatchesFromDB()) {
+  for await (const batch of fetchBatchesByChannel()) {
     results.push(
       limit(async () => {
         try {
           return await pushBatch(batch, index);
         } catch (err) {
-          console.error(`❌ Batch ${index + 1} failed permanently:`, err);
+          console.error(`❌ Batch ${index + 1} failed:`, err);
           return {
             AcceptedCount: 0,
             RejectedCount: batch.length,
@@ -223,10 +236,9 @@ const pushProductsFromDB = async () => {
     index++;
   }
 
-  // Wait for all limited promises to finish
   const settled = await Promise.allSettled(results);
 
-  // 🔹 Merge results
+  // 4️⃣ Merge results
   return settled.reduce(
     (acc, r) => {
       if (r.status === 'fulfilled') {
@@ -650,7 +662,6 @@ const unlinkProductFromChannel = async (userId, channelId, ids) => {
 
 export default {
   fetchProducts,
-  pushProductsFromDB,
   importProductsFromCsvFile,
   importProductsFromGoogleSheet,
   deleteProduct,
@@ -661,4 +672,5 @@ export default {
   getUserUnassignedProducts,
   addProductsToUserChannel,
   unlinkProductFromChannel,
+  pushProductsFromChannel,
 };
