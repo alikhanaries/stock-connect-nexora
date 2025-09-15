@@ -245,9 +245,6 @@ export const updateUserChannelsStatus = async (userId, ids, status) => {
 };
 
 export const removeUserChannels = async (userId, ids) => {
-  if (!ids || !ids.length) {
-    return { deletedChannels: 0, deletedProducts: 0 };
-  }
   try {
     // Remove from UserChannels
     const channelResult = await UserChannels.updateMany(
@@ -256,15 +253,11 @@ export const removeUserChannels = async (userId, ids) => {
     );
 
     // Delete related products
-    const productResult = await UserChannelProducts.deleteMany({
+    await UserChannelProducts.deleteMany({
       userId: new ObjectId(userId),
       channelId: { $in: ids },
     });
-
-    return {
-      deletedChannels: channelResult?.modifiedCount || 0,
-      deletedProducts: productResult?.deletedCount || 0,
-    };
+    return channelResult.modifiedCount || 0;
   } catch (err) {
     console.error('Service error in removeUserChannels:', err);
     throw new Error('Failed to remove user channels. Please try again.');

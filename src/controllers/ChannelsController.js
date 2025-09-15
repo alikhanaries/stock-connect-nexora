@@ -121,8 +121,8 @@ export const removeUserChannels = async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, req.locale.INVALID_IDS, 400);
     }
-    const result = await channelService.removeUserChannels(userId, ids);
-    if (result.deletedChannels === 0 && result.deletedProducts === 0) {
+    const updatedCount = await channelService.removeUserChannels(userId, ids);
+    if (updatedCount === 0) {
       return Responses.failResponse(res, req.locale.NO_CHANNEL_FOUND, 404);
     }
     return Responses.successResponse(res, req.locale.USER_CHANNELS_REMOVED_SUCCESSFULLY, 200);
