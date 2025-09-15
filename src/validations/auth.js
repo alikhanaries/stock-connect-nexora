@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { validate } from './validate.js';
-import { LANGUAGE_CODES } from '#constants/common.js';
+import { LANGUAGE_CODES, USER_ROLES } from '#constants/common.js';
+const allowedRoles = Object.values(USER_ROLES);
 
 const emailSchema = z
   .string({
@@ -88,9 +89,9 @@ export const registerValidator = validate(async (req) => {
       firstName: nameSchema('First name'),
       lastName: nameSchema('Last name'),
       phoneNumber: phoneSchema,
-      role: z.enum(['admin', 'super_admin'], {
+      role: z.enum(allowedRoles, {
         required_error: 'Role is required',
-        invalid_type_error: 'Role must be either admin or super_admin',
+        invalid_type_error: `Invalid role. Please select one of: ${allowedRoles.join(', ')}`,
       }),
       active: z
         .boolean({

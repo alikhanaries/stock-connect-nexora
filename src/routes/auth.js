@@ -14,11 +14,15 @@ import {
   resetPasswordValidator,
   resetTokenValidator,
 } from '#validations/auth.js';
+import { authMiddleware, authorize } from '#middleware/index.js';
+// import { loginSchema, registerSchema } from '#validations/auth.js';
+import { USER_ROLES } from '#constants/common.js';
+const allowedRoles = Object.values(USER_ROLES);
 
 const router = express.Router();
 
 router.post('/login', loginValidator, login);
-router.post('/register', registerValidator, register);
+router.post('/register', authMiddleware, authorize(allowedRoles), registerValidator, register);
 router.post('/refresh-token', refreshToken);
 router.post('/forget-password', forgetPasswordValidator, forgotPassword);
 router.post('/validate-reset-token', resetTokenValidator, validateResetToken);
