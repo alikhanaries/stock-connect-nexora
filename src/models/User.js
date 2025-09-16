@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { USER_ROLES } from '#constants/common.js';
+const roles = Object.values(USER_ROLES);
 
 const userSchema = new mongoose.Schema(
   {
@@ -25,18 +27,26 @@ const userSchema = new mongoose.Schema(
     firstName: {
       type: String,
       required: [true, 'First name is required'],
+      index: true,
     },
     lastName: {
       type: String,
       required: [true, 'Last name is required'],
+      index: true,
+    },
+    phoneNumber: {
+      type: String,
+      required: [true, 'Phone number is required'],
+      unique: [true, 'Phone number already exists!'],
+      trim: true,
     },
     role: {
       type: String,
-      enum: ['admin', 'super_admin'],
+      enum: roles,
       required: [true, 'Role is required!'],
       index: true,
     },
-    isActive: {
+    active: {
       type: Boolean,
       default: true,
       index: true,
@@ -47,9 +57,17 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
     lastLogin: Date,
-    isSupplierConnected: {
+    isMarketplaceConnected: {
       type: Boolean,
       default: false,
+    },
+    resetPasswordToken: {
+      type: String,
+      default: null,
+    },
+    resetPasswordExpires: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true }
