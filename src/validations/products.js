@@ -243,20 +243,14 @@ export const deleteProductValidator = validate(async (req) => {
 export const pushProductsToChannelEngineValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
-  const querySchema = z
-    .object({
-      limit: z
-        .string()
-        .regex(/^\d+$/, 'limit must be a number string')
-        .transform((val) => parseInt(val, 10))
-        .pipe(z.number().min(1, 'limit must be at least 1'))
-        .optional(),
-    })
-    .strict();
-
-  querySchema.parse(req.query);
+  const paramsSchema = z.object({
+    channelId: z
+      .string()
+      .regex(/^\d+$/, 'channelId must be a number string')
+      .transform((val) => parseInt(val, 10)),
+  });
+  paramsSchema.parse(req.params);
 });
-
 // /* GET USER CHANNEL PRODUCTS VALIDATOR */
 export const getUserChannelProductsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);

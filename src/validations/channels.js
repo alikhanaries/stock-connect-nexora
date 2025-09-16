@@ -119,3 +119,17 @@ export const saveUserChannelsValidator = validate(async (req) => {
 
   bodySchema.parse(req.body);
 });
+// /* REMOVE USER CHANNELS VALIDATOR */
+export const removeUserChannelsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const bodySchema = z
+    .object({
+      ids: z
+        .array(z.union([z.string().min(1, 'id cannot be empty'), z.number().transform((val) => val.toString())]))
+        .nonempty('At least one channel id is required'),
+    })
+    .strict();
+
+  bodySchema.parse(req.body);
+});
