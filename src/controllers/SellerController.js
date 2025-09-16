@@ -31,7 +31,7 @@ export const softDeleteSeller = async (req, res) => {
 
     const deletedSeller = await sellerService.deleteSeller(id);
 
-    if (deletedSeller.isDeleted) {
+    if (!deletedSeller) {
       return response.failResponse(res, 'Seller not found.', 404);
     }
     return response.successResponse(res, 'Seller deleted sucessfully', 200);
