@@ -23,7 +23,7 @@ const CategoryMappingSchema = new Schema(
       index: true,
     },
     marketplaceCategoryId: {
-      type: String,
+      type: Number,
       required: true,
       trim: true,
       index: true,

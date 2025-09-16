@@ -13,7 +13,13 @@ const objectIdSchema = z
 const categoryItemSchema = z.object({
   platformCategoryIdRef: objectIdSchema,
   marketplaceIdRef: objectIdSchema,
-  marketplaceCategoryId: z.string().min(1, 'marketplaceCategoryId is required'),
+  marketplaceCategoryId: z
+    .number({
+      required_error: 'marketplaceCategoryId is required',
+      invalid_type_error: 'marketplaceCategoryId must be a number',
+    })
+    .int('marketplaceCategoryId must be an integer')
+    .min(1, 'marketplaceCategoryId must be greater than 0'),
 });
 
 export const addCategoryValidator = validate(async (req) => {
