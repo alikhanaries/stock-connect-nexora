@@ -242,13 +242,16 @@ export const deleteProductValidator = validate(async (req) => {
 // /* PUSH PRODUCTS TO CHANNELENGINE VALIDATOR */
 export const pushProductsToChannelEngineValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-
   const paramsSchema = z.object({
     channelId: z
-      .string()
-      .regex(/^\d+$/, 'channelId must be a number string')
-      .transform((val) => parseInt(val, 10)),
+      .number({
+        required_error: "channelId is required",
+        invalid_type_error: "channelId must be a number",
+      })
+      .int("channelId must be an integer")
+      .positive("channelId must be positive"),
   });
+
   paramsSchema.parse(req.params);
 });
 // /* GET USER CHANNEL PRODUCTS VALIDATOR */
