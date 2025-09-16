@@ -5,12 +5,8 @@ import UserSeller from '#models/UserSeller.js';
 
 const createSeller = async (sellerData) => {
   const { name } = sellerData;
-  const slug = name
-    .toLowerCase()
-    .replace(/[\s\W_]+/g, '_')
-    .replace(/^-+|-+$/g, '');
 
-  const seller = new Seller({ name, slug });
+  const seller = new Seller({ name });
   await seller.save();
   return {
     isExist: false,
@@ -27,18 +23,18 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
   let filter = { isDeleted: false };
   if (search) {
     const searchRegex = new RegExp(search, 'i');
-    filter = { name: searchRegex };
+    filter.name = searchRegex;
   }
 
   if (creatorRole === USER_ROLES.BRAND_SUPER_ADMIN) {
-    const sellerLinks = await UserSeller.find({ userId: creatorId }).lean();
+    const sellerLinks = await UserSeller.find({ userId: creatorId }).select('sellerId').lean();
     const sellerId = sellerLinks.map((link) => link.sellerId);
-    filter = { _id: { $in: sellerId } };
+    filter._id = { $in: sellerId };
   }
 
   const [totalElements, seller] = await Promise.all([
     Seller.countDocuments(filter),
-    Seller.find(filter).skip(skip).limit(size).lean(),
+    Seller.find(filter).skip(skip).limit(limit).lean(),
   ]);
   return {
     seller,

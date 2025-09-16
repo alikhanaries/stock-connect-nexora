@@ -32,5 +32,11 @@ const sellerSchema = new Schema(
   }
 );
 
+sellerSchema.pre('validate', function (next) {
+  if (!this.slug && this.name) {
+    this.slug = this.name.toLowerCase().replace(/\s+/g, '_');
+  }
+  next();
+});
 const Seller = mongoose.model('Seller', sellerSchema);
 export default Seller;
