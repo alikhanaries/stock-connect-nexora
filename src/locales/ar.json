@@ -90,5 +90,8 @@
   "VALID_SELLER_IDS": "يرجى تقديم معرفات صالحة",
   "NO_SELLER_FOUND": "لم يتم العثور على بائعين مطابقين للحذف",
   "SELLER_DELETED": "تم حذف البائع بنجاح",
-  "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح"
+  "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح",
+  "MARKETPLACE_NOT_FOUND": "لم يتم العثور على السوق",
+  "CATEGORY_PROCESSED_SUCCESS": "تمت معالجة الفئات بنجاح",
+  "CATEGORY_NOT_SAVED": "تعذر حفظ الفئات"
 }
