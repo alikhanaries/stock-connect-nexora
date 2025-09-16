@@ -99,22 +99,12 @@ export const importProductsFromCsvFile = async (req, res) => {
 
 export const pushProductToChannelEngine = async (req, res) => {
   try {
-    const maxProducts = Math.max(1, parseInt(req.query.limit || '500', 10));
-
-    // 🔹 Background push (fire-and-forget)
-    setImmediate(async () => {
-      try {
-        await productService.pushProductsFromDB(maxProducts);
-        console.log(`Background push completed for up to ${maxProducts} products`);
-      } catch (err) {
-        console.error('Background push error:', err);
-      }
-    });
-
-    // 🔹 Return early
-    return successResponse(res, req.locale.PRODUCTS_PUSH_STARTED, 202, {
-      message: `Up to ${maxProducts} products will be pushed`,
-    });
+    const { channelId } = req.params;
+    if (!channelId) {
+      return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
+    }
+    const result = await productService.pushProductsFromChannel(channelId);
+    return successResponse(res, `${result.AcceptedCount} ${req.locale.PRODUCTS_PUSH_STARTED}`, 202);
   } catch (err) {
     console.error('Controller Error:', err);
     errorLog(err);

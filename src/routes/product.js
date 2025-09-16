@@ -63,15 +63,17 @@ productsRouter.post(
 );
 
 productsRouter.get(
-  '/push-to-channelengine',
+  '/push-product-to-channelengine/:channelId',
   pushProductsToChannelEngineValidator,
   checkLanguage,
   authMiddleware,
   pushProductToChannelEngine
 );
+
 productsRouter.get('/top-product', getTopSellingProductValidator,checkLanguage, authMiddleware, getTopSellingProduct);
 
 productsRouter.patch('/update-status', updateProductStatusValidator,checkLanguage, authMiddleware, updateProductStatus);
+
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete(
@@ -88,6 +90,21 @@ productsRouter.put(
   checkLanguage,
   authMiddleware,
   addProductsToUserChannel
+);
+
+
+productsRouter.get('/user-channel-products/:channelId', checkLanguage, authMiddleware, getUserChannelProducts);
+productsRouter.get(
+  '/get-user-unassigned-products/:channelId',
+  checkLanguage,
+  authMiddleware,
+  getUserUnassignedProducts
+);
+productsRouter.delete(
+  '/unlink-product-from-channel/:channelId',
+  checkLanguage,
+  authMiddleware,
+  unlinkProductFromChannel
 );
 
 productsRouter.get(
@@ -107,5 +124,6 @@ productsRouter.get(
 );
 
 productsRouter.delete('/unlink-product-from-channel/:channelId',checkLanguage,authMiddleware,unlinkProductFromChannel);
+
 
 export default productsRouter;
