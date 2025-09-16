@@ -126,8 +126,14 @@ export const removeUserChannelsValidator = validate(async (req) => {
   const bodySchema = z
     .object({
       ids: z
-        .array(z.union([z.string().min(1, 'id cannot be empty'), z.number().transform((val) => val.toString())]))
-        .nonempty('At least one channel id is required'),
+        .array(
+          z.number({
+            required_error: "Channel ID is required",
+            invalid_type_error: "Channel ID must be a number",
+          }).int("Channel ID must be an integer")
+            .positive("Channel ID must be positive")
+        )
+        .nonempty("At least one channel id is required"),
     })
     .strict();
 
