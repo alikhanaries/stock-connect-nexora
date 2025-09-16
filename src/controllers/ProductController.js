@@ -9,7 +9,8 @@ import User from '../models/User.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query);
+    const sellerId = req.sellerIds;
+    const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query, sellerId);
     const responseData = {
       content: products || [],
       appliedFilters: appliedFilters || {},
@@ -46,6 +47,7 @@ export const getTopSellingProduct = async (req, res) => {
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
+    const sellerId = req.sellerIds;
     const { url } = req.body;
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
@@ -58,7 +60,7 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
     // Process file in background (async, no await here)
     productService
-      .importProductsFromGoogleSheet(exportUrl, req.locale)
+      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId)
       .then((result) => {
         console.log('CSV processing completed:', result);
         // Send email notification after processing
@@ -86,9 +88,12 @@ export const importProductsFromCsvFile = async (req, res) => {
   try {
     // Send immediate response to client
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+    // Call service
+    const sellerId = req.sellerIds;
+
     // Process file in background (async, no await here)
     productService
-      .importProductsFromCsvFile(req.file.path, req.locale)
+      .importProductsFromCsvFile(req.file.path, req.locale, sellerId)
       .then((result) => {
         console.log('CSV processing completed:', result.errorDetails);
         // Send email notification after processing
