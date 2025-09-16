@@ -1,44 +1,8 @@
-import { z, ZodError } from 'zod';
-import { errorResponse } from '#helpers/response.js';
+import { z } from 'zod';
 // Common language list
-import { LANGUAGE_CODES, ORDER_STATUS_MAP, VALID_PERIODS } from '#constants/common.js';
-const validate = (parseFn) => async (req, res, next) => {
-  try {
-    await parseFn(req);
-    return next();
-  } catch (error) {
-    console.error('Validation error:', error);
-    const message =
-      error instanceof ZodError ? error.issues[0]?.message || 'Invalid input' : error.message || 'Server Error';
-    return errorResponse(res, message, 400);
-  }
-};
-
-export const headerSchema = z
-  .object({
-    authorization: z
-      .string({
-        required_error: 'Authorization header is required',
-        invalid_type_error: 'Authorization must be a string',
-      })
-      .nonempty('Authorization header cannot be empty'),
-
-    'accept-language': z
-      .string({
-        invalid_type_error: 'Accept-Language must be a string',
-      })
-      .optional()
-      .superRefine((val, ctx) => {
-        if (val && !LANGUAGE_CODES.includes(val)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Accept-Language '${val}' is not supported. Supported languages: ${LANGUAGE_CODES.join(', ')}`,
-            path: ['accept-language'],
-          });
-        }
-      }),
-  })
-  .passthrough();
+import { ORDER_STATUS_MAP, VALID_PERIODS } from '#constants/common.js';
+import { validate } from './validate.js';
+import { headerSchema } from './headerSchema.js';
 
 export const getAllOrdersValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
