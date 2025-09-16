@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 import { z } from 'zod';
 import { PRODUCT_STATUSES } from '#constants/common.js';
-import { validate } from './validate';
-import { headerSchema } from './headerSchema';
+import { validate } from './validate.js';
+import { headerSchema } from './headerSchema.js';
 
 const objectIdSchema = z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
   message: 'Invalid ID format. Must be a 24-character hexadecimal string.',
