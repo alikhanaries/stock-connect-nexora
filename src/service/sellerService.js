@@ -1,17 +1,19 @@
 import Seller from '#models/Seller.js';
 
-const updateSeller = async (id, req) => {
-  const { name, status } = req;
-  const updatedSeller = await Seller.findByIdAndUpdate(
+const updateSeller = async (id, name, statusValue) => {
+  const updatedSeller = await Seller.findOneAndUpdate(
     { _id: id, isDeleted: false },
-    { name, status: status },
+    { name, status: statusValue },
     { new: true }
   ).lean();
   return updatedSeller;
 };
 
 const deleteSeller = async (id) => {
-  const deletedSeller = await Seller.findByIdAndUpdate({ _id: id, isDeleted: false }, { isDeleted: true });
+  const deletedSeller = await Seller.findOneAndUpdate(
+    { _id: id, isDeleted: false },
+    { isDeleted: true, status: 'inactive' }
+  );
   return deletedSeller;
 };
 
