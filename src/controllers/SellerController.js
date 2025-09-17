@@ -105,9 +105,10 @@ export const getAllSeller = async (req, res) => {
   try {
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
-    const { seller, pagination } = await sellerService.getAllSeller(req.query, creatorId, creatorRole);
+    const { seller, pagination, appliedFilters } = await sellerService.getAllSeller(req.query, creatorId, creatorRole);
     const responseData = {
       content: seller || [],
+      appliedFilters: appliedFilters || {},
       ...pagination,
     };
     const message = seller.length ? 'Seller fetched successfully' : 'No Seller found';
