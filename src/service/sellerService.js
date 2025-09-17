@@ -55,8 +55,6 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
   }
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
-
-  console.log(sort);
   const [totalElements, seller] = await Promise.all([
     Seller.countDocuments(filter),
     Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).skip(skip).limit(limit).lean(),
