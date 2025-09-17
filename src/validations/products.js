@@ -104,6 +104,7 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
   const bodySchema = z
     .object({
       url: z.any(), // temporarily accept anything
+      marketplaceId: z.number().int().positive('marketplaceId must be a positive integer'),
     })
     .strict()
     .refine((data) => data.url !== undefined && data.url !== null, {

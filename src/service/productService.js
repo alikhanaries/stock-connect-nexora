@@ -13,6 +13,7 @@ import { Readable } from 'stream';
 import mongoose from 'mongoose';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 import Channel from '#models/Channel.js';
+import * as categoryService from '../service/categoryService.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -252,7 +253,7 @@ const pushProductsFromChannel = async (channelId) => {
   );
 };
 
-const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
+const processImportStream = async (stream, { marketPlaceId, deleteAfter, filePath } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   let batch = [];
   let insertedCount = 0;
@@ -260,7 +261,7 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
   let invalidRowsCount = 0;
   let errorRows = [];
   const batchPromises = [];
-
+  const categoryTrails = [];
   await new Promise((resolve, reject) => {
     let rowIndex = 1;
 
@@ -287,7 +288,7 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
             errorRows.push(rowIndex);
             return;
           }
-
+          categoryTrails.push(product?.categoryTrail);
           batch.push(product);
 
           // 3. If batch full → upsert
@@ -355,7 +356,11 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
       })
       .on('error', reject);
   });
+  // AFTER ALL PRODUCTS IMPORTED NOW ADD ALL CATEGORY BY TRAILS
 
+  if (categoryTrails?.length !== 0) {
+    await categoryService.insertCategoryTrail(categoryTrails, marketPlaceId);
+  }
   return {
     success: true,
     message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
@@ -367,12 +372,12 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
 };
 
 /* Google Sheet Import */
-export const importProductsFromGoogleSheet = async (url) => {
+export const importProductsFromGoogleSheet = async (url, marketPlaceId) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processImportStream(stream);
+    return await processImportStream(stream, { marketPlaceId });
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
     throw new Error(err.message); // force the catch block
@@ -380,10 +385,10 @@ export const importProductsFromGoogleSheet = async (url) => {
 };
 
 /* CSV File Import */
-export const importProductsFromCsvFile = async (filePath) => {
+export const importProductsFromCsvFile = async (filePath, marketplaceId) => {
   try {
     const stream = fs.createReadStream(filePath);
-    return await processImportStream(stream, { deleteAfter: true, filePath });
+    return await processImportStream(stream, { marketplaceId, deleteAfter: true, filePath });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block

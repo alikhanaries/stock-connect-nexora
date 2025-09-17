@@ -5,6 +5,7 @@ import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import User from '../models/User.js';
+import Channel from '../models/Channel.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -45,16 +46,19 @@ export const getTopSellingProduct = async (req, res) => {
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
-    const { url } = req.body;
+    const { url, marketplaceId } = req.body;
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
-
+    const channelExists = await Channel.exists({ channelId: marketplaceId });
+    if (!channelExists) {
+      return failResponse(res, req.locale.MARKET_PLACE_NOT_FOUND, 404);
+    }
     const exportUrl = await convertGoogleSheetUrlToExport(url);
     if (!exportUrl) {
       return failResponse(res, req.locale.INVALID_URL, 500);
     }
-    const result = await productService.importProductsFromGoogleSheet(exportUrl);
+    const result = await productService.importProductsFromGoogleSheet(exportUrl, marketplaceId);
     // Handle failure from service
     if (!result?.success) {
       return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
@@ -76,8 +80,13 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 /* UPLOAD PRODUCTS FROM CSV FILE */
 export const importProductsFromCsvFile = async (req, res) => {
   try {
+    const { marketplaceId } = req.body;
+    const channelExists = await Channel.exists({ channelId: marketplaceId });
+    if (!channelExists) {
+      return failResponse(res, req.locale.MARKET_PLACE_NOT_FOUND, 404);
+    }
     // Call service
-    const result = await productService.importProductsFromCsvFile(req.file.path);
+    const result = await productService.importProductsFromCsvFile(req.file.path, marketplaceId);
 
     // Handle failure from service
     if (!result?.success) {
