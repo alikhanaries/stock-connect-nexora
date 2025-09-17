@@ -61,7 +61,6 @@
   "INVALID_PERIOD": "فترة غير صالحة. يرجى استخدام واحدة مما يلي:",
   "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "تم جلب مقارنة الطلبات بنجاح.",
 
-
   "USERID_REQUIRED": "معرّف المستخدم مطلوب",
   "PRODUCT_ASSIGNED_SUCCESS": "تم تعيين المنتج بنجاح",
   "PRODUCT_ASSIGNED_FAILED": "فشل في تعيين المنتج",
@@ -78,5 +77,8 @@
   "INVALID_PRODUCTS": "لم يتم العثور على منتجات صالحة لمعرفات المنتجات المقدمة",
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "تم فصل المنتج من القناة بنجاح",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "فشل فصل المنتج من القناة",
-  "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث"
+  "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث",
+
+  "FAILED_TO_UPLOAD": "تعذر جلب الفاتورة",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "تم جلب الفاتورة بنجاح"
 }
