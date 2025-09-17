@@ -3,6 +3,20 @@ import sellerService from '#service/sellerService.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import mongoose from 'mongoose';
 
+export const getSellerById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userData = await sellerService.getSellerById(id);
+    console.log(userData);
+    if (!userData) {
+      return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
+    }
+    return response.successResponse(res, req.locale.GET_SELLER_SUCCESS, 200, userData);
+  } catch (error) {
+    console.log('Update seller error: ', error);
+    return response.errorResponse(res, error.message, 500);
+  }
+};
 export const updateSeller = async (req, res) => {
   try {
     const { id } = req.params;
@@ -21,22 +35,7 @@ export const updateSeller = async (req, res) => {
     return response.successResponse(res, 'Seller Updated sucessfully', 200, updatedSeller);
   } catch (error) {
     console.log('Update seller error: ', error);
-    return response.errorResponse(res, error, 500);
-  }
-};
-
-export const softDeleteSeller = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const deletedSeller = await sellerService.deleteSeller(id);
-
-    if (!deletedSeller) {
-      return response.failResponse(res, 'Seller not found.', 404);
-    }
-    return response.successResponse(res, 'Seller deleted sucessfully', 200);
-  } catch (error) {
-    return response.errorResponse(res, error, 500);
+    return response.errorResponse(res, error.message, 500);
   }
 };
 
@@ -64,6 +63,29 @@ export const updateSellerStatus = async (req, res) => {
   } catch (err) {
     console.error('Error updating Seller status:', err);
     return response.errorResponse(res, err, 500);
+  }
+};
+
+export const softDeleteSellers = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || !ids.length) {
+      return response.failResponse(res, req.locale.SELLERIDS_REQUIRED, 400);
+    }
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return response.failResponse(res, `${req.locale.VALID_SELLER_IDS} ${invalidIds.join(', ')}`, 400);
+    }
+    const deletedSellers = await sellerService.softDeleteSellers(ids);
+    console.log(deletedSellers);
+    if (deletedSellers.modifiedCount === 0) {
+      return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
+    }
+    const statusMessage = `${deletedSellers.modifiedCount} ${req.locale.SELLER_DELETED}`;
+    return response.successResponse(res, statusMessage, 200);
+  } catch (err) {
+    console.error('Error updating Seller status:', err);
+    return response.errorResponse(res, err.message, 500);
   }
 };
 

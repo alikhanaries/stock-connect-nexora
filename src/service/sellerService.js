@@ -51,12 +51,12 @@ const updateSeller = async (id, name, statusValue) => {
   return updatedSeller;
 };
 
-const deleteSeller = async (id) => {
-  const deletedSeller = await Seller.findOneAndUpdate(
-    { _id: id, isDeleted: false },
-    { isDeleted: true, status: 'inactive' }
+const softDeleteSellers = async (ids) => {
+  const deletedSellers = await Seller.updateMany(
+    { _id: { $in: ids }, isDeleted: false },
+    { $set: { isDeleted: true, status: 'inactive' } }
   );
-  return deletedSeller;
+  return deletedSellers;
 };
 
 export const updateSellerStatus = async (ids, status) => {
@@ -65,4 +65,9 @@ export const updateSellerStatus = async (ids, status) => {
   return result.modifiedCount || 0;
 };
 
-export default { createSeller, getAllSeller, updateSeller, deleteSeller, updateSellerStatus };
+export const getSellerById = async (id) => {
+  const user = await Seller.findById({ _id: id, isDeleted: false }).lean();
+  return user;
+};
+
+export default { createSeller, getAllSeller, updateSeller, softDeleteSellers, updateSellerStatus, getSellerById };
