@@ -29,7 +29,7 @@ export const login = async (req, res) => {
 
     let sellerId = null;
 
-    if (user.role !== USER_ROLES.PLATFORM_MASTER) {
+    if (user.role !== USER_ROLES.MASTER_ADMIN) {
       sellerId = await userHelper.getSellerId(user._id);
     }
     // Create JWT payload
@@ -76,12 +76,12 @@ export const register = async (req, res) => {
     if (existingUser) {
       return Response.failResponse(res, 'A user with this email or phone number already exists.', 409);
     }
-    if (role != USER_ROLES.PLATFORM_MASTER && !sellerId) {
+    if (role != USER_ROLES.MASTER_ADMIN && !sellerId) {
       return Response.failResponse(res, 'A sellerId is required for this user role.', 400);
     }
     const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
     const massage =
-      seller.role === USER_ROLES.PLATFORM_MASTER
+      seller.role === USER_ROLES.MASTER_ADMIN
         ? 'the Seller you have provided does not exists.'
         : 'You do not have access to this seller.';
     if (!seller.success) {
@@ -100,7 +100,7 @@ export const register = async (req, res) => {
     });
     const newUserData = await newUser.save();
 
-    if (role !== USER_ROLES.PLATFORM_MASTER) {
+    if (role !== USER_ROLES.MASTER_ADMIN) {
       const userSellerConnection = new UserSeller({
         userId: newUserData._id,
         sellerId: sellerId,
