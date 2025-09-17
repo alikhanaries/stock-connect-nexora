@@ -62,6 +62,7 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
   return {
     seller,
     pagination: getPagination(totalElements, currentPage, limit),
+    appliedFilters,
   };
 };
 
