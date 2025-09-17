@@ -102,7 +102,7 @@ export const registerValidator = validate(async (req) => {
       sellerId: objectIdSchema.optional(),
     })
     .superRefine((data, ctx) => {
-      if (data.role !== USER_ROLES.PLATFORM_MASTER && !data.sellerId) {
+      if (data.role !== USER_ROLES.MASTER_ADMIN && !data.sellerId) {
         ctx.addIssue({
           path: ['sellerId'],
           message: 'Seller ID is required for this role.',
