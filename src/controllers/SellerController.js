@@ -7,7 +7,6 @@ export const getSellerById = async (req, res) => {
   try {
     const { id } = req.params;
     const userData = await sellerService.getSellerById(id);
-    console.log(userData);
     if (!userData) {
       return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
     }
