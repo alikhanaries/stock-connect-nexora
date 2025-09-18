@@ -103,8 +103,14 @@ export const pushProductToChannelEngine = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
     }
-    const result = await productService.pushProductsFromChannel(channelId);
-    return successResponse(res, `${result.AcceptedCount} ${req.locale.PRODUCTS_PUSH_STARTED}`, 202);
+    setImmediate(async () => {
+      try {
+        await productService.pushProductsFromChannel(channelId);
+      } catch (err) {
+        console.error('Background push error:', err);
+      }
+    });
+    return successResponse(res, req.locale.PRODUCTS_PUSH_STARTED, 202);
   } catch (err) {
     console.error('Controller Error:', err);
     errorLog(err);

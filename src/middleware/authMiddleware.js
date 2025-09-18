@@ -24,6 +24,7 @@ export const authMiddleware = async (req, res, next) => {
       }
       console.timeEnd('authMiddleware');
       req.user = user;
+      req.sellerId = decoded.sellerId;
       next();
     } catch (error) {
       console.log('JWT verification error:', error.message);
@@ -38,7 +39,7 @@ export const authMiddleware = async (req, res, next) => {
 export const authorize = (roles) => {
   return (req, res, next) => {
     try {
-      if (req.user.role === USER_ROLES.PLATFORM_MASTER) {
+      if (req.user.role === USER_ROLES.MASTER_ADMIN) {
         return next();
       }
       if (!roles.includes(req.user.role)) {

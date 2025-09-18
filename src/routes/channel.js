@@ -13,6 +13,7 @@ import {
   getAllChannelsFromChannelPartnerValidator,
   getAllChannelsValidator,
   getAllUserChannelsValidator,
+  removeUserChannelsValidator,
   saveUserChannelsValidator,
 } from '#validations/channels.js';
 
@@ -34,7 +35,7 @@ router.put('/addChannels', saveUserChannelsValidator, authMiddleware, saveUserCh
 
 router.patch('/update-user-channels-status', authMiddleware, updateUserChannelsStatus);
 
-router.delete('/remove-user-channel', authMiddleware, removeUserChannels);
+router.delete('/remove-user-channel', removeUserChannelsValidator, authMiddleware, removeUserChannels);
 
 router.get('/getAllUserChannels/:userId', getAllUserChannelsValidator, authMiddleware, getAllUserChannels);
 
