@@ -46,7 +46,8 @@ export const getTopSellingProduct = async (req, res) => {
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
-    const { url, marketplaceId } = req.body;
+    const { url } = req.body;
+    const { marketplaceId } = req.params;
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
@@ -80,7 +81,7 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 /* UPLOAD PRODUCTS FROM CSV FILE */
 export const importProductsFromCsvFile = async (req, res) => {
   try {
-    const { marketplaceId } = req.body;
+    const { marketplaceId } = req.params;
     const channelExists = await Channel.exists({ channelId: marketplaceId });
     if (!channelExists) {
       return failResponse(res, req.locale.MARKET_PLACE_NOT_FOUND, 404);

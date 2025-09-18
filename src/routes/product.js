@@ -38,13 +38,11 @@ const productsRouter = express.Router();
 /* DELETE PRODUCT BY ID*/
 productsRouter.delete('/deleteProduct/:id', deleteProductValidator, checkLanguage, authMiddleware, deleteProduct);
 
-productsRouter.get('/', getProductsValidator,checkLanguage, authMiddleware, getProducts);
-
-
+productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 productsRouter.post(
-  '/importProductsFromGoogleSheet',
+  '/importProductsFromGoogleSheet/:marketplaceId',
   importProductsFromGoogleSheetValidator,
   checkLanguage,
   authMiddleware,
@@ -53,7 +51,7 @@ productsRouter.post(
 
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post(
-  '/importProductsFromCsvFile',
+  '/importProductsFromCsvFile/:marketplaceId',
   importProductsFromCsvFileValidator,
   checkLanguage,
   authMiddleware,
@@ -70,10 +68,15 @@ productsRouter.get(
   pushProductToChannelEngine
 );
 
-productsRouter.get('/top-product', getTopSellingProductValidator,checkLanguage, authMiddleware, getTopSellingProduct);
+productsRouter.get('/top-product', getTopSellingProductValidator, checkLanguage, authMiddleware, getTopSellingProduct);
 
-productsRouter.patch('/update-status', updateProductStatusValidator,checkLanguage, authMiddleware, updateProductStatus);
-
+productsRouter.patch(
+  '/update-status',
+  updateProductStatusValidator,
+  checkLanguage,
+  authMiddleware,
+  updateProductStatus
+);
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete(
@@ -91,7 +94,6 @@ productsRouter.put(
   authMiddleware,
   addProductsToUserChannel
 );
-
 
 productsRouter.get('/user-channel-products/:channelId', checkLanguage, authMiddleware, getUserChannelProducts);
 productsRouter.get(
@@ -123,7 +125,11 @@ productsRouter.get(
   getUserUnassignedProducts
 );
 
-productsRouter.delete('/unlink-product-from-channel/:channelId',checkLanguage,authMiddleware,unlinkProductFromChannel);
-
+productsRouter.delete(
+  '/unlink-product-from-channel/:channelId',
+  checkLanguage,
+  authMiddleware,
+  unlinkProductFromChannel
+);
 
 export default productsRouter;
