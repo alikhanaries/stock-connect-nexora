@@ -78,5 +78,11 @@
   "INVALID_PRODUCTS": "لم يتم العثور على منتجات صالحة لمعرفات المنتجات المقدمة",
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "تم فصل المنتج من القناة بنجاح",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "فشل فصل المنتج من القناة",
-  "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث"
+  "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث",
+
+  "SELLERIDS_REQUIRED": "يرجى تقديم مصفوفة من المعرفات",
+  "VALID_SELLER_IDS": "يرجى تقديم معرفات صالحة",
+  "NO_SELLER_FOUND": "لم يتم العثور على بائعين مطابقين للحذف",
+  "SELLER_DELETED": "تم حذف البائع بنجاح",
+  "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح"
 }
