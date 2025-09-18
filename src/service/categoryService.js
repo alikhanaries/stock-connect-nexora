@@ -1,6 +1,5 @@
 import MarketplaceCategory from '../models/MarketplaceCategory.js';
 import CategoryMapping from '../models/CategoryMapping.js';
-import PlatformCategory from '../models/PlatformCategory.js';
 
 export const getMarketplaceCategoriesService = async (marketplaceId) => {
   try {
