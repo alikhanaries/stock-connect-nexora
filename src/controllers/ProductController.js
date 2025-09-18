@@ -5,7 +5,6 @@ import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import User from '../models/User.js';
-import Channel from '../models/Channel.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -47,30 +46,28 @@ export const getTopSellingProduct = async (req, res) => {
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
     const { url } = req.body;
-    const { marketplaceId } = req.params;
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
-    }
-    const channelExists = await Channel.exists({ channelId: marketplaceId });
-    if (!channelExists) {
-      return failResponse(res, req.locale.MARKET_PLACE_NOT_FOUND, 404);
     }
     const exportUrl = await convertGoogleSheetUrlToExport(url);
     if (!exportUrl) {
       return failResponse(res, req.locale.INVALID_URL, 500);
     }
-    const result = await productService.importProductsFromGoogleSheet(exportUrl, marketplaceId);
-    // Handle failure from service
-    if (!result?.success) {
-      return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
-    }
 
-    // Success response with details
-    return successResponse(res, result.message, 200, {
-      insertedCount: result.insertedCount,
-      invalidRowsCount: result.invalidRowsCount,
-      errorRows: result.errorRows,
-    });
+    // Send immediate response to client
+    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+
+    // Process file in background (async, no await here)
+    productService
+      .importProductsFromGoogleSheet(exportUrl)
+      .then((result) => {
+        console.log('CSV processing completed:', result);
+        // Optionally update DB with processing status
+      })
+      .catch((error) => {
+        console.error('Error in background CSV processing:', error.message);
+        // Optionally store error in DB for tracking
+      });
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     errorLog(error);
@@ -81,25 +78,20 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 /* UPLOAD PRODUCTS FROM CSV FILE */
 export const importProductsFromCsvFile = async (req, res) => {
   try {
-    const { marketplaceId } = req.params;
-    const channelExists = await Channel.exists({ channelId: marketplaceId });
-    if (!channelExists) {
-      return failResponse(res, req.locale.MARKET_PLACE_NOT_FOUND, 404);
-    }
-    // Call service
-    const result = await productService.importProductsFromCsvFile(req.file.path, marketplaceId);
+    // Send immediate response to client
+    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
 
-    // Handle failure from service
-    if (!result?.success) {
-      return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
-    }
-
-    // Success response with details
-    return successResponse(res, result.message, 200, {
-      insertedCount: result.insertedCount,
-      invalidRowsCount: result.invalidRowsCount,
-      errorRows: result.errorRows,
-    });
+    // Process file in background (async, no await here)
+    productService
+      .importProductsFromCsvFile(req.file.path)
+      .then((result) => {
+        console.log('CSV processing completed:', result);
+        // Optionally update DB with processing status
+      })
+      .catch((error) => {
+        console.error('Error in background CSV processing:', error.message);
+        // Optionally store error in DB for tracking
+      });
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     errorLog(error);

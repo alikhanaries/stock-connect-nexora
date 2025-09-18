@@ -42,7 +42,7 @@ productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, get
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 productsRouter.post(
-  '/importProductsFromGoogleSheet/:marketplaceId',
+  '/importProductsFromGoogleSheet',
   importProductsFromGoogleSheetValidator,
   checkLanguage,
   authMiddleware,
@@ -51,7 +51,7 @@ productsRouter.post(
 
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post(
-  '/importProductsFromCsvFile/:marketplaceId',
+  '/importProductsFromCsvFile',
   importProductsFromCsvFileValidator,
   checkLanguage,
   authMiddleware,

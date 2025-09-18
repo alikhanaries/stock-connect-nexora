@@ -128,33 +128,12 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
         path: ['url'],
       }
     );
-  const paramsSchema = z.object({
-    marketplaceId: z
-      .string({
-        required_error: 'marketplaceId is required',
-        invalid_type_error: 'marketplaceId must be a string',
-      })
-      .regex(/^\d+$/, 'marketplaceId must be a numeric string')
-      .transform((val) => parseInt(val, 10)), // optional: convert to number
-  });
 
-  paramsSchema.parse(req.params);
   bodySchema.parse(req.body);
 });
 // /* IMPORT PRODUCTS BY CSV FILE VALIDATOR */
 export const importProductsFromCsvFileValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    marketplaceId: z
-      .string({
-        required_error: 'marketplaceId is required',
-        invalid_type_error: 'marketplaceId must be a string',
-      })
-      .regex(/^\d+$/, 'marketplaceId must be a numeric string')
-      .transform((val) => parseInt(val, 10)), // optional: convert to number
-  });
-
-  paramsSchema.parse(req.params);
 });
 // /* DELETE MULTIPLE PRODUCTS VALIDATOR */
 export const deleteMultipleProductsValidator = validate(async (req) => {

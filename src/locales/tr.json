@@ -78,5 +78,6 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "Ürün kanaldan başarıyla kaldırıldı",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Ürün kanal bağlantısı kaldırılamadı",
   "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı",
-  "MARKET_PLACE_NOT_FOUND": "Pazar yeri bulunamadı"
+  "MARKET_PLACE_NOT_FOUND": "Pazar yeri bulunamadı",
+  "PRODUCT_IMPORTED_PROCESSING": "Ürün aktarımı işleniyor"
 }

@@ -1,22 +1,43 @@
-export const mapRowToProduct = (row) => {
+// mapRowToProduct.js
+export const mapRowToProduct = async (row, index, channelMap) => {
   if (!row || typeof row !== 'object') return null;
 
   // Normalize keys (lowercase + trim)
   const r = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key.toLowerCase().trim(), value ? String(value).trim() : ''])
   );
+
   // CHECK MANDATORY FIELD
-  if (!r.productskucode || !r.price) {
-    return;
+  const price = parseFloat(r.price);
+  if (!r.productskucode || isNaN(price)) {
+    return null;
   }
+
+  // Lookup channelId from preloaded map
+  let channelId = null;
+  if (r.marketplace) {
+    const regex = new RegExp(r.marketplace.trim(), 'i'); // case-insensitive
+
+    for (const [name, id] of channelMap.entries()) {
+      if (regex.test(name)) {
+        channelId = id;
+        break;
+      }
+    }
+
+    if (!channelId) {
+      console.warn(`⚠️ Marketplace not matched: "${r.marketplace}" at row ${index}`);
+    }
+  }
+
   return {
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,
-    name: r.name || `Unnamed Product`,
+    name: r.name || 'Unnamed Product',
     description: r.description || null,
     brand: r.brand || null,
     ean: r.ean || null, // should be unique
-    price: parseFloat(r.price),
+    price,
     minPrice: r.minprice ? parseFloat(r.minprice) : null,
     maxPrice: r.maxprice ? parseFloat(r.maxprice) : null,
     msrp: r.msrp ? parseFloat(r.msrp) : null,
@@ -34,5 +55,6 @@ export const mapRowToProduct = (row) => {
     currentStockCount: r.stock ? parseInt(r.stock, 10) || 0 : 0,
     createdAt: new Date(),
     updatedAt: new Date(),
+    channelId,
   };
 };

@@ -253,75 +253,83 @@ const pushProductsFromChannel = async (channelId) => {
   );
 };
 
-const processImportStream = async (stream, { marketPlaceId, deleteAfter, filePath } = {}) => {
+export const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   let batch = [];
   let insertedCount = 0;
   let updatedCount = 0;
   let invalidRowsCount = 0;
-  let errorRows = [];
-  const batchPromises = [];
   const categoryTrails = [];
+  const rowPromises = []; // 🔑 track all async row handlers
+
+  // preload channels into a map
+  const channels = await Channel.find({}, { channelId: 1, channelName: 1 }).lean();
+  const channelMap = new Map(channels.map((c) => [c.channelName.toLowerCase().trim(), c.channelId]));
+
   await new Promise((resolve, reject) => {
-    let rowIndex = 1;
+    let rowIndex = 0;
 
     stream
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
-        try {
-          // 1. Skip empty rows
-          const isEmptyRow = Object.values(row).every(
-            (val) => val === null || val === undefined || String(val).trim() === ''
-          );
-          if (isEmptyRow) {
+
+        const rowPromise = (async () => {
+          try {
+            // skip empty rows
+            const isEmpty = Object.values(row).every((val) => val == null || String(val).trim() === '');
+            if (isEmpty) {
+              invalidRowsCount++;
+              return;
+            }
+
+            // map row
+            const product = await mapRowToProduct(row, rowIndex, channelMap);
+            if (!product) {
+              invalidRowsCount++;
+              return;
+            }
+
+            // collect category trail
+            categoryTrails.push({
+              categoryTrail: product?.categoryTrail,
+              channelId: product.channelId,
+            });
+
+            batch.push(product);
+
+            // flush batch if full
+            if (batch.length >= batchSize) {
+              const toProcess = [...batch];
+              batch = [];
+
+              const ops = toProcess.map((p) => ({
+                updateOne: {
+                  filter: { productSkuCode: p.productSkuCode },
+                  update: { $set: p },
+                  upsert: true,
+                },
+              }));
+
+              const res = await Product.bulkWrite(ops, { ordered: false });
+              insertedCount += res.upsertedCount || 0;
+              updatedCount += res.modifiedCount || 0;
+              console.log(`Batch upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
+            }
+          } catch (err) {
+            console.error(`Row ${rowIndex} error:`, err.message);
             invalidRowsCount++;
-            errorRows.push(rowIndex);
-            return;
           }
+        })();
 
-          // 2. Map row
-          const product = mapRowToProduct(row, rowIndex);
-
-          if (!product) {
-            invalidRowsCount++;
-            errorRows.push(rowIndex);
-            return;
-          }
-          categoryTrails.push(product?.categoryTrail);
-          batch.push(product);
-
-          // 3. If batch full → upsert
-          if (batch.length >= batchSize) {
-            const toProcess = [...batch];
-            batch = [];
-
-            const ops = toProcess.map((p) => ({
-              updateOne: {
-                filter: { productSkuCode: p.productSkuCode },
-                update: { $set: p },
-                upsert: true,
-              },
-            }));
-
-            batchPromises.push(
-              Product.bulkWrite(ops, { ordered: false })
-                .then((res) => {
-                  insertedCount += res.upsertedCount || 0;
-                  updatedCount += res.modifiedCount || 0;
-                  console.log(`Batch upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
-                })
-                .catch((err) => console.error('Batch upsert error:', err.message))
-            );
-          }
-        } catch (err) {
-          console.error(`Row ${rowIndex} error:`, err.message);
-          invalidRowsCount++;
-          errorRows.push(rowIndex);
-        }
+        rowPromises.push(rowPromise);
       })
       .on('end', async () => {
         try {
+          // wait for all rows to finish
+          await Promise.all(rowPromises);
+
+          // final flush
           if (batch.length) {
             const ops = batch.map((p) => ({
               updateOne: {
@@ -331,22 +339,19 @@ const processImportStream = async (stream, { marketPlaceId, deleteAfter, filePat
               },
             }));
 
-            batchPromises.push(
-              Product.bulkWrite(ops, { ordered: false })
-                .then((res) => {
-                  insertedCount += res.upsertedCount || 0;
-                  updatedCount += res.modifiedCount || 0;
-                  console.log(`Final upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
-                })
-                .catch((err) => console.error('Final batch upsert error:', err.message))
-            );
+            const res = await Product.bulkWrite(ops, { ordered: false });
+            insertedCount += res.upsertedCount || 0;
+            updatedCount += res.modifiedCount || 0;
+            console.log(`Final upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
           }
 
-          await Promise.all(batchPromises);
-
-          // Cleanup uploaded file if needed
+          // cleanup uploaded file
           if (deleteAfter && filePath) {
-            fs.unlinkSync(filePath);
+            try {
+              fs.unlinkSync(filePath);
+            } catch (err) {
+              console.warn('File cleanup failed:', err.message);
+            }
           }
 
           resolve();
@@ -356,28 +361,28 @@ const processImportStream = async (stream, { marketPlaceId, deleteAfter, filePat
       })
       .on('error', reject);
   });
-  // AFTER ALL PRODUCTS IMPORTED NOW ADD ALL CATEGORY BY TRAILS
 
-  if (categoryTrails?.length !== 0) {
-    await categoryService.insertCategoryTrail(categoryTrails, marketPlaceId);
+  // insert category trails
+  if (categoryTrails.length > 0) {
+    await categoryService.insertCategoryTrail(categoryTrails);
   }
+
   return {
     success: true,
     message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
     insertedCount,
     updatedCount,
     invalidRowsCount,
-    errorRows,
   };
 };
 
 /* Google Sheet Import */
-export const importProductsFromGoogleSheet = async (url, marketPlaceId) => {
+export const importProductsFromGoogleSheet = async (url) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processImportStream(stream, { marketPlaceId });
+    return await processImportStream(stream);
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
     throw new Error(err.message); // force the catch block
@@ -385,10 +390,10 @@ export const importProductsFromGoogleSheet = async (url, marketPlaceId) => {
 };
 
 /* CSV File Import */
-export const importProductsFromCsvFile = async (filePath, marketplaceId) => {
+export const importProductsFromCsvFile = async (filePath) => {
   try {
     const stream = fs.createReadStream(filePath);
-    return await processImportStream(stream, { marketplaceId, deleteAfter: true, filePath });
+    return await processImportStream(stream, { deleteAfter: true, filePath });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block
