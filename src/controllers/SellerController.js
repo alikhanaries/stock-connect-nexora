@@ -107,7 +107,7 @@ export const getAllSeller = async (req, res) => {
     const responseData = {
       content: seller || [],
       appliedFilters: appliedFilters || {},
-      ...pagination,
+      ...(pagination && { pagination }),
     };
     const message = seller.length ? 'Seller fetched successfully' : 'No Seller found';
 

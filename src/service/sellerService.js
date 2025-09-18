@@ -14,11 +14,8 @@ const createSeller = async (sellerData) => {
   };
 };
 const getAllSeller = async (query, creatorId, creatorRole) => {
-  const { page = 1, size = 10, search, toDate, fromDate, status, sortBy = 'name', sortOrder = 'asc' } = query;
-
-  const currentPage = Math.max(1, Number(page));
-  const limit = Math.max(1, Number(size));
-  const skip = (currentPage - 1) * limit;
+  const isPaginated = query.page ? true : false;
+  const { search, toDate, fromDate, status, sortBy = 'name', sortOrder = 'asc' } = query;
 
   const appliedFilters = {};
 
@@ -55,15 +52,28 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
   }
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
-  const [totalElements, seller] = await Promise.all([
-    Seller.countDocuments(filter),
-    Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).skip(skip).limit(limit).lean(),
-  ]);
-  return {
-    seller,
-    pagination: getPagination(totalElements, currentPage, limit),
-    appliedFilters,
-  };
+  if (isPaginated) {
+    const page = Math.max(1, Number(query.page));
+    const limit = Math.max(1, Number(query.size || 10));
+    const skip = (page - 1) * limit;
+
+    const [totalElements, seller] = await Promise.all([
+      Seller.countDocuments(filter),
+      Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).skip(skip).limit(limit).lean(),
+    ]);
+
+    return {
+      seller,
+      pagination: getPagination(totalElements, page, limit),
+      appliedFilters,
+    };
+  } else {
+    const seller = await Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).lean();
+    return {
+      seller,
+      appliedFilters,
+    };
+  }
 };
 
 const updateSeller = async (id, name, statusValue) => {
