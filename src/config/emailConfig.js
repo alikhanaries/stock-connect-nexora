@@ -6,11 +6,11 @@ export const transporter = nodemailer.createTransport({
   port: config.MAIL_PORT,
   secure: false, // true for 465, false for 587
   auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
+    user: config.MAIL_USER,
+    pass: config.MAIL_PASS,
   },
 });
 
 export const defaultMailOptions = {
-  from: `"StockConnect" <cs@alhome.com>`, // must be verified in SES
+  from: config.FORM_ADDRESS, // must be verified in SES
 };
