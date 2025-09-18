@@ -66,17 +66,26 @@ const getAllChannelsFromChannelPartner = async () => {
 };
 
 /** FUNC - GET ALL CHANNEL LIST FROM DATABASE */
-const getAllChannels = async (query) => {
+const getAllChannels = async (query, userId) => {
   try {
     const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', appliedFilters = {} } = query;
 
-    const parsedLimit = Math.min(Math.max(parseInt(size) || 10, 1), 100); // max 100 per page
+    const parsedLimit = Math.min(Math.max(parseInt(size) || 10, 1), 100);
     const currentPage = Math.max(parseInt(page) || 1, 1);
 
-    // Build Mongo query
+    // Build base query
     const mongoQuery = {};
     if (search) {
       mongoQuery.channelName = { $regex: search, $options: 'i' };
+    }
+
+    // 🔹 Find channels already linked to this user
+    const userChannels = await UserChannels.find({ userId }, { 'channelIds.id': 1 }).lean();
+
+    const excludedChannelIds = userChannels.flatMap((uc) => uc.channelIds.map((c) => c.id));
+
+    if (excludedChannelIds.length > 0) {
+      mongoQuery.channelId = { $nin: excludedChannelIds };
     }
 
     // Count total channels
@@ -101,28 +110,30 @@ const getAllChannels = async (query) => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-const saveUserChannels = async (userId, channelIds) => {
+const saveUserChannels = async (userId, ids) => {
   try {
     // Format incoming channelIds into schema shape
-    const formattedChannels = channelIds.map((id) => {
+    const formattedChannels = ids.map((id) => {
       if (!ObjectId.isValid(id)) {
-        throw new Error(`Invalid channelId: ${id}`);
+        throw new Error(`Invalid ids: ${id}`);
       }
       return {
         id,
-        status: 'active', // default
+        status: 'active',
       };
     });
 
     // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(
       { userId: new ObjectId(userId) },
-      { $set: { channelIds: formattedChannels } }, // ✅ correct structure
+      { $addToSet: { channelIds: { $each: formattedChannels } } },
       { new: true, upsert: true }
     );
-
-    // Update user flag
-    await User.updateOne({ _id: new ObjectId(userId) }, { $set: { isMarketplaceConnected: true } });
+    // Update user flag if not already true
+    await User.updateOne(
+      { _id: new ObjectId(userId), isMarketplaceConnected: { $ne: true } },
+      { $set: { isMarketplaceConnected: true } }
+    );
     return {
       success: true,
       data: updatedUserChannels,
@@ -136,7 +147,7 @@ const saveUserChannels = async (userId, channelIds) => {
 /** FUNC - GET USER CHANNEL LIST */
 export const getAllUserChannels = async (userId, query) => {
   try {
-    const { page = 1, limit = 10, status = 'active', search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+    const { page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
     const skip = (page - 1) * limit;
     const parsedLimit = parseInt(limit);
     const currentPage = Math.max(1, Number(page));
