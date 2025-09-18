@@ -76,7 +76,6 @@ export const softDeleteSellers = async (req, res) => {
       return response.failResponse(res, `${req.locale.VALID_SELLER_IDS} ${invalidIds.join(', ')}`, 400);
     }
     const deletedSellers = await sellerService.softDeleteSellers(ids);
-    console.log(deletedSellers);
     if (deletedSellers.modifiedCount === 0) {
       return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
     }
