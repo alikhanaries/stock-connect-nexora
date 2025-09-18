@@ -92,7 +92,7 @@ export const getProductsValidator = validate(async (req) => {
         })
         .optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -245,11 +245,11 @@ export const pushProductsToChannelEngineValidator = validate(async (req) => {
   const paramsSchema = z.object({
     channelId: z
       .number({
-        required_error: "channelId is required",
-        invalid_type_error: "channelId must be a number",
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a number',
       })
-      .int("channelId must be an integer")
-      .positive("channelId must be positive"),
+      .int('channelId must be an integer')
+      .positive('channelId must be positive'),
   });
 
   paramsSchema.parse(req.params);
