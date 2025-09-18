@@ -1,8 +1,9 @@
 import nodemailer from 'nodemailer';
+import { config } from '#config/config.js';
 
 export const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST,
-  port: process.env.MAIL_PORT,
+  host: config.MAIL_HOST,
+  port: config.MAIL_PORT,
   secure: false, // true for 465, false for 587
   auth: {
     user: process.env.MAIL_USER,

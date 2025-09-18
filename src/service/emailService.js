@@ -10,7 +10,6 @@ const sendMail = async ({ to, subject, html }) => {
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('SES Email sent:', info.messageId);
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
