@@ -12,5 +12,5 @@ export const transporter = nodemailer.createTransport({
 });
 
 export const defaultMailOptions = {
-  from: config.FORM_ADDRESS, // must be verified in SES
+  from: config.FROM_ADDRESS, // must be verified in SES
 };
