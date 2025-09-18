@@ -36,13 +36,13 @@ export const insertCategoryTrail = async (categoryTrailArray) => {
           marketplaceCategoryId,
         };
 
-        const category = await MarketplaceCategory.findOneAndUpdate(
+        await MarketplaceCategory.findOneAndUpdate(
           query,
           { $setOnInsert: query }, // only insert if not exists
           { new: true, upsert: true }
         );
 
-        parent = category._id;
+        parent = categorySlug;
       }
     }
 

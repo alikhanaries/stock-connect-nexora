@@ -4,7 +4,7 @@ const { Schema } = mongoose;
 const MarketplaceCategorySchema = new Schema(
   {
     categoryName: { type: String, required: true, trim: true, lowercase: true },
-    parent: { type: Schema.Types.ObjectId, ref: 'MarketplaceCategory', default: null },
+    parent: { type: String, required: true, ref: 'MarketplaceCategory', default: 'root' },
     marketplaceId: {
       type: Number,
       required: true,
