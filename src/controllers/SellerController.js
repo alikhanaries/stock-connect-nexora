@@ -7,7 +7,6 @@ export const getSellerById = async (req, res) => {
   try {
     const { id } = req.params;
     const userData = await sellerService.getSellerById(id);
-    console.log(userData);
     if (!userData) {
       return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
     }
@@ -77,7 +76,6 @@ export const softDeleteSellers = async (req, res) => {
       return response.failResponse(res, `${req.locale.VALID_SELLER_IDS} ${invalidIds.join(', ')}`, 400);
     }
     const deletedSellers = await sellerService.softDeleteSellers(ids);
-    console.log(deletedSellers);
     if (deletedSellers.modifiedCount === 0) {
       return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
     }
@@ -109,7 +107,7 @@ export const getAllSeller = async (req, res) => {
     const responseData = {
       content: seller || [],
       appliedFilters: appliedFilters || {},
-      ...pagination,
+      ...(pagination && { pagination }),
     };
     const message = seller.length ? 'Seller fetched successfully' : 'No Seller found';
 
