@@ -7,13 +7,13 @@ const userRoleBasedAccess = (creatorRole, newUserRole) => {
 };
 
 const validateSellerAccessForCreator = async (creatorId, selectedSeller, creatorRole) => {
-  if (USER_ROLES.BRAND_SUPER_ADMIN === creatorRole) {
+  if (USER_ROLES.SUPER_ADMIN === creatorRole) {
     const linkExists = await UserSeller.countDocuments({
       userId: creatorId,
       sellerId: selectedSeller,
     });
     return { success: linkExists > 0, role: creatorRole };
-  } else if (USER_ROLES.PLATFORM_MASTER === creatorRole) {
+  } else if (USER_ROLES.MASTER_ADMIN === creatorRole) {
     const sellerExists = await Seller.countDocuments({
       _id: selectedSeller,
       isDeleted: false,
