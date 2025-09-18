@@ -38,7 +38,9 @@ seller.patch(
   authorize(USER_ROLES.MASTER_ADMIN),
   updateSellerStatus
 );
-seller.get('/:id', getSellerByIdValidator, checkLanguage, authMiddleware, getSellerById);
-seller.patch('/:id', updateSellerValidator, authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), updateSeller);
+
+seller.get('/:id', getSellerByIdValidator,checkLanguage, authMiddleware, getSellerById);
+seller.patch('/:id',updateSellerValidator, authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), updateSeller);
+
 
 export default seller;
