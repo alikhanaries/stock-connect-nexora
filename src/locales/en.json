@@ -77,10 +77,6 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "Product unlinked from channel successfully",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Failed to unlink product from channel",
   "NO_MATCHING_PRODUCTS_FOUND": "No matching products found to update",
-
-  "SELLERIDS_REQUIRED": "please provide array of ids",
-  "VALID_SELLER_IDS": "Please provide valid Ids",
-  "NO_SELLER_FOUND": "No Matching sellers found to Delete.",
-  "SELLER_DELETED": "Seller Deleted Successfully",
-  "GET_SELLER_SUCCESS": "Fetched seller successfully"
+  "CATEGORY_NOT_FOUND": "Category not found",
+  "CATEGORY_FOUND": "Category found"
 }

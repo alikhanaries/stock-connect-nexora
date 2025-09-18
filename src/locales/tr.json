@@ -77,11 +77,5 @@
   "INVALID_PRODUCTS": "Verilen ürün kimlikleri için geçerli ürün bulunamadı",
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "Ürün kanaldan başarıyla kaldırıldı",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Ürün kanal bağlantısı kaldırılamadı",
-  "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı",
-
-  "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
-  "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
-  "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
-  "SELLER_DELETED": "Satıcı başarıyla silindi",
-  "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi"
+  "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı"
 }
