@@ -25,8 +25,8 @@ seller.post('/create', authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), creat
 seller.get('/', authMiddleware, authorize(allowedRoles), getAllSellerValidator, getAllSeller);
 seller.delete(
   '/bulk-delete',
-  checkLanguage,
   softDeleteSellerValidator,
+  checkLanguage,
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
   softDeleteSellers
@@ -38,7 +38,7 @@ seller.patch(
   authorize(USER_ROLES.MASTER_ADMIN),
   updateSellerStatus
 );
-seller.get('/:id', checkLanguage, getSellerByIdValidator, authMiddleware, getSellerById);
-seller.patch('/:id', authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), updateSellerValidator, updateSeller);
+seller.get('/:id', getSellerByIdValidator,checkLanguage, authMiddleware, getSellerById);
+seller.patch('/:id',updateSellerValidator, authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), updateSeller);
 
 export default seller;
