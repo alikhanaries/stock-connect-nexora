@@ -91,6 +91,7 @@ export const getProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         })
         .optional(),
+      isGridView: z.boolean().optional(),
     })
     .strict();
 
@@ -244,12 +245,12 @@ export const pushProductsToChannelEngineValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
   const paramsSchema = z.object({
     channelId: z
-      .number({
-        required_error: "channelId is required",
-        invalid_type_error: "channelId must be a number",
+      .string({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a string',
       })
-      .int("channelId must be an integer")
-      .positive("channelId must be positive"),
+      .regex(/^\d+$/, 'channelId must be a numeric string')
+      .transform((val) => parseInt(val, 10)),
   });
 
   paramsSchema.parse(req.params);
