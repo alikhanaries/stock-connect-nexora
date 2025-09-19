@@ -25,7 +25,7 @@ export const USER_ROLES = {
 
 export const ROLES_BASED_USER_CREATION = {
   master_admin: ['master_admin', 'super_admin', 'admin'],
-  super_admin: ['master_admin', 'super_admin'],
+  super_admin: ['admin', 'super_admin'],
   admin: [],
 };
 
