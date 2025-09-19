@@ -12,7 +12,6 @@ const objectIdSchema = z
 // Category item schema
 const categoryItemSchema = z.object({
   platformCategoryIdRef: objectIdSchema,
-  marketplaceIdRef: objectIdSchema,
   marketplaceCategoryId: z
     .number({
       required_error: 'marketplaceCategoryId is required',
@@ -22,9 +21,9 @@ const categoryItemSchema = z.object({
     .min(1, 'marketplaceCategoryId must be greater than 0'),
 });
 
-export const addCategoryValidator = validate(async (req) => {
+export const mapCategoryValidator = validate(async (req) => {
   // Validate headers
-  headerSchema.parse(req.headers);
+  // headerSchema.parse(req.headers);
 
   // Validate body
   const bodySchema = z

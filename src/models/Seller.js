@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { SELLER_TYPE } from '#constants/common.js';
 const { Schema } = mongoose;
 
 const sellerSchema = new Schema(
@@ -15,6 +16,11 @@ const sellerSchema = new Schema(
       unique: true,
       lowercase: true,
       trim: true,
+    },
+    type: {
+      type: String,
+      enum: [SELLER_TYPE.BASE, SELLER_TYPE.NORMAL],
+      default: SELLER_TYPE.NORMAL,
     },
     isDeleted: {
       type: Boolean,

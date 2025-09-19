@@ -1,9 +1,9 @@
 import express from 'express';
-import { addCategory } from '../controllers/CategoryController.js';
+import { mapCategory } from '../controllers/CategoryController.js';
 import { authMiddleware, checkLanguage } from '#middleware/index.js';
-import { addCategoryValidator } from '#validations/category.js';
+import { mapCategoryValidator } from '#validations/category.js';
 const router = express.Router();
 
-router.put('/addCategory', addCategoryValidator, checkLanguage, authMiddleware, addCategory);
+router.put('/mapCategory', mapCategoryValidator, checkLanguage, authMiddleware, mapCategory);
 
 export default router;

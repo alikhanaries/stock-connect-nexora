@@ -49,10 +49,10 @@ export const updateSellerValidator = validate(async (req) => {
 export const softDeleteSellerValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 
-  const paramsSchema = z.object({
-    id: objectIdSchema,
+  const bodySchema = z.object({
+    ids: z.array(objectIdSchema).nonempty({ message: 'Please provide at least one seller ID.' }),
   });
-  paramsSchema.parse(req.params);
+  bodySchema.parse(req.body);
 });
 
 export const updateSellerStatusValidator = validate(async (req) => {
@@ -67,4 +67,13 @@ export const updateSellerStatusValidator = validate(async (req) => {
     }),
   });
   await bodySchema.parseAsync(req.body);
+});
+
+export const getSellerByIdValidator = validate(async (req) => {
+  await headerSchema.parseAsync(req.headers);
+
+  const paramsSchema = z.object({
+    id: objectIdSchema,
+  });
+  await paramsSchema.parseAsync(req.params);
 });
