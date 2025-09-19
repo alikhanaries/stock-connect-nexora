@@ -1,11 +1,11 @@
 import MarketplaceCategory from '../models/MarketplaceCategory.js';
 import CategoryMapping from '../models/CategoryMapping.js';
 
-export const getMarketplaceCategoriesService = async (marketplaceId) => {
+export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm = '') => {
   try {
     const id = Number(marketplaceId);
 
-    // 1️⃣ Fetch all marketplace categories flat
+    // 1️⃣ Fetch all marketplace categories
     const categories = await MarketplaceCategory.find(
       { marketplaceId: id },
       {
@@ -34,7 +34,7 @@ export const getMarketplaceCategoriesService = async (marketplaceId) => {
     mappings.forEach((map) => {
       const key = String(map.marketplaceCategoryId);
       if (map.platformCategoryIdRef) {
-        mappingMap[key] = map.platformCategoryIdRef; // 👈 store as object, not array
+        mappingMap[key] = map.platformCategoryIdRef;
       }
     });
 
@@ -44,23 +44,51 @@ export const getMarketplaceCategoriesService = async (marketplaceId) => {
       categoryMap[cat.categorySlug] = {
         ...cat,
         children: [],
-        platformCategoryData: mappingMap[String(cat.marketplaceCategoryId)] || null, // 👈 single object or null
+        platformCategoryData: mappingMap[String(cat.marketplaceCategoryId)] || null,
       };
     });
 
-    // 5️⃣ Build the tree
-    const tree = [];
-    categories.forEach((cat) => {
-      if (cat.parent && categoryMap[cat.parent]) {
-        categoryMap[cat.parent].children.push(categoryMap[cat.categorySlug]);
-      } else {
-        tree.push(categoryMap[cat.categorySlug]); // root
-      }
+    // 5️⃣ Filter by searchTerm (if provided) and include ancestors
+    let categoriesToInclude = categories;
+    if (searchTerm) {
+      const regex = new RegExp(searchTerm, 'i');
+      const matched = categories.filter((cat) => regex.test(cat.categoryName));
+
+      // Include ancestor slugs from categoryTrail
+      const ancestorSlugs = new Set();
+      matched.forEach((cat) => {
+        if (cat.categoryTrail) {
+          const parts = cat.categoryTrail.split('>').map((p) => p.trim());
+          parts.pop(); // remove the category itself
+          parts.forEach((slug) => ancestorSlugs.add(slug));
+        }
+      });
+
+      // Filter categories: matched + ancestors
+      categoriesToInclude = categories.filter((cat) => matched.includes(cat) || ancestorSlugs.has(cat.categorySlug));
+    }
+
+    // 6️⃣ Pre-group children for faster tree construction
+    const childrenMap = {};
+    categoriesToInclude.forEach((cat) => {
+      if (!childrenMap[cat.parent]) childrenMap[cat.parent] = [];
+      childrenMap[cat.parent].push(categoryMap[cat.categorySlug]);
     });
+
+    // 7️⃣ Recursive tree builder
+    const buildNode = (cat) => {
+      const node = { ...cat, children: [] };
+      const children = childrenMap[cat.categorySlug] || [];
+      node.children = children.map(buildNode);
+      return node;
+    };
+
+    // 8️⃣ Build tree starting from roots (parent null or missing)
+    const tree = (childrenMap[null] || []).map(buildNode);
 
     return tree;
   } catch (err) {
-    console.error('Error building category tree with platform data:', err);
+    console.error('Error building marketplace category tree:', err);
     throw err;
   }
 };

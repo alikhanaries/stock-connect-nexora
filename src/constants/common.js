@@ -12,6 +12,11 @@ export const VALID_PERIODS = ['week', 'month', 'year'];
 
 export const ORDER_STATUS_MATCH = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'CLOSED'];
 
+export const SELLER_TYPE = {
+  BASE: 'base',
+  NORMAL: 'normal',
+};
+
 export const USER_ROLES = {
   ADMIN: 'admin',
   SUPER_ADMIN: 'super_admin',
