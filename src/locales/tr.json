@@ -77,5 +77,7 @@
   "INVALID_PRODUCTS": "Verilen ürün kimlikleri için geçerli ürün bulunamadı",
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "Ürün kanaldan başarıyla kaldırıldı",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Ürün kanal bağlantısı kaldırılamadı",
-  "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı"
+  "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı",
+  "CATEGORY_NOT_FOUND": "Kategori bulunamadı",
+  "CATEGORY_FOUND": "Kategori bulundu"
 }

@@ -4,7 +4,7 @@ import slugify from 'slugify';
 
 export const getPlatformCategoriesService = async (searchTerm = '') => {
   try {
-    // Fetch all categories (we need all for ancestor lookup)
+    // Fetch all categories
     let allCategories = await PlatformCategory.find(
       {},
       {
@@ -22,53 +22,58 @@ export const getPlatformCategoriesService = async (searchTerm = '') => {
       if (cat.platformCategoryTrail) {
         const parts = cat.platformCategoryTrail.split('>').map((p) => p.trim());
         cat.parent = parts.length > 1 ? slugify(parts[parts.length - 2], { lower: true }) : 'root';
+      } else {
+        cat.parent = 'root';
       }
     });
 
-    // If search term provided, find matching categories
+    // Filter by search term if provided
     let categoriesToInclude = allCategories;
     if (searchTerm) {
-      const regex = new RegExp(searchTerm, 'i');
-      const matched = allCategories.filter((cat) => regex.test(cat.categoryName));
+      const safeRegex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+      const matched = allCategories.filter(
+        (cat) => safeRegex.test(cat.categoryName) || safeRegex.test(cat.platformCategoryTrail)
+      );
 
       // Include ancestors
       const ancestorSlugs = new Set();
       matched.forEach((cat) => {
         const parts = cat.platformCategoryTrail.split('>').map((p) => slugify(p.trim(), { lower: true }));
-        parts.pop(); // remove the category itself
+        parts.pop(); // remove self
         parts.forEach((slug) => ancestorSlugs.add(slug));
       });
 
-      // Filter categories to include only matched + ancestors
       categoriesToInclude = allCategories.filter((cat) => matched.includes(cat) || ancestorSlugs.has(cat.categorySlug));
     }
 
-    // Build lookup map
-    const categoryMap = {};
+    // Build lookup maps
+    const categoryMap = {}; // slug -> category
+    const childrenByParent = {}; // parentSlug -> [childSlugs]
+
     categoriesToInclude.forEach((cat) => {
       categoryMap[cat.categorySlug] = { ...cat, children: [] };
+      const parentSlug = cat.parent || 'root';
+      if (!childrenByParent[parentSlug]) childrenByParent[parentSlug] = [];
+      childrenByParent[parentSlug].push(cat.categorySlug);
     });
 
-    // Recursive tree builder
+    // Recursive tree builder using childrenByParent map
     const buildNode = (cat, visited = new Set()) => {
       if (!cat || visited.has(cat.categorySlug)) return null;
       visited.add(cat.categorySlug);
 
       const node = { ...cat, children: [] };
-      categoriesToInclude
-        .filter((child) => child.parent === cat.categorySlug)
-        .forEach((child) => {
-          const childNode = buildNode(categoryMap[child.categorySlug], new Set(visited));
-          if (childNode) node.children.push(childNode);
-        });
+      (childrenByParent[cat.categorySlug] || []).forEach((childSlug) => {
+        const childNode = buildNode(categoryMap[childSlug], new Set(visited));
+        if (childNode) node.children.push(childNode);
+      });
 
       return node;
     };
 
-    // Build tree starting from parent: "root"
-    const tree = categoriesToInclude
-      .filter((cat) => cat.parent === 'root')
-      .map((rootCat) => buildNode(categoryMap[rootCat.categorySlug]));
+    // Build tree from root nodes
+    const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
 
     return tree;
   } catch (err) {

@@ -78,5 +78,7 @@
   "INVALID_PRODUCTS": "لم يتم العثور على منتجات صالحة لمعرفات المنتجات المقدمة",
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "تم فصل المنتج من القناة بنجاح",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "فشل فصل المنتج من القناة",
-  "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث"
+  "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث",
+  "CATEGORY_NOT_FOUND": "الفئة غير موجودة",
+  "CATEGORY_FOUND": "تم العثور على الفئة"
 }
