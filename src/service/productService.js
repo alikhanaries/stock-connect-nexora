@@ -647,13 +647,38 @@ const getUserUnassignedProducts = async (userId, channelId, query) => {
   };
 };
 
+const removeProductsFromChannelEngine = async (skuCodes) => {
+  if (!skuCodes?.length) return;
+
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(skuCodes),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('ChannelEngine bulkdelete failed:', errorText);
+      return { success: false, message: errorText };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Error calling ChannelEngine:', err);
+    return { success: false, message: err.message };
+  }
+};
+
 const unlinkProductFromChannel = async (userId, channelId, ids, locale) => {
   try {
-    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
-    const products = await Product.find({ _id: { $in: objectIds } }, { productSkuCode: 1, marketPlace: 1 }).lean();
+    const products = await Product.find({ _id: { $in: ids } }, { productSkuCode: 1, marketPlace: 1 }).lean();
     if (!products.length) return 0;
     const skuCodes = products.map((p) => p.productSkuCode);
-
+    const ceResult = skuCodes.length > 0 ? await removeProductsFromChannelEngine(skuCodes) : { success: true };
+    if (!ceResult.success) {
+      return { success: false, message: 'ChannelEngine deletion failed', ceError: ceResult.message };
+    }
     const result = await UserChannelProducts.updateMany(
       { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId) },
       { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
