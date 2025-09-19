@@ -80,5 +80,11 @@
   "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı",
   "MARKETPLACE_NOT_FOUND": "Pazar yeri bulunamadı",
   "CATEGORY_PROCESSED_SUCCESS": "Kategoriler başarıyla işlendi",
-  "CATEGORY_NOT_SAVED": "Kategoriler kaydedilemedi"
+  "CATEGORY_NOT_SAVED": "Kategoriler kaydedilemedi",
+
+  "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
+  "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
+  "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
+  "SELLER_DELETED": "Satıcı başarıyla silindi",
+  "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi"
 }
