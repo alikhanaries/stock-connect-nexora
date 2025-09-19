@@ -81,11 +81,12 @@ const getAllChannels = async (query, userId) => {
 
     // 🔹 Find channels already linked to this user
     const userChannels = await UserChannels.find({ userId }, { 'channelIds.id': 1 }).lean();
+    if (userChannels?.length) {
+      const excludedChannelIds = userChannels.flatMap((uc) => uc.channelIds.map((c) => c.id));
 
-    const excludedChannelIds = userChannels.flatMap((uc) => uc.channelIds.map((c) => c.id));
-
-    if (excludedChannelIds.length > 0) {
-      mongoQuery.channelId = { $nin: excludedChannelIds };
+      if (excludedChannelIds.length) {
+        mongoQuery.channelId = { $nin: excludedChannelIds };
+      }
     }
 
     // Count total channels
@@ -110,12 +111,12 @@ const getAllChannels = async (query, userId) => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-const saveUserChannels = async (userId, ids) => {
+const saveUserChannels = async (userId, channelIds) => {
   try {
     // Format incoming channelIds into schema shape
-    const formattedChannels = ids.map((id) => {
+    const formattedChannels = channelIds.map((id) => {
       if (!ObjectId.isValid(id)) {
-        throw new Error(`Invalid ids: ${id}`);
+        throw new Error(`Invalid channelIds: ${id}`);
       }
       return {
         id,
