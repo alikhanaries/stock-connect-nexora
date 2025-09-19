@@ -91,8 +91,9 @@ export const getProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         })
         .optional(),
+      isGridView: z.boolean().optional(),
     })
-    .passthrough();
+    .strict();
 
   querySchema.parse(req.query);
 });
