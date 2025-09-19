@@ -1,22 +1,23 @@
 import fs from 'fs';
 import csv from 'csv-parser'; // for reading CSV
-import PlatformCategory from '../models/PlatformCategory.js';
 import { mapRowToPlatFormCategory } from '#util/mapRowToPlatFormCategory.js'; // your helper
-
-/* CSV File Import */
+import { processBatch } from '../helpers/ProcessBatchHandler.js';
 
 export const processPlatformImportStream = async (stream, { filePath } = {}) => {
-  const batchSize = process.env.BATCH_SIZE || 500;
+  const batchSize = parseInt(process.env.BATCH_SIZE) || 500;
   let batch = [];
-  let insertedCount = 0;
-  let updatedCount = 0;
+  let rowIndex = 0;
+
+  // Shared counters object (mutated inside processBatch)
+  const counters = {
+    insertedCount: 0,
+    updatedCount: 0,
+  };
+
   let invalidRowsCount = 0;
   let errorRows = [];
-  const batchPromises = [];
 
-  // instead of .on("data"), use for-await (handles async mapping)
   const parser = stream.pipe(csv({ headers: ['categoryPath'], skipLines: 0 }));
-  let rowIndex = 0;
 
   for await (const row of parser) {
     rowIndex++;
@@ -29,33 +30,11 @@ export const processPlatformImportStream = async (stream, { filePath } = {}) => 
         continue;
       }
 
-      // push all categories from this row
       batch.push(...categories);
 
       if (batch.length >= batchSize) {
-        const toProcess = [...batch];
+        await processBatch(batch, counters, `Batch ${Math.ceil(rowIndex / batchSize)}`);
         batch = [];
-
-        const ops = toProcess.map((c) => ({
-          updateOne: {
-            filter: {
-              categorySlug: c.categorySlug,
-              parent: c.parent || null,
-            },
-            update: { $set: c },
-            upsert: true,
-          },
-        }));
-
-        batchPromises.push(
-          PlatformCategory.bulkWrite(ops, { ordered: false })
-            .then((res) => {
-              insertedCount += res.upsertedCount || 0;
-              updatedCount += res.modifiedCount || 0;
-              console.log(`Batch upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
-            })
-            .catch((err) => console.error('Batch upsert error:', err.message))
-        );
       }
     } catch (err) {
       console.error(`Row ${rowIndex} error:`, err.message);
@@ -65,45 +44,25 @@ export const processPlatformImportStream = async (stream, { filePath } = {}) => 
   }
 
   // Final leftover batch
-  if (batch.length) {
-    const ops = batch.map((c) => ({
-      updateOne: {
-        filter: {
-          categorySlug: c.categorySlug,
-          parent: c.parent || null,
-        },
-        update: { $set: c },
-        upsert: true,
-      },
-    }));
+  await processBatch(batch, counters, 'Final batch');
 
-    batchPromises.push(
-      PlatformCategory.bulkWrite(ops, { ordered: false })
-        .then((res) => {
-          insertedCount += res.upsertedCount || 0;
-          updatedCount += res.modifiedCount || 0;
-          console.log(`Final upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
-        })
-        .catch((err) => console.error('Final batch upsert error:', err.message))
-    );
-  }
-
-  await Promise.all(batchPromises);
-
+  // Delete temp file
   if (filePath) {
-    fs.unlinkSync(filePath);
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (err) {
+      console.error('Failed to delete CSV file:', err.message);
+    }
   }
 
   return {
     success: true,
-    message: `Imported ${insertedCount} new categories, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
-    insertedCount,
-    updatedCount,
+    message: `Imported ${counters.insertedCount} new categories, updated ${counters.updatedCount}, skipped ${invalidRowsCount} invalid rows`,
+    ...counters,
     invalidRowsCount,
     errorRows,
   };
 };
-
 /* CSV File Import */
 export const importPlatformCategories = async (filePath) => {
   try {
