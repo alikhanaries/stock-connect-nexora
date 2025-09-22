@@ -27,7 +27,7 @@ export const uploadInvoiceService = async (merchantNo) => {
     const file = await fetchImageAsFile(merchantNo);
     if (!file) return { success: false };
 
-    const fileName = `OrderInvoice--${file.originalname}`;
+    const fileName = `OrderInvoice--${merchantNo}`;
     const imageUrl = await uploadImage(file, fileName, config.BUCKET_NAME);
     if (!imageUrl) return { success: false };
 
