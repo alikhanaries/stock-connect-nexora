@@ -1,18 +1,15 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { config } from '#config/config.js';
 
-const accesskey = config.ACCESS_KEY;
-const secretkey = config.SECRET_KEY;
-const endpoint = config.ENDPOINT;
-const region = config.REGION;
+const { ACCESS_KEY, SECRET_KEY, ENDPOINT, REGION } = config;
 
 const s3Client = new S3Client({
-  endpoint: endpoint,
-  region: region,
+  endpoint: ENDPOINT,
+  region: REGION,
   forcePathStyle: true,
   credentials: {
-    accessKeyId: accesskey,
-    secretAccessKey: secretkey,
+    accessKeyId: ACCESS_KEY,
+    secretAccessKey: SECRET_KEY,
   },
 });
 
@@ -26,7 +23,7 @@ export const uploadImage = async (file, fileName, bucket) => {
     };
 
     await s3Client.send(new PutObjectCommand(uploadParams));
-    const imageUrl = `${endpoint}/${bucket}/${fileName}`;
+    const imageUrl = `${ENDPOINT}/${bucket}/${fileName}`;
 
     return imageUrl;
   } catch (error) {
