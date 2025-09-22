@@ -77,6 +77,6 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Failed to unlink product from channel",
   "NO_MATCHING_PRODUCTS_FOUND": "No matching products found to update",
 
-  "FAILED_TO_UPLOAD": "Unable to fetch invoice",
+  "FAILED_TO_UPLOAD": "Failed to download invoice",
   "IMAGE_UPLOADED_SUCCESSFULLY": "Invoice fetched successfully"
 }

@@ -79,6 +79,6 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "فشل فصل المنتج من القناة",
   "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث",
 
-  "FAILED_TO_UPLOAD": "تعذر جلب الفاتورة",
+  "FAILED_TO_UPLOAD": "غير قادر على تنزيل الفاتورة",
   "IMAGE_UPLOADED_SUCCESSFULLY": "تم جلب الفاتورة بنجاح"
 }

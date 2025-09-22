@@ -78,6 +78,6 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Ürün kanal bağlantısı kaldırılamadı",
   "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı",
 
-  "FAILED_TO_UPLOAD": "Fatura alınamadı",
+  "FAILED_TO_UPLOAD": "Fatura indirilemiyor",
   "IMAGE_UPLOADED_SUCCESSFULLY": "Fatura başarıyla alındı"
 }

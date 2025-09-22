@@ -4,7 +4,7 @@ import { Buffer } from 'buffer';
 
 // helper function
 export const fetchImageAsFile = async (merchantNo) => {
-  const INVOICE_URL = `https://ollkom-dev.channelengine.net/api/v2/orders/${merchantNo}/invoice?apikey=${config.CHANNEL_ENGINE_API_KEY}`;
+  const INVOICE_URL = `${config.CHANNEL_ENGINE_BASE_URL}/orders/${merchantNo}/invoice?apikey=${config.CHANNEL_ENGINE_API_KEY}`;
 
   const response = await fetch(INVOICE_URL);
   if (!response.ok) {
