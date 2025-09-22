@@ -11,11 +11,14 @@ const userSafeFields = 'firstName lastName email phoneNumber role active created
 
 export const getUserById = async (req, res) => {
   try {
+    const seller = req.seller;
+    const sellerIds = seller[0]._id.toString();
     const id = req.params.id || req.user?._id;
     const user = await User.findOne({ _id: id, isDeleted: false }).select(userSafeFields).lean();
     if (!user) {
       return res.status(404).json(formatErrorResponse(req.locale.USER_NOT_FOUND, 404));
     }
+    user.sellerId = sellerIds;
     res.status(200).json(formatSuccessResponse(user, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
     errorLog(err);

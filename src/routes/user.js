@@ -22,7 +22,7 @@ import { sellerMiddelware } from '#middleware/sellerMiddleware.js';
 
 const user = express.Router();
 
-user.get('/me', checkLanguage, authMiddleware, getUserById);
+user.get('/me', checkLanguage, authMiddleware, sellerMiddelware, getUserById);
 user.get('/', getAllUsersValidator, checkLanguage, authMiddleware, sellerMiddelware, getAllUsers);
 user.patch('/update-password', updatePasswordValidator, checkLanguage, authMiddleware, updatePassword);
 user.delete('/all', checkLanguage, authMiddleware, deleteAllUsers);
@@ -35,7 +35,7 @@ user.patch(
   updateSelectedUserStatus
 );
 user.patch('/:id', updateUserValidator, checkLanguage, authMiddleware, updateUser);
-user.get('/:id', userIdValidator, checkLanguage, authMiddleware, getUserById);
+user.get('/:id', userIdValidator, checkLanguage, authMiddleware, sellerMiddelware, getUserById);
 user.delete('/:id', userIdValidator, checkLanguage, authMiddleware, softDeleteUser);
 
 export default user;
