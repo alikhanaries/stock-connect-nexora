@@ -1,9 +1,11 @@
 import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import userHelper from '#helpers/User.js';
 import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
+import { ROLES_BASED_USER_FETCHING, SELLER_TYPE } from '#constants/common.js';
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -44,6 +46,11 @@ export const updateUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
+    const user = req.user;
+    const seller = req.seller;
+
+    const sellerConnectionWithUsers = await userHelper.getUserConnectedToThisSellers(seller);
+
     const { role, active, search, page, size = 10 } = req.query;
 
     const pageNum = parseInt(page);
@@ -52,6 +59,14 @@ export const getAllUsers = async (req, res) => {
     const skip = (pageNum - 1) * limit;
 
     const filter = { isDeleted: false };
+
+    if (SELLER_TYPE.NORMAL === sellerConnectionWithUsers.type) {
+      filter._id = { $in: sellerConnectionWithUsers.userIds };
+    }
+
+    if (ROLES_BASED_USER_FETCHING[user.role]) {
+      filter.role = { $in: ROLES_BASED_USER_FETCHING[user.role] };
+    }
     if (role) {
       filter.role = role.toLowerCase();
     }

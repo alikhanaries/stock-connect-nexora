@@ -18,11 +18,12 @@ import {
   updateSelectedUserStatusValidator,
   updateUserValidator,
 } from '#validations/users.js';
+import { sellerMiddelware } from '#middleware/sellerMiddleware.js';
 
 const user = express.Router();
 
 user.get('/me', checkLanguage, authMiddleware, getUserById);
-user.get('/', getAllUsersValidator, checkLanguage, authMiddleware, getAllUsers);
+user.get('/', getAllUsersValidator, checkLanguage, authMiddleware, sellerMiddelware, getAllUsers);
 user.patch('/update-password', updatePasswordValidator, checkLanguage, authMiddleware, updatePassword);
 user.delete('/all', checkLanguage, authMiddleware, deleteAllUsers);
 user.delete('/bulk', bulkDeleteUsersValidator, checkLanguage, authMiddleware, deleteSelectedUsers);
