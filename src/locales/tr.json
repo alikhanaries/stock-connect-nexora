@@ -7,6 +7,7 @@
   "UNAUTHORIZED": "Yetkisiz erişim",
   "FORBIDDEN": "Yasaklanmış işlem",
 
+  "USER_CHANNELS_REMOVED_SUCCESSFULLY": "Kullanıcı kanalları başarıyla kaldırıldı",
   "CHANNELS_FOUND_SUCCESS": "Kanallar başarıyla bulundu",
   "CHANNELS_RETRIEVE_FAILED": "Kanallar alınamadı",
   "NO_CHANNEL_FOUND": "Kanal bulunamadı",
@@ -80,4 +81,10 @@
 
   "FAILED_TO_UPLOAD": "Fatura indirilemiyor",
   "IMAGE_UPLOADED_SUCCESSFULLY": "Fatura başarıyla alındı"
+  "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
+  "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
+  "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
+  "SELLER_DELETED": "Satıcı başarıyla silindi",
+  "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi"
+
 }

@@ -4,6 +4,7 @@ import Channel from '../models/Channel.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_URL } = config;
@@ -65,17 +66,27 @@ const getAllChannelsFromChannelPartner = async () => {
 };
 
 /** FUNC - GET ALL CHANNEL LIST FROM DATABASE */
-const getAllChannels = async (query) => {
+const getAllChannels = async (query, userId) => {
   try {
     const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', appliedFilters = {} } = query;
 
-    const parsedLimit = Math.min(Math.max(parseInt(size) || 10, 1), 100); // max 100 per page
+    const parsedLimit = Math.min(Math.max(parseInt(size) || 10, 1), 100);
     const currentPage = Math.max(parseInt(page) || 1, 1);
 
-    // Build Mongo query
-    const mongoQuery = { isActive: true };
+    // Build base query
+    const mongoQuery = {};
     if (search) {
       mongoQuery.channelName = { $regex: search, $options: 'i' };
+    }
+
+    // 🔹 Find channels already linked to this user
+    const userChannels = await UserChannels.find({ userId }, { 'channelIds.id': 1 }).lean();
+    if (userChannels?.length) {
+      const excludedChannelIds = userChannels.flatMap((uc) => uc.channelIds.map((c) => c.id));
+
+      if (excludedChannelIds.length) {
+        mongoQuery.channelId = { $nin: excludedChannelIds };
+      }
     }
 
     // Count total channels
@@ -105,23 +116,25 @@ const saveUserChannels = async (userId, channelIds) => {
     // Format incoming channelIds into schema shape
     const formattedChannels = channelIds.map((id) => {
       if (!ObjectId.isValid(id)) {
-        throw new Error(`Invalid channelId: ${id}`);
+        throw new Error(`Invalid channelIds: ${id}`);
       }
       return {
         id,
-        status: 'active', // default
+        status: 'active',
       };
     });
 
     // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(
       { userId: new ObjectId(userId) },
-      { $set: { channelIds: formattedChannels } }, // ✅ correct structure
+      { $addToSet: { channelIds: { $each: formattedChannels } } },
       { new: true, upsert: true }
     );
-
-    // Update user flag
-    await User.updateOne({ _id: new ObjectId(userId) }, { $set: { isMarketplaceConnected: true } });
+    // Update user flag if not already true
+    await User.updateOne(
+      { _id: new ObjectId(userId), isMarketplaceConnected: { $ne: true } },
+      { $set: { isMarketplaceConnected: true } }
+    );
     return {
       success: true,
       data: updatedUserChannels,
@@ -135,23 +148,22 @@ const saveUserChannels = async (userId, channelIds) => {
 /** FUNC - GET USER CHANNEL LIST */
 export const getAllUserChannels = async (userId, query) => {
   try {
-    const { page = 1, limit = 10, status = 'active', search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+    const { page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
     const skip = (page - 1) * limit;
     const parsedLimit = parseInt(limit);
     const currentPage = Math.max(1, Number(page));
-
     const appliedFilters = {};
     if (query?.status) {
       appliedFilters.status = query?.status;
     }
 
+    const baseMatch = {
+      userId: new ObjectId(userId),
+      ...(status ? { 'channelIds.status': status } : { 'channelIds.status': { $in: ['active', 'inactive'] } }),
+    };
     const pipeline = [
-      { $match: { userId: new ObjectId(userId), isActive: true } },
-
+      { $match: baseMatch },
       { $unwind: '$channelIds' },
-      // Fetch only removed channels
-      { $match: { 'channelIds.status': status } },
-
       {
         $lookup: {
           from: 'channels',
@@ -161,9 +173,7 @@ export const getAllUserChannels = async (userId, query) => {
         },
       },
       { $unwind: '$channelDetails' },
-
       ...(search ? [{ $match: { 'channelDetails.channelName': { $regex: search, $options: 'i' } } }] : []),
-
       // Orders count
       {
         $lookup: {
@@ -173,17 +183,18 @@ export const getAllUserChannels = async (userId, query) => {
           as: 'ordersInfo',
         },
       },
-
       // Products count
       {
         $lookup: {
-          from: 'channelproducts',
+          from: 'userchannelproducts', // :point_left: collection name (check in Mongo, likely lowercased plural)
           let: { channelId: '$channelDetails.channelId' },
-          pipeline: [{ $match: { $expr: { $eq: ['$marketPlaceId', '$$channelId'] } } }, { $count: 'count' }],
+          pipeline: [
+            { $match: { $expr: { $eq: ['$channelId', '$$channelId'] }, isActive: true } },
+            { $project: { count: { $size: '$skuList' } } },
+          ],
           as: 'productsInfo',
         },
       },
-
       {
         $project: {
           _id: 0,
@@ -200,21 +211,16 @@ export const getAllUserChannels = async (userId, query) => {
           },
         },
       },
-
       { $sort: { [`channel.${sortBy}`]: sortOrder === 'asc' ? 1 : -1 } },
     ];
-
     // First pipeline for paginated data
     const dataPipeline = [...pipeline, { $skip: skip }, { $limit: parsedLimit }];
-
     // Second pipeline for total count
     const countPipeline = [...pipeline, { $count: 'total' }];
-
     const [channels, totalResult] = await Promise.all([
       UserChannels.aggregate(dataPipeline),
       UserChannels.aggregate(countPipeline),
     ]);
-
     const total = totalResult.length > 0 ? totalResult[0].total : 0;
     return {
       success: total === 0 ? false : true,
@@ -249,10 +255,32 @@ export const updateUserChannelsStatus = async (userId, ids, status) => {
     throw new Error(err.message);
   }
 };
+
+export const removeUserChannels = async (userId, ids) => {
+  try {
+    // Remove from UserChannels
+    const channelResult = await UserChannels.updateMany(
+      { userId: new ObjectId(userId) },
+      { $pull: { channelIds: { id: { $in: ids } } } }
+    );
+
+    // Delete related products
+    await UserChannelProducts.deleteMany({
+      userId: new ObjectId(userId),
+      channelId: { $in: ids },
+    });
+    return channelResult.modifiedCount || 0;
+  } catch (err) {
+    console.error('Service error in removeUserChannels:', err);
+    throw new Error('Failed to remove user channels. Please try again.');
+  }
+};
+
 export default {
   getAllChannelsFromChannelPartner,
   getAllChannels,
   saveUserChannels,
   getAllUserChannels,
   updateUserChannelsStatus,
+  removeUserChannels,
 };

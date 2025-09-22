@@ -1,6 +1,7 @@
 import { STATUS_MESSAGES, VALID_STATUSES } from '#constants/common.js';
 import Responses from '../helpers/response.js';
 import User from '../models/User.js';
+import { errorLog } from '#middleware/index.js';
 import channelService from '../service/channelService.js';
 /**FUNC- FOR GET ALL CHANNEL LIST FROM CHANNEL PARTNER**/
 export const getAllChannelsFromChannelPartner = async (req, res) => {
@@ -11,13 +12,21 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
     }
     return Responses.successResponse(res, req.locale.CHANNELS_SAVED_SUCCESSFULLY, 200);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
 /** FUNC - Get all channel list from DB */
 export const getAllChannels = async (req, res) => {
   try {
-    const { channels, pagination, appliedFilters } = await channelService.getAllChannels(req.query);
+    const userId = req.user._id;
+    // Ensure user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
+    }
+    const { channels, pagination, appliedFilters } = await channelService.getAllChannels(req.query, userId);
+
     const responseData = {
       content: channels || [],
       appliedFilters: appliedFilters || {},
@@ -27,6 +36,7 @@ export const getAllChannels = async (req, res) => {
     return Responses.successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -52,6 +62,7 @@ export const saveUserChannels = async (req, res) => {
     return Responses.successResponse(res, req.locale.CHANNEL_SAVED_SUCCESS, 200, result.data);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -85,6 +96,7 @@ export const getAllUserChannels = async (req, res) => {
     return Responses.successResponse(res, req.locale.USER_CHANNELS_FOUND, 200, responseData);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -107,13 +119,37 @@ export const updateUserChannelsStatus = async (req, res) => {
     return Responses.successResponse(res, `User channels ${STATUS_MESSAGES[status]} successfully`, 200);
   } catch (error) {
     console.error('Controller error in updateUserChannelsStatus:', error);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+
+export const removeUserChannels = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const { ids } = req.body;
+    if (!userId) {
+      return Responses.failResponse(res, req.locale.USERID_REQUIRED, 400);
+    }
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return Responses.failResponse(res, req.locale.INVALID_IDS, 400);
+    }
+    const updatedCount = await channelService.removeUserChannels(userId, ids);
+    if (updatedCount === 0) {
+      return Responses.failResponse(res, req.locale.NO_CHANNEL_FOUND, 404);
+    }
+    return Responses.successResponse(res, req.locale.USER_CHANNELS_REMOVED_SUCCESSFULLY, 200);
+  } catch (error) {
+    console.error('Controller error in removeUserChannels:', error);
+    return Responses.errorResponse(res, error.message || 'Internal Server Error', 500);
+  }
+};
+
 export default {
   getAllChannelsFromChannelPartner,
   getAllChannels,
   saveUserChannels,
   getAllUserChannels,
   updateUserChannelsStatus,
+  removeUserChannels,
 };

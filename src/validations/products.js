@@ -38,6 +38,66 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
   paramsSchema.parse(req.params);
 });
 
+// /* GET PRODUCTS VALIDATOR */
+export const getProductsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z
+    .object({
+      page: z
+        .string()
+        .regex(/^\d+$/, 'page must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, { message: 'page must be at least 1' })
+        .optional(),
+
+      size: z
+        .string()
+        .regex(/^\d+$/, 'size must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, { message: 'size must be at least 1' })
+        .optional(),
+
+      status: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['active', 'inactive'].includes(val), {
+          message: "status must be either 'active' or 'inactive'",
+        })
+        .optional(),
+
+      minPrice: z
+        .string()
+        .regex(/^\d+$/, 'minPrice must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'minPrice cannot be negative' })
+        .optional(),
+
+      maxPrice: z
+        .string()
+        .regex(/^\d+$/, 'maxPrice must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
+        .optional(),
+
+      search: z.string().optional(),
+
+      sortBy: z.string().optional(),
+
+      sortOrder: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['asc', 'desc'].includes(val), {
+          message: "sortOrder must be either 'asc' or 'desc'",
+        })
+        .optional(),
+      isGridView: z.boolean().optional(),
+    })
+    .strict();
+
+  querySchema.parse(req.query);
+});
+
 // /* IMPORT PRODUCT BY GOOGLE SHEET VALIDATOR */
 export const importProductsFromGoogleSheetValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
@@ -108,4 +168,229 @@ export const deleteMultipleProductsValidator = validate(async (req) => {
     );
 
   bodySchema.parse(req.body);
+});
+
+// /* UPDATE PRODUCT STATUS VALIDATOR */
+export const updateProductStatusValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const bodySchema = z
+    .object({
+      ids: z
+        .array(
+          z
+            .string()
+            .length(24, 'Each productId must be exactly 24 characters')
+            .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format')
+        )
+        .nonempty('Product IDs cannot be empty')
+        .refine((ids) => new Set(ids).size === ids.length, {
+          message: 'Duplicate productIds are not allowed',
+        }),
+
+      status: z
+        .string({
+          required_error: 'status is required',
+          invalid_type_error: 'status must be a string',
+        })
+        .toLowerCase()
+        .refine((val) => ['active', 'inactive'].includes(val), {
+          message: "status must be either 'active' or 'inactive'",
+        }),
+    })
+    .strict();
+
+  bodySchema.parse(req.body);
+});
+
+// /* GET TOP SELLING PRODUCT VALIDATOR */
+export const getTopSellingProductValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z
+    .object({
+      size: z
+        .string()
+        .regex(/^\d+$/, 'size must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .pipe(z.number().min(1, 'size must be at least 1'))
+        .optional(),
+
+      channel: z.string().optional(),
+    })
+    .strict();
+
+  querySchema.parse(req.query);
+});
+
+// /* DELETE PRODUCT BY ID VALIDATOR */
+export const deleteProductValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    id: z
+      .string({
+        required_error: 'id is required',
+        invalid_type_error: 'id must be a string',
+      })
+      .length(24, 'id must be exactly 24 characters') // ObjectId length
+      .regex(/^[0-9a-fA-F]{24}$/, 'id must be a valid hex string'), // ObjectId format
+  });
+
+  paramsSchema.parse(req.params);
+});
+
+// /* PUSH PRODUCTS TO CHANNELENGINE VALIDATOR */
+export const pushProductsToChannelEngineValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const paramsSchema = z.object({
+    channelId: z
+      .string({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a string',
+      })
+      .regex(/^\d+$/, 'channelId must be a numeric string')
+      .transform((val) => parseInt(val, 10)),
+  });
+
+  paramsSchema.parse(req.params);
+});
+// /* GET USER CHANNEL PRODUCTS VALIDATOR */
+export const getUserChannelProductsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    channelId: z
+      .string({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a string',
+      })
+      .regex(/^\d+$/, 'channelId must be a number string')
+      .transform((val) => parseInt(val, 10)),
+  });
+  paramsSchema.parse(req.params);
+
+  const querySchema = z
+    .object({
+      page: z
+        .string()
+        .regex(/^\d+$/, 'page must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, { message: 'page must be at least 1' })
+        .optional(),
+
+      size: z
+        .string()
+        .regex(/^\d+$/, 'size must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, { message: 'size must be at least 1' })
+        .optional(),
+
+      status: z
+        .string()
+        .optional()
+        .transform((val) => (val ? val.toLowerCase() : val))
+        .refine((val) => !val || ['active', 'inactive'].includes(val), {
+          message: "status must be either 'active' or 'inactive'",
+        }),
+
+      minPrice: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'minPrice must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'minPrice cannot be negative' })
+        .optional(),
+
+      maxPrice: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'maxPrice must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
+        .optional(),
+
+      search: z.string().optional(),
+
+      sortBy: z.string().optional(),
+
+      sortOrder: z
+        .string()
+        .optional()
+        .transform((val) => (val ? val.toLowerCase() : val))
+        .refine((val) => !val || ['asc', 'desc'].includes(val), {
+          message: "sortOrder must be either 'asc' or 'desc'",
+        }),
+    })
+    .strict();
+
+  querySchema.parse(req.query);
+});
+
+// /* GET USER UNASSIGNED PRODUCTS VALIDATOR */
+export const getUserUnassignedProductsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    channelId: z
+      .string({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a string',
+      })
+      .regex(/^\d+$/, 'channelId must be a number string')
+      .transform((val) => parseInt(val, 10)),
+  });
+  paramsSchema.parse(req.params);
+
+  const querySchema = z
+    .object({
+      page: z
+        .string()
+        .regex(/^\d+$/, 'page must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, { message: 'page must be at least 1' })
+        .optional(),
+
+      size: z
+        .string()
+        .regex(/^\d+$/, 'size must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, { message: 'size must be at least 1' })
+        .optional(),
+
+      status: z
+        .string()
+        .optional()
+        .transform((val) => (val ? val.toLowerCase() : val))
+        .refine((val) => !val || ['active', 'inactive'].includes(val), {
+          message: "status must be either 'active' or 'inactive'",
+        }),
+
+      minPrice: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'minPrice must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'minPrice cannot be negative' })
+        .optional(),
+
+      maxPrice: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'maxPrice must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
+        .optional(),
+
+      search: z.string().optional(),
+
+      sortBy: z.string().optional(),
+
+      sortOrder: z
+        .string()
+        .optional()
+        .transform((val) => (val ? val.toLowerCase() : val))
+        .refine((val) => !val || ['asc', 'desc'].includes(val), {
+          message: "sortOrder must be either 'asc' or 'desc'",
+        }),
+    })
+    .strict();
+
+  querySchema.parse(req.query);
 });

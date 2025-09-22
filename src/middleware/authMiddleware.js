@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import User from '#models/User.js';
 import { config } from '#config/config.js';
 import Responses from '#helpers/response.js';
+import { USER_ROLES } from '#constants/common.js';
 
 export const authMiddleware = async (req, res, next) => {
   console.time('authMiddleware');
@@ -23,6 +24,7 @@ export const authMiddleware = async (req, res, next) => {
       }
       console.timeEnd('authMiddleware');
       req.user = user;
+      req.sellerId = decoded.sellerId;
       next();
     } catch (error) {
       console.log('JWT verification error:', error.message);
@@ -34,15 +36,12 @@ export const authMiddleware = async (req, res, next) => {
   }
 };
 
-// Role-based authorization
-export const authorize = (...roles) => {
+export const authorize = (roles) => {
   return (req, res, next) => {
     try {
-      // bypass superadmin role check
-      if (req.user.role === 'super_admin') {
+      if (req.user.role === USER_ROLES.MASTER_ADMIN) {
         return next();
       }
-      // Check if user role is included in the allowed roles
       if (!roles.includes(req.user.role)) {
         return Responses.errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
       }

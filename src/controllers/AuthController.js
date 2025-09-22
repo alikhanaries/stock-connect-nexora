@@ -1,9 +1,12 @@
 import User from '#models/User.js';
 import { generateTokenResponse, decodeToken, generateResetToken } from '#util/token.js';
 import { errorHandler } from '#helpers/ErrorHandler.js';
+import { errorLog } from '#middleware/index.js';
 import crypto from 'crypto';
 import Response from '#helpers/response.js';
 import userHelper from '#helpers/User.js';
+import UserSeller from '#models/UserSeller.js';
+import { USER_ROLES } from '#constants/common.js';
 
 export const login = async (req, res) => {
   try {
@@ -23,8 +26,14 @@ export const login = async (req, res) => {
     if (!isMatch) {
       return Response.failResponse(res, 'Invalid credentials', 400);
     }
+
+    let sellerId = null;
+
+    if (user.role !== USER_ROLES.MASTER_ADMIN) {
+      sellerId = await userHelper.getSellerId(user._id);
+    }
     // Create JWT payload
-    const tokenResponse = generateTokenResponse(user, user.role);
+    const tokenResponse = generateTokenResponse(user, user.role, sellerId);
 
     if (!tokenResponse) {
       return Response.failResponse(res, 'Error generating token', 500);
@@ -34,8 +43,8 @@ export const login = async (req, res) => {
 
     return Response.successResponse(res, 'Login successful', 200, tokenResponse);
   } catch (error) {
-    // errorHandler(error, res);
     console.error('userLogin Error:', error);
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
@@ -51,8 +60,10 @@ export const register = async (req, res) => {
       phoneNumber,
       active,
       isMarketplaceConnected = false,
+      sellerId,
     } = req.body;
     const creatorRole = req.user.role;
+    const creatorId = req.user._id;
 
     if (!userHelper.userRoleBasedAccess(creatorRole, role)) {
       return Response.failResponse(res, 'You do not have permission to create this user role', 403);
@@ -63,12 +74,18 @@ export const register = async (req, res) => {
     });
 
     if (existingUser) {
-      if (existingUser.email === email) {
-        return Response.failResponse(res, 'Email already exists', 409);
-      }
-      if (existingUser.phoneNumber === phoneNumber) {
-        return Response.failResponse(res, 'Phone number already exists', 409);
-      }
+      return Response.failResponse(res, 'A user with this email or phone number already exists.', 409);
+    }
+    if (role != USER_ROLES.MASTER_ADMIN && !sellerId) {
+      return Response.failResponse(res, 'A sellerId is required for this user role.', 400);
+    }
+    const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
+    const massage =
+      seller.role === USER_ROLES.MASTER_ADMIN
+        ? 'the Seller you have provided does not exists.'
+        : 'You do not have access to this seller.';
+    if (!seller.success) {
+      return Response.failResponse(res, massage, 403);
     }
 
     const newUser = new User({
@@ -81,10 +98,19 @@ export const register = async (req, res) => {
       phoneNumber,
       active,
     });
-    await newUser.save();
+    const newUserData = await newUser.save();
 
-    return Response.successResponse(res, 'User Registerd successfully', 201);
+    if (role !== USER_ROLES.MASTER_ADMIN) {
+      const userSellerConnection = new UserSeller({
+        userId: newUserData._id,
+        sellerId: sellerId,
+      });
+      await userSellerConnection.save();
+    }
+
+    return Response.successResponse(res, 'User Registered successfully', 201);
   } catch (error) {
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
@@ -106,6 +132,7 @@ export const refreshToken = async (req, res) => {
     const tokenResponse = generateTokenResponse(user, user.role);
     return Response.successResponse(res, 'refresh token', 200, tokenResponse);
   } catch (error) {
+    errorLog(error);
     errorHandler(error, res);
   }
 };
@@ -134,6 +161,7 @@ export const forgotPassword = async (req, res) => {
     return Response.successResponse(res, 'email varification successful', 200, { token });
   } catch (error) {
     console.error('Forget password error', error);
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
@@ -152,6 +180,7 @@ export const validateResetToken = async (req, res) => {
     return Response.successResponse(res, 'reset-token generation successful', 200, { valid: !!user });
   } catch (error) {
     console.error('reset-token generation error', error);
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };
@@ -180,6 +209,7 @@ export const resetPassword = async (req, res) => {
     return Response.successResponse(res, 'password reset successful', 200);
   } catch (error) {
     console.error('reset-password error', error);
+    errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
 };

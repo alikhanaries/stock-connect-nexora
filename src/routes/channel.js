@@ -6,12 +6,14 @@ import {
   saveUserChannels,
   getAllUserChannels,
   updateUserChannelsStatus,
-} from '../controllers/ChannelsController.js';
+  removeUserChannels,
+} from '#controllers/ChannelsController.js';
 import { authMiddleware } from '#middleware/index.js';
 import {
   getAllChannelsFromChannelPartnerValidator,
   getAllChannelsValidator,
   getAllUserChannelsValidator,
+  removeUserChannelsValidator,
   saveUserChannelsValidator,
 } from '#validations/channels.js';
 
@@ -32,6 +34,8 @@ router.put('/addChannels', saveUserChannelsValidator, authMiddleware, saveUserCh
 /* GET USER CHANNEL LIST */
 
 router.patch('/update-user-channels-status', authMiddleware, updateUserChannelsStatus);
+
+router.delete('/remove-user-channel', removeUserChannelsValidator, authMiddleware, removeUserChannels);
 
 router.get('/getAllUserChannels/:userId', getAllUserChannelsValidator, authMiddleware, getAllUserChannels);
 

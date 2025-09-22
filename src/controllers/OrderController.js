@@ -1,6 +1,7 @@
 import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
 import mongoose from 'mongoose';
+import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS } from '#constants/common.js';
 
 export const getAllOrders = async (req, res) => {
@@ -22,6 +23,7 @@ export const getAllOrders = async (req, res) => {
     });
   } catch (error) {
     console.error('Controller Error:', error.message);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -39,6 +41,7 @@ export const getOrderById = async (req, res) => {
     }
     return Responses.successResponse(res, req.locale.ORDER_FETCHED_SUCCESSFULLY, 200, order);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error, 500);
   }
 };
@@ -51,6 +54,7 @@ export const getOrderStats = async (req, res) => {
     }
     return Responses.successResponse(res, req.locale.ORDER_STATUS_STATS_FETCHED_SUCCESSFULLY, 200, stats);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error, 500);
   }
 };
@@ -78,6 +82,7 @@ export const getSyncedOrders = async (req, res) => {
 
     return Responses.successResponse(res, message, 200);
   } catch (error) {
+    errorLog(error);
     return Responses.errorResponse(res, error, 500);
   }
 };
@@ -104,6 +109,7 @@ export const getOrderComparison = async (req, res) => {
     );
   } catch (error) {
     console.error('Controller Error:', error.message);
+    errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
