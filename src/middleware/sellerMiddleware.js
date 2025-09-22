@@ -1,7 +1,7 @@
 import Responses from '#helpers/response.js';
 import Seller from '#models/Seller.js';
 
-export const sellerMiddelware = async (req, res, next) => {
+export const sellerMiddleware = async (req, res, next) => {
   try {
     const sellerIds = req.sellerIds;
     if (!sellerIds) {

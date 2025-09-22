@@ -18,12 +18,12 @@ import {
   updateSelectedUserStatusValidator,
   updateUserValidator,
 } from '#validations/users.js';
-import { sellerMiddelware } from '#middleware/sellerMiddleware.js';
+import { sellerMiddleware } from '#middleware/sellerMiddleware.js';
 
 const user = express.Router();
 
-user.get('/me', checkLanguage, authMiddleware, sellerMiddelware, getUserById);
-user.get('/', getAllUsersValidator, checkLanguage, authMiddleware, sellerMiddelware, getAllUsers);
+user.get('/me', checkLanguage, authMiddleware, sellerMiddleware, getUserById);
+user.get('/', getAllUsersValidator, checkLanguage, authMiddleware, sellerMiddleware, getAllUsers);
 user.patch('/update-password', updatePasswordValidator, checkLanguage, authMiddleware, updatePassword);
 user.delete('/all', checkLanguage, authMiddleware, deleteAllUsers);
 user.delete('/bulk', bulkDeleteUsersValidator, checkLanguage, authMiddleware, deleteSelectedUsers);
@@ -35,7 +35,7 @@ user.patch(
   updateSelectedUserStatus
 );
 user.patch('/:id', updateUserValidator, checkLanguage, authMiddleware, updateUser);
-user.get('/:id', userIdValidator, checkLanguage, authMiddleware, sellerMiddelware, getUserById);
+user.get('/:id', userIdValidator, checkLanguage, authMiddleware, sellerMiddleware, getUserById);
 user.delete('/:id', userIdValidator, checkLanguage, authMiddleware, softDeleteUser);
 
 export default user;
