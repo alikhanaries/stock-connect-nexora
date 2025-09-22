@@ -62,9 +62,29 @@ const userAndSellerConnection = async (role, sellerId, newUserData) => {
   }
 };
 
+const getUserConnectedToThisSellers = async (seller) => {
+  if (seller[0].type === SELLER_TYPE.BASE) {
+    return {
+      type: seller[0].type,
+      userIds: null,
+    };
+  }
+  const sellerIds = seller.map((s) => s._id.toString());
+  const userSellerConnection = await UserSeller.find({ sellerId: { $in: sellerIds } })
+    .select('userId')
+    .lean();
+
+  const userIds = userSellerConnection.map((u) => u.userId);
+  return {
+    type: SELLER_TYPE.NORMAL,
+    userIds: userIds,
+  };
+};
+
 export default {
   userRoleBasedAccess,
   validateSellerAccessForCreator,
   getSellerIds,
   userAndSellerConnection,
+  getUserConnectedToThisSellers,
 };

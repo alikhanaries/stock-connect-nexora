@@ -29,6 +29,12 @@ export const ROLES_BASED_USER_CREATION = {
   admin: [],
 };
 
+export const ROLES_BASED_USER_FETCHING = {
+  master_admin: ['master_admin', 'super_admin', 'admin'],
+  super_admin: ['admin', 'super_admin'],
+  admin: ['admin', 'super_admin'],
+};
+
 export const ORDER_STATUS_MAP = {
   NEW: 'NEW',
   IN_PROGRESS: 'IN_PROGRESS',
