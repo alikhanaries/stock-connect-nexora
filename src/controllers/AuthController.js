@@ -82,7 +82,7 @@ export const register = async (req, res) => {
       return Response.failResponse(res, 'A sellerId is required for this user role.', 400);
     }
     if (role !== USER_ROLES.MASTER_ADMIN) {
-      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole, role);
+      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
 
       if (!seller.success) {
         if (!seller.notBaseSeller) {
@@ -214,5 +214,32 @@ export const resetPassword = async (req, res) => {
     console.error('reset-password error', error);
     errorLog(error);
     return Response.errorResponse(res, error, 500);
+  }
+};
+
+export const updateSellerConnectionWithUser = async (req, res) => {
+  try {
+    const creatorRole = req.user.role;
+    const creatorId = req.user._id;
+    const { userId, sellerId } = req.body;
+    const user = await userHelper.validateUserId(userId);
+    if (!user) {
+      return Response.failResponse(res, req.locale.NOT_VALID_USER, 400);
+    }
+    const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
+    if (!seller.success) {
+      if (!seller.notBaseSeller) {
+        return Response.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
+      }
+      const message =
+        seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_DOES_NOT_EXISTS : req.locale.NOT_HAVE_ACCESS;
+      return Response.failResponse(res, message, 403);
+    }
+
+    await userHelper.userAndSellerConnection(user.role, sellerId, user);
+    return Response.successResponse(res, req.locale.SELLER_CONNECTION_SUCCESSFUL, 200);
+  } catch (error) {
+    errorLog(error);
+    return Response.errorResponse(res, error.message, 500);
   }
 };

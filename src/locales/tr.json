@@ -83,5 +83,11 @@
   "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
   "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
   "SELLER_DELETED": "Satıcı başarıyla silindi",
-  "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi"
+  "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi",
+
+  "NOT_VALID_USER": "Sağladığınız kullanıcı geçerli değil",
+  "CAN_NOT_ASSIGN_BASE_SELLER": "Temel satıcıyı herhangi bir kullanıcıya atayamazsınız.",
+  "SELLER_DOES_NOT_EXISTS": "Belirttiğiniz satıcı mevcut değil.",
+  "NOT_HAVE_ACCESS": "Bu satıcıya erişim yetkiniz yok.",
+  "SELLER_CONNECTION_SUCCESSFUL": "Satıcı bağlantısı başarılı."
 }

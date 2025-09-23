@@ -1,6 +1,7 @@
 import { ROLES_BASED_USER_CREATION, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import Seller from '#models/Seller.js';
+import User from '../models/User.js';
 
 const userRoleBasedAccess = (creatorRole, newUserRole) => {
   return ROLES_BASED_USER_CREATION[creatorRole]?.includes(newUserRole) || false;
@@ -41,25 +42,31 @@ const getSellerIds = async (id) => {
 };
 
 const userAndSellerConnection = async (role, sellerId, newUserData) => {
+  let finalSellerId;
+
   if (role === USER_ROLES.MASTER_ADMIN) {
-    const masterSellerId = await Seller.findOne({ type: SELLER_TYPE.BASE });
-    if (!masterSellerId) {
+    const masterSeller = await Seller.findOne({ type: SELLER_TYPE.BASE });
+
+    if (!masterSeller) {
       throw new Error('Cannot create MASTER_ADMIN: No "base" seller found in the database.');
     }
-    const userMasterSellerConnection = new UserSeller({
-      userId: newUserData._id,
-      sellerId: masterSellerId._id,
-    });
-    await userMasterSellerConnection.save();
-    return userMasterSellerConnection;
+
+    finalSellerId = masterSeller._id;
   } else {
-    const userSellerConnection = new UserSeller({
-      userId: newUserData._id,
-      sellerId: sellerId,
-    });
-    await userSellerConnection.save();
-    return userSellerConnection;
+    finalSellerId = sellerId;
   }
+
+  const userSellerConnection = new UserSeller({
+    userId: newUserData._id,
+    sellerId: finalSellerId,
+  });
+
+  await userSellerConnection.save();
+  return userSellerConnection;
+};
+const validateUserId = async (userId) => {
+  const user = await User.findOne({ _id: userId, isDeleted: false }).select('role').lean();
+  return user;
 };
 
 export default {
@@ -67,4 +74,5 @@ export default {
   validateSellerAccessForCreator,
   getSellerIds,
   userAndSellerConnection,
+  validateUserId,
 };
