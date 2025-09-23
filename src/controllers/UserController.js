@@ -55,17 +55,20 @@ export const updateUser = async (req, res) => {
           seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_DOES_NOT_EXISTS : req.locale.NOT_HAVE_ACCESS;
         return Response.failResponse(res, message, 403);
       }
-    }
-    const sellerConnection = await userHelper.userAndSellerConnection(updatedUser.role, sellerId, updatedUser._id);
 
-    if (!sellerConnection) {
-      return Response.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
+      const sellerUpdataion = await userHelper.sellerConnectionUpdate(updatedUser._id, sellerId);
+
+      if (!sellerUpdataion) {
+        return Response.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
+      }
+
+      userResponseObject.sellerId = sellerUpdataion.sellerId;
     }
-    userResponseObject.sellerId = sellerConnection.sellerId;
 
     return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, userResponseObject);
   } catch (error) {
     errorLog(error);
+    console.error(error);
     return Responses.errorResponse(res, error);
   }
 };
