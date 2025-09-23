@@ -83,6 +83,8 @@
   "CATEGORY_PROCESSED_SUCCESS": "تمت معالجة الفئات بنجاح",
   "CATEGORY_NOT_SAVED": "تعذر حفظ الفئات",
 
+  "FAILED_TO_UPLOAD": "غير قادر على تنزيل الفاتورة",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "تم جلب الفاتورة بنجاح",
   "SELLERIDS_REQUIRED": "يرجى تقديم مصفوفة من المعرفات",
   "VALID_SELLER_IDS": "يرجى تقديم معرفات صالحة",
   "NO_SELLER_FOUND": "لم يتم العثور على بائعين مطابقين للحذف",

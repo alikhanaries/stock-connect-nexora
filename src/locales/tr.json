@@ -82,6 +82,8 @@
   "CATEGORY_PROCESSED_SUCCESS": "Kategoriler başarıyla işlendi",
   "CATEGORY_NOT_SAVED": "Kategoriler kaydedilemedi",
 
+  "FAILED_TO_UPLOAD": "Fatura indirilemiyor",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "Fatura başarıyla alındı",
   "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
   "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
   "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",

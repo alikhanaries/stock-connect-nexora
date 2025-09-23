@@ -92,7 +92,7 @@ export const getProductsValidator = validate(async (req) => {
         })
         .optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -217,7 +217,7 @@ export const getTopSellingProductValidator = validate(async (req) => {
 
       channel: z.string().optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -244,12 +244,12 @@ export const pushProductsToChannelEngineValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
   const paramsSchema = z.object({
     channelId: z
-      .number({
+      .string({
         required_error: 'channelId is required',
-        invalid_type_error: 'channelId must be a number',
+        invalid_type_error: 'channelId must be a string',
       })
-      .int('channelId must be an integer')
-      .positive('channelId must be positive'),
+      .regex(/^\d+$/, 'channelId must be a numeric string')
+      .transform((val) => parseInt(val, 10)),
   });
 
   paramsSchema.parse(req.params);
@@ -319,7 +319,7 @@ export const getUserChannelProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         }),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -389,7 +389,7 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         }),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
