@@ -119,6 +119,11 @@ export const updateUserValidator = validate(async (req) => {
         message: `Invalid role. Please select one of: ${allowedRoles.join(', ')}`,
       })
       .optional(),
+
+    sellerId: z
+      .string()
+      .refine((val) => mongoose.Types.ObjectId.isValid(val), { message: 'Invalid ID format' })
+      .optional(),
   });
   return updateUserSchema.parse(req.body);
 });
