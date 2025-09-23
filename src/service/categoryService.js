@@ -125,10 +125,10 @@ export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
 
 export const addCategoryService = async (categoryDatas, marketplaceId) => {
   try {
-    const operations = categoryDatas.map(({ platformCategoryIdRef, marketplaceCategoryId }) => ({
+    const operations = categoryDatas.map(({ platformCategoryId, marketplaceCategoryId }) => ({
       updateOne: {
-        filter: { platformCategoryIdRef, marketplaceId, marketplaceCategoryId },
-        update: { $set: { platformCategoryIdRef, marketplaceId, marketplaceCategoryId } },
+        filter: { platformCategoryId, marketplaceId, marketplaceCategoryId },
+        update: { $set: { platformCategoryId, marketplaceId, marketplaceCategoryId } },
         upsert: true,
       },
     }));

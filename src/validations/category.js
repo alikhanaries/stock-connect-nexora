@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { headerSchema } from './headerSchema.js';
 import { validate } from './validate.js';
 // /* SAVE USER CHANNELS VALIDATOR */
-
 // Category item schema
 const categoryItemSchema = z.object({
   platformCategoryId: z
