@@ -1,11 +1,11 @@
 import MarketplaceCategory from '../models/MarketplaceCategory.js';
-
+import Channel from '../models/Channel.js';
 import slugify from 'slugify';
 export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm = '') => {
   try {
     // Fetch all categories
     let allCategories = await MarketplaceCategory.find(
-      { marketplaceId },
+      { marketPlaceId: parseInt(marketplaceId) },
       {
         _id: 1,
         categoryName: 1,
@@ -73,6 +73,15 @@ export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm 
 
     // Build tree from root nodes
     const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
+
+    const channelData = await Channel.findOne({ channelId: parseInt(marketplaceId) }, { channelName: 1, channelId: 1 });
+    if (channelData) {
+      return {
+        categoryName: channelData?.channelName,
+        id: channelData?.channelId,
+        children: tree,
+      };
+    }
 
     return tree;
   } catch (err) {
