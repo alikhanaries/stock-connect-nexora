@@ -1,33 +1,34 @@
 import mongoose from 'mongoose';
 
-const { Schema } = mongoose;
-
-const CategoryMappingSchema = new Schema(
+const categoryMappingSchema = new mongoose.Schema(
   {
     platformCategoryIdRef: {
-      type: Schema.Types.ObjectId,
-      ref: 'PlatformCategory', // reference to PlatformCategory collection
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PlatformCategory', // reference model
       required: true,
-      index: true,
+    },
+    marketplaceCategoryIdRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MarketplaceCategory', // reference model
+      required: true,
+    },
+    marketplaceIdRef: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Marketplace', // reference model
+      required: true,
     },
     marketplaceId: {
-      // marketplace id ex: 1 for noon
       type: Number,
       required: true,
-      trim: true,
       index: true,
     },
     marketplaceCategoryId: {
-      // reference to MarketPlaceCategory collection
-      type: Number,
+      type: Number, // e.g. "101"
       required: true,
       trim: true,
-      index: true,
     },
   },
   { timestamps: true }
 );
-// ✅ Compound unique index to prevent duplicates
-CategoryMappingSchema.index({ platformCategoryIdRef: 1, marketplaceId: 1, marketplaceCategoryId: 1 }, { unique: true });
-const CategoryMapping = mongoose.model('CategoryMapping', CategoryMappingSchema);
-export default CategoryMapping;
+
+export default mongoose.model('CategoryMapping', categoryMappingSchema);
