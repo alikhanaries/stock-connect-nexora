@@ -8,7 +8,7 @@ export const processMarketPlaceImportStream = async (stream, { filePath, marketP
   let batch = [];
   let rowIndex = 0;
 
-  // Shared counters object (mutated inside processBatch)
+  /// Shared counters object (mutated inside processBatch)
   const counters = {
     insertedCount: 0,
     updatedCount: 0,
