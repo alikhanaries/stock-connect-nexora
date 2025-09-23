@@ -24,7 +24,7 @@ export const authMiddleware = async (req, res, next) => {
       }
       console.timeEnd('authMiddleware');
       req.user = user;
-      req.sellerId = decoded.sellerId;
+      req.sellerIds = decoded.sellerIds;
       next();
     } catch (error) {
       console.log('JWT verification error:', error.message);

@@ -15,7 +15,7 @@ export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm 
         categorySlug: 1,
       }
     ).lean();
-
+    if (!allCategories.length) return [];
     // Normalize parent using trail
     allCategories.forEach((cat) => {
       if (cat.categoryTrail) {
@@ -74,7 +74,10 @@ export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm 
     // Build tree from root nodes
     const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
 
-    const channelData = await Channel.findOne({ channelId: parseInt(marketplaceId) }, { channelName: 1, channelId: 1 });
+    const channelData = await Channel.findOne(
+      { channelId: parseInt(marketplaceId) },
+      { channelName: 1, channelId: 1 }
+    ).lean();
     if (channelData) {
       return {
         categoryName: channelData?.channelName,

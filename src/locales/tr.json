@@ -79,8 +79,9 @@
   "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı",
   "CATEGORY_NOT_FOUND": "Kategori bulunamadı",
   "CATEGORY_FOUND": "Kategori bulundu",
-
-  "SELLERIDS_REQUIRED": "Lütfen bir ID dizisi sağlayın",
+  "FAILED_TO_UPLOAD": "Fatura indirilemiyor",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "Fatura başarıyla alındı",
+  "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
   "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
   "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
   "SELLER_DELETED": "Satıcı başarıyla silindi",
