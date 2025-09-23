@@ -5,7 +5,7 @@ import userHelper from '#helpers/User.js';
 import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
-import { ROLES_BASED_USER_FETCHING, SELLER_TYPE } from '#constants/common.js';
+import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -29,8 +29,10 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
+    const creatorRole = req.user.role;
+    const creatorId = req.user._id;
 
-    const { firstName, lastName, email, phoneNumber, active, role } = req.body;
+    const { firstName, lastName, email, phoneNumber, active, role, sellerId } = req.body;
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
@@ -40,7 +42,28 @@ export const updateUser = async (req, res) => {
     if (!updatedUser) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, updatedUser.toObject());
+
+    const userResponseObject = updatedUser.toObject();
+
+    if (sellerId) {
+      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
+      if (!seller.success) {
+        if (!seller.notBaseSeller) {
+          return Response.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
+        }
+        const message =
+          seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_DOES_NOT_EXISTS : req.locale.NOT_HAVE_ACCESS;
+        return Response.failResponse(res, message, 403);
+      }
+    }
+    const sellerConnection = await userHelper.userAndSellerConnection(updatedUser.role, sellerId, updatedUser._id);
+
+    if (!sellerConnection) {
+      return Response.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
+    }
+    userResponseObject.sellerId = sellerConnection.sellerId;
+
+    return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, userResponseObject);
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error);

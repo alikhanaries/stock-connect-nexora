@@ -41,7 +41,7 @@ const getSellerIds = async (id) => {
   return sellerIds;
 };
 
-const userAndSellerConnection = async (role, sellerId, newUserData) => {
+const userAndSellerConnection = async (role, sellerId, newUserId) => {
   let finalSellerId;
 
   if (role === USER_ROLES.MASTER_ADMIN) {
@@ -57,13 +57,14 @@ const userAndSellerConnection = async (role, sellerId, newUserData) => {
   }
 
   const userSellerConnection = new UserSeller({
-    userId: newUserData._id,
+    userId: newUserId,
     sellerId: finalSellerId,
   });
 
   await userSellerConnection.save();
   return userSellerConnection;
 };
+
 const validateUserId = async (userId) => {
   const user = await User.findOne({ _id: userId, isDeleted: false }).select('role').lean();
   return user;

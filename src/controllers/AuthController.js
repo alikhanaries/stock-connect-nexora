@@ -108,7 +108,7 @@ export const register = async (req, res) => {
     });
     const newUserData = await newUser.save();
 
-    await userHelper.userAndSellerConnection(role, sellerId, newUserData);
+    await userHelper.userAndSellerConnection(role, sellerId, newUserData._id);
 
     return Response.successResponse(res, 'User Registered successfully', 201);
   } catch (error) {
