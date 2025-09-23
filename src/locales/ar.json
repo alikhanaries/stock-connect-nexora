@@ -80,6 +80,9 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "فشل فصل المنتج من القناة",
   "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث",
 
+
+  "FAILED_TO_UPLOAD": "غير قادر على تنزيل الفاتورة",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "تم جلب الفاتورة بنجاح"
   "SELLERIDS_REQUIRED": "يرجى تقديم مصفوفة من المعرفات",
   "VALID_SELLER_IDS": "يرجى تقديم معرفات صالحة",
   "NO_SELLER_FOUND": "لم يتم العثور على بائعين مطابقين للحذف",
@@ -91,4 +94,5 @@
   "SELLER_DOES_NOT_EXISTS": "البائع الذي قدمته غير موجود.",
   "NOT_HAVE_ACCESS": "ليس لديك صلاحية للوصول إلى هذا البائع.",
   "SELLER_CONNECTION_SUCCESSFUL": "تم الاتصال بالبائع بنجاح."
+
 }

@@ -78,6 +78,9 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Failed to unlink product from channel",
   "NO_MATCHING_PRODUCTS_FOUND": "No matching products found to update",
 
+
+  "FAILED_TO_UPLOAD": "Failed to download invoice",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "Invoice fetched successfully"
   "SELLERIDS_REQUIRED": "please provide array of ids",
   "VALID_SELLER_IDS": "Please provide valid Ids",
   "NO_SELLER_FOUND": "No Matching sellers found to Delete.",
@@ -89,4 +92,5 @@
   "SELLER_DOES_NOT_EXISTS": "The seller you have provided does not exist.",
   "NOT_HAVE_ACCESS": "You do not have access to this seller.",
   "SELLER_CONNECTION_SUCCESSFUL": "seller connection successful."
+
 }

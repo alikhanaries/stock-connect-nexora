@@ -19,7 +19,14 @@ export const getAllChannelsFromChannelPartner = async (req, res) => {
 /** FUNC - Get all channel list from DB */
 export const getAllChannels = async (req, res) => {
   try {
-    const { channels, pagination, appliedFilters } = await channelService.getAllChannels(req.query);
+    const userId = req.user._id;
+    // Ensure user exists
+    const user = await User.findById(userId);
+    if (!user) {
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
+    }
+    const { channels, pagination, appliedFilters } = await channelService.getAllChannels(req.query, userId);
+
     const responseData = {
       content: channels || [],
       appliedFilters: appliedFilters || {},
