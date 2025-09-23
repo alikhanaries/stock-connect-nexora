@@ -15,7 +15,7 @@ export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm 
         categorySlug: 1,
       }
     ).lean();
-
+if (!allCategories.length) return [];
     // Normalize parent using trail
     allCategories.forEach((cat) => {
       if (cat.categoryTrail) {
