@@ -2,16 +2,15 @@ import { z } from 'zod';
 import { headerSchema } from './headerSchema.js';
 import { validate } from './validate.js';
 // /* SAVE USER CHANNELS VALIDATOR */
-
-// ObjectId schema (24 hex chars)
-const objectIdSchema = z
-  .string()
-  .length(24, 'Id must be exactly 24 characters')
-  .regex(/^[0-9a-fA-F]{24}$/, 'Invalid ObjectId format');
-
 // Category item schema
 const categoryItemSchema = z.object({
-  platformCategoryIdRef: objectIdSchema,
+  platformCategoryId: z
+    .number({
+      required_error: 'marketplaceCategoryId is required',
+      invalid_type_error: 'marketplaceCategoryId must be a number',
+    })
+    .int('marketplaceCategoryId must be an integer')
+    .min(1, 'marketplaceCategoryId must be greater than 0'),
   marketplaceCategoryId: z
     .number({
       required_error: 'marketplaceCategoryId is required',

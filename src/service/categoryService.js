@@ -2,10 +2,10 @@ import CategoryMapping from '../models/CategoryMapping.js';
 
 export const mapCategoryService = async (categoryDatas, marketplaceId) => {
   try {
-    const operations = categoryDatas.map(({ platformCategoryIdRef, marketplaceCategoryId }) => ({
+    const operations = categoryDatas.map(({ platformCategoryId, marketplaceCategoryId }) => ({
       updateOne: {
-        filter: { platformCategoryIdRef, marketplaceId, marketplaceCategoryId },
-        update: { $set: { platformCategoryIdRef, marketplaceId, marketplaceCategoryId } },
+        filter: { platformCategoryId, marketplaceId, marketplaceCategoryId },
+        update: { $set: { platformCategoryId, marketplaceId, marketplaceCategoryId } },
         upsert: true,
       },
     }));

@@ -2,21 +2,12 @@ import mongoose from 'mongoose';
 
 const categoryMappingSchema = new mongoose.Schema(
   {
-    platformCategoryIdRef: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'PlatformCategory', // reference model
+    platformCategoryId: {
+      type: Number, // e.g. "101"
       required: true,
+      trim: true,
     },
-    marketplaceCategoryIdRef: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'MarketplaceCategory', // reference model
-      required: true,
-    },
-    marketplaceIdRef: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Marketplace', // reference model
-      required: true,
-    },
+
     marketplaceId: {
       type: Number,
       required: true,
