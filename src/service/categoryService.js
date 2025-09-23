@@ -1,10 +1,12 @@
-import PlatformCategory from '../models/PlatformCategory.js';
-import Channel from '../models/Channel.js';
+import PlatformCategory from '#models/PlatformCategory.js';
+import CategoryMapping from '#models/CategoryMapping.js';
+import MarketplaceCategory from '#models/MarketPlaceCategory.js';
+import Channel from '#models/Channel.js';
 import slugify from 'slugify';
 
 export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceId) => {
   try {
-    // Fetch all categories
+    // 1️⃣ Fetch all PlatformCategories
     let allCategories = await PlatformCategory.find(
       { marketPlaceId: parseInt(marketPlaceId) },
       {
@@ -14,6 +16,7 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
         platformCategoryId: 1,
         platformCategoryTrail: 1,
         categorySlug: 1,
+        marketPlaceId: 1,
       }
     ).lean();
 
@@ -27,7 +30,7 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
       }
     });
 
-    // Filter by search term if provided
+    // 2️⃣ Filter by search term if provided
     let categoriesToInclude = allCategories;
     if (searchTerm) {
       const safeRegex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
@@ -36,7 +39,6 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
         (cat) => safeRegex.test(cat.categoryName) || safeRegex.test(cat.platformCategoryTrail)
       );
 
-      // Include ancestors
       const ancestorSlugs = new Set();
       matched.forEach((cat) => {
         const parts = cat.platformCategoryTrail.split('>').map((p) => slugify(p.trim(), { lower: true }));
@@ -47,23 +49,63 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
       categoriesToInclude = allCategories.filter((cat) => matched.includes(cat) || ancestorSlugs.has(cat.categorySlug));
     }
 
-    // Build lookup maps
+    // 3️⃣ Build lookup maps for tree
     const categoryMap = {}; // slug -> category
     const childrenByParent = {}; // parentSlug -> [childSlugs]
 
     categoriesToInclude.forEach((cat) => {
-      categoryMap[cat.categorySlug] = { ...cat, children: [] };
+      categoryMap[cat.categorySlug] = { ...cat, children: [], marketplaceCategories: [] };
       const parentSlug = cat.parent || 'root';
       if (!childrenByParent[parentSlug]) childrenByParent[parentSlug] = [];
       childrenByParent[parentSlug].push(cat.categorySlug);
     });
 
-    // Recursive tree builder using childrenByParent map
+    // 4️⃣ Fetch CategoryMappings for the marketplace
+    const mappings = await CategoryMapping.find({ marketplaceId: parseInt(marketPlaceId) }).lean();
+
+    // Build a quick map: platformCategoryId -> array of marketplaceCategoryIds
+    const mappingMap = {};
+    mappings.forEach((m) => {
+      if (!mappingMap[m.platformCategoryId]) mappingMap[m.platformCategoryId] = [];
+      mappingMap[m.platformCategoryId].push(m.marketplaceCategoryId);
+    });
+
+    // Fetch all MarketplaceCategories in one query
+    const marketplaceIds = mappings.map((m) => m.marketplaceCategoryId);
+    console.log('marketplaceIds', marketplaceIds);
+    const marketplaceCategories = await MarketplaceCategory.find(
+      {
+        marketplaceCategoryId: { $in: marketplaceIds },
+        marketPlaceId: parseInt(marketPlaceId),
+      },
+      {
+        _id: 1,
+        categorySlug: 1,
+        parent: 1,
+        categoryName: 1,
+        categoryTrail: 1,
+        marketplaceCategoryId: 1,
+        marketPlaceId: 1,
+      }
+    ).lean();
+    console.log('marketplaceCategories', marketplaceCategories);
+    // Build map: marketplaceCategoryId -> marketplaceCategory
+    const marketplaceMap = {};
+    marketplaceCategories.forEach((mc) => {
+      marketplaceMap[mc.marketplaceCategoryId] = mc;
+    });
+
+    // 5️⃣ Recursive tree builder
     const buildNode = (cat, visited = new Set()) => {
       if (!cat || visited.has(cat.categorySlug)) return null;
       visited.add(cat.categorySlug);
 
       const node = { ...cat, children: [] };
+
+      // Attach mapped marketplace categories
+      const mappedIds = mappingMap[cat.platformCategoryId] || [];
+      node.marketplaceCategories = mappedIds.map((id) => marketplaceMap[id]).filter(Boolean);
+
       (childrenByParent[cat.categorySlug] || []).forEach((childSlug) => {
         const childNode = buildNode(categoryMap[childSlug], new Set(visited));
         if (childNode) node.children.push(childNode);
@@ -75,11 +117,12 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
     // Build tree from root nodes
     const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
 
+    // Optional: attach channel info at top
     const channelData = await Channel.findOne({ channelId: parseInt(marketPlaceId) }, { channelName: 1, channelId: 1 });
     if (channelData) {
       return {
-        categoryName: channelData?.channelName,
-        id: channelData?.channelId,
+        categoryName: channelData.channelName,
+        id: channelData.channelId,
         children: tree,
       };
     }

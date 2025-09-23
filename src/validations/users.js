@@ -43,8 +43,8 @@ export const getAllUsersValidator = validate(async (req) => {
       .optional(),
 
     role: z
-      .enum(['admin', 'super_admin'], {
-        errorMap: () => ({ message: "Role must be either 'admin' or 'super_admin'" }),
+      .enum(allowedRoles, {
+        errorMap: () => ({ message: `Role must be either ${allowedRoles.join(',')}` }),
       })
       .optional(),
   });
