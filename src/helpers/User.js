@@ -1,7 +1,7 @@
 import { ROLES_BASED_USER_CREATION, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import Seller from '#models/Seller.js';
-import User from '../models/User.js';
+import User from '#models/User.js';
 
 const userRoleBasedAccess = (creatorRole, newUserRole) => {
   return ROLES_BASED_USER_CREATION[creatorRole]?.includes(newUserRole) || false;

@@ -27,6 +27,6 @@ router.post('/refresh-token', refreshToken);
 router.post('/forget-password', forgetPasswordValidator, forgotPassword);
 router.post('/validate-reset-token', resetTokenValidator, validateResetToken);
 router.post('/reset-password', resetPasswordValidator, resetPassword);
-router.post('/add-seller', checkLanguage, authMiddleware, updateSellerConnectionWithUser);
+router.post('/connect-seller', checkLanguage, authMiddleware, updateSellerConnectionWithUser);
 
 export default router;
