@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { importPlatformCategoriesFromCsv } from '../controllers/CategoryController.js';
+import { importMarketPlaceCategoriesFromCsv } from '../controllers/CategoryController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 
 const router = express.Router();
@@ -8,12 +8,12 @@ const upload = multer({ dest: 'uploads/' }); // saves CSV temporarily
 
 // POST /api/import-csv
 router.post(
-  '/importPlatformCategories',
+  '/importMarketPlaceCategories/:marketPlaceId',
   checkLanguage,
   upload.single('file'),
   validateFile,
   authMiddleware,
-  importPlatformCategoriesFromCsv
+  importMarketPlaceCategoriesFromCsv
 );
 
 export default router;

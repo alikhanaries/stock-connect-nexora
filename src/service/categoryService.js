@@ -1,9 +1,9 @@
 import fs from 'fs';
 import csv from 'csv-parser'; // for reading CSV
-import { mapRowToPlatFormCategory } from '#util/mapRowToPlatFormCategory.js'; // your helper
+import { mapRowToMarketPlaceCategory } from '#root/src/util/mapRowtoMarketPlaceCategory.js'; // your helper
 import { processBatch } from '../helpers/ProcessBatchHandler.js';
 
-export const processPlatformImportStream = async (stream, { filePath } = {}) => {
+export const processMarketPlaceImportStream = async (stream, { filePath, marketPlaceId } = {}) => {
   const batchSize = parseInt(process.env.BATCH_SIZE) || 500;
   let batch = [];
   let rowIndex = 0;
@@ -22,7 +22,7 @@ export const processPlatformImportStream = async (stream, { filePath } = {}) => 
   for await (const row of parser) {
     rowIndex++;
     try {
-      const categories = await mapRowToPlatFormCategory(row, rowIndex);
+      const categories = await mapRowToMarketPlaceCategory(row, marketPlaceId);
 
       if (!categories.length) {
         invalidRowsCount++;
@@ -64,11 +64,11 @@ export const processPlatformImportStream = async (stream, { filePath } = {}) => 
   };
 };
 /* CSV File Import */
-export const importPlatformCategories = async (filePath) => {
+export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
   try {
     const stream = fs.createReadStream(filePath);
 
-    return await processPlatformImportStream(stream, { deleteAfter: true, filePath });
+    return await processMarketPlaceImportStream(stream, { deleteAfter: true, filePath, marketPlaceId });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block

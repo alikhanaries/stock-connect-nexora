@@ -76,5 +76,7 @@
   "INVALID_PRODUCTS": "No valid products found for given productIds",
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "Product unlinked from channel successfully",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Failed to unlink product from channel",
-  "NO_MATCHING_PRODUCTS_FOUND": "No matching products found to update"
+  "NO_MATCHING_PRODUCTS_FOUND": "No matching products found to update",
+
+  "CATEGORY_IMPORTED_PROCESSING": "Category importing is under processed"
 }

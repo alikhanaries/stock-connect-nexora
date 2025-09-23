@@ -6,5 +6,5 @@ const CounterSchema = new mongoose.Schema({
     default: 99, // start from 99, so first increment = 100
   },
 });
-const PlatFormCategoryCounter = mongoose.model('PlatFormCategoryCounter', CounterSchema);
-export default PlatFormCategoryCounter;
+const MarketPlaceCategoryCounter = mongoose.model('MarketPlaceCategoryCounter', CounterSchema);
+export default MarketPlaceCategoryCounter;

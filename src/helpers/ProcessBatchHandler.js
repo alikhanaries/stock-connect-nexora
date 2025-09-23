@@ -1,4 +1,4 @@
-import PlatformCategory from '../models/PlatformCategory.js'; // adjust path
+import MarketPlaceCategory from '../models/MarketPlaceCategory.js'; // adjust path
 
 /**
  * Process a batch of categories with bulkWrite upsert.
@@ -12,14 +12,14 @@ export const processBatch = async (batch, counters, label = 'Batch') => {
 
   const ops = batch.map((c) => ({
     updateOne: {
-      filter: { categorySlug: c.categorySlug, parent: c.parent || null },
+      filter: { categorySlug: c.categorySlug, parent: c.parent || 'root', marketPlaceId: c.marketPlaceId },
       update: { $set: c },
       upsert: true,
     },
   }));
 
   try {
-    const res = await PlatformCategory.bulkWrite(ops, { ordered: false });
+    const res = await MarketPlaceCategory.bulkWrite(ops, { ordered: false });
 
     // 🔹 Update counters
     counters.insertedCount += res.upsertedCount || 0;
