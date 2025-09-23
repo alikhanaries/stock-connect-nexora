@@ -36,7 +36,7 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = { isDeleted: false };
+  const filter = { status: { $ne: 'removed' } };
   const appliedFilters = {};
 
   // Status filter
@@ -204,7 +204,6 @@ const pushProductsFromChannel = async (channelId) => {
       const products = await Product.find({
         productSkuCode: { $in: skuCodes },
         status: 'active',
-        isDeleted: { $ne: true },
       })
         .skip(skip)
         .limit(BATCH_SIZE)
@@ -297,7 +296,16 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
             const ops = toProcess.map((p) => ({
               updateOne: {
                 filter: { productSkuCode: p.productSkuCode },
-                update: { $set: p },
+                update: [
+                  {
+                    $set: {
+                      ...p,
+                      status: {
+                        $cond: [{ $eq: ['$status', 'removed'] }, 'active', { $ifNull: ['$status', 'active'] }],
+                      },
+                    },
+                  },
+                ],
                 upsert: true,
               },
             }));
@@ -324,7 +332,16 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
             const ops = batch.map((p) => ({
               updateOne: {
                 filter: { productSkuCode: p.productSkuCode },
-                update: { $set: p },
+                update: [
+                  {
+                    $set: {
+                      ...p,
+                      status: {
+                        $cond: [{ $eq: ['$status', 'removed'] }, 'active', { $ifNull: ['$status', 'active'] }],
+                      },
+                    },
+                  },
+                ],
                 upsert: true,
               },
             }));
@@ -391,11 +408,7 @@ export const importProductsFromCsvFile = async (filePath) => {
 
 const deleteProduct = async (id, locale) => {
   try {
-    const result = await Product.findByIdAndUpdate(
-      id,
-      { isDeleted: true },
-      { new: true } // return updated doc
-    );
+    const result = await Product.findByIdAndUpdate(id, { status: 'removed' }, { new: true });
 
     if (!result) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
@@ -412,8 +425,8 @@ const deleteProduct = async (id, locale) => {
 const deleteMultipleProducts = async (ids, locale) => {
   try {
     const result = await Product.updateMany(
-      { _id: { $in: ids }, isDeleted: { $ne: true } },
-      { $set: { isDeleted: true } }
+      { _id: { $in: ids }, status: { $ne: 'removed' } },
+      { $set: { status: 'removed' } }
     );
 
     if (result.modifiedCount === 0) {
@@ -513,7 +526,7 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
     { $unwind: '$productDetails' },
   ];
 
-  const matchProductStage = { 'productDetails.isDeleted': false };
+  const matchProductStage = { 'productDetails.status': { $ne: 'removed' } };
 
   if (status) {
     const statusValue = status.toString().trim().toLowerCase();
@@ -598,7 +611,7 @@ const getUserUnassignedProducts = async (userId, channelId, query) => {
 
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
 
-  const filter = { isDeleted: false };
+  const filter = { status: { $ne: 'removed' } };
   const appliedFilters = {};
 
   if (assignedSkuCodes.length > 0) {
