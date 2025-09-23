@@ -1,94 +1,82 @@
 import MarketplaceCategory from '../models/MarketplaceCategory.js';
-import CategoryMapping from '../models/CategoryMapping.js';
 
+import slugify from 'slugify';
 export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm = '') => {
   try {
-    const id = Number(marketplaceId);
-
-    // 1️⃣ Fetch all marketplace categories
-    const categories = await MarketplaceCategory.find(
-      { marketplaceId: id },
+    // Fetch all categories
+    let allCategories = await MarketplaceCategory.find(
+      { marketplaceId },
       {
         _id: 1,
         categoryName: 1,
         parent: 1,
+        marketplaceCategoryId: 1,
         categoryTrail: 1,
         categorySlug: 1,
-        marketplaceCategoryId: 1,
       }
     ).lean();
 
-    // 2️⃣ Fetch mappings and populate PlatformCategory
-    const mappings = await CategoryMapping.find({ marketplaceId: String(id) })
-      .populate('platformCategoryIdRef', {
-        _id: 1,
-        categoryName: 1,
-        categorySlug: 1,
-        platformCategoryTrail: 1,
-        platformCategoryId: 1,
-      })
-      .lean();
-
-    // 3️⃣ Build a lookup { marketplaceCategoryId -> platformCategoryData }
-    const mappingMap = {};
-    mappings.forEach((map) => {
-      const key = String(map.marketplaceCategoryId);
-      if (map.platformCategoryIdRef) {
-        mappingMap[key] = map.platformCategoryIdRef;
+    // Normalize parent using trail
+    allCategories.forEach((cat) => {
+      if (cat.categoryTrail) {
+        const parts = cat.categoryTrail.split('>').map((p) => p.trim());
+        cat.parent = parts.length > 1 ? slugify(parts[parts.length - 2], { lower: true }) : 'root';
+      } else {
+        cat.parent = 'root';
       }
     });
 
-    // 4️⃣ Build category map for tree construction
-    const categoryMap = {};
-    categories.forEach((cat) => {
-      categoryMap[cat.categorySlug] = {
-        ...cat,
-        children: [],
-        platformCategoryData: mappingMap[String(cat.marketplaceCategoryId)] || null,
-      };
-    });
-
-    // 5️⃣ Filter by searchTerm (if provided) and include ancestors
-    let categoriesToInclude = categories;
+    // Filter by search term if provided
+    let categoriesToInclude = allCategories;
     if (searchTerm) {
-      const regex = new RegExp(searchTerm, 'i');
-      const matched = categories.filter((cat) => regex.test(cat.categoryName));
+      const safeRegex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
-      // Include ancestor slugs from categoryTrail
+      const matched = allCategories.filter(
+        (cat) => safeRegex.test(cat.categoryName) || safeRegex.test(cat.categoryTrail)
+      );
+
+      // Include ancestors
       const ancestorSlugs = new Set();
       matched.forEach((cat) => {
-        if (cat.categoryTrail) {
-          const parts = cat.categoryTrail.split('>').map((p) => p.trim());
-          parts.pop(); // remove the category itself
-          parts.forEach((slug) => ancestorSlugs.add(slug));
-        }
+        const parts = cat.categoryTrail.split('>').map((p) => slugify(p.trim(), { lower: true }));
+        parts.pop(); // remove self
+        parts.forEach((slug) => ancestorSlugs.add(slug));
       });
 
-      // Filter categories: matched + ancestors
-      categoriesToInclude = categories.filter((cat) => matched.includes(cat) || ancestorSlugs.has(cat.categorySlug));
+      categoriesToInclude = allCategories.filter((cat) => matched.includes(cat) || ancestorSlugs.has(cat.categorySlug));
     }
 
-    // 6️⃣ Pre-group children for faster tree construction
-    const childrenMap = {};
+    // Build lookup maps
+    const categoryMap = {}; // slug -> category
+    const childrenByParent = {}; // parentSlug -> [childSlugs]
+
     categoriesToInclude.forEach((cat) => {
-      if (!childrenMap[cat.parent]) childrenMap[cat.parent] = [];
-      childrenMap[cat.parent].push(categoryMap[cat.categorySlug]);
+      categoryMap[cat.categorySlug] = { ...cat, children: [] };
+      const parentSlug = cat.parent || 'root';
+      if (!childrenByParent[parentSlug]) childrenByParent[parentSlug] = [];
+      childrenByParent[parentSlug].push(cat.categorySlug);
     });
 
-    // 7️⃣ Recursive tree builder
-    const buildNode = (cat) => {
+    // Recursive tree builder using childrenByParent map
+    const buildNode = (cat, visited = new Set()) => {
+      if (!cat || visited.has(cat.categorySlug)) return null;
+      visited.add(cat.categorySlug);
+
       const node = { ...cat, children: [] };
-      const children = childrenMap[cat.categorySlug] || [];
-      node.children = children.map(buildNode);
+      (childrenByParent[cat.categorySlug] || []).forEach((childSlug) => {
+        const childNode = buildNode(categoryMap[childSlug], new Set(visited));
+        if (childNode) node.children.push(childNode);
+      });
+
       return node;
     };
 
-    // 8️⃣ Build tree starting from roots (parent null or missing)
-    const tree = (childrenMap[null] || []).map(buildNode);
+    // Build tree from root nodes
+    const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
 
     return tree;
   } catch (err) {
-    console.error('Error building marketplace category tree:', err);
+    console.error('Error building platform category tree:', err);
     throw err;
   }
 };
