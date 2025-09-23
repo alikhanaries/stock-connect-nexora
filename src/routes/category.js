@@ -5,7 +5,7 @@ import { authMiddleware, checkLanguage } from '#middleware/index.js';
 const router = express.Router();
 
 router.get(
-  '/getPlatformCategories',
+  '/getPlatformCategories/:marketPlaceId',
   getPlatformCategoriesValidator,
   checkLanguage,
   authMiddleware,

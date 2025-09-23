@@ -1,12 +1,12 @@
 import PlatformCategory from '../models/PlatformCategory.js';
-
+import Channel from '../models/Channel.js';
 import slugify from 'slugify';
 
-export const getPlatformCategoriesService = async (searchTerm = '') => {
+export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceId) => {
   try {
     // Fetch all categories
     let allCategories = await PlatformCategory.find(
-      {},
+      { marketPlaceId: parseInt(marketPlaceId) },
       {
         _id: 1,
         categoryName: 1,
@@ -74,6 +74,15 @@ export const getPlatformCategoriesService = async (searchTerm = '') => {
 
     // Build tree from root nodes
     const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
+
+    const channelData = await Channel.findOne({ channelId: parseInt(marketPlaceId) }, { channelName: 1, channelId: 1 });
+    if (channelData) {
+      return {
+        categoryName: channelData?.channelName,
+        id: channelData?.channelId,
+        children: tree,
+      };
+    }
 
     return tree;
   } catch (err) {
