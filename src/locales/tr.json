@@ -80,11 +80,10 @@
   "NO_MATCHING_PRODUCTS_FOUND": "Güncellenecek eşleşen ürün bulunamadı",
 
   "FAILED_TO_UPLOAD": "Fatura indirilemiyor",
-  "IMAGE_UPLOADED_SUCCESSFULLY": "Fatura başarıyla alındı"
+  "IMAGE_UPLOADED_SUCCESSFULLY": "Fatura başarıyla alındı",
   "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
   "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
   "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
   "SELLER_DELETED": "Satıcı başarıyla silindi",
   "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi"
-
 }

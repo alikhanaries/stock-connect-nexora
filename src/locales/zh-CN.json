@@ -82,7 +82,7 @@
   "NO_MATCHING_PRODUCTS_FOUND": "未找到可更新的匹配产品",
 
   "FAILED_TO_UPLOAD": "无法下载发票",
-  "IMAGE_UPLOADED_SUCCESSFULLY": "发票获取成功"
+  "IMAGE_UPLOADED_SUCCESSFULLY": "发票获取成功",
 
   "SELLERIDS_REQUIRED": "请提供 ID 数组",
   "VALID_SELLER_IDS": "请提供有效的 ID",
