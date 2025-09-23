@@ -1,6 +1,6 @@
-import MarketplaceCategory from '../models/MarketplaceCategory.js';
+import PlatformCategory from '../models/PlatformCategory.js';
 import slugify from 'slugify';
-import { generateMarketplaceCategoryId } from '#utils/generateMarketplaceCategoryId.js';
+import { generatePlatformCategoryId } from '#utils/generatePlatformCategoryId.js';
 
 export const insertCategoryTrail = async (categoryTrailArray) => {
   try {
@@ -12,13 +12,13 @@ export const insertCategoryTrail = async (categoryTrailArray) => {
         .map((p) => p.trim())
         .filter(Boolean);
 
-      let parent = null;
+      let parent = 'root';
       const trailDocs = [];
 
       for (const part of trailParts) {
         const categoryName = part.toLowerCase();
         const categorySlug = slugify(categoryName, { lower: true });
-        const marketplaceCategoryId = await generateMarketplaceCategoryId(
+        const platformCategoryId = await generatePlatformCategoryId(
           channelId, // ✅ using channelId
           categoryName,
           categorySlug,
@@ -29,14 +29,15 @@ export const insertCategoryTrail = async (categoryTrailArray) => {
 
         const query = {
           categoryName,
-          parent: parent || null,
-          marketplaceId: channelId, // store channelId
-          categoryTrail: trailDocs.join(' > '),
+          parent: parent || 'root',
+          marketPlaceId: channelId, // store channelId
+          platformCategoryTrail: trailDocs.join(' > '),
           categorySlug,
-          marketplaceCategoryId,
+          platformCategoryId,
+          id: platformCategoryId,
         };
 
-        await MarketplaceCategory.findOneAndUpdate(
+        await PlatformCategory.findOneAndUpdate(
           query,
           { $setOnInsert: query }, // only insert if not exists
           { new: true, upsert: true }
