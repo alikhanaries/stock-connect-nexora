@@ -12,8 +12,8 @@ import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import mongoose from 'mongoose';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
-import Channel from '#models/Channel.js';
 import { insertCategoryTrail } from '../service/categoryService.js';
+import Channel from '#models/Channel.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -37,7 +37,7 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = { isDeleted: false };
+  const filter = { status: { $ne: 'removed' } };
   const appliedFilters = {};
 
   // Status filter
@@ -170,7 +170,6 @@ const pushBatch = async (batch, index) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(batch),
     });
-
     if (!response.ok) {
       throw new Error(`❌ CE API error (Batch ${index + 1}): ${response.status}`);
     }
@@ -206,7 +205,6 @@ const pushProductsFromChannel = async (channelId) => {
       const products = await Product.find({
         productSkuCode: { $in: skuCodes },
         status: 'active',
-        isDeleted: { $ne: true },
       })
         .skip(skip)
         .limit(BATCH_SIZE)
@@ -329,7 +327,16 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
             const ops = batch.map((p) => ({
               updateOne: {
                 filter: { productSkuCode: p.productSkuCode },
-                update: { $set: p },
+                update: [
+                  {
+                    $set: {
+                      ...p,
+                      status: {
+                        $cond: [{ $eq: ['$status', 'removed'] }, 'active', { $ifNull: ['$status', 'active'] }],
+                      },
+                    },
+                  },
+                ],
                 upsert: true,
               },
             }));
@@ -396,11 +403,7 @@ export const importProductsFromCsvFile = async (filePath) => {
 
 const deleteProduct = async (id, locale) => {
   try {
-    const result = await Product.findByIdAndUpdate(
-      id,
-      { isDeleted: true },
-      { new: true } // return updated doc
-    );
+    const result = await Product.findByIdAndUpdate(id, { status: 'removed' }, { new: true });
 
     if (!result) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
@@ -417,8 +420,8 @@ const deleteProduct = async (id, locale) => {
 const deleteMultipleProducts = async (ids, locale) => {
   try {
     const result = await Product.updateMany(
-      { _id: { $in: ids }, isDeleted: { $ne: true } },
-      { $set: { isDeleted: true } }
+      { _id: { $in: ids }, status: { $ne: 'removed' } },
+      { $set: { status: 'removed' } }
     );
 
     if (result.modifiedCount === 0) {
@@ -437,40 +440,49 @@ const deleteMultipleProducts = async (ids, locale) => {
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 const addProductsToUserChannel = async (userId, channelId, productIds, locale) => {
   try {
-    //  Check they exist in Product collection
     const products = await Product.find(
       { _id: { $in: productIds } },
-      { productSkuId: 1, productSkuCode: 1, _id: 1 }
+      { productSkuId: 1, productSkuCode: 1, marketPlace: 1 }
     ).lean();
-    if (products.length !== productIds.length) {
-      return {
-        success: false,
-        message: locale.PRODUCT_NOT_EXITS,
-      };
-    }
 
-    //  Prepare skuList objects
+    if (products.length !== productIds.length) {
+      return { success: false, message: locale.PRODUCT_NOT_EXITS };
+    }
     const skuList = products.map((p) => ({
       skuId: p.productSkuId,
       skuCode: p.productSkuCode,
     }));
-
-    if (skuList.length === 0) {
-      return {
-        success: false,
-        message: locale.INVALID_PRODUCTS,
-      };
+    if (!skuList.length) {
+      return { success: false, message: locale.INVALID_PRODUCTS };
     }
-
+    const channel = await Channel.findOne({ channelId }).select('channelName').lean();
+    if (!channel) {
+      return { success: false, message: locale.CHANNEL_NOT_FOUND };
+    }
+    const channelName = channel.channelName;
     await UserChannelProducts.findOneAndUpdate(
       { userId, channelId },
       { $addToSet: { skuList: { $each: skuList } } },
-      { upsert: true, new: false }
+      { upsert: true }
     );
+    const bulkOps = products.map((p) => {
+      const existing = p.marketPlace ? p.marketPlace.split(',').map((s) => s.trim()) : [];
+      if (!existing.includes(channelName)) {
+        existing.push(channelName);
+      }
+      return {
+        updateOne: {
+          filter: { _id: p._id },
+          update: { $set: { marketPlace: existing.join(', ') } },
+        },
+      };
+    });
 
-    return {
-      success: true,
-    };
+    if (bulkOps.length > 0) {
+      await Product.bulkWrite(bulkOps);
+    }
+
+    return { success: true };
   } catch (err) {
     console.error('Service error in addProductsToUserChannel:', err);
     throw new Error(err.message);
@@ -509,7 +521,7 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
     { $unwind: '$productDetails' },
   ];
 
-  const matchProductStage = { 'productDetails.isDeleted': false };
+  const matchProductStage = { 'productDetails.status': { $ne: 'removed' } };
 
   if (status) {
     const statusValue = status.toString().trim().toLowerCase();
@@ -594,7 +606,7 @@ const getUserUnassignedProducts = async (userId, channelId, query) => {
 
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
 
-  const filter = { isDeleted: false };
+  const filter = { status: { $ne: 'removed' } };
   const appliedFilters = {};
 
   if (assignedSkuCodes.length > 0) {
@@ -643,20 +655,72 @@ const getUserUnassignedProducts = async (userId, channelId, query) => {
   };
 };
 
-const unlinkProductFromChannel = async (userId, channelId, ids) => {
+const removeProductsFromChannelEngine = async (skuCodes) => {
+  if (!skuCodes?.length) return;
+
   try {
-    const products = await Product.find(
-      {
-        _id: { $in: ids.map((id) => new mongoose.Types.ObjectId(id)) },
-      },
-      { productSkuCode: 1 }
-    ).lean();
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(skuCodes),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('ChannelEngine bulkdelete failed:', errorText);
+      return { success: false, message: errorText };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Error calling ChannelEngine:', err);
+    return { success: false, message: err.message };
+  }
+};
+
+const unlinkProductFromChannel = async (userId, channelId, ids, locale) => {
+  try {
+    const products = await Product.find({ _id: { $in: ids } }, { productSkuCode: 1, marketPlace: 1 }).lean();
+    if (!products.length) return 0;
     const skuCodes = products.map((p) => p.productSkuCode);
-    if (!skuCodes.length) return 0;
+    const ceResult = skuCodes.length > 0 ? await removeProductsFromChannelEngine(skuCodes) : { success: true };
+    if (!ceResult.success) {
+      return { success: false, message: 'ChannelEngine deletion failed', ceError: ceResult.message };
+    }
     const result = await UserChannelProducts.updateMany(
       { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId) },
       { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
     );
+
+    const channel = await Channel.findOne({ channelId }).select('channelName').lean();
+    if (!channel) {
+      return { success: false, message: locale?.NO_CHANNEL_FOUND };
+    }
+    const channelName = channel.channelName;
+
+    const bulkOps = products
+      .map((p) => {
+        if (!p.marketPlace) return null;
+
+        const updatedList = p.marketPlace
+          .split(',')
+          .map((s) => s.trim())
+          .filter((name) => name && name !== channelName);
+
+        return {
+          updateOne: {
+            filter: { _id: p._id },
+            update: updatedList.length
+              ? { $set: { marketPlace: updatedList.join(', ') } }
+              : { $set: { marketPlace: null } },
+          },
+        };
+      })
+      .filter(Boolean);
+
+    if (bulkOps.length) {
+      await Product.bulkWrite(bulkOps);
+    }
     return result.modifiedCount || 0;
   } catch (err) {
     console.error('Service error in unlinkProductFromChannel:', err);

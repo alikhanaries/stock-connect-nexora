@@ -3,6 +3,19 @@ import sellerService from '#service/sellerService.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import mongoose from 'mongoose';
 
+export const getSellerById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userData = await sellerService.getSellerById(id);
+    if (!userData) {
+      return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
+    }
+    return response.successResponse(res, req.locale.GET_SELLER_SUCCESS, 200, userData);
+  } catch (error) {
+    console.log('Update seller error: ', error);
+    return response.errorResponse(res, error.message, 500);
+  }
+};
 export const updateSeller = async (req, res) => {
   try {
     const { id } = req.params;
@@ -21,22 +34,7 @@ export const updateSeller = async (req, res) => {
     return response.successResponse(res, 'Seller Updated sucessfully', 200, updatedSeller);
   } catch (error) {
     console.log('Update seller error: ', error);
-    return response.errorResponse(res, error, 500);
-  }
-};
-
-export const softDeleteSeller = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const deletedSeller = await sellerService.deleteSeller(id);
-
-    if (!deletedSeller) {
-      return response.failResponse(res, 'Seller not found.', 404);
-    }
-    return response.successResponse(res, 'Seller deleted sucessfully', 200);
-  } catch (error) {
-    return response.errorResponse(res, error, 500);
+    return response.errorResponse(res, error.message, 500);
   }
 };
 
@@ -63,15 +61,42 @@ export const updateSellerStatus = async (req, res) => {
     return response.successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating Seller status:', err);
-    return response.errorResponse(res, err, 500);
+    return response.errorResponse(res, err.message, 500);
+  }
+};
+
+export const softDeleteSellers = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || !ids.length) {
+      return response.failResponse(res, req.locale.SELLERIDS_REQUIRED, 400);
+    }
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return response.failResponse(res, `${req.locale.VALID_SELLER_IDS} ${invalidIds.join(', ')}`, 400);
+    }
+    const deletedSellers = await sellerService.softDeleteSellers(ids);
+    if (!deletedSellers || deletedSellers === 0) {
+      return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
+    }
+    const statusMessage = `${deletedSellers} ${req.locale.SELLER_DELETED}`;
+    return response.successResponse(res, statusMessage, 200);
+  } catch (err) {
+    console.error('Error updating Seller status:', err);
+    return response.errorResponse(res, err.message, 500);
   }
 };
 
 export const createSeller = async (req, res) => {
   try {
     const newSeller = await sellerService.createSeller(req.body);
-    if (!newSeller) {
-      return response.failResponse(res, 'Unable to create Seller', 400);
+
+    if (!newSeller.data) {
+      return response.failResponse(res, 'Failed to create seller.', 500);
+    }
+
+    if (newSeller.isExist) {
+      return response.failResponse(res, 'A seller with this name already exists.', 409);
     }
     return response.successResponse(res, 'Seller created successfully', 201, newSeller.data);
   } catch (error) {
@@ -83,12 +108,13 @@ export const getAllSeller = async (req, res) => {
   try {
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
-    const { seller, pagination } = await sellerService.getAllSeller(req.query, creatorId, creatorRole);
+    const { seller, pagination, appliedFilters } = await sellerService.getAllSeller(req.query, creatorId, creatorRole);
     const responseData = {
       content: seller || [],
-      ...pagination,
+      appliedFilters: appliedFilters || {},
+      ...(pagination && pagination),
     };
-    const message = seller.length ? 'Seller fetched successfully' : 'No Seller found';
+    const message = seller && seller.length > 0 ? 'Seller fetched successfully' : 'No Seller found';
 
     return response.successResponse(res, message, 200, responseData);
   } catch (error) {
