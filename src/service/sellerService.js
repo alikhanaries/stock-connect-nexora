@@ -1,10 +1,15 @@
 import Seller from '#models/Seller.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import { USER_ROLES } from '#constants/common.js';
+import { PRODUCT_STATUSES, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 
 const createSeller = async (sellerData) => {
   const { name } = sellerData;
+
+  const existingSeller = await Seller.findOne({ name });
+  if (existingSeller) {
+    return { isExist: true, data: null };
+  }
 
   const seller = new Seller({ name });
   await seller.save();
@@ -14,13 +19,15 @@ const createSeller = async (sellerData) => {
   };
 };
 const getAllSeller = async (query, creatorId, creatorRole) => {
-  const { page = 1, size = 10, search } = query;
+  const isPaginated = query.page ? true : false;
+  const { search, toDate, fromDate, status, sortBy = 'name', sortOrder = 'asc' } = query;
 
-  const currentPage = Math.max(1, Number(page));
-  const limit = Math.max(1, Number(size));
-  const skip = (currentPage - 1) * limit;
+  const appliedFilters = {};
 
-  let filter = { isDeleted: false };
+  let filter = {
+    isDeleted: false,
+    type: 'normal',
+  };
   if (search) {
     const searchRegex = new RegExp(search, 'i');
     filter.name = searchRegex;
@@ -31,32 +38,68 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
     const sellerId = sellerLinks.map((link) => link.sellerId);
     filter._id = { $in: sellerId };
   }
+  if (fromDate || toDate) {
+    filter.createdAt = {};
 
-  const [totalElements, seller] = await Promise.all([
-    Seller.countDocuments(filter),
-    Seller.find(filter).skip(skip).limit(limit).lean(),
-  ]);
-  return {
-    seller,
-    pagination: getPagination(totalElements, currentPage, limit),
-  };
+    if (fromDate) {
+      filter.createdAt.$gte = new Date(fromDate);
+      appliedFilters.fromDate = fromDate;
+    }
+    if (toDate) {
+      filter.createdAt.$lte = new Date(toDate);
+      appliedFilters.toDate = toDate;
+    }
+  }
+
+  if (status) {
+    const statusValue = status.toString().trim().toLowerCase();
+    if (PRODUCT_STATUSES.includes(statusValue)) {
+      filter.status = statusValue;
+      appliedFilters.status = statusValue;
+    }
+  }
+
+  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+  if (isPaginated) {
+    const page = Math.max(1, Number(query.page));
+    const limit = Math.max(1, Number(query.size || 10));
+    const skip = (page - 1) * limit;
+
+    const [totalElements, seller] = await Promise.all([
+      Seller.countDocuments(filter),
+      Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).skip(skip).limit(limit).lean(),
+    ]);
+
+    return {
+      seller,
+      pagination: getPagination(totalElements, page, limit),
+      appliedFilters,
+    };
+  } else {
+    const seller = await Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).lean();
+    return {
+      seller,
+      appliedFilters,
+    };
+  }
 };
 
 const updateSeller = async (id, name, statusValue) => {
-  const updatedSeller = await Seller.findOneAndUpdate(
-    { _id: id, isDeleted: false },
-    { name, status: statusValue },
-    { new: true }
-  ).lean();
+  const updateData = {};
+  if (name) updateData.name = name;
+  if (statusValue) updateData.status = statusValue;
+
+  if (Object.keys(updateData).length === 0) return null;
+  const updatedSeller = await Seller.findOneAndUpdate({ _id: id, isDeleted: false }, updateData, { new: true }).lean();
   return updatedSeller;
 };
 
-const deleteSeller = async (id) => {
-  const deletedSeller = await Seller.findOneAndUpdate(
-    { _id: id, isDeleted: false },
-    { isDeleted: true, status: 'inactive' }
+const softDeleteSellers = async (ids) => {
+  const deletedSellers = await Seller.updateMany(
+    { _id: { $in: ids }, isDeleted: false },
+    { $set: { isDeleted: true, status: 'inactive' } }
   );
-  return deletedSeller;
+  return deletedSellers.modifiedCount || 0;
 };
 
 export const updateSellerStatus = async (ids, status) => {
@@ -65,4 +108,9 @@ export const updateSellerStatus = async (ids, status) => {
   return result.modifiedCount || 0;
 };
 
-export default { createSeller, getAllSeller, updateSeller, deleteSeller, updateSellerStatus };
+export const getSellerById = async (id) => {
+  const seller = await Seller.findOne({ _id: id, isDeleted: false }).lean();
+  return seller;
+};
+
+export default { createSeller, getAllSeller, updateSeller, softDeleteSellers, updateSellerStatus, getSellerById };
