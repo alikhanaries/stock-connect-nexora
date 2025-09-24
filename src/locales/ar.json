@@ -79,6 +79,8 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "تم فصل المنتج من القناة بنجاح",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "فشل فصل المنتج من القناة",
   "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث",
+  "MARKET_PLACE_NOT_FOUND": "لم يتم العثور على السوق",
+  "PRODUCT_IMPORTED_PROCESSING": "جارٍ استيراد المنتج",
 
   "FAILED_TO_UPLOAD": "غير قادر على تنزيل الفاتورة",
   "IMAGE_UPLOADED_SUCCESSFULLY": "تم جلب الفاتورة بنجاح",

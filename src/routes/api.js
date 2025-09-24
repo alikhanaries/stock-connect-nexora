@@ -19,5 +19,4 @@ router.use('/orders', orderRoutes);
 router.use('/invoice', invoiceRoutes);
 router.use('/seller', seller);
 
-
 export default router;
