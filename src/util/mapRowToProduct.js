@@ -1,5 +1,5 @@
 // mapRowToProduct.js
-export const mapRowToProduct = async (row, index, channelMap) => {
+export const mapRowToProduct = async (row) => {
   if (!row || typeof row !== 'object') return null;
 
   // Normalize keys (lowercase + trim)
@@ -11,23 +11,6 @@ export const mapRowToProduct = async (row, index, channelMap) => {
   const price = parseFloat(r.price);
   if (!r.productskucode || isNaN(price)) {
     return null;
-  }
-
-  // Lookup channelId from preloaded map
-  let channelId = null;
-  if (r.marketplace) {
-    const regex = new RegExp(r.marketplace.trim(), 'i'); // case-insensitive
-
-    for (const [name, id] of channelMap.entries()) {
-      if (regex.test(name)) {
-        channelId = id;
-        break;
-      }
-    }
-
-    if (!channelId) {
-      console.warn(`⚠️ Marketplace not matched: "${r.marketplace}" at row ${index}`);
-    }
   }
 
   return {
@@ -55,6 +38,5 @@ export const mapRowToProduct = async (row, index, channelMap) => {
     currentStockCount: r.stock ? parseInt(r.stock, 10) || 0 : 0,
     createdAt: new Date(),
     updatedAt: new Date(),
-    channelId,
   };
 };

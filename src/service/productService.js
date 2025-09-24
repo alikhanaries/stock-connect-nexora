@@ -262,10 +262,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
   const categoryTrails = [];
   const rowPromises = []; // 🔑 track all async row handlers
 
-  // preload channels into a map
-  const channels = await Channel.find({}, { channelId: 1, channelName: 1 }).lean();
-  const channelMap = new Map(channels.map((c) => [c.channelName.toLowerCase().trim(), c.channelId]));
-
   await new Promise((resolve, reject) => {
     let rowIndex = 0;
 
@@ -284,7 +280,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
             }
 
             // map row
-            const product = await mapRowToProduct(row, rowIndex, channelMap);
+            const product = await mapRowToProduct(row);
             if (!product) {
               invalidRowsCount++;
               return;
@@ -293,7 +289,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
             // collect category trail
             categoryTrails.push({
               categoryTrail: product?.categoryTrail,
-              channelId: product.channelId,
             });
 
             batch.push(product);

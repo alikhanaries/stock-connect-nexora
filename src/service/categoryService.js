@@ -5,7 +5,7 @@ import { generatePlatformCategoryId } from '#utils/generatePlatformCategoryId.js
 export const insertCategoryTrail = async (categoryTrailArray) => {
   try {
     for (const item of categoryTrailArray) {
-      const { categoryTrail, channelId } = item;
+      const { categoryTrail } = item;
 
       const trailParts = categoryTrail
         .split('>')
@@ -18,19 +18,13 @@ export const insertCategoryTrail = async (categoryTrailArray) => {
       for (const part of trailParts) {
         const categoryName = part.toLowerCase();
         const categorySlug = slugify(categoryName, { lower: true });
-        const platformCategoryId = await generatePlatformCategoryId(
-          channelId, // ✅ using channelId
-          categoryName,
-          categorySlug,
-          parent
-        );
+        const platformCategoryId = await generatePlatformCategoryId(categoryName, categorySlug, parent);
 
         trailDocs.push(part);
 
         const query = {
           categoryName,
           parent: parent || 'root',
-          marketPlaceId: channelId, // store channelId
           platformCategoryTrail: trailDocs.join(' > '),
           categorySlug,
           platformCategoryId,

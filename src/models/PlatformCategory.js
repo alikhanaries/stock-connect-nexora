@@ -9,11 +9,6 @@ const platformCategorySchema = new Schema(
       required: true,
       index: true,
     },
-    marketPlaceId: {
-      type: Number,
-      required: true,
-      index: true,
-    },
     categoryName: {
       type: String,
       required: true,
