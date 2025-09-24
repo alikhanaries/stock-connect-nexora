@@ -5,9 +5,7 @@ import { generatePlatformCategoryId } from '#utils/generatePlatformCategoryId.js
 export const insertCategoryTrail = async (categoryTrailArray) => {
   try {
     for (const item of categoryTrailArray) {
-      const { categoryTrail } = item;
-
-      const trailParts = categoryTrail
+      const trailParts = item
         .split('>')
         .map((p) => p.trim())
         .filter(Boolean);

@@ -257,7 +257,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
   let insertedCount = 0;
   let updatedCount = 0;
   let invalidRowsCount = 0;
-  const categoryTrails = [];
+  const categoryTrails = new Set();
   const rowPromises = [];
 
   await new Promise((resolve, reject) => {
@@ -284,10 +284,9 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
               return;
             }
 
-            // collect category trail
-            categoryTrails.push({
-              categoryTrail: product?.categoryTrail,
-            });
+            if (product?.categoryTrail) {
+              categoryTrails.add(product.categoryTrail);
+            }
 
             batch.push(product);
 
@@ -364,10 +363,9 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
   });
 
   // insert category trails
-  if (categoryTrails.length > 0) {
-    await insertCategoryTrail(categoryTrails);
+  if (categoryTrails.size > 0) {
+    await insertCategoryTrail([...categoryTrails]);
   }
-
   return {
     success: true,
     message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
