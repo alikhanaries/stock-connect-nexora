@@ -21,5 +21,4 @@ router.use('/invoice', invoiceRoutes);
 router.use('/seller', seller);
 router.use('/category', category);
 
-
 export default router;

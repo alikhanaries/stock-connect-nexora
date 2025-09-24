@@ -5,7 +5,7 @@ const MarketplaceCategorySchema = new Schema(
   {
     categoryName: { type: String, required: true, trim: true, lowercase: true },
     parent: { type: String, required: true, ref: 'MarketplaceCategory', default: 'root' },
-    marketPlaceId: {
+    marketplaceId: {
       type: Number,
       required: true,
       index: true,

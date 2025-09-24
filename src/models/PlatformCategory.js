@@ -21,7 +21,7 @@ const platformCategorySchema = new Schema(
       trim: true,
       index: true,
     },
-    parent: { type: String, ref: 'PlatformCategory', default: null },
+    parent: { type: String, ref: 'PlatformCategory', default: 'root' },
     platformCategoryId: {
       type: Number,
       required: true,
