@@ -1,7 +1,6 @@
 import PlatformCategory from '#models/PlatformCategory.js';
 import CategoryMapping from '#models/CategoryMapping.js';
 import MarketplaceCategory from '#models/MarketPlaceCategory.js';
-import Channel from '#models/Channel.js';
 import slugify from 'slugify';
 
 export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceId) => {
@@ -116,16 +115,6 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
 
     // Build tree from root nodes
     const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
-
-    // Optional: attach channel info at top
-    const channelData = await Channel.findOne({ channelId: parseInt(marketPlaceId) }, { channelName: 1, channelId: 1 });
-    if (channelData) {
-      return {
-        categoryName: channelData.channelName,
-        id: channelData.channelId,
-        children: tree,
-      };
-    }
 
     return tree;
   } catch (err) {

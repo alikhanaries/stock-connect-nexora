@@ -4,7 +4,7 @@ import { getPlatformCategoriesService } from '../service/categoryService.js';
 export const getPlatformCategories = async (req, res) => {
   try {
     const result = await getPlatformCategoriesService(req.query.search, req.params.marketPlaceId);
-    if (result.length === 0) {
+    if (result && result.length === 0) {
       return successResponse(res, req.locale.CATEGORY_NOT_FOUND, 200, []);
     }
     return successResponse(res, req.locale.CATEGORY_FOUND, 200, result);
