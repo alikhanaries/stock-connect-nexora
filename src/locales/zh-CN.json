@@ -80,6 +80,9 @@
   "CATEGORY_NOT_FOUND": "未找到分类",
   "CATEGORY_FOUND": "分类已找到",
 
+  "FAILED_TO_UPLOAD": "无法下载发票",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "发票获取成功",
+
   "SELLERIDS_REQUIRED": "请提供 ID 数组",
   "VALID_SELLER_IDS": "请提供有效的 ID",
   "NO_SELLER_FOUND": "未找到可删除的匹配卖家",
