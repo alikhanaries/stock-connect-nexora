@@ -83,6 +83,8 @@
   "MARKET_PLACE_NOT_FOUND": "未找到市场",
   "PRODUCT_IMPORTED_PROCESSING": "产品导入处理中",
 
+  "CATEGORY_IMPORTED_PROCESSING": "分类正在导入中。",
+
   "FAILED_TO_UPLOAD": "无法下载发票",
   "IMAGE_UPLOADED_SUCCESSFULLY": "发票获取成功",
 

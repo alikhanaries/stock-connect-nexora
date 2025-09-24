@@ -82,6 +82,8 @@
   "MARKET_PLACE_NOT_FOUND": "لم يتم العثور على السوق",
   "PRODUCT_IMPORTED_PROCESSING": "جارٍ استيراد المنتج",
 
+  "CATEGORY_IMPORTED_PROCESSING": "جاري استيراد الفئة.",
+
   "FAILED_TO_UPLOAD": "غير قادر على تنزيل الفاتورة",
   "IMAGE_UPLOADED_SUCCESSFULLY": "تم جلب الفاتورة بنجاح",
   "SELLERIDS_REQUIRED": "يرجى تقديم مصفوفة من المعرفات",
