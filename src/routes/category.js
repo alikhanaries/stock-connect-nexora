@@ -1,15 +1,15 @@
 import express from 'express';
-import { getPlatformCategories } from '../controllers/CategoryController.js';
-import { getPlatformCategoriesValidator } from '#validations/category.js';
+import { getStockConnectCategories } from '../controllers/CategoryController.js';
+import { getStockConnectCategoriesValidator } from '#validations/category.js';
 import { authMiddleware, checkLanguage } from '#middleware/index.js';
 const router = express.Router();
 
 router.get(
-  '/getPlatformCategories/:marketPlaceId',
-  getPlatformCategoriesValidator,
+  '/getStockConnectCategories',
+  getStockConnectCategoriesValidator,
   checkLanguage,
   authMiddleware,
-  getPlatformCategories
+  getStockConnectCategories
 );
 
 export default router;

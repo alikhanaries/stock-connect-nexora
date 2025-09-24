@@ -3,11 +3,11 @@ import CategoryMapping from '#models/CategoryMapping.js';
 import MarketplaceCategory from '#models/MarketPlaceCategory.js';
 import slugify from 'slugify';
 
-export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceId) => {
+export const getStockConnectCategoriesService = async (searchTerm = '') => {
   try {
     // 1️⃣ Fetch all PlatformCategories
     let allCategories = await PlatformCategory.find(
-      { marketPlaceId: parseInt(marketPlaceId) },
+      {},
       {
         _id: 1,
         categoryName: 1,
@@ -15,7 +15,6 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
         platformCategoryId: 1,
         platformCategoryTrail: 1,
         categorySlug: 1,
-        marketPlaceId: 1,
       }
     ).lean();
 
@@ -60,7 +59,7 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
     });
 
     // 4️⃣ Fetch CategoryMappings for the marketplace
-    const mappings = await CategoryMapping.find({ marketplaceId: parseInt(marketPlaceId) }).lean();
+    const mappings = await CategoryMapping.find({}).lean();
 
     // Build a quick map: platformCategoryId -> array of marketplaceCategoryIds
     const mappingMap = {};
@@ -71,11 +70,10 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
 
     // Fetch all MarketplaceCategories in one query
     const marketplaceIds = mappings.map((m) => m.marketplaceCategoryId);
-    console.log('marketplaceIds', marketplaceIds);
+
     const marketplaceCategories = await MarketplaceCategory.find(
       {
         marketplaceCategoryId: { $in: marketplaceIds },
-        marketPlaceId: parseInt(marketPlaceId),
       },
       {
         _id: 1,
@@ -87,7 +85,7 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
         marketPlaceId: 1,
       }
     ).lean();
-    console.log('marketplaceCategories', marketplaceCategories);
+
     // Build map: marketplaceCategoryId -> marketplaceCategory
     const marketplaceMap = {};
     marketplaceCategories.forEach((mc) => {
@@ -118,7 +116,6 @@ export const getPlatformCategoriesService = async (searchTerm = '', marketPlaceI
 
     return tree;
   } catch (err) {
-    console.error('Error building platform category tree:', err);
-    throw err;
+    console.log(err);
   }
 };

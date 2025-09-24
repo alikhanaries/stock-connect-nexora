@@ -1,9 +1,9 @@
 import { errorResponse, successResponse } from '#helpers/response.js';
-import { getPlatformCategoriesService } from '../service/categoryService.js';
+import { getStockConnectCategoriesService } from '../service/categoryService.js';
 
-export const getPlatformCategories = async (req, res) => {
+export const getStockConnectCategories = async (req, res) => {
   try {
-    const result = await getPlatformCategoriesService(req.query.search, req.params.marketPlaceId);
+    const result = await getStockConnectCategoriesService(req.query.search);
     if (result && result.length === 0) {
       return successResponse(res, req.locale.CATEGORY_NOT_FOUND, 200, []);
     }
