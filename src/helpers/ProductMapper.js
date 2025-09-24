@@ -1,6 +1,7 @@
 export const mapProductToChannelEngine = (product) => {
   const customAttributes = [
     { Key: 'MarketPlace', Value: product.marketPlace, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
+    { Key: 'Stock', Value: product.currentStockCount || 0, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
   ];
   const attributesString = product.attributes || '';
   return {
