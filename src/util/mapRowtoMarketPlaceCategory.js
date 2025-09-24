@@ -4,8 +4,8 @@ import { generateMarketPlaceCategoryId } from './generateMarketPlaceCategoryId.j
 export const mapRowToMarketPlaceCategory = async (row, marketPlaceId) => {
   const modifiedArray = [];
   let rawPath = row.categoryPath?.trim();
-  if (!rawPath) return null;
 
+  if (!rawPath) return [];
   const firstValue = rawPath
     .replace(/\b(Yes|No)$/i, '') // drop Yes/No
     .replace(/^"+|"+$/g, '') // drop quotes

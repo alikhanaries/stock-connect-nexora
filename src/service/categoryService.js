@@ -68,7 +68,7 @@ export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
   try {
     const stream = fs.createReadStream(filePath);
 
-    return await processMarketPlaceImportStream(stream, { deleteAfter: true, filePath, marketPlaceId });
+    return await processMarketPlaceImportStream(stream, { filePath, marketPlaceId });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block
