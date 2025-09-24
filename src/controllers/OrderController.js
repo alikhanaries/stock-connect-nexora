@@ -113,3 +113,31 @@ export const getOrderComparison = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+
+export const merchantCancelById = async (req, res) => {
+  try {
+    const { orderId, reason, reasonCode, specifics } = req.body;
+    // console.log('got the fields in controller');
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
+    }
+    // console.log('controller - orderId validation');
+    if (!reason || !reasonCode) {
+      return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+    // console.log('controller - reason and reasonCode checking');
+    const orderResponse = await orderService.cancelOrder(orderId, reason, reasonCode, specifics);
+    // console.log('controller - cancel order calling');
+
+    if (!orderResponse.success) {
+      return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, orderResponse.error);
+    }
+    // console.log('controller - success checking pass');
+
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, orderResponse);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
