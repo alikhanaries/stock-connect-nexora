@@ -13,7 +13,7 @@ import { Readable } from 'stream';
 import mongoose from 'mongoose';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 import Channel from '#models/Channel.js';
-import * as categoryService from '../service/categoryService.js';
+import { insertCategoryTrail } from '../service/categoryService.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -260,7 +260,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
   let updatedCount = 0;
   let invalidRowsCount = 0;
   const categoryTrails = [];
-  const rowPromises = []; // 🔑 track all async row handlers
+  const rowPromises = [];
 
   await new Promise((resolve, reject) => {
     let rowIndex = 0;
@@ -337,7 +337,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
             const res = await Product.bulkWrite(ops, { ordered: false });
             insertedCount += res.upsertedCount || 0;
             updatedCount += res.modifiedCount || 0;
-            console.log(`Final upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
           }
 
           // cleanup uploaded file
@@ -359,7 +358,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
 
   // insert category trails
   if (categoryTrails.length > 0) {
-    await categoryService.insertCategoryTrail(categoryTrails);
+    await insertCategoryTrail(categoryTrails);
   }
 
   return {
