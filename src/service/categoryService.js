@@ -26,7 +26,7 @@ export const getStockConnectCategoriesService = async (searchTerm = '') => {
     // Normalize parent using trail
     allCategories.forEach((cat) => {
       if (cat.platformCategoryTrail) {
-        const parts = cat.platformCategoryTrail.split('>').map((p) => p.trim());
+        const parts = (cat.platformCategoryTrail || '').split('>').map((p) => p.trim());
         cat.parent = parts.length > 1 ? slugify(parts[parts.length - 2], { lower: true }) : 'root';
       } else {
         cat.parent = 'root';
@@ -109,7 +109,7 @@ export const getStockConnectCategoriesService = async (searchTerm = '') => {
       node.marketplaceCategories = mappedIds.map((id) => marketplaceMap[id]).filter(Boolean);
 
       (childrenByParent[cat.categorySlug] || []).forEach((childSlug) => {
-        const childNode = buildNode(categoryMap[childSlug], new Set(visited));
+        const childNode = buildNode(categoryMap[childSlug], visited);
         if (childNode) node.children.push(childNode);
       });
 
