@@ -1,9 +1,10 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import { ORDER_STATUS_MAP, SELECTED_FIELDS } from '#constants/common.js';
+import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
 import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
-const { CHANNEL_ORDER_URL } = config;
+import { randomBytes } from 'node:crypto';
+const { CHANNEL_ORDER_URL, CHANNEL_ENGINE_BASE_URL } = config;
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -183,4 +184,96 @@ const getOrderComparison = async (lowercasedPeriod) => {
   return response;
 };
 
-export default { getAllOrders, getOrderById, processOrders, getNewOrders, getOrderStats, getOrderComparison };
+/**
+ * Cancels an order in ChannelEngine and updates the local order status in the database.
+ *
+ * @param {string} orderId - The MongoDB ObjectId of the order to cancel.
+ * @param {string} reason - The reason for cancellation (must be a meaningful string).
+ * @param {string} reasonCode - The cancellation reason code (string, as required by ChannelEngine).
+ *
+ * What it does:
+ * - Finds the order in the database by orderId.
+ * - Checks the current status of the order. If the order is already cancelled (MANCO), closed (CLOSED), returned (RETURNED), or shipped (SHIPPED), it will not proceed and returns an error.
+ * - Builds a cancellation payload for ChannelEngine, including all order lines.
+ * - Makes a POST request to ChannelEngine's /cancellations endpoint with the payload and API key.
+ * - Handles ChannelEngine's response and error codes.
+ * - If cancellation is successful, updates the order status and all order line statuses to 'MANCO' in the database.
+ *
+ * Returns:
+ * - On success: { success: true, data: <updated order document> }
+ * - On failure: { success: false, error: <error object or message> }
+ */
+const cancelOrder = async (orderId, reason, reasonCode) => {
+  try {
+    const existenceOfOrder = await Order.findById(orderId);
+
+    if (!existenceOfOrder) {
+      return { success: false, error: { message: 'Order not found', status: 404 } };
+    }
+
+    const lines = existenceOfOrder.orderSkuList.skuList.map((oItem) => {
+      return {
+        MerchantProductNo: oItem.merchantProductNo,
+        OrderLineId: oItem.id,
+        Quantity: oItem.quantity,
+      };
+    });
+
+    // Create Payload
+    const info = {
+      MerchantCancellationNo: randomBytes(6).toString('hex'),
+      MerchantOrderNo: existenceOfOrder.merchantOrderNo,
+      Lines: lines,
+      Reason: reason,
+      ReasonCode: reasonCode,
+      IsMerchantCreator: true,
+    };
+
+    // Status checking from Database
+    if (BLOCKED_STATUSES[existenceOfOrder.status]) {
+      return { success: false, error: { message: BLOCKED_STATUSES[existenceOfOrder.status], status: 400 } };
+    }
+
+    // Cancellation call with api key and payload
+    const markingCancelled = await fetch(
+      `${CHANNEL_ENGINE_BASE_URL}/cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(info),
+      }
+    );
+
+    const markingCancelledObject = await markingCancelled.json();
+
+    if (parseInt(markingCancelledObject.StatusCode / 100) === 4) {
+      return { success: false, error: markingCancelledObject };
+    }
+
+    // After successful cancellation update the database
+    const updateInformation = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        $set: {
+          status: ORDER_STATUS_MAP.MANCO,
+          'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.MANCO,
+        },
+      },
+      { new: true }
+    );
+
+    return { success: true, data: updateInformation };
+  } catch (error) {
+    console.log(error);
+    return { success: false, error: error };
+  }
+};
+
+export default {
+  getAllOrders,
+  getOrderById,
+  processOrders,
+  getNewOrders,
+  getOrderStats,
+  getOrderComparison,
+  cancelOrder,
+};
