@@ -3,12 +3,14 @@ import multer from 'multer';
 import {
   importMarketPlaceCategoriesFromCsv,
   mapCategory,
+  getMarketplaceCategories,
   getStockConnectCategories,
 } from '../controllers/CategoryController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import {
   importMarketPlaceCategoriesValidator,
   mapCategoryValidator,
+  getMarketplaceCategoriesValidator,
   getStockConnectCategoriesValidator,
 } from '#validations/category.js';
 const router = express.Router();
@@ -31,6 +33,14 @@ router.get(
   checkLanguage,
   authMiddleware,
   getStockConnectCategories
+);
+
+router.get(
+  '/getMarketplaceCategories/:marketPlaceId',
+  getMarketplaceCategoriesValidator,
+  checkLanguage,
+  authMiddleware,
+  getMarketplaceCategories
 );
 
 export default router;
