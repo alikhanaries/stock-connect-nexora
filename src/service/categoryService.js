@@ -1,3 +1,4 @@
+import CategoryMapping from '../models/CategoryMapping.js';
 import PlatformCategory from '../models/PlatformCategory.js';
 import slugify from 'slugify';
 import { generatePlatformCategoryId } from '#utils/generatePlatformCategoryId.js';
@@ -119,5 +120,24 @@ export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block
+  }
+};
+
+export const mapCategoryService = async (categoryDatas, marketplaceId) => {
+  try {
+    const operations = categoryDatas.map(({ platformCategoryId, marketplaceCategoryId }) => ({
+      updateOne: {
+        filter: { platformCategoryId, marketplaceId, marketplaceCategoryId },
+        update: { $set: { platformCategoryId, marketplaceId, marketplaceCategoryId } },
+        upsert: true,
+      },
+    }));
+
+    const result = await CategoryMapping.bulkWrite(operations, { ordered: false });
+
+    return result; // contains counts of created/updated
+  } catch (err) {
+    console.error('Error in mapCategoryService:', err);
+    throw err; // preserve stack trace
   }
 };

@@ -1,32 +1,50 @@
 import mongoose from 'mongoose';
-const { Schema } = mongoose;
 
-const MarketplaceCategorySchema = new Schema(
+const MarketplaceCategorySchema = new mongoose.Schema(
   {
-    categoryName: { type: String, required: true, trim: true, lowercase: true },
-    parent: { type: String, required: true, ref: 'MarketplaceCategory', default: 'root' },
     marketplaceId: {
-      type: Number,
+      type: mongoose.Schema.Types.ObjectId, // ref -> Marketplace._id
+      ref: 'Marketplace',
       required: true,
       index: true,
     },
-    categoryTrail: { type: String, required: true, trim: true, lowercase: true },
     marketplaceCategoryId: {
       type: Number, // 101
       required: true,
       index: true,
+    },
+    categoryName: {
+      type: String, // "Smart TVs"
+      required: true,
     },
     categorySlug: {
       type: String, // "smart-tvs"
       required: true,
       index: true,
     },
+    parent: {
+      type: String, // "electronics"
+      default: 'root',
+      index: true,
+    },
+    marketplaceCategoryTrail: {
+      type: String, // "electronics>smart-tvs"
+      required: true,
+      index: true,
+    },
+    isEligible: {
+      type: Boolean,
+      required: true,
+      index: true,
+      default: true,
+    },
   },
   { timestamps: true }
 );
 
-// Avoid duplicates under same parent in same marketplace
-//MarketplaceCategorySchema.index({ name: 1, parent: 1, }, { unique: true });
+// prevent duplicate categories per marketplace
+MarketplaceCategorySchema.index({ marketplaceId: 1, marketplaceCategoryId: 1 }, { unique: true });
 
 const MarketplaceCategory = mongoose.model('MarketplaceCategory', MarketplaceCategorySchema);
+
 export default MarketplaceCategory;
