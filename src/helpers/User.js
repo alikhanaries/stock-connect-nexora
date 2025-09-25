@@ -44,7 +44,7 @@ const userAndSellerConnection = async (role, sellerId, newUserId) => {
   let finalSellerId;
 
   if (role === USER_ROLES.MASTER_ADMIN) {
-    const masterSeller = await Seller.findOne({ type: SELLER_TYPE.BASE });
+    const masterSeller = await Seller.findOne({ type: SELLER_TYPE.BASE }).lean();
 
     if (!masterSeller) {
       throw new Error('Cannot create MASTER_ADMIN: No "base" seller found in the database.');
