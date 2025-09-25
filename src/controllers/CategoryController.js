@@ -57,7 +57,7 @@ export const mapCategory = async (req, res) => {
     // Call service
     const result = await mapCategoryService(categoryDatas, marketPlaceId);
 
-    if (result.modifiedCount > 0 || result.upsertedCount > 0) {
+    if (result.length) {
       return successResponse(res, req.locale.CATEGORY_PROCESSED_SUCCESS, 201);
     } else {
       return failResponse(res, req.locale.CATEGORY_NOT_SAVED, 400);
