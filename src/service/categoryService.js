@@ -6,7 +6,7 @@ import fs from 'fs';
 import csv from 'csv-parser'; // for reading CSV
 import { mapRowToMarketPlaceCategory } from '#root/src/util/mapRowtoMarketPlaceCategory.js'; // your helper
 import { processBatch } from '../helpers/ProcessBatchHandler.js';
-import MarketplaceCategory from '#models/MarketPlaceCategory.js';
+import MarketPlaceCategory from '#models/MarketPlaceCategory.js';
 import Channel from '../models/Channel.js';
 
 export const getStockConnectCategoriesService = async (searchTerm = '') => {
@@ -77,7 +77,7 @@ export const getStockConnectCategoriesService = async (searchTerm = '') => {
     // Fetch all MarketplaceCategories in one query
     const marketplaceIds = mappings.map((m) => m.marketplaceCategoryId);
 
-    const marketplaceCategories = await MarketplaceCategory.find(
+    const marketplaceCategories = await MarketPlaceCategory.find(
       {
         marketplaceCategoryId: { $in: marketplaceIds },
       },
@@ -264,7 +264,7 @@ export const mapCategoryService = async (categoryDatas, marketplaceId) => {
 export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm = '') => {
   try {
     // Fetch all categories
-    let allCategories = await MarketplaceCategory.find(
+    let allCategories = await MarketPlaceCategory.find(
       { marketPlaceId: parseInt(marketplaceId) },
       {
         _id: 1,
