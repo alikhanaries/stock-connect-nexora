@@ -1,16 +1,18 @@
-import { mapCategoryService } from '#service/categoryService.js';
+import {
+  mapCategoryService,
+  getStockConnectCategoriesService,
+  importMarketPlaceCategories,
+  getMarketplaceCategoriesService,
+} from '#service/categoryService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import Channel from '../models/Channel.js';
 import { errorLog } from '#middleware/index.js';
 import path from 'path';
-import { importMarketPlaceCategories, getMarketplaceCategoriesService } from '#service/categoryService.js';
 
-export const getMarketplaceCategories = async (req, res) => {
+export const getStockConnectCategories = async (req, res) => {
   try {
-    const { marketPlaceId } = req.params;
-
-    const result = await getMarketplaceCategoriesService(marketPlaceId, req.query.search);
-    if (result.length === 0) {
+    const result = await getStockConnectCategoriesService(req.query.search);
+    if (result && result.length === 0) {
       return successResponse(res, req.locale.CATEGORY_NOT_FOUND, 200, []);
     }
     return successResponse(res, req.locale.CATEGORY_FOUND, 200, result);
@@ -62,6 +64,20 @@ export const mapCategory = async (req, res) => {
   } catch (error) {
     console.error('Error in getParentMarketplaceCategoryList:', error);
     errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+export const getMarketplaceCategories = async (req, res) => {
+  try {
+    const { marketPlaceId } = req.params;
+
+    const result = await getMarketplaceCategoriesService(marketPlaceId, req.query.search);
+    if (result.length === 0) {
+      return successResponse(res, req.locale.CATEGORY_NOT_FOUND, 200, []);
+    }
+    return successResponse(res, req.locale.CATEGORY_FOUND, 200, result);
+  } catch (error) {
     return errorResponse(res, error.message, 500);
   }
 };

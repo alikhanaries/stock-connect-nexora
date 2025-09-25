@@ -92,5 +92,6 @@
   "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
   "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
   "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
-  "SELLER_DELETED": "Satıcı başarıyla silindi"
+  "SELLER_DELETED": "Satıcı başarıyla silindi",
+  "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi"
 }

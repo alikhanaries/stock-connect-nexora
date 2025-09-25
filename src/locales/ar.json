@@ -93,5 +93,5 @@
   "VALID_SELLER_IDS": "يرجى تقديم معرفات صالحة",
   "NO_SELLER_FOUND": "لم يتم العثور على أي بائع مطابق للحذف",
   "SELLER_DELETED": "تم حذف البائع بنجاح",
-  "GET_SELLER_SUCCESS": "تم جلب بيانات البائع بنجاح"
+  "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح"
 }

@@ -4,12 +4,14 @@ import {
   importMarketPlaceCategoriesFromCsv,
   mapCategory,
   getMarketplaceCategories,
+  getStockConnectCategories,
 } from '../controllers/CategoryController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import {
   importMarketPlaceCategoriesValidator,
   mapCategoryValidator,
   getMarketplaceCategoriesValidator,
+  getStockConnectCategoriesValidator,
 } from '#validations/category.js';
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' }); // saves CSV temporarily
@@ -25,6 +27,13 @@ router.post(
 );
 
 router.put('/mapCategory', mapCategoryValidator, checkLanguage, authMiddleware, mapCategory);
+router.get(
+  '/getStockConnectCategories',
+  getStockConnectCategoriesValidator,
+  checkLanguage,
+  authMiddleware,
+  getStockConnectCategories
+);
 
 router.get(
   '/getMarketplaceCategories/:marketPlaceId',
