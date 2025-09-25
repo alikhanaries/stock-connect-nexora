@@ -77,6 +77,8 @@
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "Product unlinked from channel successfully",
   "PRODUCT_UNLINK_FROM_CHANNEL_FAILED": "Failed to unlink product from channel",
   "NO_MATCHING_PRODUCTS_FOUND": "No matching products found to update",
+  "CATEGORY_NOT_FOUND": "Category not found",
+  "CATEGORY_FOUND": "Category found",
   "MARKETPLACE_NOT_FOUND": "Marketplace not found",
   "CATEGORY_PROCESSED_SUCCESS": "Categories processed successfully",
   "CATEGORY_NOT_SAVED": "Categories could not be saved",
