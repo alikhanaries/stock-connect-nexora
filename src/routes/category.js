@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { importMarketPlaceCategoriesFromCsv } from '../controllers/CategoryController.js';
+import { importMarketPlaceCategoriesFromCsv, getMarketPlaceCategoryTrails } from '../controllers/CategoryController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import { importMarketPlaceCategoriesValidator } from '#validations/category.js';
 
@@ -15,6 +15,13 @@ router.post(
   validateFile,
   authMiddleware,
   importMarketPlaceCategoriesFromCsv
+);
+router.get(
+  '/getMarketPlaceCategoryTrails/:productCategoryTrail',
+
+  checkLanguage,
+
+  getMarketPlaceCategoryTrails
 );
 
 export default router;
