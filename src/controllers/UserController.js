@@ -29,14 +29,15 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-
     const { firstName, lastName, email, phoneNumber, active, role, password } = req.body;
-
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { firstName, lastName, email, phoneNumber, active, role, password },
-      { new: true }
-    ).select(userSafeFields);
+    let updateFields = { firstName, lastName, email, phoneNumber, active, role, password };
+    // Hash password if provided
+    if (password) {
+      const bcrypt = await import('bcryptjs');
+      const salt = await bcrypt.default.genSalt(10);
+      updateFields.password = await bcrypt.default.hash(password, salt);
+    }
+    const updatedUser = await User.findByIdAndUpdate(id, updateFields, { new: true }).select(userSafeFields);
     if (!updatedUser) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
