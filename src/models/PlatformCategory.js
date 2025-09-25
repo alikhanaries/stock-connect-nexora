@@ -1,43 +1,56 @@
 import mongoose from 'mongoose';
 
-const { Schema } = mongoose;
-
-const platformCategorySchema = new Schema(
+const platformCategorySchema = new mongoose.Schema(
   {
     id: {
       type: Number,
       required: true,
+      trim: true,
+      unique: true,
       index: true,
     },
     categoryName: {
       type: String,
       required: true,
       trim: true,
+      index: true,
     },
     categorySlug: {
       type: String,
       required: true,
       lowercase: true,
       trim: true,
+    },
+    parent: {
+      type: String,
+      required: true,
+      default: 'root',
+      trim: true,
       index: true,
     },
-    parent: { type: String, ref: 'PlatformCategory', default: null },
     platformCategoryId: {
       type: Number,
       required: true,
+      trim: true,
+      unique: true,
       index: true,
     },
     platformCategoryTrail: {
       type: String,
       required: true,
+      trim: true,
+    },
+    isEligible: {
+      type: Boolean,
+      required: true,
+      index: true,
+      default: true,
     },
   },
   {
-    timestamps: true, // adds createdAt & updatedAt
+    timestamps: true,
   }
 );
-platformCategorySchema.index({ categorySlug: 1 }, { unique: true });
 
-const PlatformCategory = mongoose.model('PlatformCategory', platformCategorySchema);
-
+export const PlatformCategory = mongoose.model('PlatformCategory', platformCategorySchema);
 export default PlatformCategory;

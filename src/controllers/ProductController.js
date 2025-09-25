@@ -49,23 +49,25 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
-
     const exportUrl = await convertGoogleSheetUrlToExport(url);
     if (!exportUrl) {
       return failResponse(res, req.locale.INVALID_URL, 500);
     }
-    const result = await productService.importProductsFromGoogleSheet(exportUrl);
-    // Handle failure from service
-    if (!result?.success) {
-      return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
-    }
 
-    // Success response with details
-    return successResponse(res, result.message, 200, {
-      insertedCount: result.insertedCount,
-      invalidRowsCount: result.invalidRowsCount,
-      errorRows: result.errorRows,
-    });
+    // Send immediate response to client
+    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+
+    // Process file in background (async, no await here)
+    productService
+      .importProductsFromGoogleSheet(exportUrl)
+      .then((result) => {
+        console.log('CSV processing completed:', result);
+        // Optionally update DB with processing status
+      })
+      .catch((error) => {
+        console.error('Error in background CSV processing:', error.message);
+        // Optionally store error in DB for tracking
+      });
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     errorLog(error);
@@ -76,20 +78,20 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 /* UPLOAD PRODUCTS FROM CSV FILE */
 export const importProductsFromCsvFile = async (req, res) => {
   try {
-    // Call service
-    const result = await productService.importProductsFromCsvFile(req.file.path);
+    // Send immediate response to client
+    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
 
-    // Handle failure from service
-    if (!result?.success) {
-      return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
-    }
-
-    // Success response with details
-    return successResponse(res, result.message, 200, {
-      insertedCount: result.insertedCount,
-      invalidRowsCount: result.invalidRowsCount,
-      errorRows: result.errorRows,
-    });
+    // Process file in background (async, no await here)
+    productService
+      .importProductsFromCsvFile(req.file.path)
+      .then((result) => {
+        console.log('CSV processing completed:', result);
+        // Optionally update DB with processing status
+      })
+      .catch((error) => {
+        console.error('Error in background CSV processing:', error.message);
+        // Optionally store error in DB for tracking
+      });
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     errorLog(error);
@@ -103,7 +105,7 @@ export const pushProductToChannelEngine = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
     }
-     setImmediate(async () => {
+    setImmediate(async () => {
       try {
         await productService.pushProductsFromChannel(channelId);
       } catch (err) {

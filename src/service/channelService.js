@@ -179,18 +179,34 @@ export const getAllUserChannels = async (userId, query) => {
         $lookup: {
           from: 'orders',
           let: { channelId: '$channelDetails.channelId' },
-          pipeline: [{ $match: { $expr: { $eq: ['$channelId', '$$channelId'] } } }, { $count: 'count' }],
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$channelId', '$$channelId'] }, { $eq: ['$userId', new ObjectId(userId)] }],
+                },
+              },
+            },
+            { $count: 'count' },
+          ],
           as: 'ordersInfo',
         },
       },
-      // Products count
+      // Products coun
       {
         $lookup: {
-          from: 'userchannelproducts', // :point_left: collection name (check in Mongo, likely lowercased plural)
+          from: 'userchannelproducts',
           let: { channelId: '$channelDetails.channelId' },
           pipeline: [
-            { $match: { $expr: { $eq: ['$channelId', '$$channelId'] }, isActive: true } },
-            { $project: { count: { $size: '$skuList' } } },
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$channelId', '$$channelId'] }, { $eq: ['$userId', new ObjectId(userId)] }],
+                },
+              },
+            },
+            { $match: { isActive: true } },
+            { $project: { count: { $size: { $ifNull: ['$skuList', []] } } } },
           ],
           as: 'productsInfo',
         },
