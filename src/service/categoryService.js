@@ -244,20 +244,36 @@ export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
 
 export const mapCategoryService = async (categoryDatas, marketplaceId) => {
   try {
-    const operations = categoryDatas.map(({ platformCategoryId, marketplaceCategoryId }) => ({
-      updateOne: {
-        filter: { platformCategoryId, marketplaceId, marketplaceCategoryId },
-        update: { $set: { platformCategoryId, marketplaceId, marketplaceCategoryId } },
-        upsert: true,
-      },
-    }));
+    // Extract platformCategoryIds
+    const platformIds = categoryDatas.map((d) => d.platformCategoryId);
 
-    const result = await CategoryMapping.bulkWrite(operations, { ordered: false });
+    // Find existing mappings
+    const existing = await CategoryMapping.find({
+      marketplaceId,
+      platformCategoryId: { $in: platformIds },
+    }).select('platformCategoryId');
 
-    return result; // contains counts of created/updated
+    const existingIds = new Set(existing.map((e) => e.platformCategoryId));
+
+    // Filter out duplicates
+    const docsToInsert = categoryDatas
+      .filter((d) => !existingIds.has(d.platformCategoryId))
+      .map((d) => ({
+        platformCategoryId: d.platformCategoryId,
+        marketplaceId,
+        marketplaceCategoryId: d.marketplaceCategoryId,
+      }));
+
+    if (docsToInsert.length === 0) {
+      return docsToInsert; // Nothing to insert
+    }
+
+    const result = await CategoryMapping.insertMany(docsToInsert, { ordered: false });
+
+    return result;
   } catch (err) {
     console.error('Error in mapCategoryService:', err);
-    throw err; // preserve stack trace
+    throw err;
   }
 };
 
