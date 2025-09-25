@@ -85,13 +85,15 @@
   "MARKET_PLACE_NOT_FOUND": "Pazar yeri bulunamadı",
   "PRODUCT_IMPORTED_PROCESSING": "Ürün aktarımı işleniyor",
 
-  "CATEGORY_IMPORTED_PROCESSING": "Kategori içe aktarımı devam ediyor.",
-
-  "FAILED_TO_UPLOAD": "Fatura indirilemiyor",
+  "CATEGORY_IMPORTED_PROCESSING": "Kategori aktarımı işleniyor",
+  "WRONG_CATEGORYTRAIL": "Yanlış kategori yolları",
+  "FAILED_TO_UPLOAD": "Fatura indirilemedi",
   "IMAGE_UPLOADED_SUCCESSFULLY": "Fatura başarıyla alındı",
   "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
   "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
   "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
   "SELLER_DELETED": "Satıcı başarıyla silindi",
-  "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi"
+  "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi",
+  "NO_CATEGORYTRAILS_FOUND": "Pazar yeri kategori yolu bulunamadı",
+  "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu"
 }

@@ -60,10 +60,10 @@
   "INVALID_PERIOD": "فترة غير صالحة. يرجى استخدام واحدة من:",
   "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "تم جلب مقارنة الطلبات بنجاح",
 
-  "USERID_REQUIRED": "معرّف المستخدم مطلوب",
+  "USERID_REQUIRED": "معرف المستخدم مطلوب",
   "PRODUCT_ASSIGNED_SUCCESS": "تم تعيين المنتج بنجاح",
   "PRODUCT_ASSIGNED_FAILED": "فشل في تعيين المنتج",
-  "PRODUCTIDS_REQUIRED": "معرّفات المنتجات مطلوبة",
+  "PRODUCTIDS_REQUIRED": "معرفات المنتجات مطلوبة",
   "PRODUCT_DELETE_FAILED": "فشل في حذف المنتج",
   "PRODUCT_DELETE_SUCCESS": "تم حذف المنتج بنجاح",
   "PRODUCT_IMPORT_ERROR": "حدث خطأ أثناء التحميل",
@@ -82,16 +82,16 @@
   "MARKETPLACE_NOT_FOUND": "لم يتم العثور على السوق",
   "CATEGORY_PROCESSED_SUCCESS": "تمت معالجة الفئات بنجاح",
   "CATEGORY_NOT_SAVED": "تعذر حفظ الفئات",
-  "MARKET_PLACE_NOT_FOUND": "لم يتم العثور على السوق",
-  "PRODUCT_IMPORTED_PROCESSING": "جارٍ استيراد المنتج",
 
-  "CATEGORY_IMPORTED_PROCESSING": "جاري استيراد الفئة.",
-
-  "FAILED_TO_UPLOAD": "غير قادر على تنزيل الفاتورة",
-  "IMAGE_UPLOADED_SUCCESSFULLY": "تم جلب الفاتورة بنجاح",
+  "CATEGORY_IMPORTED_PROCESSING": "جاري معالجة استيراد الفئة",
+  "WRONG_CATEGORYTRAIL": "مسارات الفئة خاطئة",
+  "FAILED_TO_UPLOAD": "فشل تنزيل الفاتورة",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "تم استرجاع الفاتورة بنجاح",
   "SELLERIDS_REQUIRED": "يرجى تقديم مصفوفة من المعرفات",
   "VALID_SELLER_IDS": "يرجى تقديم معرفات صالحة",
   "NO_SELLER_FOUND": "لم يتم العثور على أي بائع مطابق للحذف",
   "SELLER_DELETED": "تم حذف البائع بنجاح",
-  "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح"
+  "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح",
+  "NO_CATEGORYTRAILS_FOUND": "مسار فئة السوق غير موجود",
+  "CATEGORYTRAILS_FOUND_SUCCESS": "تم العثور على مسار فئة السوق بنجاح"
 }

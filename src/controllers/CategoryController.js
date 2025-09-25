@@ -3,6 +3,7 @@ import {
   getStockConnectCategoriesService,
   importMarketPlaceCategories,
   getMarketplaceCategoriesService,
+  getMarketPlaceCategoryTrailsService,
 } from '#service/categoryService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import Channel from '../models/Channel.js';
@@ -78,6 +79,22 @@ export const getMarketplaceCategories = async (req, res) => {
     }
     return successResponse(res, req.locale.CATEGORY_FOUND, 200, result);
   } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+export const getMarketPlaceCategoryTrails = async (req, res) => {
+  try {
+    const { productCategoryTrail } = req.params;
+
+    const result = await getMarketPlaceCategoryTrailsService(productCategoryTrail);
+
+    const message =
+      result && result.length > 0 ? req.locale.CATEGORYTRAILS_FOUND_SUCCESS : req.locale.NO_CATEGORYTRAILS_FOUND;
+    return successResponse(res, message, 200, result);
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
     return errorResponse(res, error.message, 500);
   }
 };

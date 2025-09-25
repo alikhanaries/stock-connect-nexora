@@ -5,6 +5,7 @@ import {
   mapCategory,
   getMarketplaceCategories,
   getStockConnectCategories,
+  getMarketPlaceCategoryTrails,
 } from '../controllers/CategoryController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import {
@@ -25,6 +26,7 @@ router.post(
   authMiddleware,
   importMarketPlaceCategoriesFromCsv
 );
+router.get('/getMarketPlaceCategoryTrails/:productCategoryTrail', checkLanguage, getMarketPlaceCategoryTrails);
 
 router.put('/mapCategory', mapCategoryValidator, checkLanguage, authMiddleware, mapCategory);
 router.get(

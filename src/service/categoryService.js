@@ -352,3 +352,73 @@ export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm 
     throw err;
   }
 };
+
+export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) => {
+  try {
+    const platformCategoryData = await PlatformCategory.findOne(
+      { platformCategoryTrail: productCategoryTrail },
+      { platformCategoryId: 1 }
+    ).lean(); // lean() returns plain JS object
+
+    if (!platformCategoryData) return [];
+
+    const marketPlaceTrailData = await CategoryMapping.aggregate([
+      // Filter by platformCategoryId
+      { $match: { platformCategoryId: platformCategoryData.platformCategoryId } },
+
+      // Lookup marketplace category trail
+      {
+        $lookup: {
+          from: 'marketplacecategories',
+          localField: 'marketplaceCategoryId',
+          foreignField: 'marketplaceCategoryId',
+          as: 'marketplaceCategory',
+        },
+      },
+      { $unwind: '$marketplaceCategory' },
+
+      // Lookup channel info
+      {
+        $lookup: {
+          from: 'channels',
+          localField: 'marketplaceId',
+          foreignField: 'channelId',
+          as: 'channel',
+        },
+      },
+      { $unwind: '$channel' },
+
+      // Project needed fields
+      {
+        $project: {
+          _id: 0,
+          marketplaceId: 1,
+          marketplacename: '$channel.channelName',
+          marketplaceCategoryTrails: '$marketplaceCategory.categoryTrail',
+        },
+      },
+
+      // Remove duplicates per marketplace
+      {
+        $group: {
+          _id: '$marketplaceId',
+          marketplacename: { $first: '$marketplacename' },
+          marketplaceCategoryTrails: { $first: '$marketplaceCategoryTrails' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          marketplaceId: '$_id',
+          marketplacename: 1,
+          marketplaceCategoryTrails: 1,
+        },
+      },
+    ]);
+
+    return marketPlaceTrailData;
+  } catch (err) {
+    console.error('Error in getMarketPlaceCategoryTrailsService:', err);
+    throw new Error(err.message);
+  }
+};

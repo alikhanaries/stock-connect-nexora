@@ -2,10 +2,10 @@
   "SUCCESS": "操作成功完成",
   "ERROR": "发生错误",
   "NOT_FOUND": "未找到请求的资源",
-  "INVALID_INPUT": "提供的输入无效",
+  "INVALID_INPUT": "提供了无效输入",
   "VALIDATION_ERROR": "验证失败",
-  "UNAUTHORIZED": "未授权访问",
-  "FORBIDDEN": "禁止的操作",
+  "UNAUTHORIZED": "未经授权的访问",
+  "FORBIDDEN": "禁止操作",
 
   "USER_CHANNELS_REMOVED_SUCCESSFULLY": "用户频道已成功移除",
   "CHANNELS_FOUND_SUCCESS": "频道成功找到",
@@ -37,7 +37,7 @@
   "USER_UPDATED_SUCCESSFULLY": "用户成功更新",
   "FAILED_TO_FETCH_USER_DATA": "获取用户数据失败",
   "OLD_AND_NEW_PASSWORDS_REQUIRED": "需要旧密码和新密码",
-  "NEW_PASSWORD_MUST_BE_DIFFERENT": "新密码必须与旧密码不同",
+  "NEW_PASSWORD_MUST_BE_DIFFERENT": "新密码必须不同于旧密码",
   "INVALID_OLD_PASSWORD": "旧密码无效",
   "PASSWORD_UPDATED_SUCCESSFULLY": "密码成功更新",
   "USER_DELETED_SUCCESSFULLY": "用户已成功删除",
@@ -95,5 +95,7 @@
   "VALID_SELLER_IDS": "请提供有效的 ID",
   "NO_SELLER_FOUND": "未找到可删除的匹配卖家",
   "SELLER_DELETED": "卖家已成功删除",
-  "GET_SELLER_SUCCESS": "卖家成功获取"
+  "GET_SELLER_SUCCESS": "卖家成功获取",
+  "NO_CATEGORYTRAILS_FOUND": "未找到市场类别路径",
+  "CATEGORYTRAILS_FOUND_SUCCESS": "已成功找到市场类别路径"
 }
