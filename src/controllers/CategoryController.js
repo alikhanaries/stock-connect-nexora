@@ -1,9 +1,24 @@
-import { mapCategoryService } from '#service/categoryService.js';
+import {
+  mapCategoryService,
+  getStockConnectCategoriesService,
+  importMarketPlaceCategories,
+} from '#service/categoryService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import Channel from '../models/Channel.js';
 import { errorLog } from '#middleware/index.js';
 import path from 'path';
-import { importMarketPlaceCategories } from '#service/categoryService.js';
+
+export const getStockConnectCategories = async (req, res) => {
+  try {
+    const result = await getStockConnectCategoriesService(req.query.search);
+    if (result && result.length === 0) {
+      return successResponse(res, req.locale.CATEGORY_NOT_FOUND, 200, []);
+    }
+    return successResponse(res, req.locale.CATEGORY_FOUND, 200, result);
+  } catch (error) {
+    return errorResponse(res, error.message, 500);
+  }
+};
 
 export const importMarketPlaceCategoriesFromCsv = async (req, res) => {
   try {

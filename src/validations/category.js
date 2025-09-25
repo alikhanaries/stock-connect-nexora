@@ -75,3 +75,12 @@ export const mapCategoryValidator = validate(async (req) => {
 
   bodySchema.parse(req.body);
 });
+export const getStockConnectCategoriesValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  // Schema for req.query
+  const querySchema = z.object({
+    search: z.string().optional().default(''),
+  });
+  querySchema.parse(req.query);
+});

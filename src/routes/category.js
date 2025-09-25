@@ -1,8 +1,16 @@
 import express from 'express';
 import multer from 'multer';
-import { importMarketPlaceCategoriesFromCsv, mapCategory } from '../controllers/CategoryController.js';
+import {
+  importMarketPlaceCategoriesFromCsv,
+  mapCategory,
+  getStockConnectCategories,
+} from '../controllers/CategoryController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
-import { importMarketPlaceCategoriesValidator, mapCategoryValidator } from '#validations/category.js';
+import {
+  importMarketPlaceCategoriesValidator,
+  mapCategoryValidator,
+  getStockConnectCategoriesValidator,
+} from '#validations/category.js';
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' }); // saves CSV temporarily
 
@@ -17,5 +25,12 @@ router.post(
 );
 
 router.put('/mapCategory', mapCategoryValidator, checkLanguage, authMiddleware, mapCategory);
+router.get(
+  '/getStockConnectCategories',
+  getStockConnectCategoriesValidator,
+  checkLanguage,
+  authMiddleware,
+  getStockConnectCategories
+);
 
 export default router;
