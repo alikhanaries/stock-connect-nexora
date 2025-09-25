@@ -1,9 +1,12 @@
-import { mapCategoryService } from '#service/categoryService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import Channel from '../models/Channel.js';
 import { errorLog } from '#middleware/index.js';
 import path from 'path';
-import { importMarketPlaceCategories, getMarketPlaceCategoryTrailsService } from '#service/categoryService.js';
+import {
+  importMarketPlaceCategories,
+  getMarketPlaceCategoryTrailsService,
+  mapCategoryService,
+} from '#service/categoryService.js';
 
 export const importMarketPlaceCategoriesFromCsv = async (req, res) => {
   try {
