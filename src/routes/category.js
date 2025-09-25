@@ -16,12 +16,6 @@ router.post(
   authMiddleware,
   importMarketPlaceCategoriesFromCsv
 );
-router.get(
-  '/getMarketPlaceCategoryTrails/:productCategoryTrail',
-
-  checkLanguage,
-
-  getMarketPlaceCategoryTrails
-);
+router.get('/getMarketPlaceCategoryTrails/:productCategoryTrail', checkLanguage, getMarketPlaceCategoryTrails);
 
 export default router;

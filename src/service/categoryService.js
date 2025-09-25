@@ -122,86 +122,69 @@ export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
     throw new Error(err.message); // force the catch block
   }
 };
-
-export const getMarketPlaceCategoryTrailsService = async (platformCategoryId) => {
+export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) => {
   try {
-    const marketPlaceTrailData = await CategoryMapping.aggregate([
-      // 1. Filter early
-      { $match: { platformCategoryId } },
+    const platformCategoryData = await PlatformCategory.findOne(
+      { platformCategoryTrail: productCategoryTrail },
+      { platformCategoryId: 1 }
+    ).lean(); // lean() returns plain JS object
 
-      // 2. Lookup marketplace category (fetch only what we need)
+    if (!platformCategoryData) return [];
+
+    const marketPlaceTrailData = await CategoryMapping.aggregate([
+      // Filter by platformCategoryId
+      { $match: { platformCategoryId: platformCategoryData.platformCategoryId } },
+
+      // Lookup marketplace category trail
       {
         $lookup: {
           from: 'marketplacecategories',
-          let: { mcatId: '$marketplaceCategoryId' },
-          pipeline: [
-            { $match: { $expr: { $eq: ['$marketplaceCategoryId', '$$mcatId'] } } },
-            { $project: { categoryName: 1, parentId: 1, marketplaceCategoryId: 1 } },
-          ],
+          localField: 'marketplaceCategoryId',
+          foreignField: 'marketplaceCategoryId',
           as: 'marketplaceCategory',
         },
       },
       { $unwind: '$marketplaceCategory' },
 
-      // 3. Build category trail with constraints
-      {
-        $graphLookup: {
-          from: 'marketplacecategories',
-          startWith: '$marketplaceCategory.parentId',
-          connectFromField: 'parentId',
-          connectToField: 'marketplaceCategoryId',
-          as: 'categoryTrail',
-          depthField: 'level',
-          maxDepth: 10, // 🚀 prevents infinite loops
-          restrictSearchWithMatch: {}, // can add { marketplaceId: "$marketplaceId" } if stored
-        },
-      },
-
-      // 4. Lookup channel (optimized)
+      // Lookup channel info
       {
         $lookup: {
           from: 'channels',
-          let: { cid: '$marketplaceId' },
-          pipeline: [
-            { $match: { $expr: { $eq: ['$channelId', '$$cid'] } } },
-            { $project: { channelId: 1, channelName: 1 } },
-          ],
+          localField: 'marketplaceId',
+          foreignField: 'channelId',
           as: 'channel',
         },
       },
       { $unwind: '$channel' },
 
-      // 5. Final projection
+      // Project needed fields
       {
         $project: {
           _id: 0,
           marketplaceId: 1,
           marketplacename: '$channel.channelName',
-          marketplaceCategoryTrails: {
-            $reduce: {
-              input: {
-                $concatArrays: [
-                  {
-                    $map: {
-                      input: { $reverseArray: '$categoryTrail' }, // ✅ ensures root → child order
-                      as: 'c',
-                      in: '$$c.categoryName',
-                    },
-                  },
-                  ['$marketplaceCategory.categoryName'],
-                ],
-              },
-              initialValue: '',
-              in: {
-                $cond: [{ $eq: ['$$value', ''] }, '$$this', { $concat: ['$$value', ' > ', '$$this'] }],
-              },
-            },
-          },
+          marketplaceCategoryTrails: '$marketplaceCategory.categoryTrail',
+        },
+      },
+
+      // Remove duplicates per marketplace
+      {
+        $group: {
+          _id: '$marketplaceId',
+          marketplacename: { $first: '$marketplacename' },
+          marketplaceCategoryTrails: { $first: '$marketplaceCategoryTrails' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          marketplaceId: '$_id',
+          marketplacename: 1,
+          marketplaceCategoryTrails: 1,
         },
       },
     ]);
 
-    console.log('marketPlaceTrailData', marketPlaceTrailData);
     return marketPlaceTrailData;
   } catch (err) {
     console.error('Error in getMarketPlaceCategoryTrailsService:', err);

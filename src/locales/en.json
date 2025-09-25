@@ -81,12 +81,14 @@
   "PRODUCT_IMPORTED_PROCESSING": "Product import is processing",
 
   "CATEGORY_IMPORTED_PROCESSING": "Category importing is under processed",
-
+  "WRONG_CATEGORYTRAIL": "Wrong category trails",
   "FAILED_TO_UPLOAD": "Failed to download invoice",
   "IMAGE_UPLOADED_SUCCESSFULLY": "Invoice fetched successfully",
   "SELLERIDS_REQUIRED": "please provide array of ids",
   "VALID_SELLER_IDS": "Please provide valid Ids",
   "NO_SELLER_FOUND": "No Matching sellers found to Delete.",
   "SELLER_DELETED": "Seller Deleted Successfully",
-  "GET_SELLER_SUCCESS": "Fetched seller successfully"
+  "GET_SELLER_SUCCESS": "Fetched seller successfully",
+  "NO_CATEGORYTRAILS_FOUND": "Marketplace Category trail not found",
+  "CATEGORYTRAILS_FOUND_SUCCESS": "Marketplace Category trail found"
 }

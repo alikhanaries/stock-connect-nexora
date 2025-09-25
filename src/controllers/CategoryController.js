@@ -30,8 +30,10 @@ export const importMarketPlaceCategoriesFromCsv = async (req, res) => {
 
 export const getMarketPlaceCategoryTrails = async (req, res) => {
   try {
-    const { productCategoryTrails } = req.params;
-    const result = await getMarketPlaceCategoryTrailsService(productCategoryTrails);
+    const { productCategoryTrail } = req.params;
+
+    const result = await getMarketPlaceCategoryTrailsService(productCategoryTrail);
+
     const message =
       result && result.length > 0 ? req.locale.CATEGORYTRAILS_FOUND_SUCCESS : req.locale.NO_CATEGORYTRAILS_FOUND;
     return successResponse(res, message, 200, result);
