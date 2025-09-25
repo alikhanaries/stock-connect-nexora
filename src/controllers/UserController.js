@@ -30,11 +30,11 @@ export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { firstName, lastName, email, phoneNumber, active, role } = req.body;
+    const { firstName, lastName, email, phoneNumber, active, role, password } = req.body;
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
-      { firstName, lastName, email, phoneNumber, active, role },
+      { firstName, lastName, email, phoneNumber, active, role, password },
       { new: true }
     ).select(userSafeFields);
     if (!updatedUser) {
