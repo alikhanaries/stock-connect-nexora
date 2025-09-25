@@ -1,22 +1,26 @@
-export const mapRowToProduct = (row) => {
+// mapRowToProduct.js
+export const mapRowToProduct = async (row) => {
   if (!row || typeof row !== 'object') return null;
 
   // Normalize keys (lowercase + trim)
   const r = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key.toLowerCase().trim(), value ? String(value).trim() : ''])
   );
+
   // CHECK MANDATORY FIELD
-  if (!r.productskucode || !r.price) {
-    return;
+  const price = parseFloat(r.price);
+  if (!r.productskucode || isNaN(price)) {
+    return null;
   }
+
   return {
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,
-    name: r.name || `Unnamed Product`,
+    name: r.name || 'Unnamed Product',
     description: r.description || null,
     brand: r.brand || null,
     ean: r.ean || null, // should be unique
-    price: parseFloat(r.price),
+    price,
     minPrice: r.minprice ? parseFloat(r.minprice) : null,
     maxPrice: r.maxprice ? parseFloat(r.maxprice) : null,
     msrp: r.msrp ? parseFloat(r.msrp) : null,

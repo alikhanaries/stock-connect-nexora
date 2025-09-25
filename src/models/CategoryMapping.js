@@ -6,7 +6,6 @@ const categoryMappingSchema = new mongoose.Schema(
       type: Number, // e.g. "101"
       required: true,
       trim: true,
-      index: true,
     },
 
     marketplaceId: {
@@ -18,7 +17,6 @@ const categoryMappingSchema = new mongoose.Schema(
       type: Number, // e.g. "101"
       required: true,
       trim: true,
-      index: true,
     },
   },
   { timestamps: true }
