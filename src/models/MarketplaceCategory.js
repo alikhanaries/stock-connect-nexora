@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
-const MarketplaceCategorySchema = new mongoose.Schema(
+const MarketPlaceCategorySchema = new mongoose.Schema(
   {
-    marketplaceId: {
-      type: mongoose.Schema.Types.ObjectId, // ref -> Marketplace._id
+    marketPlaceId: {
+      type: Number, // 101
       ref: 'Marketplace',
       required: true,
       index: true,
@@ -27,24 +27,18 @@ const MarketplaceCategorySchema = new mongoose.Schema(
       default: 'root',
       index: true,
     },
-    marketplaceCategoryTrail: {
+    categoryTrail: {
       type: String, // "electronics>smart-tvs"
       required: true,
       index: true,
-    },
-    isEligible: {
-      type: Boolean,
-      required: true,
-      index: true,
-      default: true,
     },
   },
   { timestamps: true }
 );
 
 // prevent duplicate categories per marketplace
-MarketplaceCategorySchema.index({ marketplaceId: 1, marketplaceCategoryId: 1 }, { unique: true });
+MarketPlaceCategorySchema.index({ marketplaceId: 1, marketplaceCategoryId: 1 }, { unique: true });
 
-const MarketplaceCategory = mongoose.model('MarketplaceCategory', MarketplaceCategorySchema);
+const MarketplaceCategory = mongoose.model('MarketplaceCategory', MarketPlaceCategorySchema);
 
 export default MarketplaceCategory;
