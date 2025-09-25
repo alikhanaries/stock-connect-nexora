@@ -69,7 +69,7 @@ export const updateUser = async (req, res) => {
   } catch (error) {
     errorLog(error);
     console.error(error);
-    return Responses.errorResponse(res, error);
+    return Responses.errorResponse(res, error.message);
   }
 };
 
