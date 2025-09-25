@@ -1,7 +1,6 @@
 import { ROLES_BASED_USER_CREATION, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import Seller from '#models/Seller.js';
-import User from '#models/User.js';
 
 const userRoleBasedAccess = (creatorRole, newUserRole) => {
   return ROLES_BASED_USER_CREATION[creatorRole]?.includes(newUserRole) || false;
@@ -65,11 +64,6 @@ const userAndSellerConnection = async (role, sellerId, newUserId) => {
   return userSellerConnection;
 };
 
-const validateUserId = async (userId) => {
-  const user = await User.findOne({ _id: userId, isDeleted: false }).select('role').lean();
-  return user;
-};
-
 const getUserConnectedToThisSellers = async (seller) => {
   if (seller[0].type === SELLER_TYPE.BASE) {
     return {
@@ -93,7 +87,7 @@ const sellerConnectionUpdate = async (userId, sellerId) => {
   const connectionUpdate = await UserSeller.findOneAndUpdate(
     { userId: userId },
     { sellerId: sellerId },
-    { upsert: true }
+    { upsert: true, new: true }
   );
   return connectionUpdate;
 };
@@ -103,7 +97,6 @@ export default {
   validateSellerAccessForCreator,
   getSellerIds,
   userAndSellerConnection,
-  validateUserId,
   getUserConnectedToThisSellers,
   sellerConnectionUpdate,
 };

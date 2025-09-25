@@ -84,7 +84,7 @@ export const register = async (req, res) => {
     if (role !== USER_ROLES.MASTER_ADMIN) {
       const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
 
-      if (!seller.success) {
+      if (seller && !seller.success) {
         if (!seller.notBaseSeller) {
           return Response.failResponse(res, 'You cannot assign the base seller to any user.', 400);
         }
@@ -107,6 +107,10 @@ export const register = async (req, res) => {
       active,
     });
     const newUserData = await newUser.save();
+
+    if (!newUserData) {
+      return Response.failResponse(res, 'There is a issue while registring the user please try again', 400);
+    }
 
     await userHelper.userAndSellerConnection(role, sellerId, newUserData._id);
 

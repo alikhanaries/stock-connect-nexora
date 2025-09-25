@@ -47,19 +47,20 @@ export const updateUser = async (req, res) => {
 
     if (sellerId) {
       const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
-      if (!seller.success) {
+      if (seller && !seller.success) {
         if (!seller.notBaseSeller) {
-          return Response.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
+          return Responses.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
         }
         const message =
           seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_DOES_NOT_EXISTS : req.locale.NOT_HAVE_ACCESS;
-        return Response.failResponse(res, message, 403);
+        return Responses.failResponse(res, message, 403);
       }
 
       const sellerUpdataion = await userHelper.sellerConnectionUpdate(updatedUser._id, sellerId);
 
       if (!sellerUpdataion) {
-        return Response.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
+        console.log('________________________________________', sellerUpdataion);
+        return Responses.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
       }
 
       userResponseObject.sellerId = sellerUpdataion.sellerId;
