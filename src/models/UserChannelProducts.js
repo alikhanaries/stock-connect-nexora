@@ -24,7 +24,6 @@ const channelProductsSchema = new mongoose.Schema(
       type: Number,
       required: true,
       index: true,
-      unique: true,
     },
 
     userId: {
@@ -43,6 +42,7 @@ const channelProductsSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+channelProductsSchema.index({ channelId: 1, userId: 1 }, { unique: true });
 
 const UserChannelProducts = mongoose.model('UserChannelProducts', channelProductsSchema);
 export default UserChannelProducts;
