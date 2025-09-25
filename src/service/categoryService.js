@@ -123,7 +123,7 @@ export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
   }
 };
 
-export const addCategoryService = async (categoryDatas, marketplaceId) => {
+export const mapCategoryService = async (categoryDatas, marketplaceId) => {
   try {
     const operations = categoryDatas.map(({ platformCategoryId, marketplaceCategoryId }) => ({
       updateOne: {
