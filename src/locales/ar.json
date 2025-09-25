@@ -79,6 +79,9 @@
   "NO_MATCHING_PRODUCTS_FOUND": "لم يتم العثور على منتجات مطابقة للتحديث",
   "MARKET_PLACE_NOT_FOUND": "سوق المنتجات غير موجود",
   "PRODUCT_IMPORTED_PROCESSING": "جاري معالجة استيراد المنتج",
+  "MARKETPLACE_NOT_FOUND": "لم يتم العثور على السوق",
+  "CATEGORY_PROCESSED_SUCCESS": "تمت معالجة الفئات بنجاح",
+  "CATEGORY_NOT_SAVED": "تعذر حفظ الفئات",
 
   "CATEGORY_IMPORTED_PROCESSING": "جاري معالجة استيراد الفئة",
   "WRONG_CATEGORYTRAIL": "مسارات الفئة خاطئة",
