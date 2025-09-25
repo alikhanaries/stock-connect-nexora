@@ -80,6 +80,10 @@
   "MARKETPLACE_NOT_FOUND": "Marketplace not found",
   "CATEGORY_PROCESSED_SUCCESS": "Categories processed successfully",
   "CATEGORY_NOT_SAVED": "Categories could not be saved",
+  "MARKET_PLACE_NOT_FOUND": "Marketplace not found",
+  "PRODUCT_IMPORTED_PROCESSING": "Product import is processing",
+
+  "CATEGORY_IMPORTED_PROCESSING": "Category importing is under processed",
 
   "FAILED_TO_UPLOAD": "Failed to download invoice",
   "IMAGE_UPLOADED_SUCCESSFULLY": "Invoice fetched successfully",
