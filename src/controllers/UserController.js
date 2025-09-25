@@ -59,7 +59,6 @@ export const updateUser = async (req, res) => {
       const sellerUpdataion = await userHelper.sellerConnectionUpdate(updatedUser._id, sellerId);
 
       if (!sellerUpdataion) {
-        console.log('________________________________________', sellerUpdataion);
         return Responses.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
       }
 
