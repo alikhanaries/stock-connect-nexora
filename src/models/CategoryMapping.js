@@ -10,19 +10,15 @@ const CategoryMappingSchema = new Schema(
       required: true,
       index: true,
     },
-    marketplaceIdRef: {
-      type: Schema.Types.ObjectId,
-      ref: 'Marketplace', // reference to Marketplace collection
-      required: true,
-      index: true,
-    },
     marketplaceId: {
-      type: String,
+      // marketplace id ex: 1 for noon
+      type: Number,
       required: true,
       trim: true,
       index: true,
     },
     marketplaceCategoryId: {
+      // reference to MarketPlaceCategory collection
       type: Number,
       required: true,
       trim: true,
@@ -31,6 +27,7 @@ const CategoryMappingSchema = new Schema(
   },
   { timestamps: true }
 );
-
+// ✅ Compound unique index to prevent duplicates
+CategoryMappingSchema.index({ platformCategoryIdRef: 1, marketplaceId: 1, marketplaceCategoryId: 1 }, { unique: true });
 const CategoryMapping = mongoose.model('CategoryMapping', CategoryMappingSchema);
 export default CategoryMapping;

@@ -91,5 +91,11 @@
   "GET_SELLER_SUCCESS": "Fetched seller successfully",
   "MARKETPLACE_NOT_FOUND": "Marketplace not found",
   "CATEGORY_PROCESSED_SUCCESS": "Categories processed successfully",
-  "CATEGORY_NOT_SAVED": "Categories could not be saved"
+  "CATEGORY_NOT_SAVED": "Categories could not be saved",
+
+  "SELLERIDS_REQUIRED": "please provide array of ids",
+  "VALID_SELLER_IDS": "Please provide valid Ids",
+  "NO_SELLER_FOUND": "No Matching sellers found to Delete.",
+  "SELLER_DELETED": "Seller Deleted Successfully",
+  "GET_SELLER_SUCCESS": "Fetched seller successfully"
 }

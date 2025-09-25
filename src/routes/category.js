@@ -3,8 +3,6 @@ import multer from 'multer';
 import { importMarketPlaceCategoriesFromCsv, addCategory } from '../controllers/CategoryController.js';
 import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
 import { importMarketPlaceCategoriesValidator, addCategoryValidator } from '#validations/category.js';
-
-
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' }); // saves CSV temporarily
 
@@ -18,8 +16,6 @@ router.post(
   importMarketPlaceCategoriesFromCsv
 );
 
-
-
-router.put('/addCategory', addCategoryValidator, checkLanguage, authMiddleware, addCategory);
+router.put('/mapCategory', addCategoryValidator, checkLanguage, authMiddleware, addCategory);
 
 export default router;

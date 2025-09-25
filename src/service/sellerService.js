@@ -99,7 +99,7 @@ const softDeleteSellers = async (ids) => {
     { _id: { $in: ids }, isDeleted: false },
     { $set: { isDeleted: true, status: 'inactive' } }
   );
-  return deletedSellers.modifiedCount || 0;
+  return deletedSellers;
 };
 
 export const updateSellerStatus = async (ids, status) => {
@@ -109,8 +109,8 @@ export const updateSellerStatus = async (ids, status) => {
 };
 
 export const getSellerById = async (id) => {
-  const seller = await Seller.findOne({ _id: id, isDeleted: false }).lean();
-  return seller;
+  const user = await Seller.findById({ _id: id, isDeleted: false }).lean();
+  return user;
 };
 
 export default { createSeller, getAllSeller, updateSeller, softDeleteSellers, updateSellerStatus, getSellerById };

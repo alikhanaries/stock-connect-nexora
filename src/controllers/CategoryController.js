@@ -1,9 +1,9 @@
 import path from 'path';
 import { importMarketPlaceCategories } from '#service/categoryService.js';
 import { addCategoryService } from '#service/categoryService.js';
-import Marketplace from '../models/Marketplace.js';
-import { errorLog } from '#middleware/index.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
+import Channel from '../models/Channel.js';
+import { errorLog } from '#middleware/index.js';
 /**
  * Controller: Import categories from uploaded CSV file
  * @route POST /api/import-csv
@@ -12,13 +12,13 @@ export const addCategory = async (req, res) => {
   try {
     const { marketPlaceId, categoryDatas } = req.body;
 
-    // ✅ Check if referenced Marketplace exists
-    const marketplaceExists = await Marketplace.findOne({ marketPlaceId });
+    // Check if referenced Marketplace exists
+    const marketplaceExists = await Channel.findOne({ channelId: marketPlaceId });
     if (!marketplaceExists) {
       return failResponse(res, req.locale.MARKETPLACE_NOT_FOUND, 404);
     }
 
-    // ✅ Call service
+    // Call service
     const result = await addCategoryService(categoryDatas, marketPlaceId);
 
     if (result.modifiedCount > 0 || result.upsertedCount > 0) {
@@ -54,4 +54,3 @@ export const importMarketPlaceCategoriesFromCsv = async (req, res) => {
     return errorResponse(res, error.message, 500);
   }
 };
-

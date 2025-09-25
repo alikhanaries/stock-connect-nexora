@@ -17,9 +17,8 @@ router.use('/user', user);
 router.use('/products', productsRouter);
 router.use('/channel', channel);
 router.use('/orders', orderRoutes);
-router.use('/categories', categoryRoutes);
-
 router.use('/invoice', invoiceRoutes);
+router.use('/category', categoryRoutes);
 router.use('/seller', seller);
 router.use('/category', category);
 

@@ -123,16 +123,12 @@ export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
   }
 };
 
-
-
-
-
 export const addCategoryService = async (categoryDatas, marketplaceId) => {
   try {
-    const operations = categoryDatas.map(({ platformCategoryIdRef, marketplaceIdRef, marketplaceCategoryId }) => ({
+    const operations = categoryDatas.map(({ platformCategoryIdRef, marketplaceCategoryId }) => ({
       updateOne: {
-        filter: { platformCategoryIdRef, marketplaceIdRef, marketplaceCategoryId },
-        update: { $set: { platformCategoryIdRef, marketplaceIdRef, marketplaceId, marketplaceCategoryId } },
+        filter: { platformCategoryIdRef, marketplaceId, marketplaceCategoryId },
+        update: { $set: { platformCategoryIdRef, marketplaceId, marketplaceCategoryId } },
         upsert: true,
       },
     }));
@@ -141,7 +137,7 @@ export const addCategoryService = async (categoryDatas, marketplaceId) => {
 
     return result; // contains counts of created/updated
   } catch (err) {
-    console.error('Error in addCategoryService:', err);
+    console.error('Error in mapCategoryService:', err);
     throw err; // preserve stack trace
   }
 };

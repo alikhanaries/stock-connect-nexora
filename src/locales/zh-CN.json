@@ -95,5 +95,11 @@
   "GET_SELLER_SUCCESS": "卖家获取成功",
   "MARKETPLACE_NOT_FOUND": "未找到商城",
   "CATEGORY_PROCESSED_SUCCESS": "类别处理成功",
-  "CATEGORY_NOT_SAVED": "无法保存类别"
+  "CATEGORY_NOT_SAVED": "无法保存类别",
+
+  "SELLERIDS_REQUIRED": "请提供 ID 数组",
+  "VALID_SELLER_IDS": "请提供有效的 ID",
+  "NO_SELLER_FOUND": "未找到要删除的匹配卖家",
+  "SELLER_DELETED": "卖家删除成功",
+  "GET_SELLER_SUCCESS": "卖家获取成功"
 }
