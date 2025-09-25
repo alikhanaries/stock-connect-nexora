@@ -7,11 +7,11 @@ import MarketPlaceCategory from '../models/MarketPlaceCategory.js';
 export const generateMarketPlaceCategoryId = async (marketPlaceId, categoryName, categorySlug, parent) => {
   const MarketPlaceCategoryData = await MarketPlaceCategory.findOne(
     { categoryName, categorySlug, parent, marketPlaceId },
-    { _id: 1, marketPlaceCategoryId: 1 }
+    { _id: 1, marketplaceCategoryId: 1 }
   );
 
   if (MarketPlaceCategoryData) {
-    return MarketPlaceCategoryData?.marketPlaceCategoryId;
+    return MarketPlaceCategoryData?.marketplaceCategoryId;
   }
   const counter = await MarketPlaceCategoryCounter.findOneAndUpdate(
     {},
