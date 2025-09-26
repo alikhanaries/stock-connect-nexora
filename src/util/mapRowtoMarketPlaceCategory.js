@@ -6,6 +6,9 @@ export const mapRowToMarketPlaceCategory = async (row, marketPlaceId) => {
   let rawPath = row.categoryPath?.trim();
 
   if (!rawPath) return [];
+  const matchYesNo = rawPath.match(/(Yes|No)$/i);
+  const yesOrNo = matchYesNo ? matchYesNo[1] : null;
+
   const firstValue = rawPath
     .replace(/\b(Yes|No)$/i, '') // drop Yes/No
     .replace(/^"+|"+$/g, '') // drop quotes
@@ -47,6 +50,7 @@ export const mapRowToMarketPlaceCategory = async (row, marketPlaceId) => {
       marketplaceCategoryId: marketplaceCategoryId,
       categoryTrail: trailDocs.join(' > ').toLowerCase(),
       marketPlaceId: parseInt(marketPlaceId),
+      isEligible: yesOrNo === 'Yes',
     });
 
     parent = categorySlug?.trim().toLowerCase();
