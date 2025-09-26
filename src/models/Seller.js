@@ -38,6 +38,14 @@ const sellerSchema = new Schema(
   }
 );
 
+sellerSchema.index(
+  { type: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { type: SELLER_TYPE.BASE },
+  }
+);
+
 sellerSchema.pre('validate', function (next) {
   if (!this.slug && this.name) {
     this.slug = this.name.toLowerCase().replace(/\s+/g, '_');
