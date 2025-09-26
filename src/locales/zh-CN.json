@@ -93,6 +93,17 @@
 
   "SELLERIDS_REQUIRED": "请提供 ID 数组",
   "VALID_SELLER_IDS": "请提供有效的 ID",
+  "NO_SELLER_FOUND": "未找到要删除的匹配卖家",
+  "SELLER_DELETED": "卖家删除成功",
+  "GET_SELLER_SUCCESS": "卖家获取成功",
+
+  "NOT_VALID_USER": "您提供的用户无效",
+  "CAN_NOT_ASSIGN_BASE_SELLER": "您不能将基础卖家分配给任何用户。",
+  "SELLER_DOES_NOT_EXISTS": "您提供的卖家不存在。",
+  "NOT_HAVE_ACCESS": "您无权访问此卖家。",
+  "SELLER_CONNECTION_SUCCESSFUL": "卖家连接成功。",
+  "FAILED_SELLER_CONNECTION": "更新卖家连接失败。",
+
   "NO_SELLER_FOUND": "未找到可删除的匹配卖家",
   "SELLER_DELETED": "卖家已成功删除",
   "GET_SELLER_SUCCESS": "卖家成功获取",

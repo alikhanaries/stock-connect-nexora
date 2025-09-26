@@ -84,7 +84,6 @@
   "CATEGORY_NOT_SAVED": "Categories could not be saved",
   "MARKET_PLACE_NOT_FOUND": "Marketplace not found",
   "PRODUCT_IMPORTED_PROCESSING": "Product import is processing",
-
   "CATEGORY_IMPORTED_PROCESSING": "Category importing is under processed",
   "WRONG_CATEGORYTRAIL": "Wrong category trails",
   "FAILED_TO_UPLOAD": "Failed to download invoice",
@@ -94,6 +93,13 @@
   "NO_SELLER_FOUND": "No Matching sellers found to Delete.",
   "SELLER_DELETED": "Seller Deleted Successfully",
   "GET_SELLER_SUCCESS": "Fetched seller successfully",
+
+  "NOT_VALID_USER": "The user you provided is not valid",
+  "CAN_NOT_ASSIGN_BASE_SELLER": "You cannot assign the base seller to any user.",
+  "SELLER_DOES_NOT_EXISTS": "The seller you have provided does not exist.",
+  "NOT_HAVE_ACCESS": "You do not have access to this seller.",
+  "SELLER_CONNECTION_SUCCESSFUL": "seller connection successful.",
+  "FAILED_SELLER_CONNECTION": "Failed to update seller connection.",
   "NO_CATEGORYTRAILS_FOUND": "Marketplace Category trail not found",
   "CATEGORYTRAILS_FOUND_SUCCESS": "Marketplace Category trail found"
 }

@@ -82,6 +82,8 @@
   "MARKETPLACE_NOT_FOUND": "لم يتم العثور على السوق",
   "CATEGORY_PROCESSED_SUCCESS": "تمت معالجة الفئات بنجاح",
   "CATEGORY_NOT_SAVED": "تعذر حفظ الفئات",
+  "FAILED_TO_UPLOAD": "غير قادر على تنزيل الفاتورة",
+  "IMAGE_UPLOADED_SUCCESSFULLY": "تم جلب الفاتورة بنجاح",
 
   "CATEGORY_IMPORTED_PROCESSING": "جاري معالجة استيراد الفئة",
   "WRONG_CATEGORYTRAIL": "مسارات الفئة خاطئة",
@@ -92,6 +94,13 @@
   "NO_SELLER_FOUND": "لم يتم العثور على أي بائع مطابق للحذف",
   "SELLER_DELETED": "تم حذف البائع بنجاح",
   "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح",
+
+  "NOT_VALID_USER": "المستخدم الذي قدمته غير صالح",
+  "CAN_NOT_ASSIGN_BASE_SELLER": "لا يمكنك تعيين البائع الأساسي لأي مستخدم.",
+  "SELLER_DOES_NOT_EXISTS": "البائع الذي قدمته غير موجود.",
+  "NOT_HAVE_ACCESS": "ليس لديك صلاحية للوصول إلى هذا البائع.",
+  "SELLER_CONNECTION_SUCCESSFUL": "تم الاتصال بالبائع بنجاح.",
+  "FAILED_SELLER_CONNECTION": "فشل في تحديث اتصال البائع.",
   "NO_CATEGORYTRAILS_FOUND": "مسار فئة السوق غير موجود",
   "CATEGORYTRAILS_FOUND_SUCCESS": "تم العثور على مسار فئة السوق بنجاح"
 }

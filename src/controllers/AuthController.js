@@ -82,9 +82,9 @@ export const register = async (req, res) => {
       return Response.failResponse(res, 'A sellerId is required for this user role.', 400);
     }
     if (role !== USER_ROLES.MASTER_ADMIN) {
-      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole, role);
+      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
 
-      if (!seller.success) {
+      if (seller && !seller.success) {
         if (!seller.notBaseSeller) {
           return Response.failResponse(res, 'You cannot assign the base seller to any user.', 400);
         }
@@ -108,7 +108,11 @@ export const register = async (req, res) => {
     });
     const newUserData = await newUser.save();
 
-    await userHelper.userAndSellerConnection(role, sellerId, newUserData);
+    if (!newUserData) {
+      return Response.failResponse(res, 'There is a issue while registring the user please try again', 400);
+    }
+
+    await userHelper.userAndSellerConnection(role, sellerId, newUserData._id);
 
     return Response.successResponse(res, 'User Registered successfully', 201);
   } catch (error) {
