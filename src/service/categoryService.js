@@ -89,6 +89,7 @@ export const getStockConnectCategoriesService = async (searchTerm = '') => {
         categoryTrail: 1,
         marketplaceCategoryId: 1,
         marketPlaceId: 1,
+        isEligible: 1,
       }
     ).lean();
 
@@ -289,6 +290,7 @@ export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm 
         marketplaceCategoryId: 1,
         categoryTrail: 1,
         categorySlug: 1,
+        isEligible: 1,
       }
     ).lean();
     if (!allCategories.length) return [];
