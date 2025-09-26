@@ -48,7 +48,7 @@ export const mapRowToMarketPlaceCategory = async (row, marketPlaceId) => {
       marketplaceCategoryId,
       categoryTrail: trailDocs.join(' > '),
       marketPlaceId: parseInt(marketPlaceId),
-      isEligible: yesOrNo?.toLowerCase() === 'yes', // individual Yes/No
+      isEligible: (yesOrNo ?? 'yes').toLowerCase() === 'yes',
     });
 
     parent = categorySlug;
