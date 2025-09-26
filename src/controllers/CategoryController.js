@@ -54,16 +54,19 @@ export const mapCategory = async (req, res) => {
       return failResponse(res, req.locale.MARKETPLACE_NOT_FOUND, 404);
     }
 
-    // Call service
+    // Call service (bulk upsert)
     const result = await mapCategoryService(categoryDatas, marketPlaceId);
 
-    if (result.length) {
+    // bulkWrite returns an object with nUpserted, nModified, etc.
+    const totalProcessed = (result.upsertedCount || 0) + (result.modifiedCount || 0);
+
+    if (totalProcessed > 0) {
       return successResponse(res, req.locale.CATEGORY_PROCESSED_SUCCESS, 201);
     } else {
       return failResponse(res, req.locale.CATEGORY_NOT_SAVED, 400);
     }
   } catch (error) {
-    console.error('Error in getParentMarketplaceCategoryList:', error);
+    console.error('Error in mapCategory:', error);
     errorLog(error);
     return errorResponse(res, error.message, 500);
   }
