@@ -32,7 +32,7 @@ export const updateUser = async (req, res) => {
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
 
-    const { firstName, lastName, email, phoneNumber, active, role, sellerId } = req.body;
+    const { firstName, lastName, email, phoneNumber, active, role, sellerId} = req.body;
 
     const updatedUser = await User.findByIdAndUpdate(
       id,
