@@ -6,6 +6,8 @@ import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
 import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
+import bcrypt from 'bcryptjs';
+
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -32,13 +34,15 @@ export const updateUser = async (req, res) => {
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
 
-    const { firstName, lastName, email, phoneNumber, active, role, sellerId} = req.body;
+    const { firstName, lastName, email, phoneNumber, active, role, password, sellerId} = req.body;
+    let updateFields = { firstName, lastName, email, phoneNumber, active, role, password };
+    // Hash password if provided
+    if (password) {
+      const salt = await bcrypt.default.genSalt(10);
+      updateFields.password = await bcrypt.default.hash(password, salt);
+    }
+    const updatedUser = await User.findByIdAndUpdate(id, updateFields, { new: true }).select(userSafeFields);
 
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { firstName, lastName, email, phoneNumber, active, role },
-      { new: true }
-    ).select(userSafeFields);
     if (!updatedUser) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }

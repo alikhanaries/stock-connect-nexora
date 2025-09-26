@@ -1,0 +1,428 @@
+import CategoryMapping from '../models/CategoryMapping.js';
+import PlatformCategory from '../models/PlatformCategory.js';
+import slugify from 'slugify';
+import { generatePlatformCategoryId } from '#utils/generatePlatformCategoryId.js';
+import fs from 'fs';
+import csv from 'csv-parser'; // for reading CSV
+import { mapRowToMarketPlaceCategory } from '#root/src/util/mapRowtoMarketPlaceCategory.js'; // your helper
+import { processBatch } from '../helpers/ProcessBatchHandler.js';
+import MarketPlaceCategory from '#models/MarketPlaceCategory.js';
+import Channel from '../models/Channel.js';
+
+export const getStockConnectCategoriesService = async (searchTerm = '') => {
+  try {
+    // 1️⃣ Fetch all PlatformCategories
+    let allCategories = await PlatformCategory.find(
+      {},
+      {
+        _id: 1,
+        categoryName: 1,
+        parent: 1,
+        platformCategoryId: 1,
+        platformCategoryTrail: 1,
+        categorySlug: 1,
+      }
+    ).lean();
+
+    // Normalize parent using trail
+    allCategories.forEach((cat) => {
+      if (cat.platformCategoryTrail) {
+        const parts = (cat.platformCategoryTrail || '').split('>').map((p) => p.trim());
+        cat.parent = parts.length > 1 ? slugify(parts[parts.length - 2], { lower: true }) : 'root';
+      } else {
+        cat.parent = 'root';
+      }
+    });
+
+    // 2️⃣ Filter by search term if provided
+    let categoriesToInclude = allCategories;
+    if (searchTerm) {
+      const safeRegex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+      const matched = allCategories.filter(
+        (cat) => safeRegex.test(cat.categoryName) || safeRegex.test(cat.platformCategoryTrail)
+      );
+
+      const ancestorSlugs = new Set();
+      matched.forEach((cat) => {
+        const parts = cat.platformCategoryTrail.split('>').map((p) => slugify(p.trim(), { lower: true }));
+        parts.pop(); // remove self
+        parts.forEach((slug) => ancestorSlugs.add(slug));
+      });
+
+      categoriesToInclude = allCategories.filter((cat) => matched.includes(cat) || ancestorSlugs.has(cat.categorySlug));
+    }
+
+    // 3️⃣ Build lookup maps for tree
+    const categoryMap = {}; // slug -> category
+    const childrenByParent = {}; // parentSlug -> [childSlugs]
+
+    categoriesToInclude.forEach((cat) => {
+      categoryMap[cat.categorySlug] = { ...cat, children: [], marketplaceCategories: [] };
+      const parentSlug = cat.parent || 'root';
+      if (!childrenByParent[parentSlug]) childrenByParent[parentSlug] = [];
+      childrenByParent[parentSlug].push(cat.categorySlug);
+    });
+
+    // 4️⃣ Fetch CategoryMappings for the marketplace
+    const mappings = await CategoryMapping.find({}).lean();
+
+    // Build a quick map: platformCategoryId -> array of marketplaceCategoryIds
+    const mappingMap = {};
+    mappings.forEach((m) => {
+      if (!mappingMap[m.platformCategoryId]) mappingMap[m.platformCategoryId] = [];
+      mappingMap[m.platformCategoryId].push(m.marketplaceCategoryId);
+    });
+
+    // Fetch all MarketplaceCategories in one query
+    const marketplaceIds = mappings.map((m) => m.marketplaceCategoryId);
+
+    const marketplaceCategories = await MarketPlaceCategory.find(
+      {
+        marketplaceCategoryId: { $in: marketplaceIds },
+      },
+      {
+        _id: 1,
+        categorySlug: 1,
+        parent: 1,
+        categoryName: 1,
+        categoryTrail: 1,
+        marketplaceCategoryId: 1,
+        marketPlaceId: 1,
+      }
+    ).lean();
+
+    // Build map: marketplaceCategoryId -> marketplaceCategory
+    const marketplaceMap = {};
+    marketplaceCategories.forEach((mc) => {
+      marketplaceMap[mc.marketplaceCategoryId] = mc;
+    });
+
+    // 5️⃣ Recursive tree builder
+    const buildNode = (cat, visited = new Set()) => {
+      if (!cat || visited.has(cat.categorySlug)) return null;
+      visited.add(cat.categorySlug);
+
+      const node = { ...cat, children: [] };
+
+      // Attach mapped marketplace categories
+      const mappedIds = mappingMap[cat.platformCategoryId] || [];
+      node.marketplaceCategories = mappedIds.map((id) => marketplaceMap[id]).filter(Boolean);
+
+      (childrenByParent[cat.categorySlug] || []).forEach((childSlug) => {
+        const childNode = buildNode(categoryMap[childSlug], visited);
+        if (childNode) node.children.push(childNode);
+      });
+
+      return node;
+    };
+
+    // Build tree from root nodes
+    const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
+
+    return tree;
+  } catch (err) {
+    console.log(err);
+  }
+};
+
+export const insertCategoryTrail = async (categoryTrailArray) => {
+  try {
+    for (const item of categoryTrailArray) {
+      const trailParts = item
+        .split('>')
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+      let parent = 'root';
+      const trailDocs = [];
+
+      for (const part of trailParts) {
+        const categoryName = part.toLowerCase();
+        const categorySlug = slugify(categoryName, { lower: true });
+        const platformCategoryId = await generatePlatformCategoryId(categoryName, categorySlug, parent);
+
+        trailDocs.push(part);
+
+        const query = {
+          categoryName,
+          parent: parent || 'root',
+          platformCategoryTrail: trailDocs.join(' > '),
+          categorySlug,
+          platformCategoryId,
+          id: platformCategoryId,
+        };
+
+        await PlatformCategory.findOneAndUpdate(
+          query,
+          { $setOnInsert: query }, // only insert if not exists
+          { new: true, upsert: true }
+        );
+
+        parent = categorySlug;
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error('insertCategoryTrail error:', err);
+    throw err;
+  }
+};
+
+export const processMarketPlaceImportStream = async (stream, { filePath, marketPlaceId } = {}) => {
+  const batchSize = parseInt(process.env.BATCH_SIZE) || 500;
+  let batch = [];
+  let rowIndex = 0;
+
+  /// Shared counters object (mutated inside processBatch)
+  const counters = {
+    insertedCount: 0,
+    updatedCount: 0,
+  };
+
+  let invalidRowsCount = 0;
+  let errorRows = [];
+
+  const parser = stream.pipe(csv({ headers: ['categoryPath'], skipLines: 0 }));
+
+  for await (const row of parser) {
+    rowIndex++;
+    try {
+      const categories = await mapRowToMarketPlaceCategory(row, marketPlaceId);
+
+      if (!categories.length) {
+        invalidRowsCount++;
+        errorRows.push(rowIndex);
+        continue;
+      }
+
+      batch.push(...categories);
+
+      if (batch.length >= batchSize) {
+        await processBatch(batch, counters, `Batch ${Math.ceil(rowIndex / batchSize)}`);
+        batch = [];
+      }
+    } catch (err) {
+      console.error(`Row ${rowIndex} error:`, err.message);
+      invalidRowsCount++;
+      errorRows.push(rowIndex);
+    }
+  }
+
+  // Final leftover batch
+  await processBatch(batch, counters, 'Final batch');
+
+  // Delete temp file
+  if (filePath) {
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (err) {
+      console.error('Failed to delete CSV file:', err.message);
+    }
+  }
+
+  return {
+    success: true,
+    message: `Imported ${counters.insertedCount} new categories, updated ${counters.updatedCount}, skipped ${invalidRowsCount} invalid rows`,
+    ...counters,
+    invalidRowsCount,
+    errorRows,
+  };
+};
+/* CSV File Import */
+export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
+  try {
+    const stream = fs.createReadStream(filePath);
+
+    return await processMarketPlaceImportStream(stream, { filePath, marketPlaceId });
+  } catch (err) {
+    console.error('Error in importProductsFromCsvFile:', err);
+    throw new Error(err.message); // force the catch block
+  }
+};
+
+export const mapCategoryService = async (categoryDatas, marketplaceId) => {
+  try {
+    if (!categoryDatas || categoryDatas.length === 0) return [];
+
+    // Prepare bulk operations
+    const bulkOps = categoryDatas.map((d) => ({
+      updateOne: {
+        filter: { marketplaceId, platformCategoryId: d.platformCategoryId },
+        update: { $set: { marketplaceCategoryId: d.marketplaceCategoryId } },
+        upsert: true, // insert if not exists
+      },
+    }));
+
+    // Execute bulk operation
+    const result = await CategoryMapping.bulkWrite(bulkOps, { ordered: false });
+
+    return result;
+  } catch (err) {
+    console.error('Error in mapCategoryService:', err);
+    throw err;
+  }
+};
+
+export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm = '') => {
+  try {
+    // Fetch all categories
+    let allCategories = await MarketPlaceCategory.find(
+      { marketPlaceId: parseInt(marketplaceId) },
+      {
+        _id: 1,
+        categoryName: 1,
+        parent: 1,
+        marketplaceCategoryId: 1,
+        categoryTrail: 1,
+        categorySlug: 1,
+      }
+    ).lean();
+    if (!allCategories.length) return [];
+    // Normalize parent using trail
+    allCategories.forEach((cat) => {
+      if (cat.categoryTrail) {
+        const parts = cat.categoryTrail.split('>').map((p) => p.trim());
+        cat.parent = parts.length > 1 ? slugify(parts[parts.length - 2], { lower: true }) : 'root';
+      } else {
+        cat.parent = 'root';
+      }
+    });
+
+    // Filter by search term if provided
+    let categoriesToInclude = allCategories;
+    if (searchTerm) {
+      const safeRegex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+      const matched = allCategories.filter(
+        (cat) => safeRegex.test(cat.categoryName) || safeRegex.test(cat.categoryTrail)
+      );
+
+      // Include ancestors
+      const ancestorSlugs = new Set();
+      matched.forEach((cat) => {
+        const parts = cat.categoryTrail.split('>').map((p) => slugify(p.trim(), { lower: true }));
+        parts.pop(); // remove self
+        parts.forEach((slug) => ancestorSlugs.add(slug));
+      });
+
+      categoriesToInclude = allCategories.filter((cat) => matched.includes(cat) || ancestorSlugs.has(cat.categorySlug));
+    }
+
+    // Build lookup maps
+    const categoryMap = {}; // slug -> category
+    const childrenByParent = {}; // parentSlug -> [childSlugs]
+
+    categoriesToInclude.forEach((cat) => {
+      categoryMap[cat.categorySlug] = { ...cat, children: [] };
+      const parentSlug = cat.parent || 'root';
+      if (!childrenByParent[parentSlug]) childrenByParent[parentSlug] = [];
+      childrenByParent[parentSlug].push(cat.categorySlug);
+    });
+
+    // Recursive tree builder using childrenByParent map
+    const buildNode = (cat, visited = new Set()) => {
+      if (!cat || visited.has(cat.categorySlug)) return null;
+      visited.add(cat.categorySlug);
+
+      const node = { ...cat, children: [] };
+      (childrenByParent[cat.categorySlug] || []).forEach((childSlug) => {
+        const childNode = buildNode(categoryMap[childSlug], new Set(visited));
+        if (childNode) node.children.push(childNode);
+      });
+
+      return node;
+    };
+
+    // Build tree from root nodes
+    const tree = (childrenByParent['root'] || []).map((rootSlug) => buildNode(categoryMap[rootSlug]));
+
+    const channelData = await Channel.findOne(
+      { channelId: parseInt(marketplaceId) },
+      { channelName: 1, channelId: 1 }
+    ).lean();
+    if (channelData) {
+      return {
+        categoryName: channelData?.channelName,
+        id: channelData?.channelId,
+        children: tree,
+      };
+    }
+
+    return tree;
+  } catch (err) {
+    console.error('Error building platform category tree:', err);
+    throw err;
+  }
+};
+
+export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) => {
+  try {
+    const platformCategoryData = await PlatformCategory.findOne(
+      { platformCategoryTrail: productCategoryTrail },
+      { platformCategoryId: 1 }
+    ).lean(); // lean() returns plain JS object
+
+    if (!platformCategoryData) return [];
+
+    const marketPlaceTrailData = await CategoryMapping.aggregate([
+      // Filter by platformCategoryId
+      { $match: { platformCategoryId: platformCategoryData.platformCategoryId } },
+
+      // Lookup marketplace category trail
+      {
+        $lookup: {
+          from: 'marketplacecategories',
+          localField: 'marketplaceCategoryId',
+          foreignField: 'marketplaceCategoryId',
+          as: 'marketplaceCategory',
+        },
+      },
+      { $unwind: '$marketplaceCategory' },
+
+      // Lookup channel info
+      {
+        $lookup: {
+          from: 'channels',
+          localField: 'marketplaceId',
+          foreignField: 'channelId',
+          as: 'channel',
+        },
+      },
+      { $unwind: '$channel' },
+
+      // Project needed fields
+      {
+        $project: {
+          _id: 0,
+          marketplaceId: 1,
+          marketplacename: '$channel.channelName',
+          marketplaceCategoryTrails: '$marketplaceCategory.categoryTrail',
+        },
+      },
+
+      // Remove duplicates per marketplace
+      {
+        $group: {
+          _id: '$marketplaceId',
+          marketplacename: { $first: '$marketplacename' },
+          marketplaceCategoryTrails: { $first: '$marketplaceCategoryTrails' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          marketplaceId: '$_id',
+          marketplacename: 1,
+          marketplaceCategoryTrails: 1,
+        },
+      },
+    ]);
+
+    return marketPlaceTrailData;
+  } catch (err) {
+    console.error('Error in getMarketPlaceCategoryTrailsService:', err);
+    throw new Error(err.message);
+  }
+};
