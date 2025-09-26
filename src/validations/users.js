@@ -119,6 +119,7 @@ export const updateUserValidator = validate(async (req) => {
         message: `Invalid role. Please select one of: ${allowedRoles.join(', ')}`,
       })
       .optional(),
+    password: z.string().min(6, 'Password must be at least 6 characters long').optional(),
   });
   return updateUserSchema.parse(req.body);
 });
