@@ -6,23 +6,23 @@ export const mapRowToMarketPlaceCategory = async (row, marketPlaceId) => {
   let rawPath = row.categoryPath?.trim();
 
   if (!rawPath) return [];
-  const matchYesNo = rawPath.match(/(Yes|No)$/i);
+
+  // Extract Yes/No at the end (case-insensitive)
+  const matchYesNo = rawPath.match(/\b(Yes|No)$/i);
   const yesOrNo = matchYesNo ? matchYesNo[1] : null;
 
-  const firstValue = rawPath
-    .replace(/\b(Yes|No)$/i, '') // drop Yes/No
-    .replace(/^"+|"+$/g, '') // drop quotes
-    .replace(/^;+|;+$/g, '') // drop semicolons
-    .trim();
+  // Remove Yes/No from the path
+  // Remove Yes/No at the end, even if attached to a word
+  const cleanedPath = rawPath.replace(/(Yes|No)$/i, '').trim();
 
   // Split into parts
-  let trailParts = firstValue.split('>').map((p) => p.trim());
+  const trailParts = cleanedPath.split('>').map((p) => p.trim());
 
-  // Clean each part: remove numbers, parentheses, quotes, semicolons
+  // Clean each part
   const cleanParts = trailParts
     .map((p) =>
       p
-        .replace(/\s*\([^)]+\)/g, '') // remove anything in parentheses
+        .replace(/\s*\([^)]+\)/g, '') // remove parentheses
         .replace(/["';]/g, '') // remove quotes/semicolons
         .replace(/\d+/g, '') // remove numbers
         .trim()
@@ -35,25 +35,28 @@ export const mapRowToMarketPlaceCategory = async (row, marketPlaceId) => {
   for (const part of cleanParts) {
     const categoryName = part.toLowerCase();
     const categorySlug = slugify(categoryName, { lower: true });
+
     const marketplaceCategoryId = await generateMarketPlaceCategoryId(
       marketPlaceId,
       categoryName,
       categorySlug,
       parent
     );
-    trailDocs.push(part);
+
+    trailDocs.push(categoryName); // use lowercase name consistently
 
     modifiedArray.push({
-      categoryName: categoryName?.trim().toLowerCase() || '',
-      parent: parent?.trim().toLowerCase() || 'root',
+      categoryName: categoryName,
+      parent,
       categorySlug,
-      marketplaceCategoryId: marketplaceCategoryId,
-      categoryTrail: trailDocs.join(' > ').toLowerCase(),
+      marketplaceCategoryId,
+      categoryTrail: trailDocs.join(' > '),
       marketPlaceId: parseInt(marketPlaceId),
-      isEligible: yesOrNo === 'Yes',
+      isEligible: yesOrNo?.toLowerCase() === 'yes',
     });
 
-    parent = categorySlug?.trim().toLowerCase();
+    parent = categorySlug;
   }
+
   return modifiedArray;
 };
