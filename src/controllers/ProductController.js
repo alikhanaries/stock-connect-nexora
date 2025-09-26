@@ -83,9 +83,9 @@ export const importProductsFromCsvFile = async (req, res) => {
 
     // Process file in background (async, no await here)
     productService
-      .importProductsFromCsvFile(req.file.path)
+      .importProductsFromCsvFile(req.file.path, req.locale)
       .then((result) => {
-        console.log('CSV processing completed:', result);
+        console.log('CSV processing completed:', result.errorDetails);
         // Optionally update DB with processing status
       })
       .catch((error) => {

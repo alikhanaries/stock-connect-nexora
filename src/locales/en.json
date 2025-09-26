@@ -95,5 +95,9 @@
   "SELLER_DELETED": "Seller Deleted Successfully",
   "GET_SELLER_SUCCESS": "Fetched seller successfully",
   "NO_CATEGORYTRAILS_FOUND": "Marketplace Category trail not found",
-  "CATEGORYTRAILS_FOUND_SUCCESS": "Marketplace Category trail found"
+  "CATEGORYTRAILS_FOUND_SUCCESS": "Marketplace Category trail found",
+  "PRODUCT_SKUCODE_MISSING": "Product skucode is missing",
+  "PRODUCT_PRICE_MISSING": "Product price is missing",
+  "PRODUCT_CATEGORYTRAIL_MISSING": "Product categorytrail is missing",
+  "EMPTY_ROW": "Empty row"
 }

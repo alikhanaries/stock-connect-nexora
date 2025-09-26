@@ -92,8 +92,13 @@ export const getMarketPlaceCategoryTrails = async (req, res) => {
 
     const result = await getMarketPlaceCategoryTrailsService(productCategoryTrail);
 
+    const { marketPlaceTrailData } = result;
+
     const message =
-      result && result.length > 0 ? req.locale.CATEGORYTRAILS_FOUND_SUCCESS : req.locale.NO_CATEGORYTRAILS_FOUND;
+      Array.isArray(marketPlaceTrailData) && marketPlaceTrailData.length > 0
+        ? req.locale.CATEGORYTRAILS_FOUND_SUCCESS
+        : req.locale.NO_CATEGORYTRAILS_FOUND;
+
     return successResponse(res, message, 200, result);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);

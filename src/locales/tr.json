@@ -95,5 +95,9 @@
   "SELLER_DELETED": "Satıcı başarıyla silindi",
   "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi",
   "NO_CATEGORYTRAILS_FOUND": "Pazar yeri kategori yolu bulunamadı",
-  "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu"
+  "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu",
+  "PRODUCT_SKUCODE_MISSING": "Ürün stok kodu eksik",
+  "PRODUCT_PRICE_MISSING": "Ürün fiyatı eksik",
+  "PRODUCT_CATEGORYTRAIL_MISSING": "Ürün kategori yolu eksik",
+  "EMPTY_ROW": "Boş satır"
 }

@@ -93,5 +93,9 @@
   "SELLER_DELETED": "تم حذف البائع بنجاح",
   "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح",
   "NO_CATEGORYTRAILS_FOUND": "مسار فئة السوق غير موجود",
-  "CATEGORYTRAILS_FOUND_SUCCESS": "تم العثور على مسار فئة السوق بنجاح"
+  "CATEGORYTRAILS_FOUND_SUCCESS": "تم العثور على مسار فئة السوق بنجاح",
+  "PRODUCT_SKUCODE_MISSING": "رمز SKU للمنتج مفقود",
+  "PRODUCT_PRICE_MISSING": "سعر المنتج مفقود",
+  "PRODUCT_CATEGORYTRAIL_MISSING": "مسار فئة المنتج مفقود",
+  "EMPTY_ROW": "صف فارغ"
 }
