@@ -103,10 +103,7 @@
   "NOT_HAVE_ACCESS": "您无权访问此卖家。",
   "SELLER_CONNECTION_SUCCESSFUL": "卖家连接成功。",
   "FAILED_SELLER_CONNECTION": "更新卖家连接失败。",
-
-  "NO_SELLER_FOUND": "未找到可删除的匹配卖家",
-  "SELLER_DELETED": "卖家已成功删除",
-  "GET_SELLER_SUCCESS": "卖家成功获取",
   "NO_CATEGORYTRAILS_FOUND": "未找到市场类别路径",
-  "CATEGORYTRAILS_FOUND_SUCCESS": "已成功找到市场类别路径"
+  "CATEGORYTRAILS_FOUND_SUCCESS": "已成功找到市场类别路径",
+  "UNABLE_FETCH_SELLER": "没有卖家与该用户关联"
 }

@@ -92,6 +92,11 @@ const sellerConnectionUpdate = async (userId, sellerId) => {
   return connectionUpdate;
 };
 
+const getConnectedSllerId = async (userId) => {
+  const sellereId = await UserSeller.findOne({ userId: userId }).select('sellerId').lean();
+  return sellereId.sellerId;
+};
+
 export default {
   userRoleBasedAccess,
   validateSellerAccessForCreator,
@@ -99,4 +104,5 @@ export default {
   userAndSellerConnection,
   getUserConnectedToThisSellers,
   sellerConnectionUpdate,
+  getConnectedSllerId,
 };

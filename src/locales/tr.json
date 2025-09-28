@@ -88,7 +88,6 @@
 
   "CATEGORY_IMPORTED_PROCESSING": "Kategori aktarımı işleniyor",
   "WRONG_CATEGORYTRAIL": "Yanlış kategori yolları",
-  "FAILED_TO_UPLOAD": "Fatura indirilemedi",
   "IMAGE_UPLOADED_SUCCESSFULLY": "Fatura başarıyla alındı",
   "SELLERIDS_REQUIRED": "Lütfen ID dizisi sağlayın",
   "VALID_SELLER_IDS": "Lütfen geçerli ID'ler sağlayın",
@@ -103,5 +102,6 @@
   "SELLER_CONNECTION_SUCCESSFUL": "Satıcı bağlantısı başarılı.",
   "FAILED_SELLER_CONNECTION": "Satıcı bağlantısı güncellenemedi.",
   "NO_CATEGORYTRAILS_FOUND": "Pazar yeri kategori yolu bulunamadı",
-  "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu"
+  "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu",
+  "UNABLE_FETCH_SELLER": "Bu kullanıcıya bağlı satıcı yok"
 }

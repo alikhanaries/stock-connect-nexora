@@ -63,8 +63,13 @@ export const updateUser = async (req, res) => {
       }
 
       userResponseObject.sellerId = sellerUpdataion.sellerId;
+    } else {
+      const sellerId = await userHelper.getConnectedSllerId(updatedUser._id);
+      if (!sellerId) {
+        return Responses.failResponse(res, req.locale.UNABLE_FETCH_SELLER, 400);
+      }
+      userResponseObject.sellerId = sellerId;
     }
-
     return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, userResponseObject);
   } catch (error) {
     errorLog(error);

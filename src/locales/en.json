@@ -93,6 +93,7 @@
   "NO_SELLER_FOUND": "No Matching sellers found to Delete.",
   "SELLER_DELETED": "Seller Deleted Successfully",
   "GET_SELLER_SUCCESS": "Fetched seller successfully",
+  "UNABLE_FETCH_SELLER": "there no Seller connected to this user",
 
   "NOT_VALID_USER": "The user you provided is not valid",
   "CAN_NOT_ASSIGN_BASE_SELLER": "You cannot assign the base seller to any user.",
