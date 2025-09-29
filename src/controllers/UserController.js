@@ -6,8 +6,6 @@ import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
 import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
-import bcrypt from 'bcryptjs';
-
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -34,14 +32,19 @@ export const updateUser = async (req, res) => {
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
 
-    const { firstName, lastName, email, phoneNumber, active, role, password, sellerId} = req.body;
-    let updateFields = { firstName, lastName, email, phoneNumber, active, role, password };
-    // Hash password if provided
-    if (password) {
-      const salt = await bcrypt.default.genSalt(10);
-      updateFields.password = await bcrypt.default.hash(password, salt);
+    const { firstName, lastName, email, phoneNumber, active, role, password, sellerId } = req.body;
+    const payload = { firstName, lastName, email, phoneNumber, active, role };
+
+    if (password && password.trim() !== '') {
+      if (password.length < 6) {
+        return Responses.failResponse(res, req.locale.PASSWORD_LENGTH, 400);
+      }
+      payload.password = password;
     }
-    const updatedUser = await User.findByIdAndUpdate(id, updateFields, { new: true }).select(userSafeFields);
+
+    const updatedUser = await User.findByIdAndUpdate(id, { $set: payload }, { new: true, runValidators: true }).select(
+      userSafeFields
+    );
 
     if (!updatedUser) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
@@ -67,8 +70,13 @@ export const updateUser = async (req, res) => {
       }
 
       userResponseObject.sellerId = sellerUpdataion.sellerId;
+    } else {
+      const sellerId = await userHelper.getConnectedSllerId(updatedUser._id);
+      if (!sellerId) {
+        return Responses.failResponse(res, req.locale.UNABLE_FETCH_SELLER, 400);
+      }
+      userResponseObject.sellerId = sellerId;
     }
-
     return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, userResponseObject);
   } catch (error) {
     errorLog(error);
