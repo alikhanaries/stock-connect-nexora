@@ -100,23 +100,46 @@ export const importProductsFromCsvFile = async (req, res) => {
 };
 
 export const pushProductToChannelEngine = async (req, res) => {
+  const { channelId } = req.params;
   try {
-    const { channelId } = req.params;
-    if (!channelId) {
-      return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
+    const {
+      validatedProducts = [],
+      validProducts = [],
+      failed = 0,
+      total = 0,
+    } = await productService.validateProducts(channelId);
+
+    const uniqueCategoryErrors = [...new Set(validatedProducts.flatMap((p) => p.Errors || []))];
+    const errorData = uniqueCategoryErrors.length
+      ? { message: req.locale.INVALID_CATEGORY_TRAIL, categoryData: uniqueCategoryErrors }
+      : null;
+
+    const message =
+      failed === 0
+        ? req.locale.ALL_PRODUCTS_PUSH_SUCCESS
+        : failed === total
+          ? req.locale.ALL_PRODUCTS_PUSH_FAILED
+          : req.locale.PRODUCTS_PUSH_PARTIAL_SUCCESS;
+
+    if (validProducts?.length) {
+      (async () => {
+        try {
+          await productService.pushProductsAsync(validProducts);
+        } catch (err) {
+          console.error('Async push failed:', err);
+        }
+      })();
     }
-    setImmediate(async () => {
-      try {
-        await productService.pushProductsFromChannel(channelId);
-      } catch (err) {
-        console.error('Background push error:', err);
-      }
-    });
-    return successResponse(res, req.locale.PRODUCTS_PUSH_STARTED, 202);
+
+    if (failed > 0) {
+      return failResponse(res, message, 400, errorData);
+    }
+
+    return successResponse(res, message, 200, null);
   } catch (err) {
     console.error('Controller Error:', err);
     errorLog(err);
-    return errorResponse(res, err, 500);
+    return errorResponse(res, err.message || 'Internal Server Error', 500);
   }
 };
 

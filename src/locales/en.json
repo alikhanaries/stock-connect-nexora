@@ -23,6 +23,7 @@
   "PRODUCTS_PUSH_STARTED": "Products push started in background",
   "PRODUCT_IDS_REQUIRED": "Product IDs are required",
   "INVALID_PRODUCT_IDS": "Invalid product IDs:",
+  "PRODUCT_PUSH_FAILED": "Product push failed. Check your email for details.",
   "NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE": "No matching products found to update",
   "PRODUCTS_ACTIVATED_SUCCESSFULLY": "Products activated successfully",
   "PRODUCTS_INACTIVATED_SUCCESSFULLY": "Products inactivated successfully",
@@ -84,6 +85,7 @@
   "CATEGORY_NOT_SAVED": "Categories could not be saved",
   "MARKET_PLACE_NOT_FOUND": "Marketplace not found",
   "PRODUCT_IMPORTED_PROCESSING": "Product import is processing",
+
   "CATEGORY_IMPORTED_PROCESSING": "Category importing is under processed",
   "WRONG_CATEGORYTRAIL": "Wrong category trails",
   "FAILED_TO_UPLOAD": "Failed to download invoice",
@@ -93,13 +95,10 @@
   "NO_SELLER_FOUND": "No Matching sellers found to Delete.",
   "SELLER_DELETED": "Seller Deleted Successfully",
   "GET_SELLER_SUCCESS": "Fetched seller successfully",
-
-  "NOT_VALID_USER": "The user you provided is not valid",
-  "CAN_NOT_ASSIGN_BASE_SELLER": "You cannot assign the base seller to any user.",
-  "SELLER_DOES_NOT_EXISTS": "The seller you have provided does not exist.",
-  "NOT_HAVE_ACCESS": "You do not have access to this seller.",
-  "SELLER_CONNECTION_SUCCESSFUL": "seller connection successful.",
-  "FAILED_SELLER_CONNECTION": "Failed to update seller connection.",
   "NO_CATEGORYTRAILS_FOUND": "Marketplace Category trail not found",
-  "CATEGORYTRAILS_FOUND_SUCCESS": "Marketplace Category trail found"
+  "CATEGORYTRAILS_FOUND_SUCCESS": "Marketplace Category trail found",
+  "ALL_PRODUCTS_PUSH_SUCCESS": "All products pushed successfully",
+  "ALL_PRODUCTS_PUSH_FAILED": "All products push failed",
+  "PRODUCTS_PUSH_PARTIAL_SUCCESS": "Some products pushed successfully, some failed",
+  "INVALID_CATEGORY_TRAIL": "Invalid category trail"
 }

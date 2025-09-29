@@ -361,11 +361,13 @@ export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) 
   try {
     const platformCategoryData = await PlatformCategory.findOne(
       { platformCategoryTrail: productCategoryTrail },
-      { platformCategoryId: 1 }
+      { platformCategoryId: 1, categoryName: 1 }
     ).lean(); // lean() returns plain JS object
-
-    if (!platformCategoryData) return [];
-
+    if (!platformCategoryData)
+      return {
+        platformCategoryName: null,
+        marketPlaceTrailData: [],
+      };
     const marketPlaceTrailData = await CategoryMapping.aggregate([
       // Filter by platformCategoryId
       { $match: { platformCategoryId: platformCategoryData.platformCategoryId } },
@@ -420,7 +422,10 @@ export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) 
       },
     ]);
 
-    return marketPlaceTrailData;
+    return {
+      platformCategoryName: platformCategoryData?.categoryName,
+      marketPlaceTrailData,
+    };
   } catch (err) {
     console.error('Error in getMarketPlaceCategoryTrailsService:', err);
     throw new Error(err.message);
