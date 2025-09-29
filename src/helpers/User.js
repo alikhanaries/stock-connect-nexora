@@ -93,8 +93,9 @@ const sellerConnectionUpdate = async (userId, sellerId) => {
 };
 
 const getConnectedSllerId = async (userId) => {
-  const sellereId = await UserSeller.findOne({ userId: userId }).select('sellerId').lean();
-  return sellereId.sellerId;
+  const doc = await UserSeller.findOne({ userId }, { sellerId: 1, _id: 0 }).lean();
+
+  return doc?.sellerId || null;
 };
 
 export default {
