@@ -1,4 +1,6 @@
-import { defaultMailOptions, transporter } from '../config/emailConfig.js';
+import { defaultMailOptions, transporter, mailBranding } from '../config/emailConfig.js';
+import { importProductConstant } from '../constants/emailConstants.js';
+import { productImportTemplate } from '../emailTemplates/productTemplate.js';
 
 const sendMail = async ({ to, subject, html }) => {
   try {
@@ -22,4 +24,26 @@ const sendMail = async ({ to, subject, html }) => {
   }
 };
 
-export default { sendMail };
+const importProductMailService = async ({ to, importStatus = 'SUCCESS', errorDetails = [], userName }) => {
+  try {
+    const mailOptions = {
+      to,
+      subject: 'Product Import Notification',
+      html: productImportTemplate({
+        importStatus,
+        errorDetails,
+        ...importProductConstant,
+        ...mailBranding,
+        PRODUCT_IMPORT_HELLO: `Hello ${userName},`,
+      }),
+    };
+
+    const { success, messageId } = await sendMail(mailOptions);
+    return { success, messageId };
+  } catch (error) {
+    console.error('Mail error (Product Import):', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+export default { sendMail, importProductMailService };

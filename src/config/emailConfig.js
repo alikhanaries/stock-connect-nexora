@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { config } from '#config/config.js';
-const { MAIL_HOST, MAIL_PORT, MAIL_USER, MAIL_PASS, FROM_ADDRESS } = config;
+const { MAIL_HOST, MAIL_PORT, MAIL_USER, MAIL_PASS, FROM_ADDRESS, LOGO_URL } = config;
 
 export const transporter = nodemailer.createTransport({
   host: MAIL_HOST,
@@ -15,4 +15,11 @@ export const transporter = nodemailer.createTransport({
 export const defaultMailOptions = {
   from: FROM_ADDRESS,
   replyTo: FROM_ADDRESS,
+};
+
+export const mailBranding = {
+  tenantName: 'StockConnect',
+  tenantLogo: LOGO_URL,
+  tenantColor: '#c7c8cbff',
+  tenantEmail: 'support@stockconnect.com',
 };
