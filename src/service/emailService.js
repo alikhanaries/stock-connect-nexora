@@ -1,6 +1,6 @@
 import { defaultMailOptions, transporter, mailBranding } from '../config/emailConfig.js';
 import { importProductConstant } from '../constants/emailConstants.js';
-import { productImportTemplate } from '../emailTemplates/productTemplate.js';
+import { productImportTemplate } from '../emailTemplates/importProductTemplate.js';
 
 const sendMail = async ({ to, subject, html }) => {
   try {
