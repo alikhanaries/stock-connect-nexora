@@ -59,10 +59,10 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     // Process file in background (async, no await here)
     productService
       .importProductsFromGoogleSheet(exportUrl, req.locale)
-      .then(async (result) => {
+      .then((result) => {
         console.log('CSV processing completed:', result);
         // Send email notification after processing
-        await emailService.importProductMailService({
+        emailService.importProductMailService({
           to: req.user.email,
           userName: req.user.firstName,
           importStatus: result.success ? 'SUCCESS' : 'FAILED',
@@ -89,10 +89,10 @@ export const importProductsFromCsvFile = async (req, res) => {
     // Process file in background (async, no await here)
     productService
       .importProductsFromCsvFile(req.file.path, req.locale)
-      .then(async (result) => {
+      .then((result) => {
         console.log('CSV processing completed:', result.errorDetails);
         // Send email notification after processing
-        await emailService.importProductMailService({
+        emailService.importProductMailService({
           to: req.user.email,
           userName: req.user.name,
           importStatus: result.success ? 'SUCCESS' : 'FAILED',
