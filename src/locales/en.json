@@ -102,5 +102,6 @@
   "SELLER_CONNECTION_SUCCESSFUL": "seller connection successful.",
   "FAILED_SELLER_CONNECTION": "Failed to update seller connection.",
   "NO_CATEGORYTRAILS_FOUND": "Marketplace Category trail not found",
-  "CATEGORYTRAILS_FOUND_SUCCESS": "Marketplace Category trail found"
+  "CATEGORYTRAILS_FOUND_SUCCESS": "Marketplace Category trail found",
+  "PASSWORD_LENGTH": "Password must be at least 6 characters long"
 }

@@ -124,9 +124,22 @@ export const updateUserValidator = validate(async (req) => {
       .string()
       .refine((val) => mongoose.Types.ObjectId.isValid(val), { message: 'Invalid ID format' })
       .optional(),
-    
-    password: z.string().min(6, 'Password must be at least 6 characters long').optional(),
 
+    password: z
+      .string()
+      .optional()
+      .transform((val) => (val?.trim() === '' ? undefined : val))
+      .refine(
+        (val) => {
+          if (val === undefined) {
+            return true;
+          }
+          return val.length >= 6;
+        },
+        {
+          message: 'Password must be at least 6 characters long',
+        }
+      ),
   });
   return updateUserSchema.parse(req.body);
 });

@@ -33,7 +33,14 @@ export const updateUser = async (req, res) => {
     const creatorId = req.user._id;
 
     const { firstName, lastName, email, phoneNumber, active, role, password, sellerId } = req.body;
-    const payload = { firstName, lastName, email, phoneNumber, active, role, password };
+    const payload = { firstName, lastName, email, phoneNumber, active, role };
+
+    if (password && password.trim() !== '') {
+      if (password.length < 6) {
+        return Responses.failResponse(res, req.locale.PASSWORD_LENGTH, 400);
+      }
+      payload.password = password;
+    }
 
     const updatedUser = await User.findByIdAndUpdate(id, { $set: payload }, { new: true, runValidators: true }).select(
       userSafeFields

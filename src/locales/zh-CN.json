@@ -105,5 +105,6 @@
   "FAILED_SELLER_CONNECTION": "更新卖家连接失败。",
   "NO_CATEGORYTRAILS_FOUND": "未找到市场类别路径",
   "CATEGORYTRAILS_FOUND_SUCCESS": "已成功找到市场类别路径",
-  "UNABLE_FETCH_SELLER": "没有卖家与该用户关联"
+  "UNABLE_FETCH_SELLER": "没有卖家与该用户关联",
+  "PASSWORD_LENGTH": "密码长度必须至少为6个字符"
 }

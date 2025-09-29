@@ -103,5 +103,6 @@
   "FAILED_SELLER_CONNECTION": "Satıcı bağlantısı güncellenemedi.",
   "NO_CATEGORYTRAILS_FOUND": "Pazar yeri kategori yolu bulunamadı",
   "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu",
-  "UNABLE_FETCH_SELLER": "Bu kullanıcıya bağlı satıcı yok"
+  "UNABLE_FETCH_SELLER": "Bu kullanıcıya bağlı satıcı yok",
+  "PASSWORD_LENGTH": "Şifre en az 6 karakter uzunluğunda olmalıdır"
 }

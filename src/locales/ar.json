@@ -101,5 +101,6 @@
   "FAILED_SELLER_CONNECTION": "فشل في تحديث اتصال البائع.",
   "NO_CATEGORYTRAILS_FOUND": "مسار فئة السوق غير موجود",
   "CATEGORYTRAILS_FOUND_SUCCESS": "تم العثور على مسار فئة السوق بنجاح",
-  "UNABLE_FETCH_SELLER": "لا يوجد بائع مرتبط بهذا المستخدم"
+  "UNABLE_FETCH_SELLER": "لا يوجد بائع مرتبط بهذا المستخدم",
+  "PASSWORD_LENGTH": "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل"
 }
