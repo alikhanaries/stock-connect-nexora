@@ -59,7 +59,7 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 
     // Process file in background (async, no await here)
     productService
-      .importProductsFromGoogleSheet(exportUrl)
+      .importProductsFromGoogleSheet(exportUrl, req.locale)
       .then((result) => {
         console.log('CSV processing completed:', result);
         // Optionally update DB with processing status
