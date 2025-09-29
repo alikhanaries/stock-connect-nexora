@@ -72,6 +72,7 @@
   "FAILED_FETCHING_SHEET": "فشل في جلب الملف",
   "GOOGLE_SHEET_URL_REQUIRED": "رابط Google Sheet مطلوب",
   "INVALID_URL": "رابط غير صالح",
+  "PRODUCT_PUSH_FAILED": "فشل دفع المنتج. تحقق من بريدك الإلكتروني لمعرفة التفاصيل.",
   "PRODUCT_NOT_EXITS": "بعض معرّفات المنتجات غير موجودة في مجموعة المنتجات",
   "INVALID_PRODUCTS": "لا توجد منتجات صالحة للمعرّفات المقدمة",
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "تم فصل المنتج عن القناة بنجاح",
@@ -92,15 +93,12 @@
   "NO_SELLER_FOUND": "لم يتم العثور على أي بائع مطابق للحذف",
   "SELLER_DELETED": "تم حذف البائع بنجاح",
   "GET_SELLER_SUCCESS": "تم جلب البائع بنجاح",
-
-  "NOT_VALID_USER": "المستخدم الذي قدمته غير صالح",
-  "CAN_NOT_ASSIGN_BASE_SELLER": "لا يمكنك تعيين البائع الأساسي لأي مستخدم.",
-  "SELLER_DOES_NOT_EXISTS": "البائع الذي قدمته غير موجود.",
-  "NOT_HAVE_ACCESS": "ليس لديك صلاحية للوصول إلى هذا البائع.",
-  "SELLER_CONNECTION_SUCCESSFUL": "تم الاتصال بالبائع بنجاح.",
-  "FAILED_SELLER_CONNECTION": "فشل في تحديث اتصال البائع.",
   "NO_CATEGORYTRAILS_FOUND": "مسار فئة السوق غير موجود",
   "CATEGORYTRAILS_FOUND_SUCCESS": "تم العثور على مسار فئة السوق بنجاح",
   "UNABLE_FETCH_SELLER": "لا يوجد بائع مرتبط بهذا المستخدم",
-  "PASSWORD_LENGTH": "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل"
+  "PASSWORD_LENGTH": "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل",
+  "ALL_PRODUCTS_PUSH_SUCCESS": "تم دفع جميع المنتجات بنجاح",
+  "ALL_PRODUCTS_PUSH_FAILED": "فشل دفع جميع المنتجات",
+  "PRODUCTS_PUSH_PARTIAL_SUCCESS": "تم دفع بعض المنتجات بنجاح، وفشلت بعض المنتجات",
+  "INVALID_CATEGORY_TRAIL": "مسار الفئة غير صالح"
 }
