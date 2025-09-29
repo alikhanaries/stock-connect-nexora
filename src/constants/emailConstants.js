@@ -6,6 +6,7 @@ export const importProductConstant = {
   PROD_IMPORT_SUCCESS: 'Your product import has been completed successfully.',
   PROD_IMPORT_SKIPPED_SKUS: 'Skipped SKUs:',
   PROD_IMPORT_FOOTER: 'All rights reserved.',
+  SUBJECT: 'Product Import Notification',
   PROD_IMPORT_PARTIAL_SUCCESS:
     'Important: Some entries in your CSV file were not imported successfully. Refer to the table below for the row numbers and corresponding error details.',
 };

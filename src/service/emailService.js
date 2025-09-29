@@ -27,16 +27,18 @@ const sendMail = async ({ to, subject, html }) => {
 
 const importProductMailService = async ({ to, importStatus = 'SUCCESS', errorDetails = [], userName }) => {
   try {
+    const templateData = {
+      importStatus,
+      errorDetails,
+      ...importProductConstant,
+      ...mailBranding,
+      PRODUCT_IMPORT_HELLO: `Hello ${userName}`,
+    };
+
     const mailOptions = {
       to,
-      subject: 'Product Import Notification',
-      html: productImportTemplate({
-        importStatus,
-        errorDetails,
-        ...importProductConstant,
-        ...mailBranding,
-        PRODUCT_IMPORT_HELLO: `Hello ${userName},`,
-      }),
+      subject: `${mailBranding.tenantName} - ${importProductConstant.SUBJECT}`,
+      html: productImportTemplate(templateData),
     };
 
     const { success, messageId } = await sendMail(mailOptions);
