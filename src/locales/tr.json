@@ -6,7 +6,6 @@
   "VALIDATION_ERROR": "Doğrulama başarısız oldu",
   "UNAUTHORIZED": "Yetkisiz erişim",
   "FORBIDDEN": "Yasaklı işlem",
-
   "USER_CHANNELS_REMOVED_SUCCESSFULLY": "Kullanıcı kanalları başarıyla kaldırıldı",
   "CHANNELS_FOUND_SUCCESS": "Kanallar başarıyla bulundu",
   "CHANNELS_RETRIEVE_FAILED": "Kanallar alınamadı",
@@ -24,10 +23,11 @@
   "PRODUCT_IDS_REQUIRED": "Ürün ID'leri gerekli",
   "INVALID_PRODUCT_IDS": "Geçersiz ürün ID'leri:",
   "NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE": "Güncellenecek eşleşen ürün bulunamadı",
-  "PRODUCTS_ACTIVATED_SUCCESSFULLY": "Ürünler başarıyla etkinleştirildi",
-  "PRODUCTS_INACTIVATED_SUCCESSFULLY": "Ürünler başarıyla devre dışı bırakıldı",
-  "CHANNEL_ID_REQUIRED": "channelId gerekli",
-  "USER_CHANNEL_PRODUCTS_FETCHED_SUCCESSFULLY": "Kullanıcı kanal ürünleri başarıyla alındı",
+  "PRODUCTS_ACTIVATED_SUCCESSFULLY": "Ürünler başarıyla aktifleştirildi",
+  "PRODUCTS_INACTIVATED_SUCCESSFULLY": "Ürünler başarıyla pasifleştirildi",
+  "CHANNEL_ID_REQUIRED": "channelId gereklidir",
+  "PRODUCT_PUSH_FAILED": "Ürün gönderimi başarısız oldu. Detaylar için e-postanızı kontrol edin.",
+  "USER_CHANNEL_PRODUCTS_FETCHED_SUCCESSFULLY": "Kullanıcı kanal ürünleri başarıyla getirildi",
   "NO_USER_CHANNEL_PRODUCTS_FOUND": "Kullanıcı kanal ürünleri bulunamadı",
   "AVAILABLE_PRODUCTS_FETCHED_SUCCESSFULLY": "Mevcut ürünler başarıyla alındı",
   "CHANNELID_REQUIRED": "channelId gerekli",
@@ -84,7 +84,6 @@
   "CATEGORY_NOT_SAVED": "Kategoriler kaydedilemedi",
   "MARKET_PLACE_NOT_FOUND": "Pazar yeri bulunamadı",
   "PRODUCT_IMPORTED_PROCESSING": "Ürün aktarımı işleniyor",
-  "FAILED_TO_UPLOAD": "Fatura indirilemiyor",
 
   "CATEGORY_IMPORTED_PROCESSING": "Kategori aktarımı işleniyor",
   "WRONG_CATEGORYTRAIL": "Yanlış kategori yolları",
@@ -95,13 +94,10 @@
   "NO_SELLER_FOUND": "Silinecek eşleşen satıcı bulunamadı",
   "SELLER_DELETED": "Satıcı başarıyla silindi",
   "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi",
-
-  "NOT_VALID_USER": "Sağladığınız kullanıcı geçerli değil",
-  "CAN_NOT_ASSIGN_BASE_SELLER": "Temel satıcıyı herhangi bir kullanıcıya atayamazsınız.",
-  "SELLER_DOES_NOT_EXISTS": "Belirttiğiniz satıcı mevcut değil.",
-  "NOT_HAVE_ACCESS": "Bu satıcıya erişim yetkiniz yok.",
-  "SELLER_CONNECTION_SUCCESSFUL": "Satıcı bağlantısı başarılı.",
-  "FAILED_SELLER_CONNECTION": "Satıcı bağlantısı güncellenemedi.",
   "NO_CATEGORYTRAILS_FOUND": "Pazar yeri kategori yolu bulunamadı",
-  "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu"
+  "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu",
+  "ALL_PRODUCTS_PUSH_SUCCESS": "Tüm ürünler başarıyla gönderildi",
+  "ALL_PRODUCTS_PUSH_FAILED": "Tüm ürünlerin gönderimi başarısız oldu",
+  "PRODUCTS_PUSH_PARTIAL_SUCCESS": "Bazı ürünler başarıyla gönderildi, bazıları başarısız oldu",
+  "INVALID_CATEGORY_TRAIL": "Geçersiz kategori yolu"
 }
