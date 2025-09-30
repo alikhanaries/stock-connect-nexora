@@ -9,7 +9,7 @@ import User from '../models/User.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const sellerId = req.sellerIds;
+    const sellerId = req.sellerId;
     const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query, sellerId);
     const responseData = {
       content: products || [],
@@ -47,7 +47,7 @@ export const getTopSellingProduct = async (req, res) => {
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
-    const sellerId = req.sellerIds;
+    const sellerId = req.sellerId;
     const { url } = req.body;
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
@@ -89,7 +89,7 @@ export const importProductsFromCsvFile = async (req, res) => {
     // Send immediate response to client
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
     // Call service
-    const sellerId = req.sellerIds;
+    const sellerId = req.sellerId;
 
     // Process file in background (async, no await here)
     productService

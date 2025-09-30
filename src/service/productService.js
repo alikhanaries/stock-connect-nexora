@@ -37,7 +37,7 @@ const fetchProducts = async (query, sellerId) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = { status: { $ne: 'removed' }, sellerId: sellerId };
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
 
   const appliedFilters = {};
 
@@ -299,7 +299,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               invalidRowsCount++;
               return;
             }
-          product['sellerId'] = sellerId;
+            product['sellerId'] = sellerId;
 
             if (product?.categoryTrail) {
               categoryTrails.add(product.categoryTrail);
@@ -341,7 +341,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
           if (batch.length) {
             const ops = batch.map((p) => ({
               updateOne: {
-                filter: { sellerId , productSkuCode: p.productSkuCode },
+                filter: { sellerId, productSkuCode: p.productSkuCode },
                 update: [
                   {
                     $set: {
