@@ -8,7 +8,7 @@ export const fetchImageAsFile = async (merchantNo) => {
   // const INVOICE_URL = ``;
 
   const response = await fetch(
-    `${CHANNEL_ENGINE_BASE_URL}/orders/${merchantNo}/invoice?apikey=${CHANNEL_ENGINE_API_KEY}`
+    `${CHANNEL_ENGINE_BASE_URL}orders/${merchantNo}/invoice?apikey=${CHANNEL_ENGINE_API_KEY}`
   );
   if (!response.ok) {
     throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
