@@ -39,6 +39,10 @@ export const getAllUserChannelsValidator = validate(async (req) => {
       .string()
       .length(24, 'userId must be 24 characters long')
       .regex(/^[0-9a-fA-F]+$/, 'userId must be a hex string'),
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
   paramsSchema.parse(req.params);
   // validate query (for pagination + search)
@@ -101,8 +105,16 @@ export const getAllChannelsValidator = validate(async (req) => {
 // /* SAVE USER CHANNELS VALIDATOR */
 export const saveUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  // Body schema
 
+  const paramsSchema = z.object({
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
+  });
+  paramsSchema.parse(req.params);
+
+  // Body schema
   const bodySchema = z
     .object({
       ids: z
@@ -122,7 +134,13 @@ export const saveUserChannelsValidator = validate(async (req) => {
 // /* REMOVE USER CHANNELS VALIDATOR */
 export const removeUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-
+  const paramsSchema = z.object({
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
+  });
+  paramsSchema.parse(req.params);
   const bodySchema = z
     .object({
       ids: z
