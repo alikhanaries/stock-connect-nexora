@@ -45,10 +45,6 @@ const phoneSchema = z
   .regex(/^[+]?[\d\s\-()]+$/, 'Invalid phone number format')
   .trim();
 
-const objectIdSchema = z.string().refine((val) => mongoose.Types.ObjectId.isValid(val), {
-  message: 'Invalid ID format',
-});
-
 export const headerSchema = z
   .object({
     authorization: z
@@ -98,8 +94,26 @@ export const registerValidator = validate(async (req) => {
         required_error: 'Role is required',
         invalid_type_error: `Invalid role. Please select one of: ${allowedRoles.join(', ')}`,
       }),
+
       active: z.boolean({ invalid_type_error: 'Active must be a boolean' }).optional().default(true),
-      sellerId: objectIdSchema.optional(),
+
+      sellerId: z
+        .string()
+        .optional()
+        .transform((val) => (val?.trim() === '' ? undefined : val))
+
+        .refine(
+          (val) => {
+            if (val === undefined) {
+              return true;
+            }
+
+            return mongoose.Types.ObjectId.isValid(val);
+          },
+          {
+            message: 'sellerId must be a valid ID format',
+          }
+        ),
     })
     .superRefine((data, ctx) => {
       if (data.role !== USER_ROLES.MASTER_ADMIN && !data.sellerId) {

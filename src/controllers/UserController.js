@@ -17,9 +17,7 @@ export const getUserById = async (req, res) => {
       return res.status(404).json(formatErrorResponse(req.locale.USER_NOT_FOUND, 404));
     }
     const sellerId = await userHelper.getConnectedSllerId(user._id);
-    if (!sellerId) {
-      return Responses.failResponse(res, req.locale.UNABLE_FETCH_SELLER, 400);
-    }
+
     user.sellerId = sellerId;
     res.status(200).json(formatSuccessResponse(user, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
