@@ -3,7 +3,7 @@ import Return from '#models/Return.js';
 import { sanitizeReturnData, validateReturnData } from '#helpers/ReturnHandler.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 
-const { CHANNEL_ENGINE_BASE_URL } = config;
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 /**
  * Fetches returns from ChannelEngine and saves them to the database.
@@ -12,7 +12,7 @@ export const getReturns = async (queryParams = {}) => {
   try {
     const params = new URLSearchParams({
       ...queryParams,
-      apikey: process.env.CHANNEL_ENGINE_API_KEY,
+      apikey: `${CHANNEL_ENGINE_API_KEY}`,
     });
     const fullUrl = `${CHANNEL_ENGINE_BASE_URL}/returns?${params.toString()}`;
 
