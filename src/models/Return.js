@@ -17,22 +17,11 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
-    name: {
-      type: String,
-      trim: true,
-    },
-    address: {
-      type: String,
-      trim: true,
-    },
     channelId: {
       type: Number,
       index: true,
     },
-    phone: {
-      type: String,
-    },
-    placedOn: { 
+    placedOn: {
       type: Date,
     },
     acknowledgeDate: {
@@ -42,13 +31,13 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
-    platform: { 
+    platform: {
       type: String,
     },
-    products: [ 
+    products: [
       {
-        _id: false, 
-        merchantProductNo: {
+        _id: false,
+        productSkuCode: {
           type: String,
         },
         quantity: {
@@ -59,7 +48,7 @@ const ReturnSchema = new mongoose.Schema(
     ],
   },
   {
-    timestamps: true, 
+    timestamps: true,
     collection: 'Returns',
   }
 );
