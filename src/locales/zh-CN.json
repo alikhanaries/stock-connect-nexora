@@ -62,6 +62,7 @@
   "NEW_ORDERS_SYNCED_SUCCESSFULLY": "新订单已成功同步。",
   "INVALID_PERIOD": "无效的周期。请使用以下之一：",
   "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "订单对比获取成功。",
+  "CANCEL_ORDER": "订单取消成功。",
 
   "USERID_REQUIRED": "需要用户ID",
   "PRODUCT_ASSIGNED_SUCCESS": "产品分配成功",

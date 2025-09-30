@@ -132,7 +132,7 @@ export const merchantCancelById = async (req, res) => {
       return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, orderResponse.error);
     }
 
-    return Responses.successResponse(res, req.locale.SUCCESS, 200, orderResponse);
+    return Responses.successResponse(res, req.locale.CANCEL_ORDER, 200, orderResponse);
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);

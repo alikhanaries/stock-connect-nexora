@@ -59,6 +59,7 @@
   "NEW_ORDERS_SYNCED_SUCCESSFULLY": "new order(s) were synced successfully.",
   "INVALID_PERIOD": "Invalid period. Please use one of:",
   "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "order comparison fetched successfully.",
+  "CANCEL_ORDER": "Order cancelled successfully.",
 
   "USERID_REQUIRED": "User ID is required",
   "PRODUCT_ASSIGNED_SUCCESS": "Product assigned successfully",
