@@ -80,6 +80,10 @@ export const getSyncedOrders = async (req, res) => {
         ? `${dataSavedInDb.data.upsertedCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
         : req.locale.NO_NEW_ORDERS_FOUND;
 
+    const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW');
+
+    orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge);
+
     return Responses.successResponse(res, message, 200);
   } catch (error) {
     errorLog(error);
