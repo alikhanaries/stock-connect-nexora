@@ -116,24 +116,21 @@ export const getOrderComparison = async (req, res) => {
 
 export const merchantCancelById = async (req, res) => {
   try {
-    const { orderId, reason, reasonCode, specifics } = req.body;
-    // console.log('got the fields in controller');
+    const { orderId, reason, specifics } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
-    // console.log('controller - orderId validation');
-    if (!reason || !reasonCode) {
+
+    if (!reason) {
       return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
     }
-    // console.log('controller - reason and reasonCode checking');
-    const orderResponse = await orderService.cancelOrder(orderId, reason, reasonCode, specifics);
-    // console.log('controller - cancel order calling');
+
+    const orderResponse = await orderService.cancelOrder(orderId, reason, specifics);
 
     if (!orderResponse.success) {
       return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, orderResponse.error);
     }
-    // console.log('controller - success checking pass');
 
     return Responses.successResponse(res, req.locale.SUCCESS, 200, orderResponse);
   } catch (error) {
