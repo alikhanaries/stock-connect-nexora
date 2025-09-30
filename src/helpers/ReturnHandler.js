@@ -1,30 +1,6 @@
 /**
  * Helper functions for processing return data
- * Helper function to build a full name from customer data
  */
-export const formatName = (customer) => {
-  try {
-    if (!customer) return '';
-    const { FirstName = '', LastName = '' } = customer;
-    return `${FirstName} ${LastName}`.trim();
-  } catch (error) {
-    console.error('Error formatting name:', error.message);
-    return '';
-  }
-};
-
-/**
- * Helper function to build a single address string from address object
- */
-export const formatAddress = (address) => {
-  if (!address) return '';
-
-  const { Line1, Line2, Line3, City, Region, ZipCode, CountryName } = address;
-
-  const parts = [Line1, Line2, Line3, City, Region, ZipCode, CountryName];
-
-  return parts.filter(Boolean).join(', '); // Join parts that exist
-};
 
 export const sanitizeReturnData = (returnData) => {
   try {
@@ -36,11 +12,7 @@ export const sanitizeReturnData = (returnData) => {
       returnId: returnData.Id?.toString(),
       merchantReturnNo: returnData.MerchantReturnNo,
       orderId: returnData.OrderId?.toString(),
-      name: formatName(returnData.Customer),
-      address: formatAddress(returnData.Address),
       channelId: returnData.ChannelId,
-      phone: returnData.Customer?.Phone,
-      email: returnData.Email,
       totalPrice: returnData.TotalInclVat,
       placedOn: returnData.ReturnDate ? new Date(returnData.ReturnDate) : null,
       acknowledgeDate: returnData.AcknowledgedDate ? new Date(returnData.AcknowledgedDate) : null,
@@ -48,7 +20,7 @@ export const sanitizeReturnData = (returnData) => {
       platform: returnData.ChannelName,
       products: Array.isArray(returnData.Lines)
         ? returnData.Lines.map((line) => ({
-            merchantProductNo: line.MerchantProductNo,
+            productSkuCode: line.MerchantProductNo,
             quantity: line.Quantity || 0,
           }))
         : [],
@@ -102,70 +74,7 @@ export const validateReturnData = (returnData) => {
   }
 };
 
-/**
- * Builds database query filters and pagination options for return searches.
- */
-const buildReturnQuery = (filters = {}) => {
-  try {
-    const { status, channelId, returnId, dateFrom, dateTo, page, limit } = filters;
-    const query = {};
-
-    // Pagination logic
-    const currentPage = Math.max(1, parseInt(page, 10) || 1); //
-    const size = Math.max(1, parseInt(limit, 10) || 10); //
-    const skip = (currentPage - 1) * size;
-    const paginationOptions = { skip, limit: size };
-
-    // Filtering logic
-    if (status) {
-      query.status = status;
-    }
-
-    if (channelId) {
-      const parsedChannelId = parseInt(channelId, 10);
-      if (isNaN(parsedChannelId)) {
-        throw new Error('Invalid channel ID format');
-      }
-      query.channelId = parsedChannelId;
-    }
-
-    if (returnId) {
-      query.returnId = returnId;
-    }
-
-    if (dateFrom || dateTo) {
-      query.createdAt = {};
-      if (dateFrom) {
-        const fromDate = new Date(dateFrom);
-        if (isNaN(fromDate.getTime())) {
-          throw new Error('Invalid dateFrom format');
-        }
-        query.createdAt.$gte = fromDate;
-      }
-      if (dateTo) {
-        const toDate = new Date(dateTo);
-        if (isNaN(toDate.getTime())) {
-          throw new Error('Invalid dateTo format');
-        }
-        query.createdAt.$lte = toDate;
-      }
-    }
-
-    return { success: true, query, paginationOptions };
-  } catch (error) {
-    console.error('Error building return query:', error.message);
-    return {
-      success: false,
-      message: `Error building query: ${error.message}`,
-      error: error.message,
-    };
-  }
-};
-
 export default {
-  formatName,
-  formatAddress,
   sanitizeReturnData,
   validateReturnData,
-  buildReturnQuery,
 };

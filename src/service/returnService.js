@@ -14,7 +14,7 @@ export const getReturns = async (queryParams = {}) => {
       ...queryParams,
       apikey: `${CHANNEL_ENGINE_API_KEY}`,
     });
-    const fullUrl = `${CHANNEL_ENGINE_BASE_URL}/returns?${params.toString()}`;
+    const fullUrl = `${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`;
 
     const response = await fetch(fullUrl);
     const responseData = await response.json();
@@ -36,8 +36,7 @@ export const getReturns = async (queryParams = {}) => {
 };
 
 /**
- * Saves return data to the database with the new simplified structure.
- * @param {object} returnData - Raw return data from ChannelEngine.
+ * Saves return data to the database with simplified structure.
  */
 export const saveReturnToDatabase = async (returnData) => {
   try {
@@ -70,7 +69,7 @@ export const saveReturnToDatabase = async (returnData) => {
 };
 
 /**
- * Gets returns from the local database with pagination and filtering.
+ * Gets returns from the database with pagination and filtering.
  */
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
@@ -109,12 +108,12 @@ export const getReturnsFromDatabase = async (query = {}) => {
     }
 
     const projection = {
-      name: 1, // Corresponds to "customer" in your image
-      orderId: 1, // Corresponds to "orderID"
-      phone: 1, // Corresponds to "phoneNumber"
+      name: 1,
+      orderId: 1,
+      phone: 1,
       placedOn: 1,
       platform: 1,
-      products: 1, // This will return the array of products, which contains quantity
+      products: 1,
       status: 1,
     };
 
