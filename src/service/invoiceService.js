@@ -2,10 +2,11 @@ import { uploadImage } from './s3Service.js';
 import { config } from '#config/config.js';
 import { Buffer } from 'buffer';
 
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+
 // helper function
 export const fetchImageAsFile = async (merchantNo) => {
-  const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
-  // const INVOICE_URL = ``;
+  
 
   const response = await fetch(
     `${CHANNEL_ENGINE_BASE_URL}orders/${merchantNo}/invoice?apikey=${CHANNEL_ENGINE_API_KEY}`
