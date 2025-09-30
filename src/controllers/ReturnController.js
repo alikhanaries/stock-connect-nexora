@@ -9,19 +9,14 @@ export const getAllReturns = async (req, res) => {
     const result = await returnService.getReturnsFromDatabase(req.query);
 
     if (result.success === false) {
-      return Responses.failResponse(res, result.message, 400);
+      return Responses.failResponse(res, result.message || 'Failed to fetch returns', 400);
     }
 
-    const { data: returns, pagination } = result;
+    const { data: returns = [], pagination = {} } = result;
 
-    if (!returns || returns.length === 0) {
-      return Responses.successResponse(res, 'No returns found', 200, {
-        content: [],
-        ...pagination,
-      });
-    }
+    const message = returns.length > 0 ? 'Returns fetched successfully' : 'No returns found';
 
-    return Responses.successResponse(res, 'Returns fetched successfully', 200, {
+    return Responses.successResponse(res, message, 200, {
       content: returns,
       ...pagination,
     });
@@ -40,7 +35,7 @@ export const syncReturns = async (req, res) => {
     const result = await returnService.getReturns(req.query);
 
     if (!result.success) {
-      return Responses.failResponse(res, result.message, 400);
+      return Responses.failResponse(res, result.message || 'Failed to sync returns', 400);
     }
 
     const returnsCount = result.data?.Content?.length || 0;

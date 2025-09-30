@@ -5,9 +5,8 @@
 export const formatName = (customer) => {
   try {
     if (!customer) return '';
-    const firstName = customer.FirstName || '';
-    const lastName = customer.LastName || '';
-    return `${firstName} ${lastName}`.trim();
+    const { FirstName = '', LastName = '' } = customer;
+    return `${FirstName} ${LastName}`.trim();
   } catch (error) {
     console.error('Error formatting name:', error.message);
     return '';
@@ -18,22 +17,13 @@ export const formatName = (customer) => {
  * Helper function to build a single address string from address object
  */
 export const formatAddress = (address) => {
-  try {
-    if (!address) return '';
-    const parts = [
-      address.Line1,
-      address.Line2,
-      address.Line3,
-      address.City,
-      address.Region,
-      address.ZipCode,
-      address.CountryName,
-    ];
-    return parts.filter(Boolean).join(', '); // Join parts that exist
-  } catch (error) {
-    console.error('Error formatting address:', error.message);
-    return '';
-  }
+  if (!address) return '';
+
+  const { Line1, Line2, Line3, City, Region, ZipCode, CountryName } = address;
+
+  const parts = [Line1, Line2, Line3, City, Region, ZipCode, CountryName];
+
+  return parts.filter(Boolean).join(', '); // Join parts that exist
 };
 
 export const sanitizeReturnData = (returnData) => {

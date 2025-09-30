@@ -3,16 +3,18 @@ import Return from '#models/Return.js';
 import { sanitizeReturnData, validateReturnData } from '#helpers/ReturnHandler.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 
-const { CHANNEL_GET_RETURNS_URL } = config;
+const { CHANNEL_ENGINE_BASE_URL } = config;
 
 /**
  * Fetches returns from ChannelEngine and saves them to the database.
  */
-export const getReturns = async (queryParams) => {
+export const getReturns = async (queryParams = {}) => {
   try {
-    const params = new URLSearchParams(queryParams);
-    params.append('apikey', process.env.CHANNEL_ENGINE_API_KEY);
-    const fullUrl = `${CHANNEL_GET_RETURNS_URL}?${params.toString()}`;
+    const params = new URLSearchParams({
+      ...queryParams,
+      apikey: process.env.CHANNEL_ENGINE_API_KEY,
+    });
+    const fullUrl = `${CHANNEL_ENGINE_BASE_URL}/returns?${params.toString()}`;
 
     const response = await fetch(fullUrl);
     const responseData = await response.json();
@@ -70,19 +72,12 @@ export const saveReturnToDatabase = async (returnData) => {
 /**
  * Gets returns from the local database with pagination and filtering.
  */
-export const getReturnsFromDatabase = async (query) => {
+export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const {
-      page = 1,
-      size = 10,
-      status,
-      channelId,
-      returnId,
-      dateFrom,
-      dateTo,
-      sortOrder = 'asc',
-      sortBy = '_id',
-    } = query;
+    const { status, channelId, returnId, dateFrom, dateTo, sortOrder = 'asc', sortBy = '_id' } = query;
+
+    const page = parseInt(query.page, 10) || 1;
+    const size = parseInt(query.size, 10) || 10;
 
     const skip = (page - 1) * size;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -113,9 +108,20 @@ export const getReturnsFromDatabase = async (query) => {
       }
     }
 
+    const projection = {
+      name: 1, // Corresponds to "customer" in your image
+      orderId: 1, // Corresponds to "orderID"
+      phone: 1, // Corresponds to "phoneNumber"
+      placedOn: 1,
+      platform: 1,
+      products: 1, // This will return the array of products, which contains quantity
+      status: 1,
+    };
+
     const [totalReturns, returns] = await Promise.all([
       Return.countDocuments(filter),
-      Return.find(filter)
+      // Add the projection object as the second argument to find()
+      Return.find(filter, projection)
         .skip(skip)
         .limit(size)
         .sort({ [sortBy]: sortDirection })
@@ -123,6 +129,7 @@ export const getReturnsFromDatabase = async (query) => {
     ]);
 
     return {
+      success: true,
       data: returns,
       pagination: getPagination(totalReturns, page, size),
     };
