@@ -13,7 +13,11 @@ const ReturnSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    orderId: {
+    merchantOrderNo: {
+      type: String,
+      index: true,
+    },
+    channelOrderNo: {
       type: String,
       index: true,
     },
