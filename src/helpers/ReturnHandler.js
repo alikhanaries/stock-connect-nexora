@@ -11,9 +11,10 @@ export const sanitizeReturnData = (returnData) => {
     const sanitizedData = {
       returnId: returnData.Id?.toString(),
       merchantReturnNo: returnData.MerchantReturnNo,
-      orderId: returnData.OrderId?.toString(),
+      merchantOrderNo: returnData.MerchantOrderNo, // Store MerchantOrderNo for matching with orders
+      channelOrderNo: returnData.ChannelOrderNo, // Also store ChannelOrderNo if needed
       channelId: returnData.ChannelId,
-      totalPrice: returnData.TotalInclVat,
+      totalPrice: returnData.RefundInclVat || 0,
       placedOn: returnData.ReturnDate ? new Date(returnData.ReturnDate) : null,
       acknowledgeDate: returnData.AcknowledgedDate ? new Date(returnData.AcknowledgedDate) : null,
       status: returnData.Status,
@@ -26,15 +27,6 @@ export const sanitizeReturnData = (returnData) => {
         : [],
     };
 
-    // Validate required fields
-    if (!sanitizedData.returnId) {
-      throw new Error('Return ID is required');
-    }
-
-    if (!sanitizedData.merchantReturnNo) {
-      throw new Error('Merchant Return Number is required');
-    }
-
     return { success: true, data: sanitizedData };
   } catch (error) {
     console.error('Error sanitizing return data:', error.message);
@@ -46,35 +38,6 @@ export const sanitizeReturnData = (returnData) => {
   }
 };
 
-/**
- * Validates return data structure before processing
- */
-export const validateReturnData = (returnData) => {
-  try {
-    if (!returnData) {
-      return { success: false, message: 'Return data is required' };
-    }
-
-    if (!returnData.Id) {
-      return { success: false, message: 'Return ID is required' };
-    }
-
-    if (!returnData.MerchantReturnNo) {
-      return { success: false, message: 'Merchant Return Number is required' };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error validating return data:', error.message);
-    return {
-      success: false,
-      message: `Validation error: ${error.message}`,
-      error: error.message,
-    };
-  }
-};
-
 export default {
   sanitizeReturnData,
-  validateReturnData,
 };

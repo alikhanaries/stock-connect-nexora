@@ -12,12 +12,13 @@ export const getAllReturns = async (req, res) => {
       return Responses.failResponse(res, result.message || 'Failed to fetch returns', 400);
     }
 
-    const { data: returns = [], pagination = {} } = result;
+    const { data: returns = [], pagination = {}, appliedFilters = {} } = result;
 
     const message = returns.length > 0 ? 'Returns fetched successfully' : 'No returns found';
 
     return Responses.successResponse(res, message, 200, {
       content: returns,
+      appliedFilters,
       ...pagination,
     });
   } catch (error) {

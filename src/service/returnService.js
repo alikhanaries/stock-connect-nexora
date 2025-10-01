@@ -1,9 +1,84 @@
 import { config } from '#config/config.js';
 import Return from '#models/Return.js';
-import { sanitizeReturnData, validateReturnData } from '#helpers/ReturnHandler.js';
+import Order from '#models/Orders.js';
+import { sanitizeReturnData } from '#helpers/ReturnHandler.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+
+/**
+ * Formats return data with order information
+ */
+const formatReturnWithOrderData = async (returns) => {
+  if (!returns || returns.length === 0) {
+    return [];
+  }
+
+  // Get unique merchant order numbers from returns
+  const merchantOrderNos = [...new Set(returns.map((returnItem) => returnItem.merchantOrderNo).filter(Boolean))];
+
+  if (merchantOrderNos.length === 0) {
+    // No merchant order numbers found, return returns with empty order data
+    return returns.map((returnItem) => {
+      const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
+
+      return {
+        _id: returnItem._id,
+        orderID: null,
+        quantity: totalQuantity,
+        totalPrice: returnItem.totalPrice || null,
+        customer: null,
+        placedOn: returnItem.placedOn,
+        email: null,
+        phoneNumber: null,
+        status: returnItem.status,
+        platform: returnItem.platform,
+      };
+    });
+  }
+
+  // Find orders that match merchantOrderNo from returns
+  const orders = await Order.find(
+    { merchantOrderNo: { $in: merchantOrderNos } },
+    {
+      orderId: 1,
+      merchantOrderNo: 1,
+      totalInclVat: 1,
+      orderCustomer: 1, // Get the full orderCustomer object
+    }
+  ).lean();
+
+  // Create a map: merchantOrderNo -> Order data
+  const orderMap = {};
+  orders.forEach((order) => {
+    orderMap[order.merchantOrderNo] = order;
+  });
+
+  // Format returns with matched order data
+  return returns.map((returnItem) => {
+    const orderData = orderMap[returnItem.merchantOrderNo] || {};
+
+    const customerName = orderData.orderCustomer
+      ? `${orderData.orderCustomer.firstName || ''} ${orderData.orderCustomer.lastName || ''}`.trim()
+      : '';
+
+    // Calculate total quantity from products
+    const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
+
+    return {
+      _id: returnItem._id,
+      orderID: orderData.orderId || null,
+      quantity: totalQuantity,
+      totalPrice: orderData.totalInclVat || null,
+      customer: customerName || null,
+      placedOn: returnItem.placedOn,
+      email: orderData.orderCustomer?.email || null,
+      phoneNumber: orderData.orderCustomer?.phone || null,
+      status: returnItem.status,
+      platform: returnItem.platform,
+    };
+  });
+};
 
 /**
  * Fetches returns from ChannelEngine and saves them to the database.
@@ -14,19 +89,22 @@ export const getReturns = async (queryParams = {}) => {
       ...queryParams,
       apikey: `${CHANNEL_ENGINE_API_KEY}`,
     });
-    const fullUrl = `${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`;
 
-    const response = await fetch(fullUrl);
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
     const responseData = await response.json();
 
     if (!response.ok) {
       return { success: false, message: `ChannelEngine API error: ${response.status}`, error: responseData };
     }
 
-    // Save each return to the database using the new simplified format
-    if (responseData.Content && Array.isArray(responseData.Content)) {
-      const savePromises = responseData.Content.map((returnItem) => saveReturnToDatabase(returnItem));
-      await Promise.allSettled(savePromises);
+    const { Content = [] } = responseData;
+    if (!Content.length) return { success: true, data: responseData };
+
+    // Save returns in batches to reduce memory usage
+    const batchSize = 50;
+    for (let i = 0; i < Content.length; i += batchSize) {
+      const chunk = Content.slice(i, i + batchSize);
+      await Promise.allSettled(chunk.map(saveReturnToDatabase));
     }
 
     return { success: true, data: responseData };
@@ -40,12 +118,6 @@ export const getReturns = async (queryParams = {}) => {
  */
 export const saveReturnToDatabase = async (returnData) => {
   try {
-    // Validate return data first
-    const validation = validateReturnData(returnData);
-    if (!validation.success) {
-      return validation;
-    }
-
     // Sanitize return data using helper
     const sanitizationResult = sanitizeReturnData(returnData);
     if (!sanitizationResult.success) {
@@ -73,7 +145,7 @@ export const saveReturnToDatabase = async (returnData) => {
  */
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const { status, channelId, returnId, dateFrom, dateTo, sortOrder = 'asc', sortBy = '_id' } = query;
+    const { status, channelId, returnId, dateFrom, dateTo, sortOrder = 'asc', sortBy = 'returnId' } = query;
 
     const page = parseInt(query.page, 10) || 1;
     const size = parseInt(query.size, 10) || 10;
@@ -81,18 +153,23 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const skip = (page - 1) * size;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const filter = {};
+    const appliedFilters = {};
 
     // Build query filters
     if (status) {
       filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
+      appliedFilters.status = status;
     }
 
     if (channelId) {
-      filter.channelId = parseInt(channelId, 10);
+      const channelIdNum = parseInt(channelId, 10);
+      filter.channelId = channelIdNum;
+      appliedFilters.channelId = channelIdNum;
     }
 
     if (returnId) {
       filter.returnId = returnId;
+      appliedFilters.returnId = returnId;
     }
 
     // Date filter
@@ -101,25 +178,30 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
       if (dateFrom) {
         filter.createdAt.$gte = new Date(dateFrom);
+        appliedFilters.dateFrom = dateFrom;
       }
       if (dateTo) {
         filter.createdAt.$lte = new Date(dateTo);
+        appliedFilters.dateTo = dateTo;
       }
     }
 
     const projection = {
-      name: 1,
-      orderId: 1,
-      phone: 1,
+      returnId: 1,
+      merchantReturnNo: 1,
+      merchantOrderNo: 1,
+      channelOrderNo: 1,
+      channelId: 1,
       placedOn: 1,
+      acknowledgeDate: 1,
       platform: 1,
       products: 1,
       status: 1,
+      totalPrice: 1,
     };
 
     const [totalReturns, returns] = await Promise.all([
       Return.countDocuments(filter),
-      // Add the projection object as the second argument to find()
       Return.find(filter, projection)
         .skip(skip)
         .limit(size)
@@ -127,10 +209,14 @@ export const getReturnsFromDatabase = async (query = {}) => {
         .lean(),
     ]);
 
+    // Format returns with order data
+    const formattedReturns = await formatReturnWithOrderData(returns);
+
     return {
       success: true,
-      data: returns,
+      data: formattedReturns,
       pagination: getPagination(totalReturns, page, size),
+      appliedFilters,
     };
   } catch (err) {
     console.error('Error fetching returns:', err.message);
