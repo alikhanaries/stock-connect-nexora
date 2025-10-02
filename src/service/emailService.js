@@ -1,6 +1,7 @@
 import { defaultMailOptions, transporter, mailBranding } from '../config/emailConfig.js';
-import { importProductConstant } from '../constants/emailConstants.js';
-import { productImportTemplate } from '../emailTemplates/importProductTemplate.js';
+import { importProductConstant, resetPasswordConstants } from '../constants/emailConstants.js';
+import { productImportTemplate } from '../emailTemplates/productTemplate.js';
+import { resetPasswordTemplate } from '../emailTemplates/resetPasswordTemplate.js';
 
 const sendMail = async ({ to, subject, html }) => {
   try {
@@ -48,4 +49,25 @@ const importProductMailService = async ({ to, importStatus = 'SUCCESS', errorDet
   }
 };
 
-export default { sendMail, importProductMailService };
+const resetPasswordService = async ({ to, userName, resetUrl }) => {
+  try {
+    const mailOptions = {
+      to,
+      subject: `${mailBranding.tenantName} - ${resetPasswordConstants.RESET_PASSWORD_TITLE}`,
+      html: resetPasswordTemplate({
+        userName: userName || 'User',
+        resetUrl,
+        ...mailBranding,
+        ...resetPasswordConstants,
+      }),
+    };
+
+    const { success, messageId } = await sendMail(mailOptions);
+    return { success, messageId };
+  } catch (error) {
+    console.error('Mail error (Reset Password):', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+export default { importProductMailService, resetPasswordService };
