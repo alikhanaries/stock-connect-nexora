@@ -12,8 +12,9 @@ import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import mongoose from 'mongoose';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
+import { getMarketPlaceCategoryTrailsService, insertCategoryTrail } from '../service/categoryService.js';
 import Channel from '#models/Channel.js';
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
@@ -36,7 +37,7 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = { isDeleted: false };
+  const filter = { status: { $ne: 'removed' } };
   const appliedFilters = {};
 
   // Status filter
@@ -164,187 +165,201 @@ const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
 // 🔹 Push a single batch to CE
 const pushBatch = async (batch, index) => {
   return withRetry(async () => {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_KEY}`, {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(batch),
     });
-    if (!response.ok) {
-      throw new Error(`❌ CE API error (Batch ${index + 1}): ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`CE API error (Batch ${index + 1}): ${response.status}`);
     const data = await response.json();
-    return (
-      data.Content || {
-        AcceptedCount: 0,
-        RejectedCount: batch.length,
-        ProductMessages: [],
-      }
-    );
+    return data.Content;
   });
 };
 
-const pushProductsFromChannel = async (channelId) => {
-  const limit = pLimit(MAX_CONCURRENT);
-  const results = [];
-
-  // 1️⃣ Get assigned SKUs for this channel
+// 🔹 Validate products
+const validateProducts = async (channelId) => {
   const channelProducts = await UserChannelProducts.find({ channelId }, { 'skuList.skuCode': 1, _id: 0 }).lean();
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
+  if (!skuCodes.length) return { total: 0, validProducts: [], failed: 0, validatedProducts: [] };
+  const products = await Product.find({ productSkuCode: { $in: skuCodes }, status: 'active' }).lean();
+  const trailCache = new Map();
+  const validatedProducts = await Promise.all(
+    products.map(async (product) => {
+      if (!trailCache.has(product.categoryTrail)) {
+        trailCache.set(product.categoryTrail, await getMarketPlaceCategoryTrailsService(product.categoryTrail));
+      }
+      const trails = trailCache.get(product.categoryTrail);
+      const errors = [];
+      if (!trails?.marketPlaceTrailData?.length) {
+        errors.push(trails?.platformCategoryName || 'Missing category trail');
+      }
+      return {
+        ...product,
+        categoryTrailAmazon:
+          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Amazon.in (v3)')
+            ?.marketplaceCategoryTrails || null,
+        categoryTrailNoon:
+          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Noon V2')?.marketplaceCategoryTrails || null,
+        Errors: errors,
+        Warnings: [],
+      };
+    })
+  );
+  const bulkOps = validatedProducts
+    .filter((p) => p.categoryTrailAmazon || p.categoryTrailNoon)
+    .map((p) => ({
+      updateOne: {
+        filter: { _id: p._id },
+        update: {
+          $set: {
+            categoryTrailAmazon: p.categoryTrailAmazon,
+            categoryTrailNoon: p.categoryTrailNoon,
+          },
+        },
+      },
+    }));
 
-  if (!skuCodes.length) {
-    console.warn(`No products found for channel ${channelId}`);
-    return { AcceptedCount: 0, RejectedCount: 0, ProductMessages: [] };
+  if (bulkOps.length) {
+    await Product.bulkWrite(bulkOps, { ordered: false });
+  }
+  const validProducts = validatedProducts.filter((p) => p.Errors.length === 0);
+  const failed = validatedProducts.length - validProducts.length;
+  return { total: validatedProducts.length, validProducts, failed, validatedProducts };
+};
+
+//  Async push products to CE
+const pushProductsAsync = async (products) => {
+  const limit = pLimit(MAX_CONCURRENT);
+  const batches = [];
+
+  for (let i = 0; i < products.length; i += BATCH_SIZE) {
+    batches.push(products.slice(i, i + BATCH_SIZE));
   }
 
-  // 2️⃣ Fetch products by SKU in batches
-  async function* fetchBatchesByChannel() {
-    let skip = 0;
-    while (true) {
-      const products = await Product.find({
-        productSkuCode: { $in: skuCodes },
-        status: 'active',
-        isDeleted: { $ne: true },
-      })
-        .skip(skip)
-        .limit(BATCH_SIZE)
-        .lean();
-      if (!products.length) break;
-      yield products.map(mapProductToChannelEngine);
-      skip += BATCH_SIZE;
-    }
-  }
-
-  // 3️⃣ Push batches
-  let index = 0;
-  for await (const batch of fetchBatchesByChannel()) {
-    results.push(
+  await Promise.allSettled(
+    batches.map((batch, idx) =>
       limit(async () => {
         try {
-          return await pushBatch(batch, index);
+          return await pushBatch(batch.map(mapProductToChannelEngine), idx);
         } catch (err) {
-          console.error(`❌ Batch ${index + 1} failed:`, err);
+          console.error(`Batch ${idx} CE Push failed:`, err.message);
           return {
             AcceptedCount: 0,
             RejectedCount: batch.length,
-            ProductMessages: [],
+            ProductMessages: batch.map((p) => ({
+              Name: p.name,
+              Reference: p.productSkuCode,
+              Errors: [err.message],
+              Warnings: p.Warnings,
+            })),
           };
         }
       })
-    );
-    index++;
-  }
-
-  const settled = await Promise.allSettled(results);
-
-  // 4️⃣ Merge results
-  return settled.reduce(
-    (acc, r) => {
-      if (r.status === 'fulfilled') {
-        acc.AcceptedCount += r.value.AcceptedCount;
-        acc.RejectedCount += r.value.RejectedCount;
-        acc.ProductMessages.push(...r.value.ProductMessages);
-      }
-      return acc;
-    },
-    { AcceptedCount: 0, RejectedCount: 0, ProductMessages: [] }
+    )
   );
 };
 
-const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
+export const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   let batch = [];
   let insertedCount = 0;
   let updatedCount = 0;
   let invalidRowsCount = 0;
-  let errorRows = [];
-  const batchPromises = [];
+  const categoryTrails = new Set();
+  const rowPromises = [];
 
   await new Promise((resolve, reject) => {
-    let rowIndex = 1;
+    let rowIndex = 0;
 
     stream
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
-        try {
-          // 1. Skip empty rows
-          const isEmptyRow = Object.values(row).every(
-            (val) => val === null || val === undefined || String(val).trim() === ''
-          );
-          if (isEmptyRow) {
+
+        const rowPromise = (async () => {
+          try {
+            // skip empty rows
+            const isEmpty = Object.values(row).every((val) => val == null || String(val).trim() === '');
+            if (isEmpty) {
+              invalidRowsCount++;
+              return;
+            }
+
+            // map row
+            const product = await mapRowToProduct(row);
+            if (!product) {
+              invalidRowsCount++;
+              return;
+            }
+
+            if (product?.categoryTrail) {
+              categoryTrails.add(product.categoryTrail);
+            }
+
+            batch.push(product);
+
+            // flush batch if full
+            if (batch.length >= batchSize) {
+              const toProcess = [...batch];
+              batch = [];
+
+              const ops = toProcess.map((p) => ({
+                updateOne: {
+                  filter: { productSkuCode: p.productSkuCode },
+                  update: { $set: p },
+                  upsert: true,
+                },
+              }));
+
+              const res = await Product.bulkWrite(ops, { ordered: false });
+              insertedCount += res.upsertedCount || 0;
+              updatedCount += res.modifiedCount || 0;
+              console.log(`Batch upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
+            }
+          } catch (err) {
+            console.error(`Row ${rowIndex} error:`, err.message);
             invalidRowsCount++;
-            errorRows.push(rowIndex);
-            return;
           }
+        })();
 
-          // 2. Map row
-          const product = mapRowToProduct(row, rowIndex);
-
-          if (!product) {
-            invalidRowsCount++;
-            errorRows.push(rowIndex);
-            return;
-          }
-
-          batch.push(product);
-
-          // 3. If batch full → upsert
-          if (batch.length >= batchSize) {
-            const toProcess = [...batch];
-            batch = [];
-
-            const ops = toProcess.map((p) => ({
-              updateOne: {
-                filter: { productSkuCode: p.productSkuCode },
-                update: { $set: p },
-                upsert: true,
-              },
-            }));
-
-            batchPromises.push(
-              Product.bulkWrite(ops, { ordered: false })
-                .then((res) => {
-                  insertedCount += res.upsertedCount || 0;
-                  updatedCount += res.modifiedCount || 0;
-                  console.log(`Batch upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
-                })
-                .catch((err) => console.error('Batch upsert error:', err.message))
-            );
-          }
-        } catch (err) {
-          console.error(`Row ${rowIndex} error:`, err.message);
-          invalidRowsCount++;
-          errorRows.push(rowIndex);
-        }
+        rowPromises.push(rowPromise);
       })
       .on('end', async () => {
         try {
+          // wait for all rows to finish
+          await Promise.all(rowPromises);
+
+          // final flush
           if (batch.length) {
             const ops = batch.map((p) => ({
               updateOne: {
                 filter: { productSkuCode: p.productSkuCode },
-                update: { $set: p },
+                update: [
+                  {
+                    $set: {
+                      ...p,
+                      status: {
+                        $cond: [{ $eq: ['$status', 'removed'] }, 'active', { $ifNull: ['$status', 'active'] }],
+                      },
+                    },
+                  },
+                ],
                 upsert: true,
               },
             }));
 
-            batchPromises.push(
-              Product.bulkWrite(ops, { ordered: false })
-                .then((res) => {
-                  insertedCount += res.upsertedCount || 0;
-                  updatedCount += res.modifiedCount || 0;
-                  console.log(`Final upsert: inserted ${res.upsertedCount}, updated ${res.modifiedCount}`);
-                })
-                .catch((err) => console.error('Final batch upsert error:', err.message))
-            );
+            const res = await Product.bulkWrite(ops, { ordered: false });
+            insertedCount += res.upsertedCount || 0;
+            updatedCount += res.modifiedCount || 0;
           }
 
-          await Promise.all(batchPromises);
-
-          // Cleanup uploaded file if needed
+          // cleanup uploaded file
           if (deleteAfter && filePath) {
-            fs.unlinkSync(filePath);
+            try {
+              fs.unlinkSync(filePath);
+            } catch (err) {
+              console.warn('File cleanup failed:', err.message);
+            }
           }
 
           resolve();
@@ -355,13 +370,16 @@ const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
       .on('error', reject);
   });
 
+  // insert category trails
+  if (categoryTrails.size > 0) {
+    await insertCategoryTrail([...categoryTrails]);
+  }
   return {
     success: true,
     message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
     insertedCount,
     updatedCount,
     invalidRowsCount,
-    errorRows,
   };
 };
 
@@ -391,11 +409,7 @@ export const importProductsFromCsvFile = async (filePath) => {
 
 const deleteProduct = async (id, locale) => {
   try {
-    const result = await Product.findByIdAndUpdate(
-      id,
-      { isDeleted: true },
-      { new: true } // return updated doc
-    );
+    const result = await Product.findByIdAndUpdate(id, { status: 'removed' }, { new: true });
 
     if (!result) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
@@ -412,8 +426,8 @@ const deleteProduct = async (id, locale) => {
 const deleteMultipleProducts = async (ids, locale) => {
   try {
     const result = await Product.updateMany(
-      { _id: { $in: ids }, isDeleted: { $ne: true } },
-      { $set: { isDeleted: true } }
+      { _id: { $in: ids }, status: { $ne: 'removed' } },
+      { $set: { status: 'removed' } }
     );
 
     if (result.modifiedCount === 0) {
@@ -513,7 +527,7 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
     { $unwind: '$productDetails' },
   ];
 
-  const matchProductStage = { 'productDetails.isDeleted': false };
+  const matchProductStage = { 'productDetails.status': { $ne: 'removed' } };
 
   if (status) {
     const statusValue = status.toString().trim().toLowerCase();
@@ -598,7 +612,7 @@ const getUserUnassignedProducts = async (userId, channelId, query) => {
 
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
 
-  const filter = { isDeleted: false };
+  const filter = { status: { $ne: 'removed' } };
   const appliedFilters = {};
 
   if (assignedSkuCodes.length > 0) {
@@ -647,13 +661,38 @@ const getUserUnassignedProducts = async (userId, channelId, query) => {
   };
 };
 
+const removeProductsFromChannelEngine = async (skuCodes) => {
+  if (!skuCodes?.length) return;
+
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(skuCodes),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('ChannelEngine bulkdelete failed:', errorText);
+      return { success: false, message: errorText };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Error calling ChannelEngine:', err);
+    return { success: false, message: err.message };
+  }
+};
+
 const unlinkProductFromChannel = async (userId, channelId, ids, locale) => {
   try {
-    const objectIds = ids.map((id) => new mongoose.Types.ObjectId(id));
-    const products = await Product.find({ _id: { $in: objectIds } }, { productSkuCode: 1, marketPlace: 1 }).lean();
+    const products = await Product.find({ _id: { $in: ids } }, { productSkuCode: 1, marketPlace: 1 }).lean();
     if (!products.length) return 0;
     const skuCodes = products.map((p) => p.productSkuCode);
-
+    const ceResult = skuCodes.length > 0 ? await removeProductsFromChannelEngine(skuCodes) : { success: true };
+    if (!ceResult.success) {
+      return { success: false, message: 'ChannelEngine deletion failed', ceError: ceResult.message };
+    }
     const result = await UserChannelProducts.updateMany(
       { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId) },
       { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
@@ -707,5 +746,6 @@ export default {
   getUserUnassignedProducts,
   addProductsToUserChannel,
   unlinkProductFromChannel,
-  pushProductsFromChannel,
+  validateProducts,
+  pushProductsAsync,
 };

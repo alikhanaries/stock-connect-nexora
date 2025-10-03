@@ -1,19 +1,18 @@
-import { config } from '../config/config.js';
-import mongoose from 'mongoose';
-import Channel from '../models/Channel.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
+import mongoose from 'mongoose';
+import { config } from '../config/config.js';
+import Channel from '../models/Channel.js';
 import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
-import UserChannelProducts from '#models/UserChannelProducts.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
-const { CHANNEL_ENGINE_URL } = config;
-
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 /** FUNC - GET ALL CHANNEL LIST FROM CHANNEL PARTNER AND SAVE */
 const getAllChannelsFromChannelPartner = async () => {
   try {
     // GET THE LIST FROM CHANELPARTNER API
-    const response = await fetch(CHANNEL_ENGINE_URL);
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}channels?apiKey=${CHANNEL_ENGINE_API_KEY}`);
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
@@ -179,18 +178,34 @@ export const getAllUserChannels = async (userId, query) => {
         $lookup: {
           from: 'orders',
           let: { channelId: '$channelDetails.channelId' },
-          pipeline: [{ $match: { $expr: { $eq: ['$channelId', '$$channelId'] } } }, { $count: 'count' }],
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$channelId', '$$channelId'] }, { $eq: ['$userId', new ObjectId(userId)] }],
+                },
+              },
+            },
+            { $count: 'count' },
+          ],
           as: 'ordersInfo',
         },
       },
-      // Products count
+      // Products coun
       {
         $lookup: {
-          from: 'userchannelproducts', // :point_left: collection name (check in Mongo, likely lowercased plural)
+          from: 'userchannelproducts',
           let: { channelId: '$channelDetails.channelId' },
           pipeline: [
-            { $match: { $expr: { $eq: ['$channelId', '$$channelId'] }, isActive: true } },
-            { $project: { count: { $size: '$skuList' } } },
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$channelId', '$$channelId'] }, { $eq: ['$userId', new ObjectId(userId)] }],
+                },
+              },
+            },
+            { $match: { isActive: true } },
+            { $project: { count: { $size: { $ifNull: ['$skuList', []] } } } },
           ],
           as: 'productsInfo',
         },

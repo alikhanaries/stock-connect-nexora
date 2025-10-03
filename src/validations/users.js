@@ -43,8 +43,8 @@ export const getAllUsersValidator = validate(async (req) => {
       .optional(),
 
     role: z
-      .enum(['admin', 'super_admin'], {
-        errorMap: () => ({ message: "Role must be either 'admin' or 'super_admin'" }),
+      .enum(allowedRoles, {
+        errorMap: () => ({ message: `Role must be either ${allowedRoles.join(',')}` }),
       })
       .optional(),
   });
@@ -119,6 +119,27 @@ export const updateUserValidator = validate(async (req) => {
         message: `Invalid role. Please select one of: ${allowedRoles.join(', ')}`,
       })
       .optional(),
+
+    sellerId: z
+      .string()
+      .refine((val) => mongoose.Types.ObjectId.isValid(val), { message: 'Invalid ID format' })
+      .optional(),
+
+    password: z
+      .string()
+      .optional()
+      .transform((val) => (val?.trim() === '' ? undefined : val))
+      .refine(
+        (val) => {
+          if (val === undefined) {
+            return true;
+          }
+          return val.length >= 6;
+        },
+        {
+          message: 'Password must be at least 6 characters long',
+        }
+      ),
   });
   return updateUserSchema.parse(req.body);
 });

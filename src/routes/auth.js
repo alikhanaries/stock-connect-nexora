@@ -21,7 +21,7 @@ const allowedRoles = Object.values(USER_ROLES);
 const router = express.Router();
 
 router.post('/login', loginValidator, login);
-router.post('/register', authMiddleware, authorize(allowedRoles),registerValidator, register);
+router.post('/register', registerValidator, authMiddleware, authorize(allowedRoles), register);
 router.post('/refresh-token', refreshToken);
 router.post('/forget-password', forgetPasswordValidator, forgotPassword);
 router.post('/validate-reset-token', resetTokenValidator, validateResetToken);

@@ -22,7 +22,7 @@ const ProductSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'inactive'],
+      enum: ['active', 'inactive', 'removed'],
       default: 'active',
     },
     shippingCost: { type: Number, default: 0 },
@@ -31,14 +31,11 @@ const ProductSchema = new mongoose.Schema(
     isFrozen: { type: Boolean, default: false },
     categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
     categoryTrail: { type: String },
+    categoryTrailAmazon: { type: String, default: null },
+    categoryTrailNoon: { type: String, default: null },
     marketPlace: { type: String, trim: true },
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
-    isDeleted: {
-      type: Boolean,
-      default: false,
-      required: true,
-    },
   },
   { timestamps: true }
 );
