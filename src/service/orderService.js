@@ -35,8 +35,8 @@ const getAllOrders = async (query) => {
       toDate,
       fromDate,
       status,
-      sortOrder = 'asc',
-      sortBy = '_id',
+      sortOrder = 'desc',
+      sortBy = 'orderId',
       platform = '',
     } = query;
     const skip = (page - 1) * size;
@@ -91,6 +91,7 @@ const getAllOrders = async (query) => {
         .skip(skip)
         .limit(size)
         .sort({ [sortBy]: sortDirection })
+        .collation({ locale: 'en_US', numericOrdering: true })
         .select(SELECTED_FIELDS)
         .lean(),
     ]);
