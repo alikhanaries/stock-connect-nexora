@@ -1,5 +1,5 @@
 import express from 'express';
-import { checkLanguage } from '#middleware/index.js';
+import { checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
   getAllChannelsFromChannelPartner,
   getAllChannels,
@@ -31,18 +31,31 @@ router.get(
 // /* GET ALL CHANNEL LIST FROM DATABASE */
 router.get('/getAllChannels', getAllChannelsValidator, authMiddleware, getAllChannels);
 // /* SAVE USER CHANNELS  */
-router.put('/addChannels/:sellerId', saveUserChannelsValidator, authMiddleware, saveUserChannels);
+router.put('/addChannels/:sellerId', saveUserChannelsValidator, authMiddleware, verifySellerAccess, saveUserChannels);
 /* GET USER CHANNEL LIST */
 
 router.patch(
   '/update-user-channels-status/:sellerId',
   updateUserChannelsValidator,
   authMiddleware,
+  verifySellerAccess,
   updateUserChannelsStatus
 );
 
-router.delete('/remove-user-channel/:sellerId', removeUserChannelsValidator, authMiddleware, removeUserChannels);
+router.delete(
+  '/remove-user-channel/:sellerId',
+  removeUserChannelsValidator,
+  authMiddleware,
+  verifySellerAccess,
+  removeUserChannels
+);
 
-router.get('/getAllUserChannels/:userId/:sellerId', getAllUserChannelsValidator, authMiddleware, getAllUserChannels);
+router.get(
+  '/getAllUserChannels/:userId/:sellerId',
+  getAllUserChannelsValidator,
+  authMiddleware,
+  verifySellerAccess,
+  getAllUserChannels
+);
 
 export default router;

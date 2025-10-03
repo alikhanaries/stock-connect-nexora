@@ -46,7 +46,7 @@ export const saveUserChannels = async (req, res) => {
   try {
     const { ids } = req.body;
     const userId = req.user._id;
-    const { sellerId } = req.params;
+    const sellerId = req.sellerId;
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
@@ -70,7 +70,8 @@ export const saveUserChannels = async (req, res) => {
 /** FUNC - GET USER ALL CHANNEL LIST */
 export const getAllUserChannels = async (req, res) => {
   try {
-    const { userId, sellerId } = req.params;
+    const sellerId = req.sellerId;
+    const { userId } = req.params;
 
     // Ensure user exists
     const user = await User.findById(userId).lean();
@@ -106,7 +107,7 @@ export const getAllUserChannels = async (req, res) => {
 export const updateUserChannelsStatus = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { sellerId } = req.params;
+    const sellerId = req.sellerId;
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, req.locale.INVALID_IDS, 400);
@@ -131,7 +132,7 @@ export const removeUserChannels = async (req, res) => {
   try {
     const userId = req.user?._id;
     const { ids } = req.body;
-    const { sellerId } = req.params;
+    const sellerId = req.sellerId;
     if (!userId) {
       return Responses.failResponse(res, req.locale.USERID_REQUIRED, 400);
     }
