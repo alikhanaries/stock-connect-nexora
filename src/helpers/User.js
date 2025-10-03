@@ -40,26 +40,28 @@ const getSellerIds = async (id) => {
   return sellerIds;
 };
 
-const userAndSellerConnection = async (role, sellerId, newUserData) => {
+const userAndSellerConnection = async (role, sellerId, newUserId) => {
+  let finalSellerId;
+
   if (role === USER_ROLES.MASTER_ADMIN) {
-    const masterSellerId = await Seller.findOne({ type: SELLER_TYPE.BASE });
-    if (!masterSellerId) {
+    const masterSeller = await Seller.findOne({ type: SELLER_TYPE.BASE }).lean();
+
+    if (!masterSeller) {
       throw new Error('Cannot create MASTER_ADMIN: No "base" seller found in the database.');
     }
-    const userMasterSellerConnection = new UserSeller({
-      userId: newUserData._id,
-      sellerId: masterSellerId._id,
-    });
-    await userMasterSellerConnection.save();
-    return userMasterSellerConnection;
+
+    finalSellerId = masterSeller._id;
   } else {
-    const userSellerConnection = new UserSeller({
-      userId: newUserData._id,
-      sellerId: sellerId,
-    });
-    await userSellerConnection.save();
-    return userSellerConnection;
+    finalSellerId = sellerId;
   }
+
+  const userSellerConnection = new UserSeller({
+    userId: newUserId,
+    sellerId: finalSellerId,
+  });
+
+  await userSellerConnection.save();
+  return userSellerConnection;
 };
 
 const getUserConnectedToThisSellers = async (seller) => {
@@ -81,10 +83,27 @@ const getUserConnectedToThisSellers = async (seller) => {
   };
 };
 
+const sellerConnectionUpdate = async (userId, sellerId) => {
+  const connectionUpdate = await UserSeller.findOneAndUpdate(
+    { userId: userId },
+    { sellerId: sellerId },
+    { upsert: true, new: true }
+  );
+  return connectionUpdate;
+};
+
+const getConnectedSllerId = async (userId) => {
+  const doc = await UserSeller.findOne({ userId }, { sellerId: 1, _id: 0 }).lean();
+
+  return doc?.sellerId || null;
+};
+
 export default {
   userRoleBasedAccess,
   validateSellerAccessForCreator,
   getSellerIds,
   userAndSellerConnection,
   getUserConnectedToThisSellers,
+  sellerConnectionUpdate,
+  getConnectedSllerId,
 };

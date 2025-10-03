@@ -89,6 +89,7 @@ export const getStockConnectCategoriesService = async (searchTerm = '') => {
         categoryTrail: 1,
         marketplaceCategoryId: 1,
         marketPlaceId: 1,
+        isEligible: 1,
       }
     ).lean();
 
@@ -277,6 +278,7 @@ export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm 
         marketplaceCategoryId: 1,
         categoryTrail: 1,
         categorySlug: 1,
+        isEligible: 1,
       }
     ).lean();
     if (!allCategories.length) return [];
@@ -361,11 +363,13 @@ export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) 
   try {
     const platformCategoryData = await PlatformCategory.findOne(
       { platformCategoryTrail: productCategoryTrail },
-      { platformCategoryId: 1 }
+      { platformCategoryId: 1, categoryName: 1 }
     ).lean(); // lean() returns plain JS object
-
-    if (!platformCategoryData) return [];
-
+    if (!platformCategoryData)
+      return {
+        platformCategoryName: null,
+        marketPlaceTrailData: [],
+      };
     const marketPlaceTrailData = await CategoryMapping.aggregate([
       // Filter by platformCategoryId
       { $match: { platformCategoryId: platformCategoryData.platformCategoryId } },
@@ -420,7 +424,10 @@ export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) 
       },
     ]);
 
-    return marketPlaceTrailData;
+    return {
+      platformCategoryName: platformCategoryData?.categoryName,
+      marketPlaceTrailData,
+    };
   } catch (err) {
     console.error('Error in getMarketPlaceCategoryTrailsService:', err);
     throw new Error(err.message);

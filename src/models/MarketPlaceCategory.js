@@ -32,6 +32,12 @@ const MarketPlaceCategorySchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    isEligible: {
+      type: Boolean,
+      required: true,
+      index: true,
+      default: true,
+    },
   },
   { timestamps: true }
 );

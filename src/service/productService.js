@@ -12,9 +12,9 @@ import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import mongoose from 'mongoose';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
-import { insertCategoryTrail } from '../service/categoryService.js';
+import { getMarketPlaceCategoryTrailsService, insertCategoryTrail } from '../service/categoryService.js';
 import Channel from '#models/Channel.js';
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
@@ -165,89 +165,97 @@ const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
 // 🔹 Push a single batch to CE
 const pushBatch = async (batch, index) => {
   return withRetry(async () => {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_KEY}`, {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(batch),
     });
-    if (!response.ok) {
-      throw new Error(`❌ CE API error (Batch ${index + 1}): ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`CE API error (Batch ${index + 1}): ${response.status}`);
     const data = await response.json();
-    return (
-      data.Content || {
-        AcceptedCount: 0,
-        RejectedCount: batch.length,
-        ProductMessages: [],
-      }
-    );
+    return data.Content;
   });
 };
 
-const pushProductsFromChannel = async (channelId) => {
-  const limit = pLimit(MAX_CONCURRENT);
-  const results = [];
-
-  // 1️⃣ Get assigned SKUs for this channel
+// 🔹 Validate products
+const validateProducts = async (channelId) => {
   const channelProducts = await UserChannelProducts.find({ channelId }, { 'skuList.skuCode': 1, _id: 0 }).lean();
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
+  if (!skuCodes.length) return { total: 0, validProducts: [], failed: 0, validatedProducts: [] };
+  const products = await Product.find({ productSkuCode: { $in: skuCodes }, status: 'active' }).lean();
+  const trailCache = new Map();
+  const validatedProducts = await Promise.all(
+    products.map(async (product) => {
+      if (!trailCache.has(product.categoryTrail)) {
+        trailCache.set(product.categoryTrail, await getMarketPlaceCategoryTrailsService(product.categoryTrail));
+      }
+      const trails = trailCache.get(product.categoryTrail);
+      const errors = [];
+      if (!trails?.marketPlaceTrailData?.length) {
+        errors.push(trails?.platformCategoryName || 'Missing category trail');
+      }
+      return {
+        ...product,
+        categoryTrailAmazon:
+          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Amazon.in (v3)')
+            ?.marketplaceCategoryTrails || null,
+        categoryTrailNoon:
+          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Noon V2')?.marketplaceCategoryTrails || null,
+        Errors: errors,
+        Warnings: [],
+      };
+    })
+  );
+  const bulkOps = validatedProducts
+    .filter((p) => p.categoryTrailAmazon || p.categoryTrailNoon)
+    .map((p) => ({
+      updateOne: {
+        filter: { _id: p._id },
+        update: {
+          $set: {
+            categoryTrailAmazon: p.categoryTrailAmazon,
+            categoryTrailNoon: p.categoryTrailNoon,
+          },
+        },
+      },
+    }));
 
-  if (!skuCodes.length) {
-    console.warn(`No products found for channel ${channelId}`);
-    return { AcceptedCount: 0, RejectedCount: 0, ProductMessages: [] };
+  if (bulkOps.length) {
+    await Product.bulkWrite(bulkOps, { ordered: false });
+  }
+  const validProducts = validatedProducts.filter((p) => p.Errors.length === 0);
+  const failed = validatedProducts.length - validProducts.length;
+  return { total: validatedProducts.length, validProducts, failed, validatedProducts };
+};
+
+//  Async push products to CE
+const pushProductsAsync = async (products) => {
+  const limit = pLimit(MAX_CONCURRENT);
+  const batches = [];
+
+  for (let i = 0; i < products.length; i += BATCH_SIZE) {
+    batches.push(products.slice(i, i + BATCH_SIZE));
   }
 
-  // 2️⃣ Fetch products by SKU in batches
-  async function* fetchBatchesByChannel() {
-    let skip = 0;
-    while (true) {
-      const products = await Product.find({
-        productSkuCode: { $in: skuCodes },
-        status: 'active',
-      })
-        .skip(skip)
-        .limit(BATCH_SIZE)
-        .lean();
-      if (!products.length) break;
-      yield products.map(mapProductToChannelEngine);
-      skip += BATCH_SIZE;
-    }
-  }
-
-  // 3️⃣ Push batches
-  let index = 0;
-  for await (const batch of fetchBatchesByChannel()) {
-    results.push(
+  await Promise.allSettled(
+    batches.map((batch, idx) =>
       limit(async () => {
         try {
-          return await pushBatch(batch, index);
+          return await pushBatch(batch.map(mapProductToChannelEngine), idx);
         } catch (err) {
-          console.error(`❌ Batch ${index + 1} failed:`, err);
+          console.error(`Batch ${idx} CE Push failed:`, err.message);
           return {
             AcceptedCount: 0,
             RejectedCount: batch.length,
-            ProductMessages: [],
+            ProductMessages: batch.map((p) => ({
+              Name: p.name,
+              Reference: p.productSkuCode,
+              Errors: [err.message],
+              Warnings: p.Warnings,
+            })),
           };
         }
       })
-    );
-    index++;
-  }
-
-  const settled = await Promise.allSettled(results);
-
-  // 4️⃣ Merge results
-  return settled.reduce(
-    (acc, r) => {
-      if (r.status === 'fulfilled') {
-        acc.AcceptedCount += r.value.AcceptedCount;
-        acc.RejectedCount += r.value.RejectedCount;
-        acc.ProductMessages.push(...r.value.ProductMessages);
-      }
-      return acc;
-    },
-    { AcceptedCount: 0, RejectedCount: 0, ProductMessages: [] }
+    )
   );
 };
 
@@ -664,7 +672,7 @@ const removeProductsFromChannelEngine = async (skuCodes) => {
   if (!skuCodes?.length) return;
 
   try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_KEY}`, {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(skuCodes),
@@ -745,5 +753,6 @@ export default {
   getUserUnassignedProducts,
   addProductsToUserChannel,
   unlinkProductFromChannel,
-  pushProductsFromChannel,
+  validateProducts,
+  pushProductsAsync,
 };

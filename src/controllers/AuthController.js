@@ -6,6 +6,8 @@ import crypto from 'crypto';
 import Response from '#helpers/response.js';
 import userHelper from '#helpers/User.js';
 import { USER_ROLES } from '#constants/common.js';
+import emailService from '#service/emailService.js';
+import { config } from '#config/config.js';
 
 export const login = async (req, res) => {
   try {
@@ -82,9 +84,9 @@ export const register = async (req, res) => {
       return Response.failResponse(res, 'A sellerId is required for this user role.', 400);
     }
     if (role !== USER_ROLES.MASTER_ADMIN) {
-      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole, role);
+      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
 
-      if (!seller.success) {
+      if (seller && !seller.success) {
         if (!seller.notBaseSeller) {
           return Response.failResponse(res, 'You cannot assign the base seller to any user.', 400);
         }
@@ -108,7 +110,11 @@ export const register = async (req, res) => {
     });
     const newUserData = await newUser.save();
 
-    await userHelper.userAndSellerConnection(role, sellerId, newUserData);
+    if (!newUserData) {
+      return Response.failResponse(res, 'There is a issue while registring the user please try again', 400);
+    }
+
+    await userHelper.userAndSellerConnection(role, sellerId, newUserData._id);
 
     return Response.successResponse(res, 'User Registered successfully', 201);
   } catch (error) {
@@ -160,12 +166,23 @@ export const forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
     await user.save();
 
-    // In production, send `token` to user via email
+    // Send reset password email
+    const resetUrl = `${config.FRONTEND_URL}/account/reset-password?resetToken=${token}`;
+
+    const mailResult = await emailService.resetPasswordService({
+      to: email,
+      userName: user.firstName || 'User',
+      resetUrl,
+    });
+
+    if (!mailResult.success) {
+      return Response.failResponse(res, 'Failed to send reset email', 500);
+    }
     return Response.successResponse(res, 'email varification successful', 200, { token });
   } catch (error) {
     console.error('Forget password error', error);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return Response.errorResponse(res, error.message, 500);
   }
 };
 

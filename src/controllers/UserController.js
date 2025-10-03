@@ -5,21 +5,20 @@ import userHelper from '#helpers/User.js';
 import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
-import { ROLES_BASED_USER_FETCHING, SELLER_TYPE } from '#constants/common.js';
-import bcrypt from 'bcryptjs';
+import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
 export const getUserById = async (req, res) => {
   try {
-    const seller = req.seller;
-    const sellerIds = seller[0]._id.toString();
     const id = req.params.id || req.user?._id;
     const user = await User.findOne({ _id: id, isDeleted: false }).select(userSafeFields).lean();
     if (!user) {
       return res.status(404).json(formatErrorResponse(req.locale.USER_NOT_FOUND, 404));
     }
-    user.sellerId = sellerIds;
+    const sellerId = await userHelper.getConnectedSllerId(user._id);
+
+    user.sellerId = sellerId;
     res.status(200).json(formatSuccessResponse(user, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
     errorLog(err);
@@ -30,21 +29,59 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, email, phoneNumber, active, role, password } = req.body;
-    let updateFields = { firstName, lastName, email, phoneNumber, active, role, password };
-    // Hash password if provided
-    if (password) {
-      const salt = await bcrypt.default.genSalt(10);
-      updateFields.password = await bcrypt.default.hash(password, salt);
+    const creatorRole = req.user.role;
+    const creatorId = req.user._id;
+
+    const { firstName, lastName, email, phoneNumber, active, role, password, sellerId } = req.body;
+    const payload = { firstName, lastName, email, phoneNumber, active, role };
+
+    if (password && password.trim() !== '') {
+      if (password.length < 6) {
+        return Responses.failResponse(res, req.locale.PASSWORD_LENGTH, 400);
+      }
+      payload.password = password;
     }
-    const updatedUser = await User.findByIdAndUpdate(id, updateFields, { new: true }).select(userSafeFields);
+
+    const updatedUser = await User.findByIdAndUpdate(id, { $set: payload }, { new: true, runValidators: true }).select(
+      userSafeFields
+    );
+
     if (!updatedUser) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, updatedUser.toObject());
+
+    const userResponseObject = updatedUser.toObject();
+
+    if (sellerId) {
+      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
+      if (seller && !seller.success) {
+        if (!seller.notBaseSeller) {
+          return Responses.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
+        }
+        const message =
+          seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_DOES_NOT_EXISTS : req.locale.NOT_HAVE_ACCESS;
+        return Responses.failResponse(res, message, 403);
+      }
+
+      const sellerUpdataion = await userHelper.sellerConnectionUpdate(updatedUser._id, sellerId);
+
+      if (!sellerUpdataion) {
+        return Responses.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
+      }
+
+      userResponseObject.sellerId = sellerUpdataion.sellerId;
+    } else {
+      const sellerId = await userHelper.getConnectedSllerId(updatedUser._id);
+      if (!sellerId) {
+        return Responses.failResponse(res, req.locale.UNABLE_FETCH_SELLER, 400);
+      }
+      userResponseObject.sellerId = sellerId;
+    }
+    return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, userResponseObject);
   } catch (error) {
     errorLog(error);
-    return Responses.errorResponse(res, error);
+    console.error(error);
+    return Responses.errorResponse(res, error.message);
   }
 };
 

@@ -72,6 +72,7 @@
   "FAILED_FETCHING_SHEET": "فشل في جلب الملف",
   "GOOGLE_SHEET_URL_REQUIRED": "رابط Google Sheet مطلوب",
   "INVALID_URL": "رابط غير صالح",
+  "PRODUCT_PUSH_FAILED": "فشل دفع المنتج. تحقق من بريدك الإلكتروني لمعرفة التفاصيل.",
   "PRODUCT_NOT_EXITS": "بعض معرّفات المنتجات غير موجودة في مجموعة المنتجات",
   "INVALID_PRODUCTS": "لا توجد منتجات صالحة للمعرّفات المقدمة",
   "PRODUCT_UNLINK_FROM_CHANNEL_SUCCESS": "تم فصل المنتج عن القناة بنجاح",
@@ -97,5 +98,11 @@
   "PRODUCT_SKUCODE_MISSING": "رمز SKU للمنتج مفقود",
   "PRODUCT_PRICE_MISSING": "سعر المنتج مفقود",
   "PRODUCT_CATEGORYTRAIL_MISSING": "مسار فئة المنتج مفقود",
-  "EMPTY_ROW": "صف فارغ"
+  "EMPTY_ROW": "صف فارغ",
+  "UNABLE_FETCH_SELLER": "لا يوجد بائع مرتبط بهذا المستخدم",
+  "PASSWORD_LENGTH": "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل",
+  "ALL_PRODUCTS_PUSH_SUCCESS": "تم دفع جميع المنتجات بنجاح",
+  "ALL_PRODUCTS_PUSH_FAILED": "فشل دفع جميع المنتجات",
+  "PRODUCTS_PUSH_PARTIAL_SUCCESS": "تم دفع بعض المنتجات بنجاح، وفشلت بعض المنتجات",
+  "INVALID_CATEGORY_TRAIL": "مسار الفئة غير صالح"
 }
