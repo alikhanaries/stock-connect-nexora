@@ -12,15 +12,3 @@ Stack Trace: Error: Producwt is not defined
     at processParams (D:\PROJECTS\STOCKCONNECTBE\stock-connect-backend\node_modules\router\index.js:582:12)
     at next (D:\PROJECTS\STOCKCONNECTBE\stock-connect-backend\node_modules\router\index.js:291:5)
 
-Date: 23/09/2025, Time: 17:33
-Error: response is not defined
-Stack Trace: ReferenceError: response is not defined
-    at merchantCancelById (file:///D:/Projects/gravity-work/stock-connect-backend/src/controllers/OrderController.js:134:68)
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-
-Date: 24/09/2025, Time: 11:17
-Error: response is not defined
-Stack Trace: ReferenceError: response is not defined
-    at merchantCancelById (file:///D:/Projects/gravity-work/stock-connect-backend/src/controllers/OrderController.js:137:68)
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-
