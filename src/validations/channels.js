@@ -39,6 +39,10 @@ export const getAllUserChannelsValidator = validate(async (req) => {
       .string()
       .length(24, 'userId must be 24 characters long')
       .regex(/^[0-9a-fA-F]+$/, 'userId must be a hex string'),
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
   paramsSchema.parse(req.params);
   // validate query (for pagination + search)
@@ -57,7 +61,7 @@ export const getAllUserChannelsValidator = validate(async (req) => {
 
     search: z.string().optional(),
 
-    status: z.enum(['active', 'inactive', 'removed']).optional().default('active'),
+    status: z.enum(['active', 'inactive', 'removed']).optional(),
 
     sortBy: z.enum(['channelName', 'createdAt', 'ordersCount', 'productsCount']).optional().default('createdAt'),
 
@@ -101,8 +105,16 @@ export const getAllChannelsValidator = validate(async (req) => {
 // /* SAVE USER CHANNELS VALIDATOR */
 export const saveUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  // Body schema
 
+  const paramsSchema = z.object({
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
+  });
+  paramsSchema.parse(req.params);
+
+  // Body schema
   const bodySchema = z
     .object({
       ids: z
@@ -122,7 +134,13 @@ export const saveUserChannelsValidator = validate(async (req) => {
 // /* REMOVE USER CHANNELS VALIDATOR */
 export const removeUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-
+  const paramsSchema = z.object({
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
+  });
+  paramsSchema.parse(req.params);
   const bodySchema = z
     .object({
       ids: z
@@ -136,6 +154,35 @@ export const removeUserChannelsValidator = validate(async (req) => {
             .positive('Channel ID must be positive')
         )
         .nonempty('At least one channel id is required'),
+    })
+    .strict();
+
+  bodySchema.parse(req.body);
+});
+// /* UPDATE USER CHANNELS VALIDATOR */
+export const updateUserChannelsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const paramsSchema = z.object({
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
+  });
+  paramsSchema.parse(req.params);
+  const bodySchema = z
+    .object({
+      ids: z
+        .array(
+          z
+            .number({
+              required_error: 'Channel ID is required',
+              invalid_type_error: 'Channel ID must be a number',
+            })
+            .int('Channel ID must be an integer')
+            .positive('Channel ID must be positive')
+        )
+        .nonempty('At least one channel id is required'),
+      status: z.enum(['active', 'inactive'], { required_error: 'Status is required' }),
     })
     .strict();
 
