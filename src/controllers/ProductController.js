@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService from '#service/productService.js';
+import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
@@ -53,15 +54,20 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     if (!exportUrl) {
       return failResponse(res, req.locale.INVALID_URL, 500);
     }
-
     // Send immediate response to client
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
-
     // Process file in background (async, no await here)
     productService
-      .importProductsFromGoogleSheet(exportUrl)
+      .importProductsFromGoogleSheet(exportUrl, req.locale)
       .then((result) => {
         console.log('CSV processing completed:', result);
+        // Send email notification after processing
+        emailService.importProductMailService({
+          to: req.user.email,
+          userName: req.user.firstName,
+          importStatus: result.success ? 'SUCCESS' : 'FAILED',
+          errorDetails: result.errorDetails || [],
+        });
         // Optionally update DB with processing status
       })
       .catch((error) => {
@@ -80,12 +86,18 @@ export const importProductsFromCsvFile = async (req, res) => {
   try {
     // Send immediate response to client
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
-
     // Process file in background (async, no await here)
     productService
-      .importProductsFromCsvFile(req.file.path)
+      .importProductsFromCsvFile(req.file.path, req.locale)
       .then((result) => {
-        console.log('CSV processing completed:', result);
+        console.log('CSV processing completed:', result.errorDetails);
+        // Send email notification after processing
+        emailService.importProductMailService({
+          to: req.user.email,
+          userName: req.user.name,
+          importStatus: result.success ? 'SUCCESS' : 'FAILED',
+          errorDetails: result.errorDetails || [],
+        });
         // Optionally update DB with processing status
       })
       .catch((error) => {
