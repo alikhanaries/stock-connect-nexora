@@ -212,12 +212,13 @@ export const addProductsToUserChannel = async (req, res) => {
     const { ids } = req.body;
     const { id } = req.params;
     const userId = req.user._id;
+    const sellerId = req.sellerId;
     // Check if user exists
     const user = await User.findById(userId);
     if (!user) {
       return failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    const result = await productService.addProductsToUserChannel(userId, id, ids, req.locale);
+    const result = await productService.addProductsToUserChannel(userId, sellerId, id, ids, req.locale);
 
     if (!result.success) {
       return failResponse(res, result?.message, 404);
@@ -234,7 +235,7 @@ export const addProductsToUserChannel = async (req, res) => {
 export const getUserChannelProducts = async (req, res) => {
   try {
     const userId = req.user?._id;
-
+    const sellerId = req.sellerId;
     if (!userId) {
       return failResponse(res, 'User ID is required', 400);
     }
@@ -244,6 +245,7 @@ export const getUserChannelProducts = async (req, res) => {
     }
     const { channel, products, pagination, appliedFilters } = await productService.getUserChannelProducts(
       userId,
+      sellerId,
       channelId,
       req.query
     );
@@ -268,11 +270,13 @@ export const getUserUnassignedProducts = async (req, res) => {
   try {
     const { channelId } = req.params;
     const userId = req.user?._id;
+    const sellerId = req.sellerId;
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
     const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
       userId,
+      sellerId,
       channelId,
       req.query
     );
@@ -295,6 +299,7 @@ export const unlinkProductFromChannel = async (req, res) => {
   try {
     const userId = req.user._id;
     const { channelId } = req.params;
+    const sellerId = req.sellerId;
     const { ids } = req.body;
     if (!userId) {
       return errorResponse(res, { message: req.locale.USERID_REQUIRED }, 400);
@@ -305,7 +310,7 @@ export const unlinkProductFromChannel = async (req, res) => {
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, req.locale.PRODUCTIDS_REQUIRED, 400);
     }
-    const updatedCount = await productService.unlinkProductFromChannel(userId, channelId, ids);
+    const updatedCount = await productService.unlinkProductFromChannel(userId, sellerId, channelId, ids);
     if (updatedCount === 0) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND, 404);
     }
