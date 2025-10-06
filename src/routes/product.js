@@ -31,7 +31,6 @@ import {
   updateProductStatusValidator,
 } from '#validations/products.js';
 import upload from '#helpers/FileHandler.js'; // the above multer setup
-import { canAccessSeller } from '#middleware/sellerMiddleware.js';
 
 const productsRouter = express.Router();
 
@@ -40,7 +39,7 @@ const productsRouter = express.Router();
 /* DELETE PRODUCT BY ID*/
 productsRouter.delete('/deleteProduct/:id', deleteProductValidator, checkLanguage, authMiddleware, deleteProduct);
 
-productsRouter.get('/:sellerId', getProductsValidator, checkLanguage, authMiddleware, canAccessSeller, getProducts);
+productsRouter.get('/:sellerId', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 productsRouter.post(
@@ -48,6 +47,7 @@ productsRouter.post(
   importProductsFromGoogleSheetValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   importProductsFromGoogleSheet
 );
 
@@ -57,7 +57,7 @@ productsRouter.post(
   importProductsFromCsvFileValidator,
   checkLanguage,
   authMiddleware,
-  canAccessSeller,
+  verifySellerAccess,
   upload.single('file'),
   validateFile,
   importProductsFromCsvFile
