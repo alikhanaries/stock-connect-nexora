@@ -6,6 +6,8 @@ import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
 import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
+import UserSeller from '#models/UserSeller.js';
+import Seller from '#models/Seller.js';
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -97,7 +99,7 @@ export const getAllUsers = async (req, res) => {
 
     const sellerConnectionWithUsers = await userHelper.getUserConnectedToThisSellers(seller);
 
-    const { role, active, search, page, size = 10 } = req.query;
+    const { role, active, search, page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
 
     const pageNum = parseInt(page);
     const limit = parseInt(size);
@@ -125,11 +127,67 @@ export const getAllUsers = async (req, res) => {
       const searchRegex = new RegExp(search, 'i');
       filter.$or = [{ firstName: searchRegex }, { lastName: searchRegex }];
     }
-    const [totalElements, users] = await Promise.all([
-      User.countDocuments(filter),
-      User.find(filter).skip(skip).limit(size).select(userSafeFields).lean(),
-    ]);
-    const pagination = getPagination(totalElements, pageNum, limit);
+
+    const sortDirection = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
+    const sort = { [sortBy]: sortDirection };
+    const aggregationPipeline = [
+      { $match: filter },
+
+      { $sort: sort },
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+
+            {
+              $lookup: {
+                from: UserSeller.collection.name,
+                localField: '_id',
+                foreignField: 'userId',
+                as: 'sellerConnection',
+              },
+            },
+
+            { $unwind: { path: '$sellerConnection', preserveNullAndEmptyArrays: true } },
+
+            {
+              $lookup: {
+                from: Seller.collection.name,
+                localField: 'sellerConnection.sellerId',
+                foreignField: '_id',
+                as: 'sellerDetails',
+              },
+            },
+
+            { $unwind: { path: '$sellerDetails', preserveNullAndEmptyArrays: true } },
+
+            {
+              $project: {
+                _id: 1,
+                firstName: 1,
+                lastName: 1,
+                email: 1,
+                role: 1,
+                active: 1,
+                createdAt: 1,
+                updatedAt: 1,
+                lastLogin: 1,
+                sellerId: '$sellerConnection.sellerId',
+                sellerName: '$sellerDetails.name',
+              },
+            },
+          ],
+          metadata: [{ $count: 'total' }],
+        },
+      },
+    ];
+    const results = await User.aggregate(aggregationPipeline);
+
+    const users = results[0].data;
+    const total = results[0].metadata[0] ? results[0].metadata[0].total : 0;
+
+    const pagination = getPagination(total, pageNum, limit);
     const response = {
       content: users,
       appliedFilters: {
