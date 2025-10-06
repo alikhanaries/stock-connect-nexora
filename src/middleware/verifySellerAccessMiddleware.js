@@ -9,7 +9,7 @@ export const verifySellerAccess = async (req, res, next) => {
     const { sellerId } = req.params;
     req.sellerId = new mongoose.Types.ObjectId(sellerId);
 
-    if (user.role === USER_ROLES.MASTER_ADMIN) {
+    if (user?.role === USER_ROLES.MASTER_ADMIN) {
       return next();
     }
 
