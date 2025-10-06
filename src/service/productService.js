@@ -447,7 +447,7 @@ const deleteMultipleProducts = async (ids, locale) => {
 const addProductsToUserChannel = async (userId, sellerId, channelId, productIds, locale) => {
   try {
     const products = await Product.find(
-      { _id: { $in: productIds }, sellerId },
+      { _id: { $in: productIds } },
       { productSkuId: 1, productSkuCode: 1, marketPlace: 1 }
     ).lean();
 
