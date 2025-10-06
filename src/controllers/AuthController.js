@@ -5,8 +5,9 @@ import { errorLog } from '#middleware/index.js';
 import crypto from 'crypto';
 import Response from '#helpers/response.js';
 import userHelper from '#helpers/User.js';
-import UserSeller from '#models/UserSeller.js';
 import { USER_ROLES } from '#constants/common.js';
+import emailService from '#service/emailService.js';
+import { config } from '#config/config.js';
 
 export const login = async (req, res) => {
   try {
@@ -19,21 +20,24 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email, isDeleted: false, active: true }).select('+password');
 
     if (!user) {
-      return Response.failResponse(res, 'No account exists with this email. Please register to continue.', 400);
+      return Response.failResponse(res, 'No account exists with this email. Please register to continue.', 404);
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return Response.failResponse(res, 'Invalid credentials', 400);
+      return Response.failResponse(res, 'Invalid credentials', 401);
     }
 
-    let sellerId = null;
-
-    if (user.role !== USER_ROLES.MASTER_ADMIN) {
-      sellerId = await userHelper.getSellerId(user._id);
+    const sellerIds = (await userHelper.getSellerIds(user._id.toString())) || [];
+    if (sellerIds.length === 0) {
+      return Response.failResponse(
+        res,
+        'You are not connected to any seller. Please connect with a seller to continue.',
+        400
+      );
     }
     // Create JWT payload
-    const tokenResponse = generateTokenResponse(user, user.role, sellerId);
+    const tokenResponse = generateTokenResponse(user, user.role, sellerIds);
 
     if (!tokenResponse) {
       return Response.failResponse(res, 'Error generating token', 500);
@@ -43,7 +47,7 @@ export const login = async (req, res) => {
 
     return Response.successResponse(res, 'Login successful', 200, tokenResponse);
   } catch (error) {
-    console.error('userLogin Error:', error);
+    console.error('user login Error:', error);
     errorLog(error);
     return Response.errorResponse(res, error, 500);
   }
@@ -76,16 +80,22 @@ export const register = async (req, res) => {
     if (existingUser) {
       return Response.failResponse(res, 'A user with this email or phone number already exists.', 409);
     }
-    if (role != USER_ROLES.MASTER_ADMIN && !sellerId) {
+    if (role !== USER_ROLES.MASTER_ADMIN && !sellerId) {
       return Response.failResponse(res, 'A sellerId is required for this user role.', 400);
     }
-    const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
-    const massage =
-      seller.role === USER_ROLES.MASTER_ADMIN
-        ? 'the Seller you have provided does not exists.'
-        : 'You do not have access to this seller.';
-    if (!seller.success) {
-      return Response.failResponse(res, massage, 403);
+    if (role !== USER_ROLES.MASTER_ADMIN) {
+      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
+
+      if (seller && !seller.success) {
+        if (!seller.notBaseSeller) {
+          return Response.failResponse(res, 'You cannot assign the base seller to any user.', 400);
+        }
+        const message =
+          seller.role === USER_ROLES.MASTER_ADMIN
+            ? 'The seller you have provided does not exist.'
+            : 'You do not have access to this seller.';
+        return Response.failResponse(res, message, 403);
+      }
     }
 
     const newUser = new User({
@@ -100,18 +110,17 @@ export const register = async (req, res) => {
     });
     const newUserData = await newUser.save();
 
-    if (role !== USER_ROLES.MASTER_ADMIN) {
-      const userSellerConnection = new UserSeller({
-        userId: newUserData._id,
-        sellerId: sellerId,
-      });
-      await userSellerConnection.save();
+    if (!newUserData) {
+      return Response.failResponse(res, 'There is a issue while registring the user please try again', 400);
     }
+
+    await userHelper.userAndSellerConnection(role, sellerId, newUserData._id);
 
     return Response.successResponse(res, 'User Registered successfully', 201);
   } catch (error) {
+    console.error('User register ...', error.message);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return Response.errorResponse(res, error.message, 500);
   }
 };
 
@@ -157,12 +166,23 @@ export const forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
     await user.save();
 
-    // In production, send `token` to user via email
+    // Send reset password email
+    const resetUrl = `${config.FRONTEND_URL}/account/reset-password?resetToken=${token}`;
+
+    const mailResult = await emailService.resetPasswordService({
+      to: email,
+      userName: user.firstName || 'User',
+      resetUrl,
+    });
+
+    if (!mailResult.success) {
+      return Response.failResponse(res, 'Failed to send reset email', 500);
+    }
     return Response.successResponse(res, 'email varification successful', 200, { token });
   } catch (error) {
     console.error('Forget password error', error);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return Response.errorResponse(res, error.message, 500);
   }
 };
 

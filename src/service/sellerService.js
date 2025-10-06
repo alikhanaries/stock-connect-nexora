@@ -6,6 +6,11 @@ import UserSeller from '#models/UserSeller.js';
 const createSeller = async (sellerData) => {
   const { name } = sellerData;
 
+  const existingSeller = await Seller.findOne({ name });
+  if (existingSeller) {
+    return { isExist: true, data: null };
+  }
+
   const seller = new Seller({ name });
   await seller.save();
   return {
@@ -19,7 +24,10 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
 
   const appliedFilters = {};
 
-  let filter = { isDeleted: false };
+  let filter = {
+    isDeleted: false,
+    type: 'normal',
+  };
   if (search) {
     const searchRegex = new RegExp(search, 'i');
     filter.name = searchRegex;
@@ -77,11 +85,12 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
 };
 
 const updateSeller = async (id, name, statusValue) => {
-  const updatedSeller = await Seller.findOneAndUpdate(
-    { _id: id, isDeleted: false },
-    { name, status: statusValue },
-    { new: true }
-  ).lean();
+  const updateData = {};
+  if (name) updateData.name = name;
+  if (statusValue) updateData.status = statusValue;
+
+  if (Object.keys(updateData).length === 0) return null;
+  const updatedSeller = await Seller.findOneAndUpdate({ _id: id, isDeleted: false }, updateData, { new: true }).lean();
   return updatedSeller;
 };
 

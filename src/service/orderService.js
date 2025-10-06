@@ -4,7 +4,7 @@ import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/
 import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 import { randomBytes } from 'node:crypto';
-const { CHANNEL_ORDER_URL, CHANNEL_ENGINE_BASE_URL } = config;
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -36,8 +36,8 @@ const getAllOrders = async (query) => {
       toDate,
       fromDate,
       status,
-      sortOrder = 'asc',
-      sortBy = '_id',
+      sortOrder = 'desc',
+      sortBy = 'orderId',
       platform = '',
     } = query;
     const skip = (page - 1) * size;
@@ -92,6 +92,7 @@ const getAllOrders = async (query) => {
         .skip(skip)
         .limit(size)
         .sort({ [sortBy]: sortDirection })
+        .collation({ locale: 'en_US', numericOrdering: true })
         .select(SELECTED_FIELDS)
         .lean(),
     ]);
@@ -143,8 +144,7 @@ const processOrders = async (orders) => {
 
 export async function getNewOrders() {
   try {
-    const response = await fetch(CHANNEL_ORDER_URL);
-
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}`);
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }

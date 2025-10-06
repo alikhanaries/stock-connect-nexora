@@ -91,9 +91,8 @@ export const getProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         })
         .optional(),
-      isGridView: z.boolean().optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -218,7 +217,7 @@ export const getTopSellingProductValidator = validate(async (req) => {
 
       channel: z.string().optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -320,7 +319,7 @@ export const getUserChannelProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         }),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -390,7 +389,7 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         }),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });

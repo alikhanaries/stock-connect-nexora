@@ -66,7 +66,7 @@ export const getAllOrdersValidator = validate(async (req) => {
       .refine((val) => !val || ['asc', 'desc'].includes(val.toLowerCase()), {
         message: 'sortOrder must be either "asc" or "desc"',
       })
-      .transform((val) => (val ? val.toLowerCase() : 'asc')),
+      .transform((val) => (val ? val.toLowerCase() : 'desc')),
 
     sortBy: z
       .string()
@@ -74,7 +74,7 @@ export const getAllOrdersValidator = validate(async (req) => {
       .refine((val) => !val || val.trim().length > 0, {
         message: 'sortBy cannot be empty',
       })
-      .transform((val) => (val ? val : '_id')),
+      .transform((val) => (val ? val : 'orderId')),
 
     platform: z
       .string()

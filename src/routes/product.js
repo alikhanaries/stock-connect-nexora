@@ -95,6 +95,20 @@ productsRouter.put(
   addProductsToUserChannel
 );
 
+productsRouter.get('/user-channel-products/:channelId', checkLanguage, authMiddleware, getUserChannelProducts);
+productsRouter.get(
+  '/get-user-unassigned-products/:channelId',
+  checkLanguage,
+  authMiddleware,
+  getUserUnassignedProducts
+);
+productsRouter.delete(
+  '/unlink-product-from-channel/:channelId',
+  checkLanguage,
+  authMiddleware,
+  unlinkProductFromChannel
+);
+
 productsRouter.get(
   '/user-channel-products/:channelId',
   getUserChannelProductsValidator,
