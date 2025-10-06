@@ -58,7 +58,8 @@
   "ORDER_COMPARISON_CALC_FAILED": "Sipariş karşılaştırma verileri hesaplanamadı",
   "NEW_ORDERS_SYNCED_SUCCESSFULLY": "Yeni siparişler başarıyla senkronize edildi",
   "INVALID_PERIOD": "Geçersiz dönem. Lütfen şunlardan birini kullanın:",
-  "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "Sipariş karşılaştırması başarıyla alındı",
+  "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "Sipariş karşılaştırması başarıyla getirildi.",
+  "CANCEL_ORDER": "Sipariş başarıyla iptal edildi.",
 
   "USERID_REQUIRED": "Kullanıcı ID gerekli",
   "PRODUCT_ASSIGNED_SUCCESS": "Ürün başarıyla atandı",

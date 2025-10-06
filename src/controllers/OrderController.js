@@ -116,25 +116,23 @@ export const getOrderComparison = async (req, res) => {
 
 export const merchantCancelById = async (req, res) => {
   try {
-    const { orderId, reason, reasonCode, specifics } = req.body;
+    const { orderId, reason, specifics } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
 
-    if (!reason || !reasonCode) {
+    if (!reason) {
       return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
     }
 
-    // Call service to cancel order
-    const orderResponse = await orderService.cancelOrder(orderId, reason, reasonCode, specifics);
+    const orderResponse = await orderService.cancelOrder(orderId, reason, specifics);
 
-    // Check Response status
     if (!orderResponse.success) {
       return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, orderResponse.error);
     }
 
-    return Responses.successResponse(res, req.locale.SUCCESS, 200, orderResponse);
+    return Responses.successResponse(res, req.locale.CANCEL_ORDER, 200, orderResponse);
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);

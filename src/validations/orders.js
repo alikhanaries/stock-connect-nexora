@@ -137,7 +137,6 @@ export const merchantCancelIdValidator = validate(async (req) => {
       .min(15, 'Reason should be long enough to have a meaning.')
       .max(500, 'Reason must be within 500 characters.')
       .regex(/^[a-zA-Z0-9\s.,:'"]+$/, 'Reason must be a valid statement.'),
-    reasonCode: z.string(),
     specifics: z.array(orderLineSchema).optional().default([]),
   });
   merchantCancelByIdSchema.parse(req.body);
