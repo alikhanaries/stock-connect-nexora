@@ -20,4 +20,6 @@ export const config = {
   MAIL_USER: process.env.MAIL_USER,
   MAIL_PASS: process.env.MAIL_PASS,
   FROM_ADDRESS: process.env.FROM_ADDRESS,
+  LOGO_URL: process.env.LOGO_URL,
+  FRONTEND_URL: process.env.FRONTEND_URL,
 };

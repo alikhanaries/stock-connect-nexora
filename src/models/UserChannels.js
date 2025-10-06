@@ -23,6 +23,11 @@ const channelSubSchema = new mongoose.Schema(
 // Main schema
 const userChannelsSchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
+      required: true,
+    },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
