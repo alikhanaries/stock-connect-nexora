@@ -380,7 +380,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   // insert category trails
   if (categoryTrails.size > 0) {
-    await insertCategoryTrail([...categoryTrails]);
+    await insertCategoryTrail([...categoryTrails, sellerId]);
   }
   return {
     success: true,
