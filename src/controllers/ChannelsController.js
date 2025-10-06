@@ -46,6 +46,7 @@ export const saveUserChannels = async (req, res) => {
   try {
     const { ids } = req.body;
     const userId = req.user._id;
+    const sellerId = req.sellerId;
     // Ensure user exists
     const user = await User.findById(userId);
     if (!user) {
@@ -53,7 +54,7 @@ export const saveUserChannels = async (req, res) => {
     }
 
     // Call the service to save channel data
-    const result = await channelService.saveUserChannels(userId, ids);
+    const result = await channelService.saveUserChannels(userId, sellerId, ids);
 
     if (!result.success) {
       return Responses.failResponse(res, result.message || req.locale.CHANNEL_SAVE_FAILED, 500);
@@ -69,6 +70,7 @@ export const saveUserChannels = async (req, res) => {
 /** FUNC - GET USER ALL CHANNEL LIST */
 export const getAllUserChannels = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
     const { userId } = req.params;
 
     // Ensure user exists
@@ -79,6 +81,7 @@ export const getAllUserChannels = async (req, res) => {
 
     const { channelData, pagination, appliedFilters, success } = await channelService.getAllUserChannels(
       userId,
+      sellerId,
       req.query
     );
 
@@ -104,6 +107,7 @@ export const getAllUserChannels = async (req, res) => {
 export const updateUserChannelsStatus = async (req, res) => {
   try {
     const userId = req.user._id;
+    const sellerId = req.sellerId;
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, req.locale.INVALID_IDS, 400);
@@ -111,7 +115,7 @@ export const updateUserChannelsStatus = async (req, res) => {
     if (!VALID_STATUSES.includes(status)) {
       return Responses.failResponse(res, `${req.locale.STATUS_MUST_BE_ONE_OF} ${VALID_STATUSES.join(', ')}`, 400);
     }
-    const updatedCount = await channelService.updateUserChannelsStatus(userId, ids, status);
+    const updatedCount = await channelService.updateUserChannelsStatus(userId, sellerId, ids, status);
 
     if (updatedCount === 0) {
       return Responses.failResponse(res, req.locale.NO_MATCHING_CHANNELS_FOUND_TO_UPDATE, 404);
@@ -128,13 +132,14 @@ export const removeUserChannels = async (req, res) => {
   try {
     const userId = req.user?._id;
     const { ids } = req.body;
+    const sellerId = req.sellerId;
     if (!userId) {
       return Responses.failResponse(res, req.locale.USERID_REQUIRED, 400);
     }
     if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, req.locale.INVALID_IDS, 400);
     }
-    const updatedCount = await channelService.removeUserChannels(userId, ids);
+    const updatedCount = await channelService.removeUserChannels(userId, sellerId, ids);
     if (updatedCount === 0) {
       return Responses.failResponse(res, req.locale.NO_CHANNEL_FOUND, 404);
     }

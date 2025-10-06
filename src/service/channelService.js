@@ -110,7 +110,7 @@ const getAllChannels = async (query, userId) => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-const saveUserChannels = async (userId, channelIds) => {
+const saveUserChannels = async (userId, sellerId, channelIds) => {
   try {
     // Format incoming channelIds into schema shape
     const formattedChannels = channelIds.map((id) => {
@@ -125,7 +125,7 @@ const saveUserChannels = async (userId, channelIds) => {
 
     // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(
-      { userId: new ObjectId(userId) },
+      { userId: new ObjectId(userId), sellerId: new ObjectId(sellerId) },
       { $addToSet: { channelIds: { $each: formattedChannels } } },
       { new: true, upsert: true }
     );
@@ -145,7 +145,7 @@ const saveUserChannels = async (userId, channelIds) => {
 };
 
 /** FUNC - GET USER CHANNEL LIST */
-export const getAllUserChannels = async (userId, query) => {
+export const getAllUserChannels = async (userId, sellerId, query) => {
   try {
     const { page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
     const skip = (page - 1) * limit;
@@ -158,6 +158,7 @@ export const getAllUserChannels = async (userId, query) => {
 
     const baseMatch = {
       userId: new ObjectId(userId),
+      sellerId: new ObjectId(sellerId),
       ...(status ? { 'channelIds.status': status } : { 'channelIds.status': { $in: ['active', 'inactive'] } }),
     };
     const pipeline = [
@@ -255,10 +256,10 @@ export const getAllUserChannels = async (userId, query) => {
   }
 };
 
-export const updateUserChannelsStatus = async (userId, ids, status) => {
+export const updateUserChannelsStatus = async (userId, sellerId, ids, status) => {
   try {
     const result = await UserChannels.updateOne(
-      { userId: new ObjectId(userId) },
+      { userId: new ObjectId(userId), sellerId: new ObjectId(sellerId) },
       { $set: { 'channelIds.$[elem].status': status } },
       {
         arrayFilters: [{ 'elem.id': { $in: ids }, 'elem.status': { $ne: status } }],
@@ -271,17 +272,18 @@ export const updateUserChannelsStatus = async (userId, ids, status) => {
   }
 };
 
-export const removeUserChannels = async (userId, ids) => {
+export const removeUserChannels = async (userId, sellerId, ids) => {
   try {
     // Remove from UserChannels
     const channelResult = await UserChannels.updateMany(
-      { userId: new ObjectId(userId) },
+      { userId: new ObjectId(userId), sellerId: new ObjectId(sellerId) },
       { $pull: { channelIds: { id: { $in: ids } } } }
     );
 
     // Delete related products
     await UserChannelProducts.deleteMany({
       userId: new ObjectId(userId),
+      sellerId: new ObjectId(sellerId),
       channelId: { $in: ids },
     });
     return channelResult.modifiedCount || 0;

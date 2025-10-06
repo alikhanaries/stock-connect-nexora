@@ -20,6 +20,11 @@ const skuListSchema = new mongoose.Schema(
 // Main schema
 const channelProductsSchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
+      required: true,
+    },
     channelId: {
       type: Number,
       required: true,

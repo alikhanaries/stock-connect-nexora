@@ -15,6 +15,7 @@ import {
   getAllUserChannelsValidator,
   removeUserChannelsValidator,
   saveUserChannelsValidator,
+  updateUserChannelsValidator,
 } from '#validations/channels.js';
 
 const router = express.Router();
@@ -30,13 +31,18 @@ router.get(
 // /* GET ALL CHANNEL LIST FROM DATABASE */
 router.get('/getAllChannels', getAllChannelsValidator, authMiddleware, getAllChannels);
 // /* SAVE USER CHANNELS  */
-router.put('/addChannels', saveUserChannelsValidator, authMiddleware, saveUserChannels);
+router.put('/addChannels/:sellerId', saveUserChannelsValidator, authMiddleware, saveUserChannels);
 /* GET USER CHANNEL LIST */
 
-router.patch('/update-user-channels-status', authMiddleware, updateUserChannelsStatus);
+router.patch(
+  '/update-user-channels-status/:sellerId',
+  updateUserChannelsValidator,
+  authMiddleware,
+  updateUserChannelsStatus
+);
 
-router.delete('/remove-user-channel', removeUserChannelsValidator, authMiddleware, removeUserChannels);
+router.delete('/remove-user-channel/:sellerId', removeUserChannelsValidator, authMiddleware, removeUserChannels);
 
-router.get('/getAllUserChannels/:userId', getAllUserChannelsValidator, authMiddleware, getAllUserChannels);
+router.get('/getAllUserChannels/:userId/:sellerId', getAllUserChannelsValidator, authMiddleware, getAllUserChannels);
 
 export default router;

@@ -1,6 +1,6 @@
 import { defaultMailOptions, transporter, mailBranding } from '../config/emailConfig.js';
 import { importProductConstant, resetPasswordConstants } from '../constants/emailConstants.js';
-import { productImportTemplate } from '../emailTemplates/productImportTemplate.js';
+import { productImportTemplate } from '../emailTemplates/importProductTemplate.js';
 import { resetPasswordTemplate } from '../emailTemplates/resetPasswordTemplate.js';
 
 const sendMail = async ({ to, subject, html }) => {
