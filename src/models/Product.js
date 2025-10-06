@@ -6,7 +6,7 @@ const ProductSchema = new mongoose.Schema(
     parentProductSkuCode: { type: String, trim: true },
     productSkuCode: { type: String, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
-    titleAr: { type: String, required: true, trim: true },
+    titleAr: { type: String, trim: true },
     description: { type: String },
     brand: { type: String, trim: true },
     attributes: { type: String, trim: true },
