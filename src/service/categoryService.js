@@ -128,7 +128,7 @@ export const getStockConnectCategoriesService = async (searchTerm = '', sellerId
   }
 };
 
-export const insertCategoryTrail = async (categoryTrailArray) => {
+export const insertCategoryTrail = async (categoryTrailArray, sellerId) => {
   try {
     for (const item of categoryTrailArray) {
       const trailParts = item
@@ -147,6 +147,7 @@ export const insertCategoryTrail = async (categoryTrailArray) => {
         trailDocs.push(part);
 
         const query = {
+          sellerId,
           categoryName,
           parent: parent || 'root',
           platformCategoryTrail: trailDocs.join(' > '),
