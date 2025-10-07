@@ -25,7 +25,6 @@ router.post(
   upload.single('file'),
   validateFile,
   authMiddleware,
-  verifySellerAccess,
   importMarketPlaceCategoriesFromCsv
 );
 router.get(
