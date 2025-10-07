@@ -39,6 +39,7 @@ const platformCategorySchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      index: true,
     },
     isEligible: {
       type: Boolean,

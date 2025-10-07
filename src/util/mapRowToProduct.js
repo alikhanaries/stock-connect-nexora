@@ -1,5 +1,5 @@
 // mapRowToProduct.js
-export const mapRowToProduct = async (row) => {
+export const mapRowToProduct = async (row, index, locale) => {
   if (!row || typeof row !== 'object') return null;
 
   // Normalize keys (lowercase + trim)
@@ -9,8 +9,21 @@ export const mapRowToProduct = async (row) => {
 
   // CHECK MANDATORY FIELD
   const price = parseFloat(r.price);
-  if (!r.productskucode || isNaN(price)) {
-    return null;
+  if (!r.productskucode || isNaN(price) || !r.categorytrail) {
+    let errorData = [];
+    if (!r.productskucode) {
+      errorData.push(locale.PRODUCT_SKUCODE_MISSING);
+    }
+    if (isNaN(price)) {
+      errorData.push(locale.PRODUCT_PRICE_MISSING);
+    }
+    if (!r.categorytrail) {
+      errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
+    }
+    return {
+      rowNumber: index,
+      errorData,
+    };
   }
 
   return {

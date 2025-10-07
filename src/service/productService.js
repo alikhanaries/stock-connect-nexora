@@ -259,17 +259,18 @@ const pushProductsAsync = async (products) => {
   );
 };
 
-export const processImportStream = async (stream, { deleteAfter, filePath } = {}) => {
+export const processImportStream = async (stream, { deleteAfter, filePath, locale } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   let batch = [];
   let insertedCount = 0;
   let updatedCount = 0;
   let invalidRowsCount = 0;
+  let errorDetails = [];
   const categoryTrails = new Set();
   const rowPromises = [];
 
   await new Promise((resolve, reject) => {
-    let rowIndex = 0;
+    let rowIndex = 1;
 
     stream
       .pipe(csv())
@@ -281,13 +282,18 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
             // skip empty rows
             const isEmpty = Object.values(row).every((val) => val == null || String(val).trim() === '');
             if (isEmpty) {
+              errorDetails.push({
+                rowNumber: rowIndex,
+                errorData: [locale.EMPTY_ROW],
+              });
               invalidRowsCount++;
               return;
             }
 
             // map row
-            const product = await mapRowToProduct(row);
-            if (!product) {
+            const product = await mapRowToProduct(row, rowIndex, locale);
+            if (product.errorData) {
+              errorDetails.push(product);
               invalidRowsCount++;
               return;
             }
@@ -380,16 +386,17 @@ export const processImportStream = async (stream, { deleteAfter, filePath } = {}
     insertedCount,
     updatedCount,
     invalidRowsCount,
+    errorDetails,
   };
 };
 
 /* Google Sheet Import */
-export const importProductsFromGoogleSheet = async (url) => {
+export const importProductsFromGoogleSheet = async (url, locale) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processImportStream(stream);
+    return await processImportStream(stream, { locale });
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
     throw new Error(err.message); // force the catch block
@@ -397,10 +404,10 @@ export const importProductsFromGoogleSheet = async (url) => {
 };
 
 /* CSV File Import */
-export const importProductsFromCsvFile = async (filePath) => {
+export const importProductsFromCsvFile = async (filePath, locale) => {
   try {
     const stream = fs.createReadStream(filePath);
-    return await processImportStream(stream, { deleteAfter: true, filePath });
+    return await processImportStream(stream, { deleteAfter: true, filePath, locale });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block
