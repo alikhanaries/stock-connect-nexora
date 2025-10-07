@@ -16,6 +16,35 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+
+    {
+      Key: 'titleAr',
+      Value: product.titleAr || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'ar',
+    },
+    {
+      Key: 'hsCodeSA',
+      Value: product.hsCodeSA || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'hsCodeAE',
+      Value: product.hsCodeAE || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'volumetricWeightCm',
+      Value: product.volumetricWeightCm || 0,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || '';
   return {
