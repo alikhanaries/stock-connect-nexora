@@ -158,6 +158,8 @@ export const pushProductToChannelEngine = async (req, res) => {
 export const updateProductStatus = async (req, res) => {
   try {
     const { ids, status } = req.body;
+    const sellerId = req.sellerId;
+
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, req.locale.PRODUCT_IDS_REQUIRED, 400);
     }
@@ -169,7 +171,7 @@ export const updateProductStatus = async (req, res) => {
     if (!statusValue || !PRODUCT_STATUSES.includes(statusValue)) {
       return failResponse(res, `${req.locale.STATUS_MUST_BE_ONE_OF} ${PRODUCT_STATUSES.join(', ')}`, 400);
     }
-    const updatedCount = await productService.updateProductStatus(ids, status);
+    const updatedCount = await productService.updateProductStatus(ids, status, sellerId);
     if (updatedCount === 0) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
     }
@@ -188,8 +190,9 @@ export const updateProductStatus = async (req, res) => {
 export const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    const sellerId = req.sellerId;
     //Validate ObjectId
-    const result = await productService.deleteProduct(id, req.locale);
+    const result = await productService.deleteProduct(id, req.locale, sellerId);
     if (!result.success) {
       return failResponse(res, result.message || req.locale.PRODUCT_DELETE_FAILED, 400);
     }
@@ -206,7 +209,8 @@ export const deleteProduct = async (req, res) => {
 export const deleteMultipleProducts = async (req, res) => {
   try {
     const { ids } = req.body;
-    const result = await productService.deleteMultipleProducts(ids, req.locale);
+    const sellerId = req.sellerId;
+    const result = await productService.deleteMultipleProducts(ids, req.locale, sellerId);
     if (!result.success) {
       return failResponse(res, result.message || req.locale.PRODUCT_DELETE_FAILED, 400);
     }

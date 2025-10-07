@@ -12,7 +12,7 @@ import {
   addProductsToUserChannel,
   unlinkProductFromChannel,
 } from '#controllers/ProductController.js';
-import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
   deleteMultipleProductsValidator,
   importProductsFromCsvFileValidator,
@@ -36,7 +36,14 @@ const productsRouter = express.Router();
 //productsRouter.use(authMiddleware);
 
 /* DELETE PRODUCT BY ID*/
-productsRouter.delete('/deleteProduct/:id', deleteProductValidator, checkLanguage, authMiddleware, deleteProduct);
+productsRouter.delete(
+  '/:sellerId/deleteProduct/:id',
+  deleteProductValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  deleteProduct
+);
 
 productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, getProducts);
 
@@ -71,19 +78,21 @@ productsRouter.get(
 productsRouter.get('/top-product', getTopSellingProductValidator, checkLanguage, authMiddleware, getTopSellingProduct);
 
 productsRouter.patch(
-  '/update-status',
+  '/:sellerId/update-status',
   updateProductStatusValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   updateProductStatus
 );
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete(
-  '/deleteMultipleProducts',
+  '/:sellerId/deleteMultipleProducts',
   deleteMultipleProductsValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   deleteMultipleProducts
 );
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */

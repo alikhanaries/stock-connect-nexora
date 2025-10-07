@@ -144,9 +144,18 @@ const getTopSellingProduct = async (limit, channelNameSearch) => {
   return topProducts;
 };
 
-export const updateProductStatus = async (ids, status) => {
+export const updateProductStatus = async (ids, status, sellerId) => {
   if (!ids?.length) return 0;
-  const result = await Product.updateMany({ _id: { $in: ids }, status: { $ne: status } }, { $set: { status: status } });
+
+  const filter = {
+    _id: { $in: ids },
+    sellerId: sellerId,
+    status: { $ne: status },
+  };
+
+  const result = await Product.updateMany(filter, {
+    $set: { status: status },
+  });
   return result.modifiedCount || 0;
 };
 
@@ -407,9 +416,13 @@ export const importProductsFromCsvFile = async (filePath) => {
   }
 };
 
-const deleteProduct = async (id, locale) => {
+const deleteProduct = async (id, locale, sellerId) => {
   try {
-    const result = await Product.findByIdAndUpdate(id, { status: 'removed' }, { new: true });
+    const result = await Product.findOneAndUpdate(
+      { _id: id, sellerId: sellerId },
+      { $set: { status: 'removed' } },
+      { new: true }
+    );
 
     if (!result) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
@@ -423,12 +436,14 @@ const deleteProduct = async (id, locale) => {
 };
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
-const deleteMultipleProducts = async (ids, locale) => {
+const deleteMultipleProducts = async (ids, locale, sellerId) => {
   try {
-    const result = await Product.updateMany(
-      { _id: { $in: ids }, status: { $ne: 'removed' } },
-      { $set: { status: 'removed' } }
-    );
+    const filter = {
+      _id: { $in: ids },
+      sellerId: sellerId,
+      status: { $ne: 'removed' },
+    };
+    const result = await Product.updateMany(filter, { $set: { status: 'removed' } });
 
     if (result.modifiedCount === 0) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
