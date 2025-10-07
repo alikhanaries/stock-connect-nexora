@@ -12,11 +12,12 @@ import {
   addProductsToUserChannel,
   unlinkProductFromChannel,
 } from '#controllers/ProductController.js';
-import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
   deleteMultipleProductsValidator,
   importProductsFromCsvFileValidator,
   importProductsFromGoogleSheetValidator,
+  unlinkProductFromChannelValidator,
 } from '#validations/products.js';
 import express from 'express';
 import {
@@ -86,50 +87,41 @@ productsRouter.delete(
   authMiddleware,
   deleteMultipleProducts
 );
+
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 productsRouter.put(
-  '/addProductsToUserChannel/:id',
+  '/addProductsToUserChannel/:id/:sellerId',
   addProductsToUserChannelValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   addProductsToUserChannel
 );
 
-productsRouter.get('/user-channel-products/:channelId', checkLanguage, authMiddleware, getUserChannelProducts);
-productsRouter.get(
-  '/get-user-unassigned-products/:channelId',
-  checkLanguage,
-  authMiddleware,
-  getUserUnassignedProducts
-);
 productsRouter.delete(
-  '/unlink-product-from-channel/:channelId',
+  '/unlink-product-from-channel/:channelId/:sellerId',
+  unlinkProductFromChannelValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   unlinkProductFromChannel
 );
 
 productsRouter.get(
-  '/user-channel-products/:channelId',
+  '/user-channel-products/:channelId/:sellerId',
   getUserChannelProductsValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   getUserChannelProducts
 );
 
 productsRouter.get(
-  '/get-user-unassigned-products/:channelId',
+  '/get-user-unassigned-products/:channelId/:sellerId',
   getUserUnassignedProductsValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   getUserUnassignedProducts
 );
-
-productsRouter.delete(
-  '/unlink-product-from-channel/:channelId',
-  checkLanguage,
-  authMiddleware,
-  unlinkProductFromChannel
-);
-
 export default productsRouter;

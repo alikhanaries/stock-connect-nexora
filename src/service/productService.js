@@ -451,7 +451,7 @@ const deleteMultipleProducts = async (ids, locale) => {
   }
 };
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-const addProductsToUserChannel = async (userId, channelId, productIds, locale) => {
+const addProductsToUserChannel = async (userId, sellerId, channelId, productIds, locale) => {
   try {
     const products = await Product.find(
       { _id: { $in: productIds } },
@@ -474,7 +474,7 @@ const addProductsToUserChannel = async (userId, channelId, productIds, locale) =
     }
     const channelName = channel.channelName;
     await UserChannelProducts.findOneAndUpdate(
-      { userId, channelId },
+      { userId, sellerId, channelId },
       { $addToSet: { skuList: { $each: skuList } } },
       { upsert: true }
     );
@@ -485,7 +485,7 @@ const addProductsToUserChannel = async (userId, channelId, productIds, locale) =
       }
       return {
         updateOne: {
-          filter: { _id: p._id },
+          filter: { _id: p._id, sellerId },
           update: { $set: { marketPlace: existing.join(', ') } },
         },
       };
@@ -502,7 +502,7 @@ const addProductsToUserChannel = async (userId, channelId, productIds, locale) =
   }
 };
 
-export const getUserChannelProducts = async (userId, channelId, query) => {
+export const getUserChannelProducts = async (userId, sellerId, channelId, query) => {
   const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
@@ -510,16 +510,15 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
 
   const matchStage = {
     userId: new mongoose.Types.ObjectId(userId),
+    sellerId: new mongoose.Types.ObjectId(sellerId),
     channelId: Number(channelId),
   };
 
-  // ✅ Step 1: Fetch channel details separately (before product pipeline)
   const channelDetails = await Channel.findOne(
     { channelId: Number(channelId) },
     { channelId: 1, channelName: 1, _id: 0 }
   ).lean();
 
-  // ✅ Step 2: Build product pipeline
   const pipeline = [
     { $match: matchStage },
     { $unwind: '$skuList' },
@@ -594,12 +593,10 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
     },
   });
 
-  // ✅ Step 3: Run aggregation
   const result = await UserChannelProducts.aggregate(pipeline);
   const total = result[0]?.totalCount[0]?.count || 0;
   const products = result[0]?.paginatedResults || [];
 
-  // ✅ Final Response with channel outside products
   return {
     channel: channelDetails,
     products,
@@ -608,12 +605,17 @@ export const getUserChannelProducts = async (userId, channelId, query) => {
   };
 };
 
-const getUserUnassignedProducts = async (userId, channelId, query) => {
+const getUserUnassignedProducts = async (userId, sellerId, channelId, query) => {
   const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const assignedSku = await UserChannelProducts.findOne(
-    { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId), isActive: true },
+    {
+      userId: new mongoose.Types.ObjectId(userId),
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      channelId: Number(channelId),
+      isActive: true,
+    },
     { 'skuList.skuCode': 1 }
   ).lean();
 
@@ -691,9 +693,12 @@ const removeProductsFromChannelEngine = async (skuCodes) => {
   }
 };
 
-const unlinkProductFromChannel = async (userId, channelId, ids, locale) => {
+const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale) => {
   try {
-    const products = await Product.find({ _id: { $in: ids } }, { productSkuCode: 1, marketPlace: 1 }).lean();
+    const products = await Product.find(
+      { _id: { $in: ids }, sellerId: new mongoose.Types.ObjectId(sellerId) },
+      { productSkuCode: 1, marketPlace: 1 }
+    ).lean();
     if (!products.length) return 0;
     const skuCodes = products.map((p) => p.productSkuCode);
     const ceResult = skuCodes.length > 0 ? await removeProductsFromChannelEngine(skuCodes) : { success: true };
@@ -701,7 +706,11 @@ const unlinkProductFromChannel = async (userId, channelId, ids, locale) => {
       return { success: false, message: 'ChannelEngine deletion failed', ceError: ceResult.message };
     }
     const result = await UserChannelProducts.updateMany(
-      { userId: new mongoose.Types.ObjectId(userId), channelId: Number(channelId) },
+      {
+        userId: new mongoose.Types.ObjectId(userId),
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        channelId: Number(channelId),
+      },
       { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
     );
 
@@ -722,7 +731,7 @@ const unlinkProductFromChannel = async (userId, channelId, ids, locale) => {
 
         return {
           updateOne: {
-            filter: { _id: p._id },
+            filter: { _id: p._id, sellerId: new mongoose.Types.ObjectId(sellerId) },
             update: updatedList.length
               ? { $set: { marketPlace: updatedList.join(', ') } }
               : { $set: { marketPlace: null } },

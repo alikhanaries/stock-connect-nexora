@@ -32,6 +32,10 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
       })
       .regex(/^\d+$/, 'id must be a number string')
       .transform((val) => parseInt(val, 10)),
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
 
   bodySchema.parse(req.body);
@@ -266,6 +270,10 @@ export const getUserChannelProductsValidator = validate(async (req) => {
       })
       .regex(/^\d+$/, 'channelId must be a number string')
       .transform((val) => parseInt(val, 10)),
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
   paramsSchema.parse(req.params);
 
@@ -323,6 +331,24 @@ export const getUserChannelProductsValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+export const unlinkProductFromChannelValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    channelId: z
+      .string({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a string',
+      })
+      .regex(/^\d+$/, 'channelId must be a number string')
+      .transform((val) => parseInt(val, 10)),
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
+  });
+  paramsSchema.parse(req.params);
+});
 
 // /* GET USER UNASSIGNED PRODUCTS VALIDATOR */
 export const getUserUnassignedProductsValidator = validate(async (req) => {
@@ -336,6 +362,10 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
       })
       .regex(/^\d+$/, 'channelId must be a number string')
       .transform((val) => parseInt(val, 10)),
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
   paramsSchema.parse(req.params);
 
