@@ -1,9 +1,7 @@
 import express from 'express';
-import { getAllReturns, syncReturns } from '#controllers/ReturnController.js';
-import { createMerchantReturn } from '#controllers/ReturnController.js';
+import { getAllReturns, syncReturns, createMerchantReturn } from '#controllers/ReturnController.js';
 import { authMiddleware, checkLanguage } from '#middleware/index.js';
-import { getAllReturnsValidator, syncReturnsValidator } from '#validations/return.js';
-import { validateReturn } from '#validations/return.js';
+import { getAllReturnsValidator, syncReturnsValidator, validateReturn } from '#validations/return.js';
 
 const router = express.Router();
 
@@ -12,7 +10,6 @@ router.get('/', getAllReturnsValidator, checkLanguage, authMiddleware, getAllRet
 
 // Sync returns from ChannelEngine to database
 router.get('/sync', syncReturnsValidator, checkLanguage, authMiddleware, syncReturns);
-
 // Create a new return
 router.post('/create', validateReturn, checkLanguage, authMiddleware, createMerchantReturn);
 
