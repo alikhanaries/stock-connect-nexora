@@ -6,6 +6,7 @@ const ProductSchema = new mongoose.Schema(
     parentProductSkuCode: { type: String, trim: true },
     productSkuCode: { type: String, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
+    titleAr: { type: String, trim: true },
     description: { type: String },
     brand: { type: String, trim: true },
     attributes: { type: String, trim: true },
@@ -36,6 +37,9 @@ const ProductSchema = new mongoose.Schema(
     marketPlace: { type: String, trim: true },
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
+    volumetricWeightCm: { type: Number, required: true },
+    hsCodeAE: { type: String, required: true },
+    hsCodeSA: { type: String, required: true },
   },
   { timestamps: true }
 );

@@ -84,7 +84,7 @@ export const register = async (req, res) => {
       return Response.failResponse(res, 'A sellerId is required for this user role.', 400);
     }
     if (role !== USER_ROLES.MASTER_ADMIN) {
-      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
+      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole, role);
 
       if (seller && !seller.success) {
         if (!seller.notBaseSeller) {

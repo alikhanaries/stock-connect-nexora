@@ -1,9 +1,10 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import { ORDER_STATUS_MAP, SELECTED_FIELDS } from '#constants/common.js';
+import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
 import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+import { randomBytes } from 'node:crypto';
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -45,7 +46,6 @@ const getAllOrders = async (query) => {
 
     const filter = {};
 
-    //search filter
     if (search) {
       const regex = { $regex: search, $options: 'i' };
 
@@ -59,13 +59,11 @@ const getAllOrders = async (query) => {
       ];
     }
 
-    //platform filter
     if (platform) {
       filter.channelName = { $regex: platform, $options: 'i' };
       appliedFilters.platform = platform;
     }
 
-    //date filter
     if (fromDate || toDate) {
       filter.createdAt = {};
 
@@ -79,7 +77,6 @@ const getAllOrders = async (query) => {
       }
     }
 
-    // status filter
     if (status) {
       filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
       appliedFilters.status = status;
@@ -170,11 +167,13 @@ const getOrderComparison = async (lowercasedPeriod) => {
   ]);
 
   let percentageChange = 0;
+
   if (previousCount > 0) {
     percentageChange = Math.round(((currentCount - previousCount) / previousCount) * 100);
   } else if (currentCount > 0) {
     percentageChange = 100;
   }
+
   const response = {
     totalOrders: currentCount - previousCount,
     percentage: percentageChange,
@@ -183,4 +182,72 @@ const getOrderComparison = async (lowercasedPeriod) => {
   return response;
 };
 
-export default { getAllOrders, getOrderById, processOrders, getNewOrders, getOrderStats, getOrderComparison };
+const cancelOrder = async (orderId, reason) => {
+  try {
+    const existenceOfOrder = await Order.findById(orderId).lean();
+    if (!existenceOfOrder) {
+      return { success: false, error: { message: 'Order not found', status: 404 } };
+    }
+
+    const lines = existenceOfOrder.orderSkuList.skuList.map((oItem) => {
+      return {
+        MerchantProductNo: oItem.merchantProductNo,
+        OrderLineId: oItem.id,
+        Quantity: oItem.quantity,
+      };
+    });
+
+    const info = {
+      MerchantCancellationNo: randomBytes(6).toString('hex'),
+      MerchantOrderNo: existenceOfOrder.merchantOrderNo,
+      Lines: lines,
+      Reason: reason,
+      ReasonCode: '0',
+      IsMerchantCreator: true,
+    };
+
+    if (BLOCKED_STATUSES[existenceOfOrder.status]) {
+      return { success: false, error: { message: BLOCKED_STATUSES[existenceOfOrder.status], status: 400 } };
+    }
+
+    const markingCancelled = await fetch(
+      `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(info),
+      }
+    );
+
+    const markingCancelledObject = await markingCancelled.json();
+
+    if (parseInt(markingCancelledObject.StatusCode / 100) === 4) {
+      return { success: false, error: markingCancelledObject };
+    }
+
+    const updateInformation = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        $set: {
+          status: ORDER_STATUS_MAP.MANCO,
+          'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.MANCO,
+        },
+      },
+      { new: true }
+    );
+
+    return { success: true, data: updateInformation.toObject() };
+  } catch (error) {
+    console.error(error);
+    return { success: false, error: error };
+  }
+};
+
+export default {
+  getAllOrders,
+  getOrderById,
+  processOrders,
+  getNewOrders,
+  getOrderStats,
+  getOrderComparison,
+  cancelOrder,
+};

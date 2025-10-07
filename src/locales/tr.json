@@ -58,7 +58,8 @@
   "ORDER_COMPARISON_CALC_FAILED": "Sipariş karşılaştırma verileri hesaplanamadı",
   "NEW_ORDERS_SYNCED_SUCCESSFULLY": "Yeni siparişler başarıyla senkronize edildi",
   "INVALID_PERIOD": "Geçersiz dönem. Lütfen şunlardan birini kullanın:",
-  "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "Sipariş karşılaştırması başarıyla alındı",
+  "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "Sipariş karşılaştırması başarıyla getirildi.",
+  "CANCEL_ORDER": "Sipariş başarıyla iptal edildi.",
 
   "USERID_REQUIRED": "Kullanıcı ID gerekli",
   "PRODUCT_ASSIGNED_SUCCESS": "Ürün başarıyla atandı",
@@ -95,11 +96,14 @@
   "GET_SELLER_SUCCESS": "Satıcı başarıyla getirildi",
   "NO_CATEGORYTRAILS_FOUND": "Pazar yeri kategori yolu bulunamadı",
   "CATEGORYTRAILS_FOUND_SUCCESS": "Pazar yeri kategori yolu bulundu",
+  "PRODUCT_SKUCODE_MISSING": "Ürün stok kodu eksik",
+  "PRODUCT_PRICE_MISSING": "Ürün fiyatı eksik",
+  "PRODUCT_CATEGORYTRAIL_MISSING": "Ürün kategori yolu eksik",
+  "EMPTY_ROW": "Boş satır",
   "UNABLE_FETCH_SELLER": "Bu kullanıcıya bağlı satıcı yok",
   "PASSWORD_LENGTH": "Şifre en az 6 karakter uzunluğunda olmalıdır",
   "ALL_PRODUCTS_PUSH_SUCCESS": "Tüm ürünler başarıyla gönderildi",
   "ALL_PRODUCTS_PUSH_FAILED": "Tüm ürünlerin gönderimi başarısız oldu",
   "PRODUCTS_PUSH_PARTIAL_SUCCESS": "Bazı ürünler başarıyla gönderildi, bazıları başarısız oldu",
   "INVALID_CATEGORY_TRAIL": "Geçersiz kategori yolu"
-
 }

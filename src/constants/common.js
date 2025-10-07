@@ -62,3 +62,10 @@ export const SELECTED_FIELDS = [
   'orderDate',
   'createdAt',
 ].join(' ');
+
+export const BLOCKED_STATUSES = {
+  MANCO: 'Order has already been cancelled',
+  CLOSED: 'Order has already been closed',
+  RETURNED: 'Order has been returned, cannot cancel',
+  SHIPPED: 'Order has been shipped, cannot cancel now',
+};

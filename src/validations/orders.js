@@ -4,6 +4,12 @@ import { ORDER_STATUS_MAP, VALID_PERIODS } from '#constants/common.js';
 import { validate } from './validate.js';
 import { headerSchema } from './headerSchema.js';
 
+const orderLineSchema = z.object({
+  MerchantProductNo: z.string(),
+  OrderLineId: z.number().int().positive(),
+  Quantity: z.number().int().min(1, 'You must cancel at least 1 item if you want to cancel'),
+});
+
 export const getAllOrdersValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
@@ -117,4 +123,21 @@ export const getOrderComparisonValidator = validate(async (req) => {
   });
 
   comparisonOrderQuerySchema.parse(req.query);
+});
+
+export const merchantCancelIdValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const merchantCancelByIdSchema = z.object({
+    orderId: z
+      .string()
+      .length(24, 'order id must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'order id must be a hex string'),
+    reason: z
+      .string()
+      .min(15, 'Reason should be long enough to have a meaning.')
+      .max(500, 'Reason must be within 500 characters.')
+      .regex(/^[a-zA-Z0-9\s.,:'"]+$/, 'Reason must be a valid statement.'),
+    specifics: z.array(orderLineSchema).optional().default([]),
+  });
+  merchantCancelByIdSchema.parse(req.body);
 });
