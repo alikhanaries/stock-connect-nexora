@@ -38,6 +38,7 @@ router.patch(
   '/update-user-channels-status/:sellerId',
   updateUserChannelsValidator,
   authMiddleware,
+  verifySellerAccess,
   updateUserChannelsStatus
 );
 
