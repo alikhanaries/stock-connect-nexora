@@ -2,6 +2,11 @@ import mongoose from 'mongoose';
 
 const platformCategorySchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
+      required: true,
+    },
     id: {
       type: Number,
       required: true,
@@ -32,7 +37,6 @@ const platformCategorySchema = new mongoose.Schema(
       type: Number,
       required: true,
       trim: true,
-      unique: true,
       index: true,
     },
     platformCategoryTrail: {
@@ -52,6 +56,6 @@ const platformCategorySchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
+platformCategorySchema.index({ sellerId: 1, platformCategoryId: 1 }, { unique: true });
 export const PlatformCategory = mongoose.model('PlatformCategory', platformCategorySchema);
 export default PlatformCategory;

@@ -12,7 +12,8 @@ import path from 'path';
 
 export const getStockConnectCategories = async (req, res) => {
   try {
-    const result = await getStockConnectCategoriesService(req.query.search);
+    const sellerId = req.sellerId;
+    const result = await getStockConnectCategoriesService(req.query.search, sellerId);
     if (result && result.length === 0) {
       return successResponse(res, req.locale.CATEGORY_NOT_FOUND, 200, []);
     }
@@ -47,7 +48,7 @@ export const importMarketPlaceCategoriesFromCsv = async (req, res) => {
 export const mapCategory = async (req, res) => {
   try {
     const { marketPlaceId, categoryDatas } = req.body;
-
+    const sellerId = req.sellerId;
     // Check if referenced Marketplace exists
     const marketplaceExists = await Channel.findOne({ channelId: marketPlaceId });
     if (!marketplaceExists) {
@@ -55,7 +56,7 @@ export const mapCategory = async (req, res) => {
     }
 
     // Call service (bulk upsert)
-    const result = await mapCategoryService(categoryDatas, marketPlaceId);
+    const result = await mapCategoryService(categoryDatas, marketPlaceId, sellerId);
 
     // bulkWrite returns an object with nUpserted, nModified, etc.
     const totalProcessed = (result.upsertedCount || 0) + (result.modifiedCount || 0);
@@ -89,8 +90,8 @@ export const getMarketplaceCategories = async (req, res) => {
 export const getMarketPlaceCategoryTrails = async (req, res) => {
   try {
     const { productCategoryTrail } = req.params;
-
-    const result = await getMarketPlaceCategoryTrailsService(productCategoryTrail);
+    const sellerId = req.sellerId;
+    const result = await getMarketPlaceCategoryTrailsService(productCategoryTrail, sellerId);
 
     const { marketPlaceTrailData } = result;
 
