@@ -6,14 +6,16 @@ const userRoleBasedAccess = (creatorRole, newUserRole) => {
   return ROLES_BASED_USER_CREATION[creatorRole]?.includes(newUserRole) || false;
 };
 
-const validateSellerAccessForCreator = async (creatorId, selectedSeller, creatorRole) => {
+const validateSellerAccessForCreator = async (creatorId, selectedSeller, creatorRole, newUserRole) => {
   const baseSeller = await Seller.findById(selectedSeller);
   if (!baseSeller) {
     return { success: false, notBaseSeller: true };
   }
 
-  if (baseSeller.type === SELLER_TYPE.BASE) {
-    return { success: false, notBaseSeller: false };
+  if (ROLES_BASED_USER_CREATION[USER_ROLES.SUPER_ADMIN]?.includes(newUserRole)) {
+    if (baseSeller.type === SELLER_TYPE.BASE) {
+      return { success: false, notBaseSeller: false };
+    }
   }
 
   if (USER_ROLES.SUPER_ADMIN === creatorRole) {

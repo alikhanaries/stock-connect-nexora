@@ -53,7 +53,12 @@ export const updateUser = async (req, res) => {
     const userResponseObject = updatedUser.toObject();
 
     if (sellerId) {
-      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole);
+      const seller = await userHelper.validateSellerAccessForCreator(
+        creatorId,
+        sellerId,
+        creatorRole,
+        updatedUser.role
+      );
       if (seller && !seller.success) {
         if (!seller.notBaseSeller) {
           return Responses.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
