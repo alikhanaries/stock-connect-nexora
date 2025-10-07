@@ -51,7 +51,30 @@ export const syncReturns = async (req, res) => {
   }
 };
 
+// Creates a merchant return in ChannelEngine.
+export const createMerchantReturn = async (req, res) => {
+  try {
+    const result = await returnService.createReturn(req.body);
+
+    if (!result.data) {
+      return Responses.failResponse(res, result.message || 'Failed to create return', result.statusCode || 500);
+    }
+
+    if (result.isConflict) {
+      return Responses.failResponse(res, result.message || 'A return with this reference already exists', 409);
+    }
+
+    const message = 'Return created successfully in ChannelEngine';
+    return Responses.successResponse(res, message, 201, result.data);
+  } catch (error) {
+    console.error('Controller Error: createMerchantReturn:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllReturns,
   syncReturns,
+  createMerchantReturn,
 };

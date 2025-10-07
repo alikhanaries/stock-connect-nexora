@@ -224,8 +224,56 @@ export const getReturnsFromDatabase = async (query = {}) => {
   }
 };
 
+//Creates a return in ChannelEngine.
+
+export const createReturn = async (returnData) => {
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(returnData),
+    });
+
+    const responseData = await response.json();
+
+    if (response.status === 409) {
+      return {
+        isConflict: true,
+        data: null,
+        message: responseData.Message || 'Return with this reference already exists',
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        isConflict: false,
+        data: null,
+        message: responseData.Message || `ChannelEngine API error: ${response.status}`,
+        statusCode: response.status,
+        error: responseData,
+      };
+    }
+
+    return {
+      isConflict: false,
+      data: responseData,
+    };
+  } catch (error) {
+    return {
+      isConflict: false,
+      data: null,
+      message: 'Error communicating with ChannelEngine.',
+      error: error.message,
+    };
+  }
+};
+
 export default {
   getReturns,
   getReturnsFromDatabase,
   saveReturnToDatabase,
+  createReturn,
 };

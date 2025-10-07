@@ -95,7 +95,7 @@ export const getAllReturnsValidator = validate(async (req) => {
     }
   }
 
-  querySchema.parse(req.params);
+  return validatedQuery;
 });
 
 export const syncReturnsValidator = validate(async (req) => {
@@ -157,8 +157,103 @@ export const syncReturnsValidator = validate(async (req) => {
     }
   }
 
-  querySchema.parse(req.params);
+  return validatedQuery;
 });
+
+/**
+ * Validates return data for creation/update operations
+ */
+export const validateReturn = (req, res, next) => {
+  const {
+    MerchantOrderNo,
+    MerchantReturnNo,
+    Lines,
+    Id,
+    Reason,
+    CustomerComment,
+    MerchantComment,
+    RefundInclVat,
+    RefundExclVat,
+    ReturnDate,
+    ExtraData,
+  } = req.body;
+
+  const errors = [];
+
+  // Check for required top-level fields
+  if (!MerchantOrderNo || typeof MerchantOrderNo !== 'string') {
+    errors.push('MerchantOrderNo is required and must be a string.');
+  }
+
+  if (!MerchantReturnNo || typeof MerchantReturnNo !== 'string') {
+    errors.push('MerchantReturnNo is required and must be a string.');
+  }
+
+  if (!Reason || typeof Reason !== 'string') {
+    errors.push('Reason is required and must be a string.');
+  }
+
+  // Validate Lines array
+  if (!Lines || !Array.isArray(Lines) || Lines.length === 0) {
+    errors.push('Lines is required and must be a non-empty array.');
+  } else {
+    Lines.forEach((line, index) => {
+      if (!line.MerchantProductNo || typeof line.MerchantProductNo !== 'string') {
+        errors.push(`Lines[${index}].MerchantProductNo is required and must be a string.`);
+      }
+      if (line.OrderLineId === undefined || typeof line.OrderLineId !== 'number' || line.OrderLineId < 0) {
+        errors.push(`Lines[${index}].OrderLineId is required and must be a non-negative number.`);
+      }
+      if (line.Quantity === undefined || typeof line.Quantity !== 'number' || line.Quantity <= 0) {
+        errors.push(`Lines[${index}].Quantity is required and must be a number greater than 0.`);
+      }
+      if (line.ExtraData !== undefined && typeof line.ExtraData !== 'object') {
+        errors.push(`Lines[${index}].ExtraData must be an object if provided.`);
+      }
+    });
+  }
+
+  // Validate optional numeric fields
+  if (Id !== undefined && (typeof Id !== 'number' || Id < 0)) {
+    errors.push('Id must be a non-negative number if provided.');
+  }
+
+  if (RefundInclVat !== undefined && (typeof RefundInclVat !== 'number' || RefundInclVat < 0)) {
+    errors.push('RefundInclVat must be a non-negative number if provided.');
+  }
+
+  if (RefundExclVat !== undefined && (typeof RefundExclVat !== 'number' || RefundExclVat < 0)) {
+    errors.push('RefundExclVat must be a non-negative number if provided.');
+  }
+
+  // Validate optional string fields
+  if (CustomerComment !== undefined && typeof CustomerComment !== 'string') {
+    errors.push('CustomerComment must be a string if provided.');
+  }
+
+  if (MerchantComment !== undefined && typeof MerchantComment !== 'string') {
+    errors.push('MerchantComment must be a string if provided.');
+  }
+
+  // Validate ReturnDate
+  if (ReturnDate !== undefined) {
+    const date = new Date(ReturnDate);
+    if (isNaN(date.getTime())) {
+      errors.push('ReturnDate must be a valid ISO 8601 date string if provided.');
+    }
+  }
+
+  // Validate ExtraData
+  if (ExtraData !== undefined && typeof ExtraData !== 'object') {
+    errors.push('ExtraData must be an object if provided.');
+  }
+
+  if (errors.length > 0) {
+    return res.status(400).json({ message: 'Validation failed', errors });
+  }
+
+  next();
+};
 
 /**
  * Validates return data structure for saving to database
@@ -192,4 +287,5 @@ export default {
   getAllReturnsValidator,
   syncReturnsValidator,
   validateReturnData,
+  validateReturn,
 };
