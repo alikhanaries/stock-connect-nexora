@@ -59,7 +59,6 @@ router.get(
   getMarketplaceCategoriesValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
   getMarketplaceCategories
 );
 
