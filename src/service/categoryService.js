@@ -8,12 +8,13 @@ import { mapRowToMarketPlaceCategory } from '#root/src/util/mapRowtoMarketPlaceC
 import { processBatch } from '../helpers/ProcessBatchHandler.js';
 import MarketPlaceCategory from '#models/MarketPlaceCategory.js';
 import Channel from '../models/Channel.js';
+import mongoose from 'mongoose';
 
-export const getStockConnectCategoriesService = async (searchTerm = '') => {
+export const getStockConnectCategoriesService = async (searchTerm = '', sellerId) => {
   try {
     // 1️⃣ Fetch all PlatformCategories
     let allCategories = await PlatformCategory.find(
-      {},
+      { sellerId: new mongoose.Types.ObjectId(sellerId) },
       {
         _id: 1,
         categoryName: 1,
@@ -65,7 +66,7 @@ export const getStockConnectCategoriesService = async (searchTerm = '') => {
     });
 
     // 4️⃣ Fetch CategoryMappings for the marketplace
-    const mappings = await CategoryMapping.find({}).lean();
+    const mappings = await CategoryMapping.find({ sellerId: new mongoose.Types.ObjectId(sellerId) }).lean();
 
     // Build a quick map: platformCategoryId -> array of marketplaceCategoryIds
     const mappingMap = {};
@@ -243,14 +244,14 @@ export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {
   }
 };
 
-export const mapCategoryService = async (categoryDatas, marketplaceId) => {
+export const mapCategoryService = async (categoryDatas, marketplaceId, sellerId) => {
   try {
     if (!categoryDatas || categoryDatas.length === 0) return [];
 
     // Prepare bulk operations
     const bulkOps = categoryDatas.map((d) => ({
       updateOne: {
-        filter: { marketplaceId, platformCategoryId: d.platformCategoryId },
+        filter: { sellerId, marketplaceId, platformCategoryId: d.platformCategoryId },
         update: { $set: { marketplaceCategoryId: d.marketplaceCategoryId } },
         upsert: true, // insert if not exists
       },
@@ -359,10 +360,10 @@ export const getMarketplaceCategoriesService = async (marketplaceId, searchTerm 
   }
 };
 
-export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) => {
+export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail, sellerId) => {
   try {
     const platformCategoryData = await PlatformCategory.findOne(
-      { platformCategoryTrail: productCategoryTrail },
+      { platformCategoryTrail: productCategoryTrail, sellerId: new mongoose.Types.ObjectId(sellerId) },
       { platformCategoryId: 1, categoryName: 1 }
     ).lean(); // lean() returns plain JS object
     if (!platformCategoryData)
@@ -372,7 +373,12 @@ export const getMarketPlaceCategoryTrailsService = async (productCategoryTrail) 
       };
     const marketPlaceTrailData = await CategoryMapping.aggregate([
       // Filter by platformCategoryId
-      { $match: { platformCategoryId: platformCategoryData.platformCategoryId } },
+      {
+        $match: {
+          sellerId: new mongoose.Types.ObjectId(sellerId),
+          platformCategoryId: platformCategoryData.platformCategoryId,
+        },
+      },
 
       // Lookup marketplace category trail
       {

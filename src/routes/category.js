@@ -7,12 +7,13 @@ import {
   getStockConnectCategories,
   getMarketPlaceCategoryTrails,
 } from '../controllers/CategoryController.js';
-import { authMiddleware, checkLanguage, validateFile } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
   importMarketPlaceCategoriesValidator,
   mapCategoryValidator,
   getMarketplaceCategoriesValidator,
   getStockConnectCategoriesValidator,
+  getMarketPlaceCategoryTrailsValidator,
 } from '#validations/category.js';
 const router = express.Router();
 const upload = multer({ dest: 'uploads/' }); // saves CSV temporarily
@@ -24,16 +25,32 @@ router.post(
   upload.single('file'),
   validateFile,
   authMiddleware,
+  verifySellerAccess,
   importMarketPlaceCategoriesFromCsv
 );
-router.get('/getMarketPlaceCategoryTrails/:productCategoryTrail', checkLanguage, getMarketPlaceCategoryTrails);
-
-router.put('/mapCategory', mapCategoryValidator, checkLanguage, authMiddleware, mapCategory);
 router.get(
-  '/getStockConnectCategories',
+  '/getMarketPlaceCategoryTrails/:productCategoryTrail/:sellerId',
+  getMarketPlaceCategoryTrailsValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getMarketPlaceCategoryTrails
+);
+
+router.put(
+  '/mapCategory/:sellerId',
+  mapCategoryValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  mapCategory
+);
+router.get(
+  '/getStockConnectCategories/:sellerId',
   getStockConnectCategoriesValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   getStockConnectCategories
 );
 
@@ -42,6 +59,7 @@ router.get(
   getMarketplaceCategoriesValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   getMarketplaceCategories
 );
 
