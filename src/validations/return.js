@@ -5,7 +5,6 @@ import { headerSchema } from './headerSchema.js';
 export const getAllReturnsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
-  // Query parameters schema for pagination, filtering, and sorting
   const querySchema = z.object({
     page: z
       .string()
@@ -95,7 +94,7 @@ export const getAllReturnsValidator = validate(async (req) => {
     }
   }
 
-  querySchema.parse(req.params);
+  return validatedQuery;
 });
 
 export const syncReturnsValidator = validate(async (req) => {
@@ -157,12 +156,38 @@ export const syncReturnsValidator = validate(async (req) => {
     }
   }
 
-  querySchema.parse(req.params);
+  return validatedQuery;
 });
 
-/**
- * Validates return data structure for saving to database
- */
+// Return line schema for validation
+const returnLineSchema = z.object({
+  MerchantProductNo: z.string().min(1, 'MerchantProductNo is required and cannot be empty'),
+  OrderLineId: z.number().int().nonnegative('OrderLineId must be a non-negative number'),
+  Quantity: z.number().int().positive('Quantity must be a positive number'),
+  ExtraData: z.record(z.any()).optional(),
+});
+
+export const returnValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const createReturnSchema = z.object({
+    MerchantOrderNo: z.string().min(1, 'MerchantOrderNo is required and cannot be empty'),
+    MerchantReturnNo: z.string().min(1, 'MerchantReturnNo is required and cannot be empty'),
+    Reason: z.string().min(1, 'Reason is required and cannot be empty'),
+    Lines: z.array(returnLineSchema).min(1, 'Lines is required and must contain at least one item'),
+    Id: z.number().int().nonnegative().optional(),
+    CustomerComment: z.string().optional(),
+    MerchantComment: z.string().optional(),
+    RefundInclVat: z.number().nonnegative().optional(),
+    RefundExclVat: z.number().nonnegative().optional(),
+    ReturnDate: z.string().datetime().optional(),
+    ExtraData: z.record(z.any()).optional(),
+  });
+
+  createReturnSchema.parse(req.body);
+});
+
+//Validates return data structure for saving to database
 export const validateReturnData = (returnData) => {
   try {
     if (!returnData) {
@@ -192,4 +217,5 @@ export default {
   getAllReturnsValidator,
   syncReturnsValidator,
   validateReturnData,
+  returnValidator,
 };
