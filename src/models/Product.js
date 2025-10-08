@@ -2,6 +2,11 @@ import mongoose from 'mongoose';
 
 const ProductSchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
+      required: true,
+    },
     parentProductId: { type: String, trim: true },
     parentProductSkuCode: { type: String, trim: true },
     productSkuCode: { type: String, trim: true, unique: true },
@@ -45,14 +50,19 @@ const ProductSchema = new mongoose.Schema(
 );
 
 // Indexes for performance
-ProductSchema.index({ ean: 1 });
-ProductSchema.index({ parentProductSkuCode: 1 });
-ProductSchema.index({ productSkuCode: 1 });
-ProductSchema.index({ brand: 1 });
-ProductSchema.index({ categories: 1 });
-ProductSchema.index({ marketPlace: 1 });
-ProductSchema.index({ brand: 1, categories: 1 });
-ProductSchema.index({ name: 'text', brand: 'text', description: 'text' });
+ProductSchema.index({ seller: 1, productSkuCode: 1 }, { unique: true });
+ProductSchema.index({ seller: 1, ean: 1 });
+ProductSchema.index({ seller: 1, parentProductSkuCode: 1 });
+ProductSchema.index({ seller: 1, brand: 1 });
+ProductSchema.index({ seller: 1, categories: 1 });
+ProductSchema.index({ seller: 1, marketPlace: 1 });
+ProductSchema.index({ seller: 1, brand: 1, categories: 1 });
+ProductSchema.index({
+  seller: 1,
+  name: 'text',
+  brand: 'text',
+  description: 'text',
+});
 
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;

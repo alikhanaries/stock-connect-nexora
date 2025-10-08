@@ -39,33 +39,36 @@ const productsRouter = express.Router();
 /* DELETE PRODUCT BY ID*/
 productsRouter.delete('/deleteProduct/:id', deleteProductValidator, checkLanguage, authMiddleware, deleteProduct);
 
-productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, getProducts);
+productsRouter.get('/:sellerId', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 productsRouter.post(
-  '/importProductsFromGoogleSheet',
+  '/:sellerId/importProductsFromGoogleSheet',
   importProductsFromGoogleSheetValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   importProductsFromGoogleSheet
 );
 
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post(
-  '/importProductsFromCsvFile',
+  '/:sellerId/importProductsFromCsvFile',
   importProductsFromCsvFileValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   upload.single('file'),
   validateFile,
   importProductsFromCsvFile
 );
 
 productsRouter.get(
-  '/push-product-to-channelengine/:channelId',
+  '/:sellerId/push-product-to-channelengine/:channelId',
   pushProductsToChannelEngineValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   pushProductToChannelEngine
 );
 

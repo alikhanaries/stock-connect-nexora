@@ -21,7 +21,7 @@ const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
 const MAX_RETRIES = 3;
 
-const fetchProducts = async (query) => {
+const fetchProducts = async (query, sellerId) => {
   const {
     page = 1,
     size = 10,
@@ -37,7 +37,8 @@ const fetchProducts = async (query) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = { status: { $ne: 'removed' } };
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
+
   const appliedFilters = {};
 
   // Status filter
@@ -74,7 +75,7 @@ const fetchProducts = async (query) => {
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
-      .select('_id name status productSkuCode price msrp images currentStockCount createdAt categories')
+      .select('_id name status productSkuCode price msrp images currentStockCount createdAt categories sellerId')
       .populate('categories', '_id name slug')
       .lean(),
   ]);
@@ -177,16 +178,26 @@ const pushBatch = async (batch, index) => {
 };
 
 // 🔹 Validate products
-const validateProducts = async (channelId) => {
-  const channelProducts = await UserChannelProducts.find({ channelId }, { 'skuList.skuCode': 1, _id: 0 }).lean();
+const validateProducts = async (channelId, sellerId) => {
+  const channelProducts = await UserChannelProducts.find(
+    { sellerId: sellerId, channelId },
+    { 'skuList.skuCode': 1, _id: 0 }
+  ).lean();
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
   if (!skuCodes.length) return { total: 0, validProducts: [], failed: 0, validatedProducts: [] };
-  const products = await Product.find({ productSkuCode: { $in: skuCodes }, status: 'active' }).lean();
+  const products = await Product.find({
+    sellerId: sellerId,
+    productSkuCode: { $in: skuCodes },
+    status: 'active',
+  }).lean();
   const trailCache = new Map();
   const validatedProducts = await Promise.all(
     products.map(async (product) => {
       if (!trailCache.has(product.categoryTrail)) {
-        trailCache.set(product.categoryTrail, await getMarketPlaceCategoryTrailsService(product.categoryTrail));
+        trailCache.set(
+          product.categoryTrail,
+          await getMarketPlaceCategoryTrailsService(product.categoryTrail, sellerId)
+        );
       }
       const trails = trailCache.get(product.categoryTrail);
       const errors = [];
@@ -259,7 +270,8 @@ const pushProductsAsync = async (products) => {
   );
 };
 
-export const processImportStream = async (stream, { deleteAfter, filePath, locale } = {}) => {
+export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
+
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   let batch = [];
   let insertedCount = 0;
@@ -297,6 +309,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               invalidRowsCount++;
               return;
             }
+            product['sellerId'] = sellerId;
 
             if (product?.categoryTrail) {
               categoryTrails.add(product.categoryTrail);
@@ -311,7 +324,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
               const ops = toProcess.map((p) => ({
                 updateOne: {
-                  filter: { productSkuCode: p.productSkuCode },
+                  filter: { sellerId, productSkuCode: p.productSkuCode },
                   update: { $set: p },
                   upsert: true,
                 },
@@ -327,7 +340,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
             invalidRowsCount++;
           }
         })();
-
         rowPromises.push(rowPromise);
       })
       .on('end', async () => {
@@ -339,7 +351,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
           if (batch.length) {
             const ops = batch.map((p) => ({
               updateOne: {
-                filter: { productSkuCode: p.productSkuCode },
+                filter: { sellerId, productSkuCode: p.productSkuCode },
                 update: [
                   {
                     $set: {
@@ -378,7 +390,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   // insert category trails
   if (categoryTrails.size > 0) {
-    await insertCategoryTrail([...categoryTrails]);
+    await insertCategoryTrail([...categoryTrails], sellerId);
   }
   return {
     success: true,
@@ -391,12 +403,13 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 };
 
 /* Google Sheet Import */
-export const importProductsFromGoogleSheet = async (url, locale) => {
+
+export const importProductsFromGoogleSheet = async (url, locale, sellerId) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processImportStream(stream, { locale });
+    return await processImportStream(stream, { locale , sellerId });
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
     throw new Error(err.message); // force the catch block
@@ -404,10 +417,12 @@ export const importProductsFromGoogleSheet = async (url, locale) => {
 };
 
 /* CSV File Import */
-export const importProductsFromCsvFile = async (filePath, locale) => {
+
+export const importProductsFromCsvFile = async (filePath, locale, sellerId) => {
   try {
     const stream = fs.createReadStream(filePath);
-    return await processImportStream(stream, { deleteAfter: true, filePath, locale });
+    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId});
+
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block
