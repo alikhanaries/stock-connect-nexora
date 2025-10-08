@@ -38,7 +38,7 @@ const productsRouter = express.Router();
 
 /* DELETE PRODUCT BY ID*/
 productsRouter.delete(
-  '/:sellerId/deleteProduct/:id',
+  '/deleteProduct/:id',
   deleteProductValidator,
   checkLanguage,
   authMiddleware,
@@ -46,11 +46,11 @@ productsRouter.delete(
   deleteProduct
 );
 
-productsRouter.get('/:sellerId', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
+productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 productsRouter.post(
-  '/:sellerId/importProductsFromGoogleSheet',
+  '/importProductsFromGoogleSheet',
   importProductsFromGoogleSheetValidator,
   checkLanguage,
   authMiddleware,
@@ -60,7 +60,7 @@ productsRouter.post(
 
 /* UPLOAD PRODUCTS FROM CSV FILE */
 productsRouter.post(
-  '/:sellerId/importProductsFromCsvFile',
+  '/importProductsFromCsvFile',
   importProductsFromCsvFileValidator,
   checkLanguage,
   authMiddleware,
@@ -71,7 +71,7 @@ productsRouter.post(
 );
 
 productsRouter.get(
-  '/:sellerId/push-product-to-channelengine/:channelId',
+  '/push-product-to-channelengine/:channelId',
   pushProductsToChannelEngineValidator,
   checkLanguage,
   authMiddleware,
@@ -82,7 +82,7 @@ productsRouter.get(
 productsRouter.get('/top-product', getTopSellingProductValidator, checkLanguage, authMiddleware, getTopSellingProduct);
 
 productsRouter.patch(
-  '/:sellerId/update-status',
+  '/update-status',
   updateProductStatusValidator,
   checkLanguage,
   authMiddleware,
@@ -92,7 +92,7 @@ productsRouter.patch(
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete(
-  '/:sellerId/deleteMultipleProducts',
+  '/deleteMultipleProducts',
   deleteMultipleProductsValidator,
   checkLanguage,
   authMiddleware,
@@ -102,7 +102,7 @@ productsRouter.delete(
 
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 productsRouter.put(
-  '/addProductsToUserChannel/:id/:sellerId',
+  '/addProductsToUserChannel/:id',
   addProductsToUserChannelValidator,
   checkLanguage,
   authMiddleware,
@@ -111,7 +111,7 @@ productsRouter.put(
 );
 
 productsRouter.delete(
-  '/unlink-product-from-channel/:channelId/:sellerId',
+  '/unlink-product-from-channel/:channelId',
   unlinkProductFromChannelValidator,
   checkLanguage,
   authMiddleware,
@@ -120,7 +120,7 @@ productsRouter.delete(
 );
 
 productsRouter.get(
-  '/user-channel-products/:channelId/:sellerId',
+  '/user-channel-products/:channelId',
   getUserChannelProductsValidator,
   checkLanguage,
   authMiddleware,
@@ -129,7 +129,7 @@ productsRouter.get(
 );
 
 productsRouter.get(
-  '/get-user-unassigned-products/:channelId/:sellerId',
+  '/get-user-unassigned-products/:channelId',
   getUserUnassignedProductsValidator,
   checkLanguage,
   authMiddleware,

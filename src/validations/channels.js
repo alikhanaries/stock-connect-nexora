@@ -39,10 +39,6 @@ export const getAllUserChannelsValidator = validate(async (req) => {
       .string()
       .length(24, 'userId must be 24 characters long')
       .regex(/^[0-9a-fA-F]+$/, 'userId must be a hex string'),
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
   paramsSchema.parse(req.params);
   // validate query (for pagination + search)
@@ -66,6 +62,12 @@ export const getAllUserChannelsValidator = validate(async (req) => {
     sortBy: z.enum(['channelName', 'createdAt', 'ordersCount', 'productsCount']).optional().default('createdAt'),
 
     sortOrder: z.enum(['asc', 'desc']).optional().default('asc'),
+
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+      .optional(),
   });
 
   querySchema.parse(req.query);
@@ -106,13 +108,17 @@ export const getAllChannelsValidator = validate(async (req) => {
 export const saveUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
-  paramsSchema.parse(req.params);
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
 
   // Body schema
   const bodySchema = z
@@ -162,13 +168,17 @@ export const removeUserChannelsValidator = validate(async (req) => {
 // /* UPDATE USER CHANNELS VALIDATOR */
 export const updateUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
-  paramsSchema.parse(req.params);
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   const bodySchema = z
     .object({
       ids: z
