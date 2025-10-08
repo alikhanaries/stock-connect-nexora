@@ -37,7 +37,14 @@ const productsRouter = express.Router();
 //productsRouter.use(authMiddleware);
 
 /* DELETE PRODUCT BY ID*/
-productsRouter.delete('/deleteProduct/:id', deleteProductValidator, checkLanguage, authMiddleware, deleteProduct);
+productsRouter.delete(
+  '/:sellerId/deleteProduct/:id',
+  deleteProductValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  deleteProduct
+);
 
 productsRouter.get('/:sellerId', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
 
@@ -75,19 +82,21 @@ productsRouter.get(
 productsRouter.get('/top-product', getTopSellingProductValidator, checkLanguage, authMiddleware, getTopSellingProduct);
 
 productsRouter.patch(
-  '/update-status',
+  '/:sellerId/update-status',
   updateProductStatusValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   updateProductStatus
 );
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 productsRouter.delete(
-  '/deleteMultipleProducts',
+  '/:sellerId/deleteMultipleProducts',
   deleteMultipleProductsValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   deleteMultipleProducts
 );
 
