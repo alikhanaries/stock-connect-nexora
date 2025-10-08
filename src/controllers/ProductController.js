@@ -99,7 +99,7 @@ export const importProductsFromCsvFile = async (req, res) => {
         // Send email notification after processing
         emailService.importProductMailService({
           to: req.user.email,
-          userName: req.user.name,
+          userName: req.user.firstName,
           importStatus: result.success ? 'SUCCESS' : 'FAILED',
           errorDetails: result.errorDetails || [],
         });
