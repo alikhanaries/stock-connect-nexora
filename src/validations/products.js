@@ -247,7 +247,7 @@ export const updateProductStatusValidator = validate(async (req) => {
           message: "status must be either 'active' or 'inactive'",
         }),
     })
-    .strict();
+    .passthrough();
 
   const querySchema = z
     .object({
