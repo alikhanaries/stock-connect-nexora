@@ -43,13 +43,17 @@ const categoryItemSchema = z.object({
 export const mapCategoryValidator = validate(async (req) => {
   // Validate headers
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
-  paramsSchema.parse(req.params);
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   // Main body schema
   const bodySchema = z
     .object({
@@ -84,26 +88,29 @@ export const mapCategoryValidator = validate(async (req) => {
 export const getMarketPlaceCategoryTrailsValidator = validate(async (req) => {
   // Validate headers
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
-  paramsSchema.parse(req.params);
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
 });
 export const getStockConnectCategoriesValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
-  paramsSchema.parse(req.params);
+
   // Schema for req.query
   const querySchema = z.object({
     search: z.string().optional().default(''),
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+      .optional(),
   });
   querySchema.parse(req.query);
 });

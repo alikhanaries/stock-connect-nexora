@@ -31,11 +31,11 @@ router.get(
 // /* GET ALL CHANNEL LIST FROM DATABASE */
 router.get('/getAllChannels', getAllChannelsValidator, authMiddleware, getAllChannels);
 // /* SAVE USER CHANNELS  */
-router.put('/addChannels/:sellerId', saveUserChannelsValidator, authMiddleware, verifySellerAccess, saveUserChannels);
+router.put('/addChannels', saveUserChannelsValidator, authMiddleware, verifySellerAccess, saveUserChannels);
 /* GET USER CHANNEL LIST */
 
 router.patch(
-  '/update-user-channels-status/:sellerId',
+  '/update-user-channels-status',
   updateUserChannelsValidator,
   authMiddleware,
   verifySellerAccess,
@@ -43,7 +43,7 @@ router.patch(
 );
 
 router.delete(
-  '/remove-user-channel/:sellerId',
+  '/remove-user-channel',
   removeUserChannelsValidator,
   authMiddleware,
   verifySellerAccess,
@@ -51,7 +51,7 @@ router.delete(
 );
 
 router.get(
-  '/getAllUserChannels/:userId/:sellerId',
+  '/getAllUserChannels/:userId',
   getAllUserChannelsValidator,
   authMiddleware,
   verifySellerAccess,

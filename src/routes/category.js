@@ -28,7 +28,7 @@ router.post(
   importMarketPlaceCategoriesFromCsv
 );
 router.get(
-  '/getMarketPlaceCategoryTrails/:productCategoryTrail/:sellerId',
+  '/getMarketPlaceCategoryTrails/:productCategoryTrail',
   getMarketPlaceCategoryTrailsValidator,
   checkLanguage,
   authMiddleware,
@@ -36,16 +36,9 @@ router.get(
   getMarketPlaceCategoryTrails
 );
 
-router.put(
-  '/mapCategory/:sellerId',
-  mapCategoryValidator,
-  checkLanguage,
-  authMiddleware,
-  verifySellerAccess,
-  mapCategory
-);
+router.put('/mapCategory', mapCategoryValidator, checkLanguage, authMiddleware, verifySellerAccess, mapCategory);
 router.get(
-  '/getStockConnectCategories/:sellerId',
+  '/getStockConnectCategories',
   getStockConnectCategoriesValidator,
   checkLanguage,
   authMiddleware,

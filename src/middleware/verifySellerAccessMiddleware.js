@@ -6,10 +6,13 @@ export const verifySellerAccess = async (req, res, next) => {
   try {
     const user = req.user;
     const connectedSellerIds = req.sellerIds;
-    const { sellerId } = req.params;
-    req.sellerId = new mongoose.Types.ObjectId(sellerId);
+    let { sellerId } = req.query;
 
+    if (!sellerId) {
+      sellerId = connectedSellerIds[0];
+    }
     if (user?.role === USER_ROLES.MASTER_ADMIN) {
+      req.sellerId = new mongoose.Types.ObjectId(sellerId);
       return next();
     }
 
@@ -20,6 +23,7 @@ export const verifySellerAccess = async (req, res, next) => {
 
     if (ROLES_BASED_USER_FETCHING[user.role]) {
       if (connectedSellerIds.includes(sellerId)) {
+        req.sellerId = new mongoose.Types.ObjectId(sellerId);
         return next();
       } else {
         return Responses.failResponse(res, 'You do not have access to this seller', 400);

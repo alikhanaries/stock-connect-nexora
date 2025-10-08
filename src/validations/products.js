@@ -32,12 +32,19 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
       })
       .regex(/^\d+$/, 'id must be a number string')
       .transform((val) => parseInt(val, 10)),
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
 
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   bodySchema.parse(req.body);
   paramsSchema.parse(req.params);
 });
@@ -45,13 +52,6 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
 // /* GET PRODUCTS VALIDATOR */
 export const getProductsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
 
   const querySchema = z
     .object({
@@ -102,23 +102,21 @@ export const getProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         })
         .optional(),
+
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
     })
     .passthrough();
 
-  paramsSchema.parse(req.params);
   querySchema.parse(req.query);
 });
 
 // /* IMPORT PRODUCT BY GOOGLE SHEET VALIDATOR */
 export const importProductsFromGoogleSheetValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
 
   const bodySchema = z
     .object({
@@ -147,19 +145,35 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
         path: ['url'],
       }
     );
-  paramsSchema.parse(req.params);
+
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
+
   bodySchema.parse(req.body);
 });
 // /* IMPORT PRODUCTS BY CSV FILE VALIDATOR */
 export const importProductsFromCsvFileValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
-  paramsSchema.parse(req.params);
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
 });
 // /* DELETE MULTIPLE PRODUCTS VALIDATOR */
 export const deleteMultipleProductsValidator = validate(async (req) => {
@@ -191,14 +205,17 @@ export const deleteMultipleProductsValidator = validate(async (req) => {
         path: ['ids'],
       }
     );
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
 
-  paramsSchema.parse(req.params);
+  querySchema.parse(req.query);
   bodySchema.parse(req.body);
 });
 
@@ -232,14 +249,17 @@ export const updateProductStatusValidator = validate(async (req) => {
     })
     .strict();
 
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
 
-  paramsSchema.parse(req.params);
+  querySchema.parse(req.query);
   bodySchema.parse(req.body);
 });
 
@@ -275,13 +295,19 @@ export const deleteProductValidator = validate(async (req) => {
       })
       .length(24, 'id must be exactly 24 characters') // ObjectId length
       .regex(/^[0-9a-fA-F]{24}$/, 'id must be a valid hex string'), // ObjectId format
-
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
 
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   paramsSchema.parse(req.params);
 });
 
@@ -296,12 +322,18 @@ export const pushProductsToChannelEngineValidator = validate(async (req) => {
       })
       .regex(/^\d+$/, 'channelId must be a numeric string')
       .transform((val) => parseInt(val, 10)),
-
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
 
   paramsSchema.parse(req.params);
 });
@@ -317,10 +349,6 @@ export const getUserChannelProductsValidator = validate(async (req) => {
       })
       .regex(/^\d+$/, 'channelId must be a number string')
       .transform((val) => parseInt(val, 10)),
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
   paramsSchema.parse(req.params);
 
@@ -373,6 +401,11 @@ export const getUserChannelProductsValidator = validate(async (req) => {
         .refine((val) => !val || ['asc', 'desc'].includes(val), {
           message: "sortOrder must be either 'asc' or 'desc'",
         }),
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
     })
     .passthrough();
 
@@ -389,11 +422,19 @@ export const unlinkProductFromChannelValidator = validate(async (req) => {
       })
       .regex(/^\d+$/, 'channelId must be a number string')
       .transform((val) => parseInt(val, 10)),
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
+
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   paramsSchema.parse(req.params);
 });
 
@@ -409,10 +450,6 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
       })
       .regex(/^\d+$/, 'channelId must be a number string')
       .transform((val) => parseInt(val, 10)),
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
   });
   paramsSchema.parse(req.params);
 
@@ -465,6 +502,11 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
         .refine((val) => !val || ['asc', 'desc'].includes(val), {
           message: "sortOrder must be either 'asc' or 'desc'",
         }),
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
     })
     .passthrough();
 
