@@ -178,16 +178,26 @@ const pushBatch = async (batch, index) => {
 };
 
 // 🔹 Validate products
-const validateProducts = async (channelId) => {
-  const channelProducts = await UserChannelProducts.find({ channelId }, { 'skuList.skuCode': 1, _id: 0 }).lean();
+const validateProducts = async (channelId, sellerId) => {
+  const channelProducts = await UserChannelProducts.find(
+    { sellerId: sellerId, channelId },
+    { 'skuList.skuCode': 1, _id: 0 }
+  ).lean();
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
   if (!skuCodes.length) return { total: 0, validProducts: [], failed: 0, validatedProducts: [] };
-  const products = await Product.find({ productSkuCode: { $in: skuCodes }, status: 'active' }).lean();
+  const products = await Product.find({
+    sellerId: sellerId,
+    productSkuCode: { $in: skuCodes },
+    status: 'active',
+  }).lean();
   const trailCache = new Map();
   const validatedProducts = await Promise.all(
     products.map(async (product) => {
       if (!trailCache.has(product.categoryTrail)) {
-        trailCache.set(product.categoryTrail, await getMarketPlaceCategoryTrailsService(product.categoryTrail));
+        trailCache.set(
+          product.categoryTrail,
+          await getMarketPlaceCategoryTrailsService(product.categoryTrail, sellerId)
+        );
       }
       const trails = trailCache.get(product.categoryTrail);
       const errors = [];

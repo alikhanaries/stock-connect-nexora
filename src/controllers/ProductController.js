@@ -119,12 +119,13 @@ export const importProductsFromCsvFile = async (req, res) => {
 export const pushProductToChannelEngine = async (req, res) => {
   const { channelId } = req.params;
   try {
+    const sellerId = req.sellerId;
     const {
       validatedProducts = [],
       validProducts = [],
       failed = 0,
       total = 0,
-    } = await productService.validateProducts(channelId);
+    } = await productService.validateProducts(channelId, sellerId);
 
     const uniqueCategoryErrors = [...new Set(validatedProducts.flatMap((p) => p.Errors || []))];
     const errorData = uniqueCategoryErrors.length

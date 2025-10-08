@@ -64,10 +64,11 @@ productsRouter.post(
 );
 
 productsRouter.get(
-  '/push-product-to-channelengine/:channelId',
+  '/:sellerId/push-product-to-channelengine/:channelId',
   pushProductsToChannelEngineValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   pushProductToChannelEngine
 );
 
