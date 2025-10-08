@@ -76,10 +76,11 @@ export const softDeleteSellers = async (req, res) => {
       return response.failResponse(res, `${req.locale.VALID_SELLER_IDS} ${invalidIds.join(', ')}`, 400);
     }
     const deletedSellers = await sellerService.softDeleteSellers(ids);
-    if (!deletedSellers || deletedSellers === 0) {
+    if (!deletedSellers || deletedSellers.modifiedCount === 0) {
       return response.failResponse(res, req.locale.NO_SELLER_FOUND, 404);
     }
-    const statusMessage = `${deletedSellers} ${req.locale.SELLER_DELETED}`;
+
+    const statusMessage = `${deletedSellers.modifiedCount} ${req.locale.SELLER_DELETED}`;
     return response.successResponse(res, statusMessage, 200);
   } catch (err) {
     console.error('Error updating Seller status:', err);
