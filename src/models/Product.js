@@ -2,10 +2,16 @@ import mongoose from 'mongoose';
 
 const ProductSchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
+      required: true,
+    },
     parentProductId: { type: String, trim: true },
     parentProductSkuCode: { type: String, trim: true },
     productSkuCode: { type: String, trim: true, unique: true },
     name: { type: String, required: true, trim: true },
+    titleAr: { type: String, trim: true },
     description: { type: String },
     brand: { type: String, trim: true },
     attributes: { type: String, trim: true },
@@ -22,7 +28,7 @@ const ProductSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'inactive'],
+      enum: ['active', 'inactive', 'removed'],
       default: 'active',
     },
     shippingCost: { type: Number, default: 0 },
@@ -31,27 +37,32 @@ const ProductSchema = new mongoose.Schema(
     isFrozen: { type: Boolean, default: false },
     categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
     categoryTrail: { type: String },
+    categoryTrailAmazon: { type: String, default: null },
+    categoryTrailNoon: { type: String, default: null },
     marketPlace: { type: String, trim: true },
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
-    isDeleted: {
-      type: Boolean,
-      default: false,
-      required: true,
-    },
+    volumetricWeightCm: { type: Number, required: true },
+    hsCodeAE: { type: String, required: true },
+    hsCodeSA: { type: String, required: true },
   },
   { timestamps: true }
 );
 
 // Indexes for performance
-ProductSchema.index({ ean: 1 });
-ProductSchema.index({ parentProductSkuCode: 1 });
-ProductSchema.index({ productSkuCode: 1 });
-ProductSchema.index({ brand: 1 });
-ProductSchema.index({ categories: 1 });
-ProductSchema.index({ marketPlace: 1 });
-ProductSchema.index({ brand: 1, categories: 1 });
-ProductSchema.index({ name: 'text', brand: 'text', description: 'text' });
+ProductSchema.index({ seller: 1, productSkuCode: 1 }, { unique: true });
+ProductSchema.index({ seller: 1, ean: 1 });
+ProductSchema.index({ seller: 1, parentProductSkuCode: 1 });
+ProductSchema.index({ seller: 1, brand: 1 });
+ProductSchema.index({ seller: 1, categories: 1 });
+ProductSchema.index({ seller: 1, marketPlace: 1 });
+ProductSchema.index({ seller: 1, brand: 1, categories: 1 });
+ProductSchema.index({
+  seller: 1,
+  name: 'text',
+  brand: 'text',
+  description: 'text',
+});
 
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { validate } from './validate.js';
 import { LANGUAGE_CODES, USER_ROLES } from '#constants/common.js';
+import mongoose from 'mongoose';
 const allowedRoles = Object.values(USER_ROLES);
 
 const emailSchema = z
@@ -93,16 +94,38 @@ export const registerValidator = validate(async (req) => {
         required_error: 'Role is required',
         invalid_type_error: `Invalid role. Please select one of: ${allowedRoles.join(', ')}`,
       }),
-      active: z
-        .boolean({
-          invalid_type_error: 'Active must be a boolean',
-        })
-        .optional()
-        .default(true),
-    })
-    .strict();
 
-  bodySchema.parse(req.body);
+      active: z.boolean({ invalid_type_error: 'Active must be a boolean' }).optional().default(true),
+
+      sellerId: z
+        .string()
+        .optional()
+        .transform((val) => (val?.trim() === '' ? undefined : val))
+
+        .refine(
+          (val) => {
+            if (val === undefined) {
+              return true;
+            }
+
+            return mongoose.Types.ObjectId.isValid(val);
+          },
+          {
+            message: 'sellerId must be a valid ID format',
+          }
+        ),
+    })
+    .superRefine((data, ctx) => {
+      if (data.role !== USER_ROLES.MASTER_ADMIN && !data.sellerId) {
+        ctx.addIssue({
+          path: ['sellerId'],
+          message: 'Seller ID is required for this role.',
+          code: z.ZodIssueCode.custom,
+        });
+      }
+    });
+
+  await bodySchema.parseAsync(req.body);
 });
 
 export const resetTokenValidator = validate(async (req) => {

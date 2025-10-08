@@ -7,10 +7,10 @@ export const generateToken = (payload, expiresIn = '6h') => {
   return token;
 };
 
-export const generateTokenResponse = (user, role) => {
+export const generateTokenResponse = (user, role, sellerIds) => {
   try {
     const { _id, email, firstName, lastName, isMarketplaceConnected, active, phoneNumber } = user;
-    const payload = { id: _id, email, firstName, lastName, role, isMarketplaceConnected };
+    const payload = { id: _id, email, firstName, lastName, role, isMarketplaceConnected, sellerIds: sellerIds };
 
     const token = generateToken(payload);
     const refreshToken = generateToken({ id: _id, type: 'refresh' }, '24h');

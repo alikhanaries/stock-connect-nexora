@@ -12,16 +12,27 @@ export const VALID_PERIODS = ['week', 'month', 'year'];
 
 export const ORDER_STATUS_MATCH = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'CLOSED'];
 
+export const SELLER_TYPE = {
+  BASE: 'base',
+  NORMAL: 'normal',
+};
+
 export const USER_ROLES = {
-  SELLER_ADMIN: 'seller_admin',
-  BRAND_SUPER_ADMIN: 'brand_super_admin',
-  PLATFORM_MASTER: 'platform_master',
+  ADMIN: 'admin',
+  SUPER_ADMIN: 'super_admin',
+  MASTER_ADMIN: 'master_admin',
 };
 
 export const ROLES_BASED_USER_CREATION = {
-  platform_master: ['platform_master', 'brand_super_admin', 'seller_admin'],
-  brand_super_admin: ['brand_super_admin', 'seller_admin'],
-  seller_admin: [],
+  master_admin: ['master_admin', 'super_admin', 'admin'],
+  super_admin: ['admin', 'super_admin'],
+  admin: [],
+};
+
+export const ROLES_BASED_USER_FETCHING = {
+  master_admin: ['master_admin', 'super_admin', 'admin'],
+  super_admin: ['admin', 'super_admin'],
+  admin: ['admin', 'super_admin'],
 };
 
 export const ORDER_STATUS_MAP = {
@@ -51,3 +62,10 @@ export const SELECTED_FIELDS = [
   'orderDate',
   'createdAt',
 ].join(' ');
+
+export const BLOCKED_STATUSES = {
+  MANCO: 'Order has already been cancelled',
+  CLOSED: 'Order has already been closed',
+  RETURNED: 'Order has been returned, cannot cancel',
+  SHIPPED: 'Order has been shipped, cannot cancel now',
+};

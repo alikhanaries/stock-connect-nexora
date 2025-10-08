@@ -34,6 +34,17 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
       .transform((val) => parseInt(val, 10)),
   });
 
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   bodySchema.parse(req.body);
   paramsSchema.parse(req.params);
 });
@@ -91,8 +102,14 @@ export const getProductsValidator = validate(async (req) => {
           message: "sortOrder must be either 'asc' or 'desc'",
         })
         .optional(),
+
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -129,11 +146,34 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
       }
     );
 
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
+
   bodySchema.parse(req.body);
 });
 // /* IMPORT PRODUCTS BY CSV FILE VALIDATOR */
 export const importProductsFromCsvFileValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
 });
 // /* DELETE MULTIPLE PRODUCTS VALIDATOR */
 export const deleteMultipleProductsValidator = validate(async (req) => {
@@ -165,7 +205,17 @@ export const deleteMultipleProductsValidator = validate(async (req) => {
         path: ['ids'],
       }
     );
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
 
+  querySchema.parse(req.query);
   bodySchema.parse(req.body);
 });
 
@@ -197,8 +247,19 @@ export const updateProductStatusValidator = validate(async (req) => {
           message: "status must be either 'active' or 'inactive'",
         }),
     })
-    .strict();
+    .passthrough();
 
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   bodySchema.parse(req.body);
 });
 
@@ -217,7 +278,7 @@ export const getTopSellingProductValidator = validate(async (req) => {
 
       channel: z.string().optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });
@@ -236,27 +297,46 @@ export const deleteProductValidator = validate(async (req) => {
       .regex(/^[0-9a-fA-F]{24}$/, 'id must be a valid hex string'), // ObjectId format
   });
 
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   paramsSchema.parse(req.params);
 });
 
 // /* PUSH PRODUCTS TO CHANNELENGINE VALIDATOR */
 export const pushProductsToChannelEngineValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-
+  const paramsSchema = z.object({
+    channelId: z
+      .string({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a string',
+      })
+      .regex(/^\d+$/, 'channelId must be a numeric string')
+      .transform((val) => parseInt(val, 10)),
+  });
   const querySchema = z
     .object({
-      limit: z
+      sellerId: z
         .string()
-        .regex(/^\d+$/, 'limit must be a number string')
-        .transform((val) => parseInt(val, 10))
-        .pipe(z.number().min(1, 'limit must be at least 1'))
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
         .optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
-});
 
+  paramsSchema.parse(req.params);
+});
 // /* GET USER CHANNEL PRODUCTS VALIDATOR */
 export const getUserChannelProductsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
@@ -321,10 +401,41 @@ export const getUserChannelProductsValidator = validate(async (req) => {
         .refine((val) => !val || ['asc', 'desc'].includes(val), {
           message: "sortOrder must be either 'asc' or 'desc'",
         }),
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
+});
+export const unlinkProductFromChannelValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    channelId: z
+      .string({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a string',
+      })
+      .regex(/^\d+$/, 'channelId must be a number string')
+      .transform((val) => parseInt(val, 10)),
+  });
+
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
+  paramsSchema.parse(req.params);
 });
 
 // /* GET USER UNASSIGNED PRODUCTS VALIDATOR */
@@ -391,8 +502,13 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
         .refine((val) => !val || ['asc', 'desc'].includes(val), {
           message: "sortOrder must be either 'asc' or 'desc'",
         }),
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
     })
-    .strict();
+    .passthrough();
 
   querySchema.parse(req.query);
 });

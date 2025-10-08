@@ -1,9 +1,13 @@
 import User from '#models/User.js';
 import { formatErrorResponse, formatSuccessResponse } from '#util/responseFormatter.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import userHelper from '#helpers/User.js';
 import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
+import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
+import UserSeller from '#models/UserSeller.js';
+import Seller from '#models/Seller.js';
 
 const userSafeFields = 'firstName lastName email phoneNumber role active createdAt updatedAt';
 
@@ -14,6 +18,9 @@ export const getUserById = async (req, res) => {
     if (!user) {
       return res.status(404).json(formatErrorResponse(req.locale.USER_NOT_FOUND, 404));
     }
+    const sellerId = await userHelper.getConnectedSllerId(user._id);
+
+    user.sellerId = sellerId;
     res.status(200).json(formatSuccessResponse(user, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
     errorLog(err);
@@ -24,27 +31,75 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
+    const creatorRole = req.user.role;
+    const creatorId = req.user._id;
 
-    const { firstName, lastName, email, phoneNumber, active, role } = req.body;
+    const { firstName, lastName, email, phoneNumber, active, role, password, sellerId } = req.body;
+    const payload = { firstName, lastName, email, phoneNumber, active, role };
 
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { firstName, lastName, email, phoneNumber, active, role },
-      { new: true }
-    ).select(userSafeFields);
+    if (password && password.trim() !== '') {
+      if (password.length < 6) {
+        return Responses.failResponse(res, req.locale.PASSWORD_LENGTH, 400);
+      }
+      payload.password = password;
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(id, { $set: payload }, { new: true, runValidators: true }).select(
+      userSafeFields
+    );
+
     if (!updatedUser) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, updatedUser.toObject());
+
+    const userResponseObject = updatedUser.toObject();
+
+    if (sellerId) {
+      const seller = await userHelper.validateSellerAccessForCreator(
+        creatorId,
+        sellerId,
+        creatorRole,
+        updatedUser.role
+      );
+      if (seller && !seller.success) {
+        if (!seller.notBaseSeller) {
+          return Responses.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
+        }
+        const message =
+          seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_DOES_NOT_EXISTS : req.locale.NOT_HAVE_ACCESS;
+        return Responses.failResponse(res, message, 403);
+      }
+
+      const sellerUpdataion = await userHelper.sellerConnectionUpdate(updatedUser._id, sellerId);
+
+      if (!sellerUpdataion) {
+        return Responses.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
+      }
+
+      userResponseObject.sellerId = sellerUpdataion.sellerId;
+    } else {
+      const sellerId = await userHelper.getConnectedSllerId(updatedUser._id);
+      if (!sellerId) {
+        return Responses.failResponse(res, req.locale.UNABLE_FETCH_SELLER, 400);
+      }
+      userResponseObject.sellerId = sellerId;
+    }
+    return Responses.successResponse(res, req.locale.USER_UPDATED_SUCCESSFULLY, 200, userResponseObject);
   } catch (error) {
     errorLog(error);
-    return Responses.errorResponse(res, error);
+    console.error(error);
+    return Responses.errorResponse(res, error.message);
   }
 };
 
 export const getAllUsers = async (req, res) => {
   try {
-    const { role, active, search, page, size = 10 } = req.query;
+    const user = req.user;
+    const seller = req.seller;
+
+    const sellerConnectionWithUsers = await userHelper.getUserConnectedToThisSellers(seller);
+
+    const { role, active, search, page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
 
     const pageNum = parseInt(page);
     const limit = parseInt(size);
@@ -52,6 +107,14 @@ export const getAllUsers = async (req, res) => {
     const skip = (pageNum - 1) * limit;
 
     const filter = { isDeleted: false };
+
+    if (SELLER_TYPE.NORMAL === sellerConnectionWithUsers.type) {
+      filter._id = { $in: sellerConnectionWithUsers.userIds };
+    }
+
+    if (ROLES_BASED_USER_FETCHING[user.role]) {
+      filter.role = { $in: ROLES_BASED_USER_FETCHING[user.role] };
+    }
     if (role) {
       filter.role = role.toLowerCase();
     }
@@ -64,11 +127,67 @@ export const getAllUsers = async (req, res) => {
       const searchRegex = new RegExp(search, 'i');
       filter.$or = [{ firstName: searchRegex }, { lastName: searchRegex }];
     }
-    const [totalElements, users] = await Promise.all([
-      User.countDocuments(filter),
-      User.find(filter).skip(skip).limit(size).select(userSafeFields).lean(),
-    ]);
-    const pagination = getPagination(totalElements, pageNum, limit);
+
+    const sortDirection = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
+    const sort = { [sortBy]: sortDirection };
+    const aggregationPipeline = [
+      { $match: filter },
+
+      { $sort: sort },
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+
+            {
+              $lookup: {
+                from: UserSeller.collection.name,
+                localField: '_id',
+                foreignField: 'userId',
+                as: 'sellerConnection',
+              },
+            },
+
+            { $unwind: { path: '$sellerConnection', preserveNullAndEmptyArrays: true } },
+
+            {
+              $lookup: {
+                from: Seller.collection.name,
+                localField: 'sellerConnection.sellerId',
+                foreignField: '_id',
+                as: 'sellerDetails',
+              },
+            },
+
+            { $unwind: { path: '$sellerDetails', preserveNullAndEmptyArrays: true } },
+
+            {
+              $project: {
+                _id: 1,
+                firstName: 1,
+                lastName: 1,
+                email: 1,
+                role: 1,
+                active: 1,
+                createdAt: 1,
+                updatedAt: 1,
+                lastLogin: 1,
+                sellerId: '$sellerConnection.sellerId',
+                sellerName: '$sellerDetails.name',
+              },
+            },
+          ],
+          metadata: [{ $count: 'total' }],
+        },
+      },
+    ];
+    const results = await User.aggregate(aggregationPipeline);
+
+    const users = results[0].data;
+    const total = results[0].metadata[0] ? results[0].metadata[0].total : 0;
+
+    const pagination = getPagination(total, pageNum, limit);
     const response = {
       content: users,
       appliedFilters: {

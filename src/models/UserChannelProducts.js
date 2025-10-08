@@ -20,11 +20,15 @@ const skuListSchema = new mongoose.Schema(
 // Main schema
 const channelProductsSchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
+      required: true,
+    },
     channelId: {
       type: Number,
       required: true,
       index: true,
-      unique: true,
     },
 
     userId: {
@@ -43,6 +47,7 @@ const channelProductsSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+channelProductsSchema.index({ channelId: 1, userId: 1 }, { unique: true });
 
 const UserChannelProducts = mongoose.model('UserChannelProducts', channelProductsSchema);
 export default UserChannelProducts;

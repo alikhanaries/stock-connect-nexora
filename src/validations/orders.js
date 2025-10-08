@@ -1,44 +1,14 @@
-import { z, ZodError } from 'zod';
-import { errorResponse } from '#helpers/response.js';
+import { z } from 'zod';
 // Common language list
-import { LANGUAGE_CODES, ORDER_STATUS_MAP, VALID_PERIODS } from '#constants/common.js';
-const validate = (parseFn) => async (req, res, next) => {
-  try {
-    await parseFn(req);
-    return next();
-  } catch (error) {
-    console.error('Validation error:', error);
-    const message =
-      error instanceof ZodError ? error.issues[0]?.message || 'Invalid input' : error.message || 'Server Error';
-    return errorResponse(res, message, 400);
-  }
-};
+import { ORDER_STATUS_MAP, VALID_PERIODS } from '#constants/common.js';
+import { validate } from './validate.js';
+import { headerSchema } from './headerSchema.js';
 
-export const headerSchema = z
-  .object({
-    authorization: z
-      .string({
-        required_error: 'Authorization header is required',
-        invalid_type_error: 'Authorization must be a string',
-      })
-      .nonempty('Authorization header cannot be empty'),
-
-    'accept-language': z
-      .string({
-        invalid_type_error: 'Accept-Language must be a string',
-      })
-      .optional()
-      .superRefine((val, ctx) => {
-        if (val && !LANGUAGE_CODES.includes(val)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Accept-Language '${val}' is not supported. Supported languages: ${LANGUAGE_CODES.join(', ')}`,
-            path: ['accept-language'],
-          });
-        }
-      }),
-  })
-  .passthrough();
+const orderLineSchema = z.object({
+  MerchantProductNo: z.string(),
+  OrderLineId: z.number().int().positive(),
+  Quantity: z.number().int().min(1, 'You must cancel at least 1 item if you want to cancel'),
+});
 
 export const getAllOrdersValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
@@ -96,7 +66,7 @@ export const getAllOrdersValidator = validate(async (req) => {
       .refine((val) => !val || ['asc', 'desc'].includes(val.toLowerCase()), {
         message: 'sortOrder must be either "asc" or "desc"',
       })
-      .transform((val) => (val ? val.toLowerCase() : 'asc')),
+      .transform((val) => (val ? val.toLowerCase() : 'desc')),
 
     sortBy: z
       .string()
@@ -104,7 +74,7 @@ export const getAllOrdersValidator = validate(async (req) => {
       .refine((val) => !val || val.trim().length > 0, {
         message: 'sortBy cannot be empty',
       })
-      .transform((val) => (val ? val : '_id')),
+      .transform((val) => (val ? val : 'orderId')),
 
     platform: z
       .string()
@@ -153,4 +123,21 @@ export const getOrderComparisonValidator = validate(async (req) => {
   });
 
   comparisonOrderQuerySchema.parse(req.query);
+});
+
+export const merchantCancelIdValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const merchantCancelByIdSchema = z.object({
+    orderId: z
+      .string()
+      .length(24, 'order id must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'order id must be a hex string'),
+    reason: z
+      .string()
+      .min(15, 'Reason should be long enough to have a meaning.')
+      .max(500, 'Reason must be within 500 characters.')
+      .regex(/^[a-zA-Z0-9\s.,:'"]+$/, 'Reason must be a valid statement.'),
+    specifics: z.array(orderLineSchema).optional().default([]),
+  });
+  merchantCancelByIdSchema.parse(req.body);
 });

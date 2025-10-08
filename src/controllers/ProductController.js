@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService from '#service/productService.js';
+import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
@@ -8,7 +9,8 @@ import User from '../models/User.js';
 
 export const getProducts = async (req, res) => {
   try {
-    const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query);
+    const sellerId = req.sellerId;
+    const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query, sellerId);
     const responseData = {
       content: products || [],
       appliedFilters: appliedFilters || {},
@@ -45,27 +47,35 @@ export const getTopSellingProduct = async (req, res) => {
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
     const { url } = req.body;
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
-
     const exportUrl = await convertGoogleSheetUrlToExport(url);
     if (!exportUrl) {
       return failResponse(res, req.locale.INVALID_URL, 500);
     }
-    const result = await productService.importProductsFromGoogleSheet(exportUrl);
-    // Handle failure from service
-    if (!result?.success) {
-      return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
-    }
-
-    // Success response with details
-    return successResponse(res, result.message, 200, {
-      insertedCount: result.insertedCount,
-      invalidRowsCount: result.invalidRowsCount,
-      errorRows: result.errorRows,
-    });
+    // Send immediate response to client
+    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+    // Process file in background (async, no await here)
+    productService
+      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId)
+      .then((result) => {
+        console.log('CSV processing completed:', result);
+        // Send email notification after processing
+        emailService.importProductMailService({
+          to: req.user.email,
+          userName: req.user.firstName,
+          importStatus: result.success ? 'SUCCESS' : 'FAILED',
+          errorDetails: result.errorDetails || [],
+        });
+        // Optionally update DB with processing status
+      })
+      .catch((error) => {
+        console.error('Error in background CSV processing:', error.message);
+        // Optionally store error in DB for tracking
+      });
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     errorLog(error);
@@ -76,20 +86,29 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 /* UPLOAD PRODUCTS FROM CSV FILE */
 export const importProductsFromCsvFile = async (req, res) => {
   try {
+    // Send immediate response to client
+    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
     // Call service
-    const result = await productService.importProductsFromCsvFile(req.file.path);
+    const sellerId = req.sellerId;
 
-    // Handle failure from service
-    if (!result?.success) {
-      return failResponse(res, req.locale.PRODUCT_IMPORT_ERROR, 500);
-    }
-
-    // Success response with details
-    return successResponse(res, result.message, 200, {
-      insertedCount: result.insertedCount,
-      invalidRowsCount: result.invalidRowsCount,
-      errorRows: result.errorRows,
-    });
+    // Process file in background (async, no await here)
+    productService
+      .importProductsFromCsvFile(req.file.path, req.locale, sellerId)
+      .then((result) => {
+        console.log('CSV processing completed:', result.errorDetails);
+        // Send email notification after processing
+        emailService.importProductMailService({
+          to: req.user.email,
+          userName: req.user.firstName,
+          importStatus: result.success ? 'SUCCESS' : 'FAILED',
+          errorDetails: result.errorDetails || [],
+        });
+        // Optionally update DB with processing status
+      })
+      .catch((error) => {
+        console.error('Error in background CSV processing:', error.message);
+        // Optionally store error in DB for tracking
+      });
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     errorLog(error);
@@ -98,23 +117,55 @@ export const importProductsFromCsvFile = async (req, res) => {
 };
 
 export const pushProductToChannelEngine = async (req, res) => {
+  const { channelId } = req.params;
   try {
-    const { channelId } = req.params;
-    if (!channelId) {
-      return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
+    const sellerId = req.sellerId;
+    const {
+      validatedProducts = [],
+      validProducts = [],
+      failed = 0,
+      total = 0,
+    } = await productService.validateProducts(channelId, sellerId);
+
+    const uniqueCategoryErrors = [...new Set(validatedProducts.flatMap((p) => p.Errors || []))];
+    const errorData = uniqueCategoryErrors.length
+      ? { message: req.locale.INVALID_CATEGORY_TRAIL, categoryData: uniqueCategoryErrors }
+      : null;
+
+    const message =
+      failed === 0
+        ? req.locale.ALL_PRODUCTS_PUSH_SUCCESS
+        : failed === total
+          ? req.locale.ALL_PRODUCTS_PUSH_FAILED
+          : req.locale.PRODUCTS_PUSH_PARTIAL_SUCCESS;
+
+    if (validProducts?.length) {
+      (async () => {
+        try {
+          await productService.pushProductsAsync(validProducts);
+        } catch (err) {
+          console.error('Async push failed:', err);
+        }
+      })();
     }
-    const result = await productService.pushProductsFromChannel(channelId);
-    return successResponse(res, `${result.AcceptedCount} ${req.locale.PRODUCTS_PUSH_STARTED}`, 202);
+
+    if (failed > 0) {
+      return failResponse(res, message, 400, errorData);
+    }
+
+    return successResponse(res, message, 200, null);
   } catch (err) {
     console.error('Controller Error:', err);
     errorLog(err);
-    return errorResponse(res, err, 500);
+    return errorResponse(res, err.message || 'Internal Server Error', 500);
   }
 };
 
 export const updateProductStatus = async (req, res) => {
   try {
     const { ids, status } = req.body;
+    const sellerId = req.sellerId;
+
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, req.locale.PRODUCT_IDS_REQUIRED, 400);
     }
@@ -126,7 +177,7 @@ export const updateProductStatus = async (req, res) => {
     if (!statusValue || !PRODUCT_STATUSES.includes(statusValue)) {
       return failResponse(res, `${req.locale.STATUS_MUST_BE_ONE_OF} ${PRODUCT_STATUSES.join(', ')}`, 400);
     }
-    const updatedCount = await productService.updateProductStatus(ids, status);
+    const updatedCount = await productService.updateProductStatus(ids, status, sellerId);
     if (updatedCount === 0) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
     }
@@ -145,8 +196,9 @@ export const updateProductStatus = async (req, res) => {
 export const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    const sellerId = req.sellerId;
     //Validate ObjectId
-    const result = await productService.deleteProduct(id, req.locale);
+    const result = await productService.deleteProduct(id, req.locale, sellerId);
     if (!result.success) {
       return failResponse(res, result.message || req.locale.PRODUCT_DELETE_FAILED, 400);
     }
@@ -163,7 +215,8 @@ export const deleteProduct = async (req, res) => {
 export const deleteMultipleProducts = async (req, res) => {
   try {
     const { ids } = req.body;
-    const result = await productService.deleteMultipleProducts(ids, req.locale);
+    const sellerId = req.sellerId;
+    const result = await productService.deleteMultipleProducts(ids, req.locale, sellerId);
     if (!result.success) {
       return failResponse(res, result.message || req.locale.PRODUCT_DELETE_FAILED, 400);
     }
@@ -181,12 +234,13 @@ export const addProductsToUserChannel = async (req, res) => {
     const { ids } = req.body;
     const { id } = req.params;
     const userId = req.user._id;
+    const sellerId = req.sellerId;
     // Check if user exists
     const user = await User.findById(userId);
     if (!user) {
       return failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    const result = await productService.addProductsToUserChannel(userId, id, ids, req.locale);
+    const result = await productService.addProductsToUserChannel(userId, sellerId, id, ids, req.locale);
 
     if (!result.success) {
       return failResponse(res, result?.message, 404);
@@ -203,7 +257,7 @@ export const addProductsToUserChannel = async (req, res) => {
 export const getUserChannelProducts = async (req, res) => {
   try {
     const userId = req.user?._id;
-
+    const sellerId = req.sellerId;
     if (!userId) {
       return failResponse(res, 'User ID is required', 400);
     }
@@ -213,6 +267,7 @@ export const getUserChannelProducts = async (req, res) => {
     }
     const { channel, products, pagination, appliedFilters } = await productService.getUserChannelProducts(
       userId,
+      sellerId,
       channelId,
       req.query
     );
@@ -237,11 +292,13 @@ export const getUserUnassignedProducts = async (req, res) => {
   try {
     const { channelId } = req.params;
     const userId = req.user?._id;
+    const sellerId = req.sellerId;
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
     const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
       userId,
+      sellerId,
       channelId,
       req.query
     );
@@ -264,6 +321,7 @@ export const unlinkProductFromChannel = async (req, res) => {
   try {
     const userId = req.user._id;
     const { channelId } = req.params;
+    const sellerId = req.sellerId;
     const { ids } = req.body;
     if (!userId) {
       return errorResponse(res, { message: req.locale.USERID_REQUIRED }, 400);
@@ -274,7 +332,7 @@ export const unlinkProductFromChannel = async (req, res) => {
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, req.locale.PRODUCTIDS_REQUIRED, 400);
     }
-    const updatedCount = await productService.unlinkProductFromChannel(userId, channelId, ids);
+    const updatedCount = await productService.unlinkProductFromChannel(userId, sellerId, channelId, ids);
     if (updatedCount === 0) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND, 404);
     }

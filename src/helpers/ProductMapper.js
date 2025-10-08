@@ -1,6 +1,50 @@
 export const mapProductToChannelEngine = (product) => {
   const customAttributes = [
     { Key: 'MarketPlace', Value: product.marketPlace, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
+    { Key: 'Stock', Value: product.currentStockCount || 0, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
+    {
+      Key: 'categoryTrailAmazon',
+      Value: product.categoryTrailAmazon || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'categoryTrailNoon',
+      Value: product.categoryTrailNoon || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+
+    {
+      Key: 'titleAr',
+      Value: product.titleAr || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'ar',
+    },
+    {
+      Key: 'hsCodeSA',
+      Value: product.hsCodeSA || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'hsCodeAE',
+      Value: product.hsCodeAE || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'volumetricWeightCm',
+      Value: product.volumetricWeightCm || 0,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || '';
   return {
