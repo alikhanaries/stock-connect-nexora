@@ -51,5 +51,14 @@ export const mapRowToProduct = async (row, index, locale) => {
     currentStockCount: r.stock ? parseInt(r.stock, 10) || 0 : 0,
     createdAt: new Date(),
     updatedAt: new Date(),
+    extraImageUrl1: r.extraimageurl1,
+    extraImageUrl2: r.extraimageurl2,
+    extraImageUrl3: r.extraimageurl3,
+    size: r.size,
+    color: r.color,
+    volumetricWeightCm: r.volumetricweightcm,
+    hsCodeAE: r.hscodeae,
+    hsCodeSA: r.hscodesa,
+    titleAr: r.titlear || '',
   };
 };

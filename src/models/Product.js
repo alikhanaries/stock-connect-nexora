@@ -45,6 +45,11 @@ const ProductSchema = new mongoose.Schema(
     volumetricWeightCm: { type: Number, required: true },
     hsCodeAE: { type: String, required: true },
     hsCodeSA: { type: String, required: true },
+    size: { type: String },
+    color: { type: String },
+    extraImageUrl1: { type: String },
+    extraImageUrl2: { type: String },
+    extraImageUrl3: { type: String },
   },
   { timestamps: true }
 );
