@@ -280,7 +280,6 @@ const pushProductsAsync = async (products) => {
 };
 
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
-
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   let batch = [];
   let insertedCount = 0;
@@ -418,7 +417,7 @@ export const importProductsFromGoogleSheet = async (url, locale, sellerId) => {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processImportStream(stream, { locale , sellerId });
+    return await processImportStream(stream, { locale, sellerId });
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
     throw new Error(err.message); // force the catch block
@@ -430,8 +429,7 @@ export const importProductsFromGoogleSheet = async (url, locale, sellerId) => {
 export const importProductsFromCsvFile = async (filePath, locale, sellerId) => {
   try {
     const stream = fs.createReadStream(filePath);
-    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId});
-
+    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block
@@ -700,8 +698,32 @@ const getUserUnassignedProducts = async (userId, sellerId, channelId, query) => 
   };
 };
 
-const removeProductsFromChannelEngine = async (skuCodes) => {
-  if (!skuCodes?.length) return;
+async function existProductsFromChannelEngine() {
+  const page = 1;
+  const batchSize = 500;
+
+  try {
+    const response = await fetch(
+      `${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&size=${batchSize}`,
+      { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+    );
+
+    if (!response.ok) {
+      throw new Error(`ChannelEngine GET failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    if (!data.Content) return [];
+
+    return data.Content.map((p) => p.MerchantProductNo?.trim().toUpperCase()).filter(Boolean);
+  } catch (err) {
+    console.error('Error fetching from ChannelEngine:', err);
+    return [];
+  }
+}
+
+async function removeProductsFromChannelEngine(skuCodes) {
+  if (!skuCodes?.length) return { success: true, message: 'No SKUs provided' };
 
   try {
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
@@ -721,9 +743,15 @@ const removeProductsFromChannelEngine = async (skuCodes) => {
     console.error('Error calling ChannelEngine:', err);
     return { success: false, message: err.message };
   }
-};
+}
 
 const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale) => {
+  const EXCLUDED_SKUS = new Set([
+    'SKU-BLAZER-010-BLU',
+    'SKU-BLAZER-011-BRN',
+    'SKU-BLAZER-012-GRN',
+    'SKU-BLAZER-011-PINK',
+  ]);
   try {
     const products = await Product.find(
       { _id: { $in: ids }, sellerId: new mongoose.Types.ObjectId(sellerId) },
@@ -731,9 +759,23 @@ const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale
     ).lean();
     if (!products.length) return 0;
     const skuCodes = products.map((p) => p.productSkuCode);
-    const ceResult = skuCodes.length > 0 ? await removeProductsFromChannelEngine(skuCodes) : { success: true };
-    if (!ceResult.success) {
-      return { success: false, message: 'ChannelEngine deletion failed', ceError: ceResult.message };
+    const existProductFromCE = await existProductsFromChannelEngine();
+    const commonSkuCodes = skuCodes.filter((sku) => existProductFromCE.includes(sku) && !EXCLUDED_SKUS.has(sku));
+    if (commonSkuCodes.length > 0) {
+      const ceResult = await removeProductsFromChannelEngine(commonSkuCodes);
+      if (!ceResult.success) {
+        return {
+          success: false,
+          message: 'ChannelEngine deletion failed',
+          ceError: ceResult.message,
+        };
+      }
+    } else {
+      console.log('No valid SKUs to remove from ChannelEngine');
+    }
+    const validSkuCodes = skuCodes.filter((sku) => !EXCLUDED_SKUS.has(sku));
+    if (!validSkuCodes.length) {
+      return { success: true, message: 'No valid SKUs to process' };
     }
     const result = await UserChannelProducts.updateMany(
       {
@@ -741,7 +783,7 @@ const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale
         sellerId: new mongoose.Types.ObjectId(sellerId),
         channelId: Number(channelId),
       },
-      { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
+      { $pull: { skuList: { skuCode: { $in: validSkuCodes } } } }
     );
 
     const channel = await Channel.findOne({ channelId }).select('channelName').lean();
