@@ -746,6 +746,12 @@ async function removeProductsFromChannelEngine(skuCodes) {
 }
 
 const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale) => {
+  /**
+   * TODO [TEMPORARY EXCLUSION - CE/NOON]:
+   * These SKUs are temporarily restricted from unlinking/removal.
+   * Reason: Avoid accidental deletion during ongoing ChannelEngine and Noon integrations.
+   * Remove this list and all related conditions once integrations are fully completed.
+   */
   const EXCLUDED_SKUS = new Set([
     'SKU-BLAZER-010-BLU',
     'SKU-BLAZER-011-BRN',
@@ -760,6 +766,10 @@ const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale
     if (!products.length) return 0;
     const skuCodes = products.map((p) => p.productSkuCode);
     const existProductFromCE = await existProductsFromChannelEngine();
+    /**
+     * TODO [TEMPORARY FILTER - CE/NOON]:
+     * Filtering out temporarily restricted SKUs before CE unlinking.
+     */
     const commonSkuCodes = skuCodes.filter((sku) => existProductFromCE.includes(sku) && !EXCLUDED_SKUS.has(sku));
     if (commonSkuCodes.length > 0) {
       const ceResult = await removeProductsFromChannelEngine(commonSkuCodes);
@@ -773,6 +783,10 @@ const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale
     } else {
       console.log('No valid SKUs to remove from ChannelEngine');
     }
+    /**
+     * TODO [TEMPORARY FILTER - CE/NOON]:
+     * Excluding temporary SKUs from DB update operations.
+     */
     const validSkuCodes = skuCodes.filter((sku) => !EXCLUDED_SKUS.has(sku));
     if (!validSkuCodes.length) {
       return { success: true, message: 'No valid SKUs to process' };
