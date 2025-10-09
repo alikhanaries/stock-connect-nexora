@@ -140,13 +140,17 @@ export const saveUserChannelsValidator = validate(async (req) => {
 // /* REMOVE USER CHANNELS VALIDATOR */
 export const removeUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    sellerId: z
-      .string()
-      .length(24, 'sellerId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
-  });
-  paramsSchema.parse(req.params);
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
   const bodySchema = z
     .object({
       ids: z
