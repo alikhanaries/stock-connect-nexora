@@ -21,6 +21,10 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
+    channelReturnNo: {
+      type: String,
+      index: true,
+    },
     channelId: {
       type: Number,
       index: true,
@@ -53,7 +57,7 @@ const ReturnSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    collection: 'Returns',
+    collection: 'returns',
   }
 );
 

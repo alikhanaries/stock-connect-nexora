@@ -103,6 +103,7 @@ export const sanitizeReturnData = (returnData) => {
       merchantReturnNo: returnData.MerchantReturnNo,
       merchantOrderNo: returnData.MerchantOrderNo,
       channelOrderNo: returnData.ChannelOrderNo,
+      channelReturnNo: returnData.ChannelReturnNo,
       channelId: returnData.ChannelId,
       totalPrice: returnData.RefundInclVat || 0,
       placedOn: returnData.ReturnDate ? new Date(returnData.ReturnDate) : null,

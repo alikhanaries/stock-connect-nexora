@@ -5,7 +5,81 @@ import { getPagination } from '#helpers/PaginationHandler.js';
 
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
-// Fetches returns from ChannelEngine and saves them to the database.
+//Formats return data with order information
+const formatReturnWithOrderData = async (returns) => {
+  if (!returns || returns.length === 0) {
+    return [];
+  }
+
+  // Get unique merchant order numbers from returns
+  const merchantOrderNos = [...new Set(returns.map((returnItem) => returnItem.merchantOrderNo).filter(Boolean))];
+
+  if (merchantOrderNos.length === 0) {
+    // No merchant order numbers found, return returns with empty order data
+    return returns.map((returnItem) => {
+      const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
+
+      return {
+        _id: returnItem._id,
+        orderID: null,
+        quantity: totalQuantity,
+        totalPrice: returnItem.totalPrice || null,
+        customer: null,
+        placedOn: returnItem.placedOn,
+        email: null,
+        phoneNumber: null,
+        status: returnItem.status,
+        platform: returnItem.platform,
+      };
+    });
+  }
+
+  // Find orders that match merchantOrderNo from returns
+  const orders = await Order.find(
+    { merchantOrderNo: { $in: merchantOrderNos } },
+    {
+      orderId: 1,
+      merchantOrderNo: 1,
+      totalInclVat: 1,
+      orderCustomer: 1, // Get the full orderCustomer object
+    }
+  ).lean();
+
+  // Create a map: merchantOrderNo -> Order data
+  const orderMap = {};
+  orders.forEach((order) => {
+    orderMap[order.merchantOrderNo] = order;
+  });
+
+  // Format returns with matched order data
+  return returns.map((returnItem) => {
+    const orderData = orderMap[returnItem.merchantOrderNo] || {};
+
+    const customerName = orderData.orderCustomer
+      ? `${orderData.orderCustomer.firstName || ''} ${orderData.orderCustomer.lastName || ''}`.trim()
+      : '';
+
+    // Calculate total quantity from products
+    const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
+
+    return {
+      _id: returnItem._id,
+      orderID: orderData.orderId || null,
+      quantity: totalQuantity,
+      totalPrice: orderData.totalInclVat || null,
+      customer: customerName || null,
+      placedOn: returnItem.placedOn,
+      email: orderData.orderCustomer?.email || null,
+      phoneNumber: orderData.orderCustomer?.phone || null,
+      status: returnItem.status,
+      platform: returnItem.platform,
+    };
+  });
+};
+
+/**
+ * Fetches returns from ChannelEngine and saves them to the database.
+ */
 export const getReturns = async (queryParams = {}) => {
   try {
     const params = new URLSearchParams({
@@ -198,6 +272,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
         merchantReturnNo: 1,
         merchantOrderNo: 1,
         channelOrderNo: 1,
+        channelReturnNo: 1,
         channelId: 1,
         placedOn: 1,
         acknowledgeDate: 1,
