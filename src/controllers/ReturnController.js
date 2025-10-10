@@ -8,17 +8,23 @@ export const getAllReturns = async (req, res) => {
   try {
     const result = await returnService.getReturnsFromDatabase(req.query);
 
-    if (result.success === false) {
-      return Responses.failResponse(res, result.message || 'Failed to fetch returns', 400);
+    if (result.success && !result.success) {
+      return Responses.failResponse(res, result.message || 'Returns not Found', 400);
     }
 
     const { data: returns = [], pagination = {}, appliedFilters = {} } = result;
 
-    const message = returns.length > 0 ? 'Returns fetched successfully' : 'No returns found';
+    if (!returns.length) {
+      return Responses.successResponse(res, result.message || 'No returns found', 200, {
+        content: [],
+        appliedFilters: appliedFilters || {},
+        ...pagination,
+      });
+    }
 
-    return Responses.successResponse(res, message, 200, {
+    return Responses.successResponse(res, result.message || 'Returns fetched successfully', 200, {
       content: returns,
-      appliedFilters,
+      appliedFilters: appliedFilters || {},
       ...pagination,
     });
   } catch (error) {
@@ -29,10 +35,8 @@ export const getAllReturns = async (req, res) => {
 };
 
 //  Fetches latest returns from ChannelEngine and syncs them to the database.
-
 export const syncReturns = async (req, res) => {
   try {
-    // Fetch and sync returns from ChannelEngine (automatically saves to database)
     const result = await returnService.getReturns(req.query);
 
     if (!result.success) {

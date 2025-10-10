@@ -17,8 +17,8 @@ export const getAllReturnsValidator = validate(async (req) => {
     size: z
       .string()
       .optional()
-      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0 && Number(val) <= 100), {
-        message: 'size must be a positive number between 1 and 100',
+      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0), {
+        message: 'size must be a positive number',
       })
       .transform((val) => (val ? Number(val) : 10)),
 
@@ -42,6 +42,20 @@ export const getAllReturnsValidator = validate(async (req) => {
       .optional()
       .refine((val) => !val || val.trim().length > 0, {
         message: 'returnId cannot be empty',
+      }),
+
+    orderID: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.trim().length > 0, {
+        message: 'orderID cannot be empty',
+      }),
+
+    search: z
+      .string()
+      .optional()
+      .refine((val) => !val || (val.trim().length > 0 && val.trim().length >= 1), {
+        message: 'search must be at least 1 character long',
       }),
 
     dateFrom: z
