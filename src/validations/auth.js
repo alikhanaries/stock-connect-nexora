@@ -40,7 +40,7 @@ const phoneSchema = z
     invalid_type_error: 'Phone number must be a string',
   })
   .nonempty('Phone number cannot be empty')
-  .min(10, 'Phone number must be at least 10 digits long')
+  .min(1, 'Phone number is required')
   .max(15, 'Phone number must not exceed 15 digits')
   .regex(/^[+]?[\d\s\-()]+$/, 'Invalid phone number format')
   .trim();
