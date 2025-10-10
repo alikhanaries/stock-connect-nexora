@@ -74,5 +74,8 @@ export const mapProductToChannelEngine = (product) => {
     ImageUrl: product.images?.[0] || '',
     CategoryTrail: product.categoryTrail,
     IsFrozen: false,
+    ExtraImageUrl1: product.extraImageUrl1 || '',
+    ExtraImageUrl2: product.extraImageUrl2 || '',
+    ExtraImageUrl3: product.extraImageUrl3 || '',
   };
 };
