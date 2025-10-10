@@ -134,7 +134,7 @@ export const merchantCancelIdValidator = validate(async (req) => {
       .regex(/^[0-9a-fA-F]+$/, 'order id must be a hex string'),
     reason: z
       .string()
-      .min(15, 'Reason should be long enough to have a meaning.')
+      .min(1, 'Reason should be long enough to have a meaning.')
       .max(500, 'Reason must be within 500 characters.')
       .regex(/^[a-zA-Z0-9\s.,:'"]+$/, 'Reason must be a valid statement.'),
     specifics: z.array(orderLineSchema).optional().default([]),
