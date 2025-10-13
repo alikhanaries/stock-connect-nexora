@@ -625,7 +625,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const products = result[0]?.paginatedResults || [];
 
   return {
-    channel: channelDetails,
+    channel: products.length > 0 ? channelDetails : null,
     products,
     pagination: getPagination(total, currentPage, limit),
     appliedFilters,
@@ -644,11 +644,16 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     },
     { 'skuList.skuCode': 1 }
   ).lean();
-
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
-
   const filter = { status: { $ne: 'removed' } };
   const appliedFilters = {};
+  if (assignedSkuCodes.length === 0) {
+    return {
+      products: [],
+      pagination: getPagination(0, currentPage, limit),
+      appliedFilters,
+    };
+  }
 
   if (assignedSkuCodes.length > 0) {
     filter.productSkuCode = { $nin: assignedSkuCodes };
