@@ -123,6 +123,30 @@ export const getAllSeller = async (req, res) => {
   }
 };
 
+export const getAllPickupAddresses = async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'sellerId is required',
+      });
+    }
+
+    // Directly query PickupAddress collection
+    const pickupAddresses = await sellerService.getAllPickupAddresses(sellerId);
+    const message =
+      pickupAddresses && pickupAddresses.length > 0
+        ? 'Pickup addresses fetched successfully'
+        : 'No Pickup addresse found';
+
+    return response.successResponse(res, message, 200, pickupAddresses);
+  } catch (error) {
+    return response.errorResponse(res, error.message, 500);
+  }
+};
+
 export const savePickupAddress = async (req, res) => {
   try {
     const result = await sellerService.saveSellerPickUpAdressDetails(req.body);
