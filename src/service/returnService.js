@@ -281,6 +281,34 @@ export const getReturnsFromDatabase = async (query = {}) => {
   }
 };
 
+// Gets return statistics grouped by status.
+export const getReturnStats = async () => {
+  try {
+    const statsAggregation = await Return.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $sort: { _id: 1 },
+      },
+    ]);
+
+    const stats = {};
+    statsAggregation.forEach((stat) => {
+      const status = stat._id || 'Unknown';
+      stats[status] = stat.count;
+    });
+
+    return stats;
+  } catch (error) {
+    console.error('Error getting return stats:', error.message);
+    throw error;
+  }
+};
+
 //Creates a return in ChannelEngine.
 
 export const createReturn = async (returnData) => {
@@ -333,4 +361,5 @@ export default {
   getReturnsFromDatabase,
   saveReturnToDatabase,
   createReturn,
+  getReturnStats,
 };

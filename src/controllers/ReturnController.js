@@ -77,8 +77,24 @@ export const createMerchantReturn = async (req, res) => {
   }
 };
 
+// Gets return statistics grouped by status.
+export const getReturnStats = async (req, res) => {
+  try {
+    const stats = await returnService.getReturnStats();
+    if (!stats) {
+      return Responses.failResponse(res, 'Failed to get return stats', 404);
+    }
+    return Responses.successResponse(res, 'Return stats fetched successfully', 200, stats);
+  } catch (error) {
+    console.error('Controller Error: getReturnStats:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllReturns,
   syncReturns,
   createMerchantReturn,
+  getReturnStats,
 };
