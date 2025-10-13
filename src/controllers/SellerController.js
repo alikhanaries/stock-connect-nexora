@@ -127,13 +127,6 @@ export const getAllPickupAddresses = async (req, res) => {
   try {
     const sellerId = req.params.id;
 
-    if (!sellerId) {
-      return res.status(400).json({
-        success: false,
-        message: 'sellerId is required',
-      });
-    }
-
     // Directly query PickupAddress collection
     const pickupAddresses = await sellerService.getAllPickupAddresses(sellerId);
     const message =
