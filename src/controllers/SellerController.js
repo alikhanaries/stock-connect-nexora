@@ -122,3 +122,18 @@ export const getAllSeller = async (req, res) => {
     return response.errorResponse(res, error.message, 500);
   }
 };
+
+export const savePickupAddress = async (req, res) => {
+  try {
+    const result = await sellerService.saveSellerPickUpAdressDetails(req.body);
+
+    if (!result) {
+      return response.failResponse(res, 'Failed to save seller pick up address.', 500);
+    }
+
+    return response.successResponse(res, 'Seller pick up adress saved successfully', 201, null);
+  } catch (error) {
+    console.error('Error creating seller:', error);
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
