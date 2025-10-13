@@ -625,7 +625,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const products = result[0]?.paginatedResults || [];
 
   return {
-    channel: products.length > 0 ? channelDetails : null,
+    channel: channelDetails,
     products,
     pagination: getPagination(total, currentPage, limit),
     appliedFilters,
