@@ -151,7 +151,7 @@ export const forgotPassword = async (req, res) => {
     if (!email) {
       return Response.failResponse(res, 'Missing email', 400);
     }
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email, isDeleted: false });
     if (!user) {
       return Response.failResponse(res, `user not found with given ${email}`, 400);
     }
