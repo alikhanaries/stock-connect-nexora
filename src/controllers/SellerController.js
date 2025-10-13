@@ -93,12 +93,12 @@ export const createSeller = async (req, res) => {
     const newSeller = await sellerService.createSeller(req.body);
 
     if (!newSeller.data) {
+      if (newSeller.isExist) {
+        return response.failResponse(res, 'A seller with this name already exists.', 409);
+      }
       return response.failResponse(res, 'Failed to create seller.', 500);
     }
 
-    if (newSeller.isExist) {
-      return response.failResponse(res, 'A seller with this name already exists.', 409);
-    }
     return response.successResponse(res, 'Seller created successfully', 201, newSeller.data);
   } catch (error) {
     console.error('Error creating seller:', error);
