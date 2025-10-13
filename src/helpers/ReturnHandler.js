@@ -106,7 +106,7 @@ export const sanitizeReturnData = (returnData) => {
       channelReturnNo: returnData.ChannelReturnNo,
       channelId: returnData.ChannelId,
       totalPrice: returnData.RefundInclVat || 0,
-      placedOn: returnData.ReturnDate ? new Date(returnData.ReturnDate) : null,
+      placedOn: returnData.CreatedAt ? new Date(returnData.CreatedAt) : null,
       acknowledgeDate: returnData.AcknowledgedDate ? new Date(returnData.AcknowledgedDate) : null,
       status: returnData.Status,
       platform: returnData.ChannelName,
