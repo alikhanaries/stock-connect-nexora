@@ -263,18 +263,15 @@ const acknowledgeOrder = async (orderId, merchantOrderNo) => {
       throw new Error(`Failed to acknowledge order: ${errorData.Message || response.statusText}`);
     }
   } catch (error) {
-    console.error(`Failed to acknowledge order ${orderId}:`, error.message);
-    throw new Error(`Failed to acknowledge order ${orderId}`);
+    throw new Error(`Failed to acknowledge order ${orderId}`, error);
   }
 };
 const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
-  if (newOrdersToAcknowledge.length === 0) {
-    console.log('No order to acknowldge....');
-    return;
-  }
   const ackPromises = newOrdersToAcknowledge.map((order) => {
-    const merchantOrderNo = `${order.ChannelOrderNo}-${order.Id}`;
-    return acknowledgeOrder(order.Id, merchantOrderNo);
+    if (order.ChannelOrderNo && order.Id) {
+      const merchantOrderNo = `${order?.ChannelOrderNo}-${order?.Id}`;
+      return acknowledgeOrder(order.Id, merchantOrderNo);
+    }
   });
 
   const results = await Promise.allSettled(ackPromises);
@@ -290,16 +287,11 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
         MerchantOrderNo: `${originalOrder.ChannelOrderNo}-${originalOrder.Id}`,
         Status: 'IN_PROGRESS',
       });
-    } else {
-      console.error(`Failed to acknowledge order ${originalOrder.ChannelOrderNo}:`, result.reason.message);
     }
   });
 
   if (successfulOrdersToSave.length > 0) {
-    console.log(`Saving ${successfulOrdersToSave.length} acknowledged orders to the database...`);
-    await processOrders(successfulOrdersToSave, 'rohit');
-  } else {
-    console.log('No orders were successfully acknowledged to save.');
+    await processOrders(successfulOrdersToSave);
   }
 };
 
