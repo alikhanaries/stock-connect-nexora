@@ -3,7 +3,6 @@ const { AYMAKAN_API_KEY, AYMAKAN_API_URL } = config;
 
 export const createAymakanShipmentAPI = async (payload) => {
   try {
-    console.log('aymakannpayload', payload);
     // Call Aymakan API
     const response = await fetch(`${AYMAKAN_API_URL}shipping/create`, {
       method: 'POST',
