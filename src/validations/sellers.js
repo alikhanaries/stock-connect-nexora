@@ -100,3 +100,7 @@ export const savePickupAddressValidator = validate(async (req) => {
   });
   await bodySchema.parseAsync(req.body);
 });
+
+export const getAymaknCityValidator = validate(async (req) => {
+  await headerSchema.parseAsync(req.headers);
+});

@@ -2,6 +2,7 @@ import response from '#helpers/response.js';
 import sellerService from '#service/sellerService.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import mongoose from 'mongoose';
+import { getAymakanShipmentCitiesAPI } from '../service/aymakanService.js';
 
 export const getSellerById = async (req, res) => {
   try {
@@ -135,5 +136,21 @@ export const savePickupAddress = async (req, res) => {
   } catch (error) {
     console.error('Error creating seller:', error);
     return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
+
+export const getAyMakanCities = async (req, res) => {
+  try {
+    const result = await getAymakanShipmentCitiesAPI();
+
+    if (!result.data.cities) {
+      // This can happen if service returns false for invalid inputs
+      return response.errorResponse(res, 'No city found', 400, null);
+    }
+
+    return response.successResponse(res, 'Cities found', 200, result.data.cities);
+  } catch (error) {
+    console.error('Create Shipment Controller Error:', error.message, error.stack);
+    return response.errorResponse(res, error?.message || 'Internal error', 400);
   }
 };
