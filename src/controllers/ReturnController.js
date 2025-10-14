@@ -113,16 +113,15 @@ export const updateReturn = async (req, res) => {
   try {
     const result = await returnService.acceptOrRejectReturn(req.body);
 
-    if (!result.success) {
-      return Responses.failResponse(res, result.message || 'Failed to update return', result.statusCode || 400);
-    }
-
     if (result.isConflict) {
       return Responses.failResponse(res, result.message || 'Return with this reference already exists', 409);
     }
 
-    const message = 'Return updated successfully';
-    return Responses.successResponse(res, message, 200, result.data);
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || 'Failed to update return', result.statusCode || 400);
+    }
+
+    return Responses.successResponse(res, 'Return updated successfully', 200, result.data);
   } catch (error) {
     console.error('Controller Error: updateReturn:', error.message);
     errorLog(error);
