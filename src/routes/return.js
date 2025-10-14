@@ -4,24 +4,16 @@ import {
   syncReturns,
   createMerchantReturn,
   getReturnStats,
-<<<<<<< HEAD
   acknowledgeMerchantReturn,
-  markReturnReceived,
-=======
   updateReturn,
->>>>>>> 0d45860 (feat: Added mark received api to accept or reject return)
 } from '#controllers/ReturnController.js';
 import { authMiddleware, checkLanguage } from '#middleware/index.js';
 import {
   getAllReturnsValidator,
   syncReturnsValidator,
   returnValidator,
-<<<<<<< HEAD
   validateReturnAck,
-  validateMarkReturnReceived,
-=======
   updateReturnValidator,
->>>>>>> 0d45860 (feat: Added mark received api to accept or reject return)
 } from '#validations/return.js';
 
 const router = express.Router();

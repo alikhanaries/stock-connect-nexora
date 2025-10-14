@@ -393,7 +393,7 @@ export const acknowledgeReturn = async (ackData) => {
   }
 };
 
-export const markReturnAsReceived = async (receivedData) => {
+export const acceptOrRejectReturn = async (returnData) => {
   try {
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?apikey=${CHANNEL_ENGINE_API_KEY}`, {
       method: 'PUT',
@@ -401,7 +401,7 @@ export const markReturnAsReceived = async (receivedData) => {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(receivedData),
+      body: JSON.stringify(returnData),
     });
 
     const responseData = await response.json();
@@ -426,7 +426,7 @@ export const markReturnAsReceived = async (receivedData) => {
 
     return { success: true, data: responseData };
   } catch (error) {
-    console.error('Error in markReturnAsReceived:', error.message);
+    console.error('Error in acceptOrRejectReturn:', error.message);
     return {
       success: false,
       message: 'Error communicating with ChannelEngine.',
@@ -441,6 +441,10 @@ export default {
   saveReturnToDatabase,
   createReturn,
   getReturnStats,
+<<<<<<< HEAD
   acknowledgeReturn,
   markReturnAsReceived,
+=======
+  acceptOrRejectReturn,
+>>>>>>> 5a190cb (feat: Added /update api to accept or reject return)
 };

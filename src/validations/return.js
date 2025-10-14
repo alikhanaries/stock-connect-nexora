@@ -237,8 +237,7 @@ export const validateReturnAck = validate(async (req) => {
   acknowledgeReturnSchema.parse(req.body);
 });
 
-// Return line schema for update return validation
-const updateReturnLineSchema = z.object({
+export const updateReturnLineSchema = z.object({
   MerchantProductNo: z.string().min(1, 'MerchantProductNo is required and cannot be empty'),
   AcceptedQuantity: z.number().int().nonnegative('AcceptedQuantity must be a non-negative number'),
   RejectedQuantity: z.number().int().nonnegative('RejectedQuantity must be a non-negative number'),

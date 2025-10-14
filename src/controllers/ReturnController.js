@@ -111,7 +111,7 @@ export const acknowledgeMerchantReturn = async (req, res) => {
 // Updates a return status in ChannelEngine.
 export const updateReturn = async (req, res) => {
   try {
-    const result = await returnService.markReturnAsReceived(req.body);
+    const result = await returnService.acceptOrRejectReturn(req.body);
 
     if (!result.success) {
       return Responses.failResponse(res, result.message || 'Failed to update return', result.statusCode || 400);
