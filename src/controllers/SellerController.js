@@ -2,7 +2,7 @@ import response from '#helpers/response.js';
 import sellerService from '#service/sellerService.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import mongoose from 'mongoose';
-import { getAymakanShipmentCitiesAPI } from '../service/aymakanService.js';
+import { getAymakanShipmentCities } from '../service/aymakanService.js';
 
 export const getSellerById = async (req, res) => {
   try {
@@ -157,7 +157,7 @@ export const savePickupAddress = async (req, res) => {
 };
 export const getAyMakanCities = async (req, res) => {
   try {
-    const result = await getAymakanShipmentCitiesAPI();
+    const result = await getAymakanShipmentCities();
 
     if (!result.data.cities) {
       // This can happen if service returns false for invalid inputs
