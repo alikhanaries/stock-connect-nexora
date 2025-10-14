@@ -9,6 +9,8 @@ import {
   savePickupAddress,
   getAyMakanCities,
   getAllPickupAddresses,
+  updatePickupAddress,
+  deletePickupAddress,
 } from '#controllers/SellerController.js';
 import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
@@ -22,6 +24,8 @@ import {
   savePickupAddressValidator,
   getAymaknCityValidator,
   getAllPickupAddressesValidator,
+  updatePickupAddressValidator,
+  deletePickupAddressValidator,
 } from '#validations/sellers.js';
 const seller = express.Router();
 
@@ -75,4 +79,23 @@ seller.post(
   savePickupAddress
 );
 
+// Update pickup address
+seller.put(
+  '/updatePickupAddress/:id',
+  updatePickupAddressValidator,
+  checkLanguage,
+  authMiddleware,
+  authorize(USER_ROLES.MASTER_ADMIN),
+  updatePickupAddress
+);
+
+// Delete pickup address
+seller.delete(
+  '/deletePickupAddress/:id',
+  deletePickupAddressValidator,
+  checkLanguage,
+  authMiddleware,
+  authorize(USER_ROLES.MASTER_ADMIN),
+  deletePickupAddress
+);
 export default seller;

@@ -159,6 +159,48 @@ export const getAllPickupAddresses = async (sellerId) => {
   return await PickupAddress.find({ sellerId }).sort({ createdAt: -1 });
 };
 
+// Update a pickup address
+export const updatePickupAddress = async (id, payload) => {
+  try {
+    // Find the pickup address first
+    const pickupAddress = await PickupAddress.findById(id);
+
+    if (!pickupAddress || pickupAddress.isActive === false) {
+      throw new Error('Pickup address not found');
+    }
+
+    // Update the address
+    const updatedAddress = await PickupAddress.findByIdAndUpdate(
+      id,
+      { $set: payload },
+      { new: true, runValidators: true } // validate fields
+    );
+
+    return updatedAddress;
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
+// Delete a pickup address (soft delete)
+export const deletePickupAddress = async (id) => {
+  try {
+    // Find the pickup address first
+    const pickupAddress = await PickupAddress.findById(id);
+
+    if (!pickupAddress || pickupAddress.isActive === false) {
+      throw new Error('Pickup address not found');
+    }
+
+    // Soft delete
+    const deleted = await PickupAddress.findByIdAndUpdate(id, { $set: { isActive: false } }, { new: true });
+
+    return deleted;
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
 export default {
   createSeller,
   getAllSeller,
@@ -168,4 +210,6 @@ export default {
   getSellerById,
   saveSellerPickUpAdressDetails,
   getAllPickupAddresses,
+  updatePickupAddress,
+  deletePickupAddress,
 };
