@@ -13,7 +13,8 @@ const OrderSchema = new mongoose.Schema(
       index: true,
     },
     sellerId: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
       required: true,
       index: true,
     },
