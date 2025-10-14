@@ -108,27 +108,23 @@ export const acknowledgeMerchantReturn = async (req, res) => {
   }
 };
 
-// Marks a return as received in ChannelEngine.
-export const markReturnReceived = async (req, res) => {
+// Updates a return status in ChannelEngine.
+export const updateReturn = async (req, res) => {
   try {
     const result = await returnService.markReturnAsReceived(req.body);
 
     if (!result.success) {
-      return Responses.failResponse(
-        res,
-        result.message || 'Failed to mark return as received',
-        result.statusCode || 400
-      );
+      return Responses.failResponse(res, result.message || 'Failed to update return', result.statusCode || 400);
     }
 
     if (result.isConflict) {
       return Responses.failResponse(res, result.message || 'Return with this reference already exists', 409);
     }
 
-    const message = 'Return marked as received successfully';
+    const message = 'Return updated successfully';
     return Responses.successResponse(res, message, 200, result.data);
   } catch (error) {
-    console.error('Controller Error: markReturnReceived:', error.message);
+    console.error('Controller Error: updateReturn:', error.message);
     errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
@@ -141,4 +137,5 @@ export default {
   getReturnStats,
   acknowledgeMerchantReturn,
   markReturnReceived,
+  updateReturn,
 };
