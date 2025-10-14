@@ -7,6 +7,7 @@ import {
   getAllSeller,
   getSellerById,
   savePickupAddress,
+  getAllPickupAddresses,
 } from '#controllers/SellerController.js';
 import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
@@ -18,6 +19,7 @@ import {
   getAllSellerValidator,
   getSellerByIdValidator,
   savePickupAddressValidator,
+  getAllPickupAddressesValidator,
 } from '#validations/sellers.js';
 const seller = express.Router();
 
@@ -39,6 +41,15 @@ seller.patch(
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
   updateSellerStatus
+);
+// GET SELLER PICKUP ADDRESS LIST API
+
+seller.get(
+  '/getAllPickupAddresses/:id',
+  getAllPickupAddressesValidator,
+  checkLanguage,
+  authMiddleware,
+  getAllPickupAddresses
 );
 
 seller.get('/:id', getSellerByIdValidator, checkLanguage, authMiddleware, getSellerById);
