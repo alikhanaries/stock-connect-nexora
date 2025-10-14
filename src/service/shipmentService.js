@@ -3,8 +3,8 @@ import Shipment from '../models/Shipment/Shipment.js';
 import User from '../models/User.js';
 import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
-import { createAymakanShipmentAPI, trackAymakanShipmentAPI } from './aymakanService.js';
-import { buildCollectionData } from '../helpers/buildCollectionData.js';
+import { createAymakanShipment, trackAymakanShipment } from './aymakanService.js';
+import { formatShipmentDeliveryAddress } from '../helpers/formatShipmentDeliveryAddress.js';
 import PickupAddress from '../models/PickUpAdress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -47,7 +47,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
     };
 
     // ---  Call Aymakan API ---
-    const result = await createAymakanShipmentAPI(payload);
+    const result = await createAymakanShipment(payload);
 
     // ---  Validate Aymakan response ---
     if (!result?.success || !result?.shipping?.tracking_number) {
@@ -184,7 +184,10 @@ export const createPartialShipmentService = async (shipmentData) => {
     }
 
     // Resolve or create delivery & collection
-    const deliveryData = await buildCollectionData(orderDetails?.orderShippingAddress, orderDetails?.orderCustomer);
+    const deliveryData = await formatShipmentDeliveryAddress(
+      orderDetails?.orderShippingAddress,
+      orderDetails?.orderCustomer
+    );
 
     if (!deliveryData) throw new Error('Invalid delivery information');
     const deliveryDetails = await saveDeliveryAddress(deliveryData);
@@ -228,7 +231,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       return { success: false, message: 'Channel engine error' };
     }
 
-    const aymakanTrackingResult = await trackAymakanShipmentAPI(trackingNumber);
+    const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo =
       aymakanTrackingResult?.trackingInfo?.map((info) => ({
         statusCode: info.status_code,
