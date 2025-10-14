@@ -7,6 +7,8 @@ import {
   getAllSeller,
   getSellerById,
   savePickupAddress,
+  getAyMakanCities,
+  getAllPickupAddresses,
 } from '#controllers/SellerController.js';
 import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
@@ -18,11 +20,22 @@ import {
   getAllSellerValidator,
   getSellerByIdValidator,
   savePickupAddressValidator,
+  getAymaknCityValidator,
+  getAllPickupAddressesValidator,
 } from '#validations/sellers.js';
 const seller = express.Router();
 
 const allowedRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.MASTER_ADMIN];
 
+//GET AYMAKN CITY LIST
+seller.get(
+  '/getAyMakanCities',
+  getAymaknCityValidator,
+  checkLanguage,
+  authMiddleware,
+  authorize(USER_ROLES.MASTER_ADMIN),
+  getAyMakanCities
+);
 seller.post('/create', authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), createSellerValidator, createSeller);
 seller.get('/', authMiddleware, authorize(allowedRoles), getAllSellerValidator, getAllSeller);
 seller.delete(
@@ -40,6 +53,15 @@ seller.patch(
   authorize(USER_ROLES.MASTER_ADMIN),
   updateSellerStatus
 );
+// GET SELLER PICKUP ADDRESS LIST API
+
+seller.get(
+  '/getAllPickupAddresses/:id',
+  getAllPickupAddressesValidator,
+  checkLanguage,
+  authMiddleware,
+  getAllPickupAddresses
+);
 
 seller.get('/:id', getSellerByIdValidator, checkLanguage, authMiddleware, getSellerById);
 seller.patch('/:id', updateSellerValidator, authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), updateSeller);
@@ -52,4 +74,5 @@ seller.post(
   authorize(USER_ROLES.MASTER_ADMIN),
   savePickupAddress
 );
+
 export default seller;

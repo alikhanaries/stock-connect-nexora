@@ -78,6 +78,14 @@ export const getSellerByIdValidator = validate(async (req) => {
   await paramsSchema.parseAsync(req.params);
 });
 
+export const getAllPickupAddressesValidator = validate(async (req) => {
+  await headerSchema.parseAsync(req.headers);
+  const paramsSchema = z.object({
+    id: objectIdSchema,
+  });
+  await paramsSchema.parseAsync(req.params);
+});
+
 export const savePickupAddressValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 
@@ -99,4 +107,8 @@ export const savePickupAddressValidator = validate(async (req) => {
     description: z.string().optional(),
   });
   await bodySchema.parseAsync(req.body);
+});
+
+export const getAymaknCityValidator = validate(async (req) => {
+  await headerSchema.parseAsync(req.headers);
 });
