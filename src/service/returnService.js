@@ -393,6 +393,48 @@ export const acknowledgeReturn = async (ackData) => {
   }
 };
 
+export const markReturnAsReceived = async (receivedData) => {
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?apikey=${CHANNEL_ENGINE_API_KEY}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(receivedData),
+    });
+
+    const responseData = await response.json();
+
+    if (response.status === 409) {
+      return {
+        success: false,
+        isConflict: true,
+        message: responseData.Message || 'Return with this reference already exists',
+        error: responseData,
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message: responseData.Message || `ChannelEngine API error: ${response.status}`,
+        statusCode: response.status,
+        error: responseData,
+      };
+    }
+
+    return { success: true, data: responseData };
+  } catch (error) {
+    console.error('Error in markReturnAsReceived:', error.message);
+    return {
+      success: false,
+      message: 'Error communicating with ChannelEngine.',
+      error: error.message,
+    };
+  }
+};
+
 export default {
   getReturns,
   getReturnsFromDatabase,
@@ -400,4 +442,5 @@ export default {
   createReturn,
   getReturnStats,
   acknowledgeReturn,
+  markReturnAsReceived,
 };

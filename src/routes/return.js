@@ -5,6 +5,7 @@ import {
   createMerchantReturn,
   getReturnStats,
   acknowledgeMerchantReturn,
+  markReturnReceived,
 } from '#controllers/ReturnController.js';
 import { authMiddleware, checkLanguage } from '#middleware/index.js';
 import {
@@ -12,6 +13,7 @@ import {
   syncReturnsValidator,
   returnValidator,
   validateReturnAck,
+  validateMarkReturnReceived,
 } from '#validations/return.js';
 
 const router = express.Router();
@@ -26,5 +28,7 @@ router.get('/sync', syncReturnsValidator, checkLanguage, authMiddleware, syncRet
 router.post('/create', returnValidator, checkLanguage, authMiddleware, createMerchantReturn);
 // Acknowledge a return
 router.post('/acknowledge', validateReturnAck, checkLanguage, authMiddleware, acknowledgeMerchantReturn);
+
+router.put('/mark-received', validateMarkReturnReceived, checkLanguage, authMiddleware, markReturnReceived);
 
 export default router;

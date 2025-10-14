@@ -237,10 +237,29 @@ export const validateReturnAck = validate(async (req) => {
   acknowledgeReturnSchema.parse(req.body);
 });
 
+// Return line schema for mark as received validation
+const markReturnReceivedLineSchema = z.object({
+  MerchantProductNo: z.string().min(1, 'MerchantProductNo is required and cannot be empty'),
+  AcceptedQuantity: z.number().int().nonnegative('AcceptedQuantity must be a non-negative number'),
+  RejectedQuantity: z.number().int().nonnegative('RejectedQuantity must be a non-negative number'),
+});
+
+export const validateMarkReturnReceived = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const markReturnReceivedSchema = z.object({
+    ReturnId: z.number().int().nonnegative('ReturnId is required and must be a non-negative number'),
+    Lines: z.array(markReturnReceivedLineSchema).min(1, 'Lines is required and must contain at least one item'),
+  });
+
+  markReturnReceivedSchema.parse(req.body);
+});
+
 export default {
   getAllReturnsValidator,
   syncReturnsValidator,
   validateReturnData,
   validateReturnAck,
   returnValidator,
+  validateMarkReturnReceived,
 };

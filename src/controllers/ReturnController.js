@@ -108,10 +108,37 @@ export const acknowledgeMerchantReturn = async (req, res) => {
   }
 };
 
+// Marks a return as received in ChannelEngine.
+export const markReturnReceived = async (req, res) => {
+  try {
+    const result = await returnService.markReturnAsReceived(req.body);
+
+    if (!result.success) {
+      return Responses.failResponse(
+        res,
+        result.message || 'Failed to mark return as received',
+        result.statusCode || 400
+      );
+    }
+
+    if (result.isConflict) {
+      return Responses.failResponse(res, result.message || 'Return with this reference already exists', 409);
+    }
+
+    const message = 'Return marked as received successfully';
+    return Responses.successResponse(res, message, 200, result.data);
+  } catch (error) {
+    console.error('Controller Error: markReturnReceived:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllReturns,
   syncReturns,
   createMerchantReturn,
   getReturnStats,
   acknowledgeMerchantReturn,
+  markReturnReceived,
 };
