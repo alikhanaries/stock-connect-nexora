@@ -5,7 +5,6 @@ import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
-import User from '../models/User.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -233,15 +232,8 @@ export const addProductsToUserChannel = async (req, res) => {
   try {
     const { ids } = req.body;
     const { id } = req.params;
-    const userId = req.user._id;
     const sellerId = req.sellerId;
-    // Check if user exists
-    const user = await User.findById(userId);
-    if (!user) {
-      return failResponse(res, req.locale.USER_NOT_FOUND, 404);
-    }
-    const result = await productService.addProductsToUserChannel(userId, sellerId, id, ids, req.locale);
-
+    const result = await productService.addProductsToUserChannel(sellerId, id, ids, req.locale);
     if (!result.success) {
       return failResponse(res, result?.message, 404);
     }
@@ -256,17 +248,12 @@ export const addProductsToUserChannel = async (req, res) => {
 
 export const getUserChannelProducts = async (req, res) => {
   try {
-    const userId = req.user?._id;
     const sellerId = req.sellerId;
-    if (!userId) {
-      return failResponse(res, 'User ID is required', 400);
-    }
     const { channelId } = req.params;
     if (!channelId) {
       return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
     }
     const { channel, products, pagination, appliedFilters } = await productService.getUserChannelProducts(
-      userId,
       sellerId,
       channelId,
       req.query
@@ -291,13 +278,11 @@ export const getUserChannelProducts = async (req, res) => {
 export const getUserUnassignedProducts = async (req, res) => {
   try {
     const { channelId } = req.params;
-    const userId = req.user?._id;
     const sellerId = req.sellerId;
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
     const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
-      userId,
       sellerId,
       channelId,
       req.query
@@ -319,20 +304,16 @@ export const getUserUnassignedProducts = async (req, res) => {
 };
 export const unlinkProductFromChannel = async (req, res) => {
   try {
-    const userId = req.user._id;
     const { channelId } = req.params;
     const sellerId = req.sellerId;
     const { ids } = req.body;
-    if (!userId) {
-      return errorResponse(res, { message: req.locale.USERID_REQUIRED }, 400);
-    }
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNELID_REQUIRED }, 400);
     }
     if (!Array.isArray(ids) || !ids.length) {
       return failResponse(res, req.locale.PRODUCTIDS_REQUIRED, 400);
     }
-    const updatedCount = await productService.unlinkProductFromChannel(userId, sellerId, channelId, ids);
+    const updatedCount = await productService.unlinkProductFromChannel(sellerId, channelId, ids);
     if (updatedCount === 0) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND, 404);
     }

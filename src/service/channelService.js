@@ -5,6 +5,7 @@ import { config } from '../config/config.js';
 import Channel from '../models/Channel.js';
 import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
+import UserSeller from '../models/UserSeller.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -65,7 +66,7 @@ const getAllChannelsFromChannelPartner = async () => {
 };
 
 /** FUNC - GET ALL CHANNEL LIST FROM DATABASE */
-const getAllChannels = async (query, userId) => {
+const getAllChannels = async (query, sellerId) => {
   try {
     const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', appliedFilters = {} } = query;
 
@@ -79,7 +80,7 @@ const getAllChannels = async (query, userId) => {
     }
 
     // 🔹 Find channels already linked to this user
-    const userChannels = await UserChannels.find({ userId }, { 'channelIds.id': 1 }).lean();
+    const userChannels = await UserChannels.find({ sellerId }, { 'channelIds.id': 1 }).lean();
     if (userChannels?.length) {
       const excludedChannelIds = userChannels.flatMap((uc) => uc.channelIds.map((c) => c.id));
 
@@ -110,7 +111,7 @@ const getAllChannels = async (query, userId) => {
 };
 
 /** FUNC - SAVE USER SELECTED CHANNEL DATA */
-const saveUserChannels = async (userId, sellerId, channelIds) => {
+const saveUserChannels = async (sellerId, channelIds) => {
   try {
     // Format incoming channelIds into schema shape
     const formattedChannels = channelIds.map((id) => {
@@ -125,13 +126,16 @@ const saveUserChannels = async (userId, sellerId, channelIds) => {
 
     // Update or create UserChannels
     const updatedUserChannels = await UserChannels.findOneAndUpdate(
-      { userId: new ObjectId(userId), sellerId: new ObjectId(sellerId) },
+      { sellerId: new ObjectId(sellerId) },
       { $addToSet: { channelIds: { $each: formattedChannels } } },
       { new: true, upsert: true }
     );
     // Update user flag if not already true
     await User.updateOne(
-      { _id: new ObjectId(userId), isMarketplaceConnected: { $ne: true } },
+      {
+        _id: await UserSeller.findOne({ sellerId: new mongoose.Types.ObjectId(sellerId) }).then((r) => r?.userId),
+        isMarketplaceConnected: { $ne: true },
+      },
       { $set: { isMarketplaceConnected: true } }
     );
     return {
@@ -145,7 +149,7 @@ const saveUserChannels = async (userId, sellerId, channelIds) => {
 };
 
 /** FUNC - GET USER CHANNEL LIST */
-export const getAllUserChannels = async (userId, sellerId, query) => {
+export const getAllUserChannels = async (sellerId, query) => {
   try {
     const { page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
     const skip = (page - 1) * limit;
@@ -155,9 +159,9 @@ export const getAllUserChannels = async (userId, sellerId, query) => {
     if (query?.status) {
       appliedFilters.status = query?.status;
     }
+    console.log(sellerId, query);
 
     const baseMatch = {
-      userId: new ObjectId(userId),
       sellerId: new ObjectId(sellerId),
       ...(status ? { 'channelIds.status': status } : { 'channelIds.status': { $in: ['active', 'inactive'] } }),
     };
@@ -183,7 +187,7 @@ export const getAllUserChannels = async (userId, sellerId, query) => {
             {
               $match: {
                 $expr: {
-                  $and: [{ $eq: ['$channelId', '$$channelId'] }, { $eq: ['$userId', new ObjectId(userId)] }],
+                  $and: [{ $eq: ['$channelId', '$$channelId'] }, { $eq: ['$sellerId', new ObjectId(sellerId)] }],
                 },
               },
             },
@@ -192,7 +196,7 @@ export const getAllUserChannels = async (userId, sellerId, query) => {
           as: 'ordersInfo',
         },
       },
-      // Products coun
+      // Products count
       {
         $lookup: {
           from: 'userchannelproducts',
@@ -201,7 +205,7 @@ export const getAllUserChannels = async (userId, sellerId, query) => {
             {
               $match: {
                 $expr: {
-                  $and: [{ $eq: ['$channelId', '$$channelId'] }, { $eq: ['$userId', new ObjectId(userId)] }],
+                  $and: [{ $eq: ['$channelId', '$$channelId'] }, { $eq: ['$sellerId', new ObjectId(sellerId)] }],
                 },
               },
             },
@@ -214,7 +218,6 @@ export const getAllUserChannels = async (userId, sellerId, query) => {
       {
         $project: {
           _id: 0,
-          userId: 1,
           channel: {
             _id: '$channelDetails._id',
             channelId: '$channelDetails.channelId',
@@ -241,7 +244,6 @@ export const getAllUserChannels = async (userId, sellerId, query) => {
     return {
       success: total === 0 ? false : true,
       channelData: {
-        userId,
         total,
         page: parseInt(page),
         limit: parsedLimit,
@@ -256,10 +258,10 @@ export const getAllUserChannels = async (userId, sellerId, query) => {
   }
 };
 
-export const updateUserChannelsStatus = async (userId, sellerId, ids, status) => {
+export const updateUserChannelsStatus = async (sellerId, ids, status) => {
   try {
     const result = await UserChannels.updateOne(
-      { userId: new ObjectId(userId), sellerId: new ObjectId(sellerId) },
+      { sellerId: new ObjectId(sellerId) },
       { $set: { 'channelIds.$[elem].status': status } },
       {
         arrayFilters: [{ 'elem.id': { $in: ids }, 'elem.status': { $ne: status } }],
@@ -272,17 +274,16 @@ export const updateUserChannelsStatus = async (userId, sellerId, ids, status) =>
   }
 };
 
-export const removeUserChannels = async (userId, sellerId, ids) => {
+export const removeUserChannels = async (sellerId, ids) => {
   try {
     // Remove from UserChannels
     const channelResult = await UserChannels.updateMany(
-      { userId: new ObjectId(userId), sellerId: new ObjectId(sellerId) },
+      { sellerId: new ObjectId(sellerId) },
       { $pull: { channelIds: { id: { $in: ids } } } }
     );
 
     // Delete related products
     await UserChannelProducts.deleteMany({
-      userId: new ObjectId(userId),
       sellerId: new ObjectId(sellerId),
       channelId: { $in: ids },
     });

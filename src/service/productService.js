@@ -479,7 +479,7 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
   }
 };
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-const addProductsToUserChannel = async (userId, sellerId, channelId, productIds, locale) => {
+const addProductsToUserChannel = async (sellerId, channelId, productIds, locale) => {
   try {
     const products = await Product.find(
       { _id: { $in: productIds } },
@@ -502,7 +502,7 @@ const addProductsToUserChannel = async (userId, sellerId, channelId, productIds,
     }
     const channelName = channel.channelName;
     await UserChannelProducts.findOneAndUpdate(
-      { userId, sellerId, channelId },
+      { sellerId, channelId },
       { $addToSet: { skuList: { $each: skuList } } },
       { upsert: true }
     );
@@ -530,14 +530,13 @@ const addProductsToUserChannel = async (userId, sellerId, channelId, productIds,
   }
 };
 
-export const getUserChannelProducts = async (userId, sellerId, channelId, query) => {
+export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const appliedFilters = {};
 
   const matchStage = {
-    userId: new mongoose.Types.ObjectId(userId),
     sellerId: new mongoose.Types.ObjectId(sellerId),
     channelId: Number(channelId),
   };
@@ -633,23 +632,20 @@ export const getUserChannelProducts = async (userId, sellerId, channelId, query)
   };
 };
 
-const getUserUnassignedProducts = async (userId, sellerId, channelId, query) => {
+const getUserUnassignedProducts = async (sellerId, channelId, query) => {
   const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const assignedSku = await UserChannelProducts.findOne(
     {
-      userId: new mongoose.Types.ObjectId(userId),
       sellerId: new mongoose.Types.ObjectId(sellerId),
       channelId: Number(channelId),
       isActive: true,
     },
     { 'skuList.skuCode': 1 }
   ).lean();
-
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
-
-  const filter = { status: { $ne: 'removed' } };
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
   const appliedFilters = {};
 
   if (assignedSkuCodes.length > 0) {
@@ -745,7 +741,7 @@ async function removeProductsFromChannelEngine(skuCodes) {
   }
 }
 
-const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale) => {
+const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
   /**
    * TODO [TEMPORARY EXCLUSION - CE/NOON]:
    * These SKUs are temporarily restricted from unlinking/removal.
@@ -793,7 +789,6 @@ const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale
     }
     const result = await UserChannelProducts.updateMany(
       {
-        userId: new mongoose.Types.ObjectId(userId),
         sellerId: new mongoose.Types.ObjectId(sellerId),
         channelId: Number(channelId),
       },
