@@ -6,7 +6,8 @@ import { VALID_PERIODS } from '#constants/common.js';
 
 export const getAllOrders = async (req, res) => {
   try {
-    const { data, appliedFilters, pagination } = await orderService.getAllOrders(req.query);
+    const sellerId = req.sellerId;
+    const { data, appliedFilters, pagination } = await orderService.getAllOrders(req.query, sellerId);
 
     if (!data.length) {
       return Responses.successResponse(res, req.locale.NO_ORDERS_FOUND, 200, {
@@ -48,7 +49,8 @@ export const getOrderById = async (req, res) => {
 
 export const getOrderStats = async (req, res) => {
   try {
-    const stats = await orderService.getOrderStats();
+    const sellerId = req.sellerId;
+    const stats = await orderService.getOrderStats(sellerId);
     if (!stats) {
       return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
     }
@@ -61,6 +63,7 @@ export const getOrderStats = async (req, res) => {
 
 export const getSyncedOrders = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
     const { success, data } = await orderService.getNewOrders();
 
     if (!success) {
@@ -70,7 +73,7 @@ export const getSyncedOrders = async (req, res) => {
     if (data.length === 0) {
       return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
     }
-    const dataSavedInDb = await orderService.processOrders(data);
+    const dataSavedInDb = await orderService.processOrders(data, sellerId);
 
     if (!dataSavedInDb.success) {
       return Responses.errorResponse(res, dataSavedInDb.message, 500);
@@ -94,6 +97,7 @@ export const getSyncedOrders = async (req, res) => {
 
 export const getOrderComparison = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
     const { period = 'week' } = req.query;
     const lowercasedPeriod = period.toLowerCase();
 
@@ -101,7 +105,7 @@ export const getOrderComparison = async (req, res) => {
       return Responses.failResponse(res, `${req.locale.INVALID_PERIOD} ${VALID_PERIODS.join(', ')}`, 400);
     }
 
-    const response = await orderService.getOrderComparison(lowercasedPeriod);
+    const response = await orderService.getOrderComparison(lowercasedPeriod, sellerId);
     if (!response) {
       return Responses.failResponse(res, req.locale.ORDER_COMPARISON_CALC_FAILED, 404);
     }
