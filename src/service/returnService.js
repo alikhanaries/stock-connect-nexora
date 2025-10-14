@@ -296,7 +296,11 @@ export const getReturnStats = async () => {
       },
     ]);
 
-    const stats = {};
+    const stats = statsAggregation.reduce((acc, stat) => {
+      const status = stat._id || 'Unknown';
+      acc[status] = stat.count;
+      return acc;
+    }, {});
     statsAggregation.forEach((stat) => {
       const status = stat._id || 'Unknown';
       stats[status] = stat.count;
