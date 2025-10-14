@@ -31,8 +31,8 @@ const shipmentSchema = new mongoose.Schema(
     isMerchantCreator: { type: Boolean, default: true },
     isActive: { type: Boolean, default: true, index: true },
 
-    // Lines array
-    lines: [LineSchema],
+    // products array
+    products: [LineSchema],
 
     // Extra data for API responses (optional)
     extraData: {

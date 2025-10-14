@@ -109,7 +109,7 @@ export const createShipmentWithChannelEngine = async ({
       IsMerchantCreator: isMerchantCreator,
       AirWaybillNo: airWaybillNo,
     };
-    console.log(payload);
+
     const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
 
     const response = await fetch(ceUrl, {
@@ -132,139 +132,6 @@ export const createShipmentWithChannelEngine = async ({
     throw error;
   }
 };
-
-// export const createShipmentService = async (shipmentData) => {
-//   try {
-//     const { id, sellerId, userId, delivery, collection, shippedFromCountryCode } = shipmentData;
-
-//     // Validate required fields early
-//     if (!orderId || !sellerId || !userId || !delivery || !collection) {
-//       throw new Error('Missing required shipment fields');
-//     }
-//     // Fetch order details
-
-//     const orderDetails = await Order.findById(id).lean();
-
-//     if (!orderDetails) {
-//       return { success: false, message: 'Order not found.' };
-//     }
-
-//     const { orderSkuList, merchantOrderNo, orderId } = orderDetails;
-//     console.log('orderDetails', orderDetails);
-//     // Validate SKU list
-//     if (!orderSkuList?.skuList || orderSkuList.skuList.length === 0) {
-//       return { success: false, message: 'Order has empty line items.' };
-//     }
-
-//     const { skuList } = orderSkuList;
-//     // Resolve or create delivery & collection
-//   const deliveryData = await getDeliveryAddress(delivery);
-//     if (!deliveryData) throw new Error('Invalid delivery information');
-//     const collectionData = await getPickUpAddress(orderDetails);
-//     if (!collectionData) throw new Error('Invalid collection information');
-
-//     // Call Aymakan API
-//     const aymakanResult = await createShipmentWithAymakan({
-//       ...shipmentData,
-//       deliveryData: deliveryData,
-//       collectionData: collectionData,
-//       pieces: skuList.length,
-//     });
-
-//     const trackingNumber = aymakanResult.shipping.tracking_number;
-//     if (!aymakanResult?.success) {
-//       return { success: false, message: 'Shipment by Aymakan having error' };
-//     }
-
-//     //  Transform into skuList
-//     const finalSkuList = skuList.map((line) => ({
-//       merchantProductNo: line.merchantProductNo,
-//       orderLineId: line.id,
-//       quantity: line.quantity,
-//     }));
-
-//     const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
-
-//     // Call ChannelEngine API
-//     const channelResult = await createShipmentWithChannelEngine({
-//       merchantShipmentNo: merchantShipmentNo,
-//       merchantOrderNo: merchantOrderNo,
-//       lines: finalSkuList,
-//       trackTraceNo: aymakanResult.shipping.tracking_number,
-//       trackTraceUrl: '',
-//       returnTrackTraceNo: '',
-//       method: '',
-//       shippedFromCountryCode: shippedFromCountryCode || 'SA',
-//       shipmentDate: new Date(),
-//       returnMethod: '',
-//       isMerchantCreator: true,
-//       airWaybillNo: trackingNumber,
-//       extraData: {},
-//     });
-
-//     if (!channelResult?.Success) {
-//       return { success: false, message: 'Channel engine error' };
-//     }
-//     // Assuming skuList is an array from orderSkuList.skuList
-//     const lines = skuList?.map((sku, index) => ({
-//       id: sku.orderLineId || index + 1, // fallback to index if orderLineId missing
-//       status: sku.status || 'PENDING',
-//       stockLocation: {
-//         Id: sku.stockLocationId || 1, // default warehouse ID
-//         Name: sku.stockLocationName || 'Default Warehouse',
-//       },
-//       channelProductNo: sku.channelProductNo || '',
-//       merchantProductNo: sku.merchantProductNo || sku.sku || '',
-//       quantity: sku.quantity || 1,
-//       orderLineId: sku?.id,
-//     }));
-
-//     const aymakanTrackingResult = await trackAymakanShipmentAPI(trackingNumber);
-//     const trackingInfo =
-//       aymakanTrackingResult?.trackingInfo?.map((info) => ({
-//         statusCode: info.status_code,
-//         description: info.description,
-//         descriptionAr: info.description_ar,
-//         reasonCode: info.reason_code,
-//         reasonEn: info.reason_en,
-//         reasonAr: info.reason_ar,
-//         createdAt: info.created_at,
-//       })) || [];
-//     const shpmentData = {
-//       orderId: new mongoose.Types.ObjectId(id),
-//       sellerId: new mongoose.Types.ObjectId(sellerId),
-//       userId: new mongoose.Types.ObjectId(userId),
-//       delivery: deliveryData?._id,
-//       collection: collectionData?._id,
-//       airWaybillNo: trackingNumber,
-//       merchantShipmentNo: merchantShipmentNo,
-//       merchantOrderNo: merchantOrderNo,
-//       status: 'PENDING',
-//       trackingInfo: trackingInfo,
-//       lines: lines,
-//       extraData: {
-//         aymakan: aymakanResult,
-//         channelEngine: channelResult,
-//       },
-//       shipmentMerchantDetails: {
-//         name: SHIPMENT_MERCHANT_INFO.NAME,
-//         email: SHIPMENT_MERCHANT_INFO.EMAIL,
-//       },
-//     };
-
-//     // Save shipment in MongoDB
-//     const shipment = new Shipment(shpmentData);
-
-//     await shipment.save();
-
-//     return {
-//       shipmentId: shipment?._id,
-//     };
-//   } catch (error) {
-//     console.error('Error in createShipmentService:', error.message);
-//     throw error;
-//   }
-// };
 
 export const getPickUpAddress = async (pickUpId) => {
   try {
@@ -296,7 +163,7 @@ export const saveDeliveryAddress = async (data) => {
 export const createPartialShipmentService = async (shipmentData) => {
   try {
     const { id, sellerId, userId, pickUpId, shippedFromCountryCode, products } = shipmentData;
-    console.log('shipmentData', shipmentData);
+
     // Validate required fields early
     if (!id || !sellerId || !userId || !pickUpId || !products) {
       throw new Error('Missing required shipment fields');
@@ -308,8 +175,6 @@ export const createPartialShipmentService = async (shipmentData) => {
     if (!orderDetails) {
       return { success: false, message: 'Order not found.' };
     }
-    // Fetch seller pick up address details
-    console.log('orderDetails', orderDetails);
 
     const { orderSkuList, merchantOrderNo, orderId } = orderDetails;
 
@@ -318,15 +183,14 @@ export const createPartialShipmentService = async (shipmentData) => {
       return { success: false, message: 'Order has empty line items.' };
     }
 
-    const { skuList } = orderSkuList;
     // Resolve or create delivery & collection
     const deliveryData = await buildCollectionData(orderDetails?.orderShippingAddress, orderDetails?.orderCustomer);
-    console.log('deliveryData', deliveryData);
+
     if (!deliveryData) throw new Error('Invalid delivery information');
     const deliveryDetails = await saveDeliveryAddress(deliveryData);
-    console.log('deliveryDetails-----------', deliveryDetails);
+
     const collectionData = await getPickUpAddress(pickUpId);
-    console.log('collectionData', collectionData);
+
     if (!collectionData) throw new Error('Invalid pickup information');
 
     // Call Aymakan API
@@ -363,19 +227,6 @@ export const createPartialShipmentService = async (shipmentData) => {
     if (!channelResult?.Success) {
       return { success: false, message: 'Channel engine error' };
     }
-    // Assuming skuList is an array from orderSkuList.skuList
-    const lines = skuList?.map((sku, index) => ({
-      id: sku.orderLineId || index + 1, // fallback to index if orderLineId missing
-      status: sku.status || 'PENDING',
-      stockLocation: {
-        Id: sku.stockLocationId || 1, // default warehouse ID
-        Name: sku.stockLocationName || 'Default Warehouse',
-      },
-      channelProductNo: sku.channelProductNo || '',
-      merchantProductNo: sku.merchantProductNo || sku.sku || '',
-      quantity: sku.quantity || 1,
-      orderLineId: sku?.id,
-    }));
 
     const aymakanTrackingResult = await trackAymakanShipmentAPI(trackingNumber);
     const trackingInfo =
@@ -400,7 +251,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       merchantOrderNo: merchantOrderNo,
       status: 'PENDING',
       trackingInfo: trackingInfo,
-      lines: lines,
+      products: products,
       extraData: {
         aymakan: aymakanResult,
         channelEngine: channelResult,
@@ -418,7 +269,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     await shipment.save();
     return { success: true, shipmentId: shipment?._id };
   } catch (error) {
-    console.error('Error in createShipmentService:', error.message);
+    console.error('Error in createShipmentService2:', error.message);
     throw error;
   }
 };

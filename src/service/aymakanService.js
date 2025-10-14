@@ -5,7 +5,7 @@ export const createAymakanShipmentAPI = async (payload) => {
   try {
     console.log('aymakannpayload', payload);
     // Call Aymakan API
-    const response = await fetch(`${AYMAKAN_API_URL}create`, {
+    const response = await fetch(`${AYMAKAN_API_URL}shipping/create`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -42,7 +42,7 @@ export const trackAymakanShipmentAPI = async (trackingNumber) => {
     throw new Error('Tracking number is required for Aymakan API');
   }
 
-  const url = `${AYMAKAN_API_URL}track/${trackingNumber}`;
+  const url = `${AYMAKAN_API_URL}shipping/track/${trackingNumber}`;
 
   const response = await fetch(url, {
     method: 'GET',

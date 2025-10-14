@@ -93,12 +93,12 @@ export const createSeller = async (req, res) => {
     const newSeller = await sellerService.createSeller(req.body);
 
     if (!newSeller.data) {
+      if (newSeller.isExist) {
+        return response.failResponse(res, 'A seller with this name already exists.', 409);
+      }
       return response.failResponse(res, 'Failed to create seller.', 500);
     }
 
-    if (newSeller.isExist) {
-      return response.failResponse(res, 'A seller with this name already exists.', 409);
-    }
     return response.successResponse(res, 'Seller created successfully', 201, newSeller.data);
   } catch (error) {
     console.error('Error creating seller:', error);
@@ -118,6 +118,23 @@ export const getAllSeller = async (req, res) => {
     const message = seller && seller.length > 0 ? 'Seller fetched successfully' : 'No Seller found';
 
     return response.successResponse(res, message, 200, responseData);
+  } catch (error) {
+    return response.errorResponse(res, error.message, 500);
+  }
+};
+
+export const getAllPickupAddresses = async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+
+    // Directly query PickupAddress collection
+    const pickupAddresses = await sellerService.getAllPickupAddresses(sellerId);
+    const message =
+      pickupAddresses && pickupAddresses.length > 0
+        ? 'Pickup addresses fetched successfully'
+        : 'No Pickup addresse found';
+
+    return response.successResponse(res, message, 200, pickupAddresses);
   } catch (error) {
     return response.errorResponse(res, error.message, 500);
   }
