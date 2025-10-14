@@ -1,4 +1,4 @@
-const sanitizeOrdersData = (orders) => {
+const sanitizeOrdersData = (orders, sellerId) => {
   return orders.map((data) => {
     const updatePayload = {
       orderId: data.Id,
@@ -132,10 +132,17 @@ const sanitizeOrdersData = (orders) => {
       },
     };
 
+    const updateOperation = {
+      $set: updatePayload,
+      $setOnInsert: {
+        sellerId: sellerId,
+      },
+    };
+
     return {
       updateOne: {
         filter: { orderId: data.Id },
-        update: { $set: updatePayload },
+        update: updateOperation,
         upsert: true,
       },
     };

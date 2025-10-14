@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ORDER_STATUS_MAP, VALID_PERIODS } from '#constants/common.js';
 import { validate } from './validate.js';
 import { headerSchema } from './headerSchema.js';
+import mongoose from 'mongoose';
 
 const orderLineSchema = z.object({
   MerchantProductNo: z.string(),
@@ -83,6 +84,13 @@ export const getAllOrdersValidator = validate(async (req) => {
         message: 'platform cannot be empty',
       })
       .transform((val) => (val ? val : '')),
+    sellerId: z
+      .string()
+      .trim()
+      .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+        message: 'sellerId must be a valid ID format',
+      })
+      .optional(),
   });
 
   const validatedQuery = querySchema.parse(req.query);
@@ -95,6 +103,34 @@ export const getAllOrdersValidator = validate(async (req) => {
     }
   }
 
+  querySchema.parse(req.params);
+});
+
+export const syncOrdersValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const querySchema = z.object({
+    sellerId: z
+      .string()
+      .trim()
+      .optional()
+      .refine((val) => !val || mongoose.Types.ObjectId.isValid(val), {
+        message: 'sellerId must be a valid ID format',
+      }),
+  });
+  querySchema.parse(req.params);
+});
+
+export const orderStatsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const querySchema = z.object({
+    sellerId: z
+      .string()
+      .trim()
+      .optional()
+      .refine((val) => !val || mongoose.Types.ObjectId.isValid(val), {
+        message: 'sellerId must be a valid ID format',
+      }),
+  });
   querySchema.parse(req.params);
 });
 
@@ -111,7 +147,7 @@ export const getOrderByIdValidator = validate(async (req) => {
 
 export const getOrderComparisonValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const comparisonOrderQuerySchema = z.object({
+  const querySchema = z.object({
     period: z
       .string()
       .optional()
@@ -120,9 +156,16 @@ export const getOrderComparisonValidator = validate(async (req) => {
       .refine((val) => VALID_PERIODS.includes(val), {
         message: `Invalid period. Please use one of: ${VALID_PERIODS.join(', ')}`,
       }),
+    sellerId: z
+      .string()
+      .trim()
+      .optional()
+      .refine((val) => !val || mongoose.Types.ObjectId.isValid(val), {
+        message: 'sellerId must be a valid ID format',
+      }),
   });
 
-  comparisonOrderQuerySchema.parse(req.query);
+  querySchema.parse(req.query);
 });
 
 export const merchantCancelIdValidator = validate(async (req) => {

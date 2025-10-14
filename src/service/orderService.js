@@ -27,7 +27,7 @@ const formatOrder = (order) => {
   };
 };
 
-const getAllOrders = async (query) => {
+const getAllOrders = async (query, sellerId) => {
   try {
     const {
       page = 1,
@@ -44,7 +44,7 @@ const getAllOrders = async (query) => {
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
 
-    const filter = {};
+    const filter = { sellerId: sellerId };
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
@@ -112,10 +112,10 @@ const getOrderById = async (id) => {
   return order;
 };
 
-const getOrderStats = async () => {
+const getOrderStats = async (sellerId) => {
   try {
     const statuses = Object.keys(ORDER_STATUS_MAP);
-    const counts = await Promise.all(statuses.map((status) => Order.countDocuments({ status })));
+    const counts = await Promise.all(statuses.map((status) => Order.countDocuments({ status, sellerId: sellerId })));
     const stats = statuses.reduce((acc, status, i) => {
       acc[status] = counts[i];
       return acc;
@@ -126,9 +126,9 @@ const getOrderStats = async () => {
   }
 };
 
-const processOrders = async (orders) => {
+const processOrders = async (orders, sellerId) => {
   try {
-    const operations = orderhelper.sanitizeOrdersData(orders);
+    const operations = orderhelper.sanitizeOrdersData(orders, sellerId);
     const result = await Order.bulkWrite(operations);
 
     return { success: true, data: { ...result } };
@@ -158,12 +158,12 @@ export async function getNewOrders() {
   }
 }
 
-const getOrderComparison = async (lowercasedPeriod) => {
+const getOrderComparison = async (lowercasedPeriod, sellerId) => {
   const { currentPeriodStart, previousPeriodStart, previousPeriodEnd } = orderhelper.getPeriodDate(lowercasedPeriod);
 
   const [currentCount, previousCount] = await Promise.all([
-    Order.countDocuments({ createdAt: { $gte: currentPeriodStart } }),
-    Order.countDocuments({ createdAt: { $gte: previousPeriodStart, $lte: previousPeriodEnd } }),
+    Order.countDocuments({ sellerId: sellerId, createdAt: { $gte: currentPeriodStart } }),
+    Order.countDocuments({ sellerId: sellerId, createdAt: { $gte: previousPeriodStart, $lte: previousPeriodEnd } }),
   ]);
 
   let percentageChange = 0;
