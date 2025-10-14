@@ -112,3 +112,43 @@ export const savePickupAddressValidator = validate(async (req) => {
 export const getAymaknCityValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 });
+
+export const updatePickupAddressValidator = validate(async (req) => {
+  await headerSchema.parseAsync(req.headers);
+
+  const paramsSchema = z.object({
+    id: objectIdSchema,
+  });
+  await paramsSchema.parseAsync(req.params);
+
+  const bodySchema = z
+    .object({
+      email: z.string().email({ message: 'Invalid email address' }).optional(),
+      city: z.string().optional(),
+      address: z.string().optional(),
+      postcode: z.string().optional(),
+      country: z.string().optional(),
+      phone: z
+        .string()
+        .optional()
+        .refine((val) => !val || /^[0-9]{5,15}$/.test(val), {
+          message: 'phone must contain only digits (5-15 characters)',
+        }),
+      description: z.string().optional(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+      message: 'At least one field must be provided for update',
+    });
+
+  await bodySchema.parseAsync(req.body);
+});
+
+export const deletePickupAddressValidator = validate(async (req) => {
+  await headerSchema.parseAsync(req.headers);
+
+  const paramsSchema = z.object({
+    id: objectIdSchema,
+  });
+
+  await paramsSchema.parseAsync(req.params);
+});

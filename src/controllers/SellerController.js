@@ -170,3 +170,28 @@ export const getAyMakanCities = async (req, res) => {
     return response.errorResponse(res, error?.message || 'Internal error', 400);
   }
 };
+
+// Update pickup address
+export const updatePickupAddress = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const payload = req.body;
+
+    const updated = await sellerService.updatePickupAddress(id, payload);
+    return response.successResponse(res, 'Pickup address updated successfully', 200, updated);
+  } catch (error) {
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
+
+// Delete pickup address
+export const deletePickupAddress = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const deleted = await sellerService.deletePickupAddress(id);
+
+    return response.successResponse(res, 'Pickup address deleted successfully', 200, deleted);
+  } catch (error) {
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
