@@ -1,4 +1,4 @@
-export const buildCollectionData = (orderShippingAddress, orderCustomer) => {
+export const formatShipmentDeliveryAddress = (orderShippingAddress, orderCustomer) => {
   try {
     if (!orderShippingAddress || !orderCustomer) {
       throw new Error('Missing address or customer data');

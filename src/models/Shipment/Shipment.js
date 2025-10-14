@@ -29,7 +29,6 @@ const shipmentSchema = new mongoose.Schema(
     shippedFromStockLocationId: { type: Number, default: 0 },
     method: { type: String, index: true },
     isMerchantCreator: { type: Boolean, default: true },
-    isActive: { type: Boolean, default: true, index: true },
 
     // products array
     products: [LineSchema],

@@ -1,7 +1,7 @@
 import { config } from '../config/config.js';
 const { AYMAKAN_API_KEY, AYMAKAN_API_URL } = config;
 
-export const createAymakanShipmentAPI = async (payload) => {
+export const createAymakanShipment = async (payload) => {
   try {
     // Call Aymakan API
     const response = await fetch(`${AYMAKAN_API_URL}shipping/create`, {
@@ -36,7 +36,7 @@ export const createAymakanShipmentAPI = async (payload) => {
   }
 };
 
-export const trackAymakanShipmentAPI = async (trackingNumber) => {
+export const trackAymakanShipment = async (trackingNumber) => {
   if (!trackingNumber) {
     throw new Error('Tracking number is required for Aymakan API');
   }
@@ -79,7 +79,7 @@ export const trackAymakanShipmentAPI = async (trackingNumber) => {
   };
 };
 
-export const getAymakanShipmentCitiesAPI = async () => {
+export const getAymakanShipmentCities = async () => {
   try {
     // Call Aymakan API
     const response = await fetch(`${AYMAKAN_API_URL}cities`, {
