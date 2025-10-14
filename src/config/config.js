@@ -22,4 +22,6 @@ export const config = {
   FROM_ADDRESS: process.env.FROM_ADDRESS,
   LOGO_URL: process.env.LOGO_URL,
   FRONTEND_URL: process.env.FRONTEND_URL,
+  AYMAKAN_API_URL: process.env.AYMAKAN_API_URL,
+  AYMAKAN_API_KEY: process.env.AYMAKAN_API_KEY,
 };

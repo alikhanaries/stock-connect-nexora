@@ -7,6 +7,7 @@ import {
   getAllSeller,
   getSellerById,
   savePickupAddress,
+  getAyMakanCities,
   getAllPickupAddresses,
 } from '#controllers/SellerController.js';
 import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
@@ -19,12 +20,22 @@ import {
   getAllSellerValidator,
   getSellerByIdValidator,
   savePickupAddressValidator,
+  getAymaknCityValidator,
   getAllPickupAddressesValidator,
 } from '#validations/sellers.js';
 const seller = express.Router();
 
 const allowedRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.MASTER_ADMIN];
 
+//GET AYMAKN CITY LIST
+seller.get(
+  '/getAyMakanCities',
+  getAymaknCityValidator,
+  checkLanguage,
+  authMiddleware,
+  authorize(USER_ROLES.MASTER_ADMIN),
+  getAyMakanCities
+);
 seller.post('/create', authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), createSellerValidator, createSeller);
 seller.get('/', authMiddleware, authorize(allowedRoles), getAllSellerValidator, getAllSeller);
 seller.delete(
@@ -63,4 +74,5 @@ seller.post(
   authorize(USER_ROLES.MASTER_ADMIN),
   savePickupAddress
 );
+
 export default seller;

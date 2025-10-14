@@ -159,7 +159,6 @@ export const getAllPickupAddresses = async (sellerId) => {
   return await PickupAddress.find({ sellerId }).sort({ createdAt: -1 });
 };
 
-
 export default {
   createSeller,
   getAllSeller,
@@ -168,5 +167,5 @@ export default {
   updateSellerStatus,
   getSellerById,
   saveSellerPickUpAdressDetails,
-  getAllPickupAddresses
+  getAllPickupAddresses,
 };
