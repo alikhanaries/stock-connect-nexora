@@ -242,6 +242,59 @@ const cancelOrder = async (orderId, reason) => {
   }
 };
 
+const acknowledgeOrder = async (orderId, merchantOrderNo) => {
+  const url = `${CHANNEL_ENGINE_BASE_URL}orders/acknowledge?apiKey=${CHANNEL_ENGINE_API_KEY}`;
+
+  const payload = {
+    MerchantOrderNo: merchantOrderNo,
+    OrderId: orderId,
+  };
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(`Failed to acknowledge order: ${errorData.Message || response.statusText}`);
+    }
+  } catch (error) {
+    throw new Error(`Failed to acknowledge order ${orderId}`, error);
+  }
+};
+const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
+  const ackPromises = newOrdersToAcknowledge.map((order) => {
+    if (order.ChannelOrderNo && order.Id) {
+      const merchantOrderNo = `${order?.ChannelOrderNo}-${order?.Id}`;
+      return acknowledgeOrder(order.Id, merchantOrderNo);
+    }
+  });
+
+  const results = await Promise.allSettled(ackPromises);
+
+  const successfulOrdersToSave = [];
+
+  results.forEach((result, index) => {
+    const originalOrder = newOrdersToAcknowledge[index];
+
+    if (result.status === 'fulfilled') {
+      successfulOrdersToSave.push({
+        ...originalOrder,
+        MerchantOrderNo: `${originalOrder.ChannelOrderNo}-${originalOrder.Id}`,
+        Status: 'IN_PROGRESS',
+      });
+    }
+  });
+
+  if (successfulOrdersToSave.length > 0) {
+    await processOrders(successfulOrdersToSave);
+  }
+};
+
 export default {
   getAllOrders,
   getOrderById,
@@ -250,4 +303,6 @@ export default {
   getOrderStats,
   getOrderComparison,
   cancelOrder,
+  acknowledgeOrder,
+  backgroundAcknowledgementOrders,
 };
