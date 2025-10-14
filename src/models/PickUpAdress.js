@@ -54,6 +54,12 @@ const PickupAddressSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    isActive: {
+      type: Boolean,
+      required: true,
+      index: true,
+      default: true,
+    },
   },
   { timestamps: true }
 );
