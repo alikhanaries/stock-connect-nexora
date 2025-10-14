@@ -311,7 +311,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
             }
 
             // map row
-            const product = await mapRowToProduct(row, rowIndex, locale);
+            const product = await mapRowToProduct(row, rowIndex, locale, sellerId);
             if (product.errorData) {
               errorDetails.push(product);
               invalidRowsCount++;
