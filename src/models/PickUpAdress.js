@@ -54,9 +54,10 @@ const PickupAddressSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    isActive: {
-      type: Boolean,
-      default: true,
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'removed'],
+      default: 'active',
     },
   },
   { timestamps: true }
