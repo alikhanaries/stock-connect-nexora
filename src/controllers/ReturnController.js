@@ -77,7 +77,7 @@ export const createMerchantReturn = async (req, res) => {
   }
 };
 
-// Gets return statistics grouped by status.
+// Gets return stats grouped by status.
 export const getReturnStats = async (req, res) => {
   try {
     const stats = await returnService.getReturnStats();
