@@ -435,6 +435,41 @@ export const acceptOrRejectReturn = async (returnData) => {
   }
 };
 
+export const getReturnById = async (id) => {
+  try {
+    // Check if the return exists first
+    const returnExists = await Return.findById(id).lean();
+    if (!returnExists) {
+      return null;
+    }
+
+    const result = await getReturnsFromDatabase({
+      page: 1,
+      size: 1,
+      // Filter by the specific return ID using MongoDB ObjectId
+      returnId: returnExists.returnId,
+    });
+
+    if (!result.success || !result.data || result.data.length === 0) {
+      // If the aggregation approach doesn't work, fall back to basic return data
+      return returnExists;
+    }
+
+    const returnWithOrderData = result.data[0];
+
+    return {
+      ...returnExists,
+      ...returnWithOrderData,
+      products: returnExists.products,
+      createdAt: returnExists.createdAt,
+      updatedAt: returnExists.updatedAt,
+    };
+  } catch (error) {
+    console.error('Error fetching return by ID:', error.message);
+    throw error;
+  }
+};
+
 export default {
   getReturns,
   getReturnsFromDatabase,
@@ -443,4 +478,5 @@ export default {
   getReturnStats,
   acknowledgeReturn,
   acceptOrRejectReturn,
+  getReturnById,
 };
