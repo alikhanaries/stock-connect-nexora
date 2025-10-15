@@ -62,38 +62,43 @@ const userAndSellerConnection = async (role, sellerIds, newUserId) => {
   }
 };
 
-const getUserConnectedToThisSellers = async (seller) => {
-  if (seller[0].type === SELLER_TYPE.BASE) {
-    return {
-      type: seller[0].type,
-      userIds: null,
-    };
+const getUserConnectedToThisSellers = async (seller, role, baseSellerId) => {
+  let userSellerConnection;
+  if (role === USER_ROLES.MASTER_ADMIN) {
+    const sellerIds = [seller._id, baseSellerId];
+    userSellerConnection = await UserSeller.find({ sellerId: { $in: sellerIds } })
+      .select('userId')
+      .lean();
+  } else {
+    userSellerConnection = await UserSeller.find({ sellerId: seller._id }).select('userId').lean();
   }
-  const sellerIds = seller.map((s) => s._id.toString());
-  const userSellerConnection = await UserSeller.find({ sellerId: { $in: sellerIds } })
-    .select('userId')
-    .lean();
 
   const userIds = userSellerConnection.map((u) => u.userId);
-  return {
-    type: SELLER_TYPE.NORMAL,
-    userIds: userIds,
-  };
+  return userIds;
 };
+const sellerConnectionUpdate = async (userId, sellerIds) => {
+  await UserSeller.deleteMany({ userId: userId });
 
-const sellerConnectionUpdate = async (userId, sellerId) => {
-  const connectionUpdate = await UserSeller.findOneAndUpdate(
-    { userId: userId },
-    { sellerId: sellerId },
-    { upsert: true, new: true }
-  );
-  return connectionUpdate;
+  if (!Array.isArray(sellerIds) || sellerIds.length === 0) {
+    return [];
+  }
+
+  const connectionsToCreate = sellerIds.map((sId) => ({
+    userId: userId,
+    sellerId: sId,
+  }));
+
+  const connectionUpdate = await UserSeller.insertMany(connectionsToCreate);
+
+  const resSellerIds = connectionUpdate.map((doc) => doc.sellerId);
+  return resSellerIds;
 };
 
 const getConnectedSllerId = async (userId) => {
-  const doc = await UserSeller.findOne({ userId }, { sellerId: 1, _id: 0 }).lean();
+  const doc = await UserSeller.find({ userId }, { sellerId: 1, _id: 0 }).lean();
 
-  return doc?.sellerId || null;
+  const sellerIds = doc.map((doc) => doc.sellerId);
+  return sellerIds;
 };
 
 export default {

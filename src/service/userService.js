@@ -1,5 +1,5 @@
 import User from '#models/User.js';
-import mongoose from 'mongoose';
+import UserSeller from '#models/UserSeller.js';
 
 const deleteAllUsers = async () => {
   try {
@@ -9,16 +9,20 @@ const deleteAllUsers = async () => {
     };
   } catch (err) {
     console.error('Error :', err.message);
-    return { success: false, message: err.message };
+    throw err;
   }
 };
-const deleteSelectedUsers = async (ids) => {
+const deleteSelectedUsers = async (ids, locale, sellerId) => {
   try {
-    const existingUsers = await User.find({ _id: { $in: ids }, isDeleted: false }, { _id: 1 });
-    if (existingUsers.length === 0) {
-      return { success: false, message: 'No matching users found to delete.' };
+    const connections = await UserSeller.find({
+      sellerId: sellerId,
+      userId: { $in: ids },
+    }).select('userId');
+    const idsToDelete = connections.map((con) => con.userId);
+
+    if (idsToDelete.length === 0) {
+      return { success: false, message: locale.INVALID_USER_IDS_TO_DELETE };
     }
-    const idsToDelete = existingUsers.map((user) => user._id);
 
     const result = await User.updateMany(
       {
@@ -30,27 +34,26 @@ const deleteSelectedUsers = async (ids) => {
     return result;
   } catch (err) {
     console.error('Error :', err.message);
-    return { success: false, message: err.message };
+    throw err;
   }
 };
 
-const updateSelectedUserStatus = async (ids, active) => {
-  if (!ids.every((id) => mongoose.Types.ObjectId.isValid(id))) {
-    return { success: false, message: 'Invalid user ID(s) provided.' };
-  }
-  const existingUsers = await User.find({ _id: { $in: ids }, isDeleted: false }, { _id: 1 });
+const updateSelectedUserStatus = async (ids, active, sellerId, locale) => {
+  const connections = await UserSeller.find({
+    sellerId: sellerId,
+    userId: { $in: ids },
+  }).select('userId');
+  const validUserIds = connections.map((conn) => conn.userId.toString());
 
-  if (existingUsers.length !== ids.length) {
-    const foundIds = new Set(existingUsers.map((user) => user._id.toString()));
-    const notFoundIds = ids.filter((id) => !foundIds.has(id));
+  if (validUserIds.length === 0) {
     return {
       success: false,
-      message: `Could not find all users. The following ID(s) were not found: ${notFoundIds.join(', ')}`,
+      message: locale.NO_VALID_USERS_FOUND,
     };
   }
   const result = await User.updateMany(
     {
-      _id: { $in: ids },
+      _id: { $in: validUserIds },
       isDeleted: false,
     },
     { $set: { active: active } }
@@ -58,8 +61,16 @@ const updateSelectedUserStatus = async (ids, active) => {
   return result;
 };
 
-const deleteUserId = async (id) => {
+const deleteUserId = async (id, sellerId) => {
   try {
+    const userToDelete = await UserSeller.findOne({
+      sellerId: sellerId,
+      userId: id,
+    });
+
+    if (!userToDelete) {
+      return null;
+    }
     const deletedUser = await User.findOneAndUpdate(
       { _id: id, isDeleted: false },
       { $set: { isDeleted: true, active: false } },
@@ -67,7 +78,8 @@ const deleteUserId = async (id) => {
     );
     return deletedUser;
   } catch (err) {
-    return { success: false, message: err.message };
+    console.error('Error :', err.message);
+    throw err;
   }
 };
 export default { deleteAllUsers, deleteSelectedUsers, deleteUserId, updateSelectedUserStatus };
