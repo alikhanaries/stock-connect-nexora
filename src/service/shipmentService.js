@@ -279,7 +279,7 @@ export const createPartialShipmentService = async (shipmentData) => {
   }
 };
 
-export const getAllShipmentsService = async ({ page = 1, limit = 10, status, search }) => {
+export const getAllShipmentsService = async ({ page = 1, limit = 10, sellerId, status, search }) => {
   try {
     const currentPage = parseInt(page);
     const perPage = parseInt(limit);
@@ -293,7 +293,11 @@ export const getAllShipmentsService = async ({ page = 1, limit = 10, status, sea
       matchStage.status = status;
       appliedFilters.status = status;
     }
-
+    // Filter by sellerId
+    if (sellerId) {
+      matchStage.sellerId = new mongoose.Types.ObjectId(sellerId);
+      appliedFilters.sellerId = sellerId;
+    }
     // Aggregation pipeline
     const aggregationPipeline = [
       { $match: matchStage },
@@ -332,6 +336,7 @@ export const getAllShipmentsService = async ({ page = 1, limit = 10, status, sea
           createdAt: '$createdAt',
           status: 1,
           airWaybillNo: 1,
+          sellerId: 1,
           shipmentMerchantDetails: 1,
           deliveryCustomer: {
             name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },

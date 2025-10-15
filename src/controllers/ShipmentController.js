@@ -32,12 +32,13 @@ export const createShipment = async (req, res) => {
 
 export const getAllShipments = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, search } = req.query;
+    const { page = 1, limit = 10, status, search, sellerId } = req.query;
 
     const { shipments, pagination, appliedFilters } = await getAllShipmentsService({
       page,
       limit,
       status,
+      sellerId,
       search,
     });
     const responseData = {
