@@ -60,7 +60,7 @@ export const register = async (req, res) => {
       phoneNumber,
       active,
       isMarketplaceConnected = false,
-      sellerId,
+      sellerIds,
     } = req.body;
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
@@ -76,19 +76,22 @@ export const register = async (req, res) => {
     if (existingUser) {
       return Response.failResponse(res, req.locale.USER_ALREADY_EXISTS, 409);
     }
-    if (role !== USER_ROLES.MASTER_ADMIN && !sellerId) {
-      return Response.failResponse(res, req.locale.SELLER_ID_REQUIRED, 400);
+    if (role !== USER_ROLES.MASTER_ADMIN && (!Array.isArray(sellerIds) || sellerIds.length === 0)) {
+      return Response.failResponse(res, 'Atleast one seller id is required for this user role.', 400);
     }
     if (role !== USER_ROLES.MASTER_ADMIN) {
-      const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole, role);
-
-      if (seller && !seller.success) {
-        if (!seller.notBaseSeller) {
-          return Response.failResponse(res, req.locale.CANNOT_ASSIGN_BASE_SELLER, 400);
+      for (const sellerId of sellerIds) {
+        const seller = await userHelper.validateSellerAccessForCreator(creatorId, sellerId, creatorRole, role);
+        if (seller && !seller.success) {
+          if (!seller.notBaseSeller) {
+            return Response.failResponse(res, 'You cannot assign the base seller to any user.', 400);
+          }
+          const message =
+            seller.role === USER_ROLES.MASTER_ADMIN
+              ? `The seller you have provided (${sellerId}) does not exist.`
+              : `You do not have access to this seller (${sellerId}).`;
+          return Response.failResponse(res, message, 403);
         }
-        const message =
-          seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_NOT_EXIST : req.locale.NO_ACCESS_TO_SELLER;
-        return Response.failResponse(res, message, 403);
       }
     }
 
@@ -108,7 +111,7 @@ export const register = async (req, res) => {
       return Response.failResponse(res, req.locale.USER_REGISTER_ERROR, 400);
     }
 
-    await userHelper.userAndSellerConnection(role, sellerId, newUserData._id);
+    await userHelper.userAndSellerConnection(role, sellerIds, newUserData._id);
 
     return Response.successResponse(res, req.locale.USER_REGISTER_SUCCESS, 201);
   } catch (error) {
