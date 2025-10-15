@@ -16,10 +16,12 @@ export const createShipment = async (req, res) => {
 
     if (!result.success) {
       // This can happen if service returns false for invalid inputs
-      return errorResponse(res, 'Shipment could not be created', 400);
+      return errorResponse(res, result?.message || 'Shipment could not be created', 400);
     }
 
-    return successResponse(res, 'Shipment created successfully', 201, { shipmentId: result?.shipmentId });
+    return successResponse(res, result?.message || 'Shipment created successfully', 201, {
+      shipmentId: result?.shipmentId,
+    });
   } catch (error) {
     console.error('Create Shipment Controller Error:', error.message, error.stack);
     errorLog(error);

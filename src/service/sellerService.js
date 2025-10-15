@@ -2,7 +2,7 @@ import Seller from '#models/Seller.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { PRODUCT_STATUSES, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
-import PickupAddress from '#models/PickUpAdress.js';
+import PickupAddress from '#models/PickUpAddress.js';
 
 const createSeller = async (sellerData) => {
   const { name } = sellerData;
@@ -156,7 +156,7 @@ export const saveSellerPickUpAdressDetails = async (payload) => {
 };
 
 export const getAllPickupAddresses = async (sellerId) => {
-  return await PickupAddress.find({ sellerId }).sort({ createdAt: -1 });
+  return await PickupAddress.find({ sellerId, status: 'active' }).sort({ createdAt: -1 });
 };
 
 // Update a pickup address

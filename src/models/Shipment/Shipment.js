@@ -32,7 +32,7 @@ const shipmentSchema = new mongoose.Schema(
 
     // products array
     products: [LineSchema],
-
+    pieces: { type: Number, default: 0 },
     // Extra data for API responses (optional)
     extraData: {
       aymakan: { type: mongoose.Schema.Types.Mixed },

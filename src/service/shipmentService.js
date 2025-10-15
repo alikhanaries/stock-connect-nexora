@@ -5,7 +5,7 @@ import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
 import { createAymakanShipment, trackAymakanShipment } from './aymakanService.js';
 import { formatShipmentDeliveryAddress } from '../helpers/formatShipmentDeliveryAddress.js';
-import PickupAddress from '../models/PickUpAdress.js';
+import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
@@ -162,7 +162,7 @@ export const saveDeliveryAddress = async (data) => {
 
 export const createPartialShipmentService = async (shipmentData) => {
   try {
-    const { id, sellerId, userId, pickUpId, shippedFromCountryCode, products } = shipmentData;
+    const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
 
     // Validate required fields early
     if (!id || !sellerId || !userId || !pickUpId || !products) {
@@ -201,7 +201,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       ...shipmentData,
       deliveryData: deliveryData,
       collectionData: collectionData,
-      pieces: products.length,
+      pieces,
     });
 
     const trackingNumber = aymakanResult.shipping.tracking_number;
@@ -219,7 +219,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       trackTraceUrl: '',
       returnTrackTraceNo: '',
       method: '',
-      shippedFromCountryCode: shippedFromCountryCode || 'SA',
+      shippedFromCountryCode: collectionData?.country || 'SA',
       shipmentDate: new Date(),
       returnMethod: '',
       isMerchantCreator: true,
@@ -264,6 +264,7 @@ export const createPartialShipmentService = async (shipmentData) => {
         email: SHIPMENT_MERCHANT_INFO.EMAIL,
       },
       isFullShipment,
+      pieces,
     };
 
     // Save shipment in MongoDB
