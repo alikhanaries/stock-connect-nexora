@@ -67,7 +67,7 @@ export const updatePasswordValidator = validate(async (req) => {
 
 export const bulkDeleteUsersValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const bulkDeleteUsersSchema = z.object({
+  const querySchema = z.object({
     ids: z
       .array(z.string(), {
         required_error: 'An array of user IDs is required.',
@@ -80,7 +80,7 @@ export const bulkDeleteUsersValidator = validate(async (req) => {
         message: 'One or more provided IDs are not valid ObjectIds.',
       }),
   });
-  return bulkDeleteUsersSchema.parse(req.body);
+  return querySchema.parse(req.body);
 });
 
 export const updateSelectedUserStatusValidator = validate(async (req) => {
@@ -105,7 +105,7 @@ export const updateSelectedUserStatusValidator = validate(async (req) => {
 
 export const updateUserValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const updateUserSchema = z.object({
+  const bodySchema = z.object({
     firstName: z.string().min(1, 'First name cannot be empty').optional(),
     lastName: z.string().min(1, 'Last name cannot be empty').optional(),
     email: z.string().email('Invalid email address').optional(),
@@ -120,9 +120,12 @@ export const updateUserValidator = validate(async (req) => {
       })
       .optional(),
 
-    sellerId: z
-      .string()
-      .refine((val) => mongoose.Types.ObjectId.isValid(val), { message: 'Invalid ID format' })
+    sellerIds: z
+      .array(
+        z
+          .string()
+          .refine((val) => mongoose.Types.ObjectId.isValid(val), { message: 'Each sellerId must be a valid ID format' })
+      )
       .optional(),
 
     password: z
@@ -141,5 +144,5 @@ export const updateUserValidator = validate(async (req) => {
         }
       ),
   });
-  return updateUserSchema.parse(req.body);
+  bodySchema.parse(req.body);
 });

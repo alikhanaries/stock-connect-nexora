@@ -5,7 +5,7 @@ import userHelper from '#helpers/User.js';
 import { errorLog } from '#middleware/index.js';
 import Responses from '#helpers/response.js';
 import userService from '#service/userService.js';
-import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
+import { ROLES_BASED_USER_FETCHING, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import Seller from '#models/Seller.js';
 
@@ -18,9 +18,14 @@ export const getUserById = async (req, res) => {
     if (!user) {
       return res.status(404).json(formatErrorResponse(req.locale.USER_NOT_FOUND, 404));
     }
-    const sellerId = await userHelper.getConnectedSllerId(user._id);
 
-    user.sellerId = sellerId;
+    const resSellerId = await userHelper.getConnectedSllerId(user._id);
+
+    if (resSellerId && resSellerId.length === 0) {
+      return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
+    }
+    user.sellerId = resSellerId;
+
     res.status(200).json(formatSuccessResponse(user, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
     errorLog(err);
@@ -34,7 +39,7 @@ export const updateUser = async (req, res) => {
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
 
-    const { firstName, lastName, email, phoneNumber, active, role, password, sellerId } = req.body;
+    const { firstName, lastName, email, phoneNumber, active, role, password, sellerIds } = req.body;
     const payload = { firstName, lastName, email, phoneNumber, active, role };
 
     if (password && password.trim() !== '') {
@@ -54,29 +59,36 @@ export const updateUser = async (req, res) => {
 
     const userResponseObject = updatedUser.toObject();
 
-    if (sellerId) {
-      const seller = await userHelper.validateSellerAccessForCreator(
-        creatorId,
-        sellerId,
-        creatorRole,
-        updatedUser.role
-      );
-      if (seller && !seller.success) {
-        if (!seller.notBaseSeller) {
-          return Responses.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
+    if (sellerIds) {
+      if (role !== USER_ROLES.MASTER_ADMIN && (!Array.isArray(sellerIds) || sellerIds.length === 0)) {
+        return Responses.failResponse(res, 'Atleast one seller id is required for this user role.', 400);
+      }
+      if (role !== USER_ROLES.MASTER_ADMIN) {
+        for (const sellerId of sellerIds) {
+          const seller = await userHelper.validateSellerAccessForCreator(
+            creatorId,
+            sellerId,
+            creatorRole,
+            updatedUser.role
+          );
+          if (seller && !seller.success) {
+            if (!seller.notBaseSeller) {
+              return Responses.failResponse(res, req.locale.CAN_NOT_ASSIGN_BASE_SELLER, 403);
+            }
+            const message =
+              seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_DOES_NOT_EXISTS : req.locale.NOT_HAVE_ACCESS;
+            return Responses.failResponse(res, message, 403);
+          }
         }
-        const message =
-          seller.role === USER_ROLES.MASTER_ADMIN ? req.locale.SELLER_DOES_NOT_EXISTS : req.locale.NOT_HAVE_ACCESS;
-        return Responses.failResponse(res, message, 403);
       }
 
-      const sellerUpdataion = await userHelper.sellerConnectionUpdate(updatedUser._id, sellerId);
+      const sellerUpdataion = await userHelper.sellerConnectionUpdate(updatedUser._id, sellerIds);
 
       if (!sellerUpdataion) {
         return Responses.failResponse(res, req.locale.FAILED_SELLER_CONNECTION, 400);
       }
 
-      userResponseObject.sellerId = sellerUpdataion.sellerId;
+      userResponseObject.sellerIds = sellerUpdataion;
     } else {
       const sellerId = await userHelper.getConnectedSllerId(updatedUser._id);
       if (!sellerId) {
@@ -96,8 +108,12 @@ export const getAllUsers = async (req, res) => {
   try {
     const user = req.user;
     const seller = req.seller;
+    const baseSellerId = req.baseSeller;
+    const sellerConnectionWithUsers = await userHelper.getUserConnectedToThisSellers(seller, user.role, baseSellerId);
 
-    const sellerConnectionWithUsers = await userHelper.getUserConnectedToThisSellers(seller);
+    if (sellerConnectionWithUsers.length === 0) {
+      return Response.failResponse(res, 'The seller you have provided does not have any user connected', 400);
+    }
 
     const { role, active, search, page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
 
@@ -107,14 +123,8 @@ export const getAllUsers = async (req, res) => {
     const skip = (pageNum - 1) * limit;
 
     const filter = { isDeleted: false };
+    filter._id = { $in: sellerConnectionWithUsers };
 
-    if (SELLER_TYPE.NORMAL === sellerConnectionWithUsers.type) {
-      filter._id = { $in: sellerConnectionWithUsers.userIds };
-    }
-
-    if (ROLES_BASED_USER_FETCHING[user.role]) {
-      filter.role = { $in: ROLES_BASED_USER_FETCHING[user.role] };
-    }
     if (role) {
       filter.role = role.toLowerCase();
     }
@@ -130,27 +140,41 @@ export const getAllUsers = async (req, res) => {
 
     const sortDirection = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
     const sort = { [sortBy]: sortDirection };
+
+    if (ROLES_BASED_USER_FETCHING[user.role]) {
+      filter.role = { $in: ROLES_BASED_USER_FETCHING[user.role] };
+    }
+
     const aggregationPipeline = [
       { $match: filter },
-
       { $sort: sort },
       {
         $facet: {
           data: [
             { $skip: skip },
             { $limit: limit },
-
             {
               $lookup: {
                 from: UserSeller.collection.name,
-                localField: '_id',
-                foreignField: 'userId',
+                let: { userId: '$_id' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ['$userId', '$$userId'] },
+                          {
+                            $or: [{ $eq: ['$sellerId', seller._id] }, { $eq: ['$sellerId', baseSellerId] }],
+                          },
+                        ],
+                      },
+                    },
+                  },
+                ],
                 as: 'sellerConnection',
               },
             },
-
             { $unwind: { path: '$sellerConnection', preserveNullAndEmptyArrays: true } },
-
             {
               $lookup: {
                 from: Seller.collection.name,
@@ -159,9 +183,7 @@ export const getAllUsers = async (req, res) => {
                 as: 'sellerDetails',
               },
             },
-
             { $unwind: { path: '$sellerDetails', preserveNullAndEmptyArrays: true } },
-
             {
               $project: {
                 _id: 1,
@@ -242,8 +264,8 @@ export const updatePassword = async (req, res) => {
 export const softDeleteUser = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const deletedUser = await userService.deleteUserId(id);
+    const sellerId = req.sellerId;
+    const deletedUser = await userService.deleteUserId(id, sellerId);
 
     if (!deletedUser) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
@@ -271,11 +293,11 @@ export const deleteAllUsers = async (req, res) => {
 export const deleteSelectedUsers = async (req, res) => {
   try {
     const { ids } = req.body;
-
+    const sellerId = req.sellerId;
     if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, req.locale.PROVIDE_ARRAY_OF_USER_IDS, 400);
     }
-    const result = await userService.deleteSelectedUsers(ids);
+    const result = await userService.deleteSelectedUsers(ids, req.locale, sellerId);
 
     if (result.success === false) {
       return Responses.failResponse(res, result.message, 400);
@@ -291,6 +313,7 @@ export const deleteSelectedUsers = async (req, res) => {
 export const updateSelectedUserStatus = async (req, res) => {
   try {
     const { ids, active } = req.body;
+    const sellerId = req.sellerId;
 
     if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, req.locale.PROVIDE_ARRAY_OF_USER_IDS, 400);
@@ -298,7 +321,7 @@ export const updateSelectedUserStatus = async (req, res) => {
     if (typeof active !== 'boolean') {
       return Responses.failResponse(res, req.locale.STATUS_MUST_BE_BOOLEAN, 400);
     }
-    const result = await userService.updateSelectedUserStatus(ids, active);
+    const result = await userService.updateSelectedUserStatus(ids, active, sellerId, req.locale);
 
     if (result.success === false) {
       return Responses.failResponse(res, result.message, 400);
