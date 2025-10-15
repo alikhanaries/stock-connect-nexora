@@ -1,5 +1,8 @@
 // mapRowToProduct.js
 import { uploadImageFromUrl } from '../util/uploadImage.js';
+import pLimit from 'p-limit';
+const IMAGE_CONCURRENCY = 10; // max 10 uploads at a time
+const limit = pLimit(IMAGE_CONCURRENCY);
 export const mapRowToProduct = async (row, index, locale, sellerId) => {
   if (!row || typeof row !== 'object') return null;
 
@@ -27,21 +30,29 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     };
   }
 
-  // Upload images to S3
-  const s3Url = r.url ? await uploadImageFromUrl(r.url, sellerId) : null;
-
-  const uploadedImages = [];
-  if (r.images) {
-    const imageUrls = r.images.split(',').map((img) => img.trim());
-    for (let imgUrl of imageUrls) {
-      const s3Url = await uploadImageFromUrl(imgUrl, sellerId);
-      if (s3Url) uploadedImages.push(s3Url);
-    }
-  }
-
-  const extra1 = r.extraimageurl1 ? await uploadImageFromUrl(r.extraimageurl1, sellerId) : null;
-  const extra2 = r.extraimageurl2 ? await uploadImageFromUrl(r.extraimageurl2, sellerId) : null;
-  const extra3 = r.extraimageurl3 ? await uploadImageFromUrl(r.extraimageurl3, sellerId) : null;
+  // Collect all image URLs
+  const allImageUrls = [
+    r.url,
+    ...(r.images ? r.images.split(',').map((img) => img.trim()) : []),
+    r.extraimageurl1,
+    r.extraimageurl2,
+    r.extraimageurl3,
+  ].filter(Boolean);
+  // Upload all images with concurrency limit
+  const uploadedUrls = await Promise.all(
+    allImageUrls.map((imgUrl) =>
+      limit(() =>
+        uploadImageFromUrl(imgUrl, sellerId).catch((err) => {
+          console.error(`Failed to upload ${imgUrl}: ${err.message}`);
+          return null;
+        })
+      )
+    )
+  );
+  // Map back results
+  const [mainUrl, ...rest] = uploadedUrls;
+  const [extra1, extra2, extra3] = rest.slice(-3);
+  const uploadedImages = rest.slice(0, rest.length - 3).filter(Boolean);
 
   return {
     parentProductSkuCode: r.parentproductskucode || null,
@@ -58,7 +69,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     vatRateType: r.vatratetype ? r.vatratetype.toUpperCase() : 'STANDARD',
     shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : 0,
     shippingTime: r.shippingtime || null,
-    url: s3Url,
+    url: mainUrl || null,
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
     attributes: r.attributes,
