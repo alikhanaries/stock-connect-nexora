@@ -152,5 +152,7 @@
   "RESET_TOKEN_GENERATION_SUCCESS": "تم إنشاء رمز إعادة التعيين بنجاح",
   "MISSING_INPUTS": "المدخلات مفقودة",
   "INVALID_OR_EXPIRED_TOKEN": "رمز غير صالح أو منتهي الصلاحية",
-  "PASSWORD_RESET_SUCCESS": "تم إعادة تعيين كلمة المرور بنجاح"
+  "PASSWORD_RESET_SUCCESS": "تم إعادة تعيين كلمة المرور بنجاح",
+  "INVALID_USER_IDS_TO_DELETE": "لا يوجد مستخدمون مرتبطون بهذا البائع في القائمة المقدمة.",
+  "NO_VALID_USERS_FOUND": "يرجى تقديم مستخدمين صالحين."
 }

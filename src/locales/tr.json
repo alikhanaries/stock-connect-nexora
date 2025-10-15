@@ -151,5 +151,7 @@
   "RESET_TOKEN_GENERATION_SUCCESS": "Sıfırlama tokeni başarıyla oluşturuldu",
   "MISSING_INPUTS": "Eksik bilgiler",
   "INVALID_OR_EXPIRED_TOKEN": "Geçersiz veya süresi dolmuş token",
-  "PASSWORD_RESET_SUCCESS": "Şifre başarıyla sıfırlandı"
+  "PASSWORD_RESET_SUCCESS": "Şifre başarıyla sıfırlandı",
+  "INVALID_USER_IDS_TO_DELETE": "Sağlanan listedeki hiçbir kullanıcı bu satıcıya bağlı değil.",
+  "NO_VALID_USERS_FOUND": "Lütfen geçerli kullanıcılar sağlayın."
 }
