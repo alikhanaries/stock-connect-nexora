@@ -1,19 +1,22 @@
-import { ROLES_BASED_USER_FETCHING, USER_ROLES } from '#constants/common.js';
+import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
 import mongoose from 'mongoose';
 import Responses from '#helpers/response.js';
+import Seller from '#models/Seller.js';
 
 export const verifySellerAccess = async (req, res, next) => {
   try {
     const user = req.user;
     const connectedSellerIds = req.sellerIds;
     let { sellerId } = req.query;
-
-    if (!sellerId) {
-      sellerId = connectedSellerIds[0];
-    }
     if (user?.role === USER_ROLES.MASTER_ADMIN) {
+      if (!sellerId) {
+        sellerId = await Seller.findOne({ isDeleted: false, type: SELLER_TYPE.NORMAL });
+      }
       req.sellerId = new mongoose.Types.ObjectId(sellerId);
       return next();
+    }
+    if (!sellerId) {
+      sellerId = connectedSellerIds[0];
     }
 
     if (!Array.isArray(connectedSellerIds)) {

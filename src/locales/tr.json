@@ -105,5 +105,7 @@
   "ALL_PRODUCTS_PUSH_SUCCESS": "Tüm ürünler başarıyla gönderildi",
   "ALL_PRODUCTS_PUSH_FAILED": "Tüm ürünlerin gönderimi başarısız oldu",
   "PRODUCTS_PUSH_PARTIAL_SUCCESS": "Bazı ürünler başarıyla gönderildi, bazıları başarısız oldu",
-  "INVALID_CATEGORY_TRAIL": "Geçersiz kategori yolu"
+  "INVALID_CATEGORY_TRAIL": "Geçersiz kategori yolu",
+  "INVALID_USER_IDS_TO_DELETE": "Sağlanan listedeki hiçbir kullanıcı bu satıcıya bağlı değil.",
+  "NO_VALID_USERS_FOUND": "Lütfen geçerli kullanıcılar sağlayın."
 }
