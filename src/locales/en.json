@@ -114,5 +114,17 @@
   "ALL_PRODUCTS_PUSH_SUCCESS": "All products pushed successfully",
   "ALL_PRODUCTS_PUSH_FAILED": "All products push failed",
   "PRODUCTS_PUSH_PARTIAL_SUCCESS": "Some products pushed successfully, some failed",
-  "INVALID_CATEGORY_TRAIL": "Invalid category trail"
+  "INVALID_CATEGORY_TRAIL": "Invalid category trail",
+
+  "PLEASE_PROVIDE_VALID_STATUS": "Please provide valid status",
+  "SELLER_NOT_FOUND": "Seller not found",
+  "SELLER_UPDATED_SUCCESSFULLY": "Seller updated successfully",
+  "NO_MATCHING_SELLERS_FOUND_TO_UPDATE": "No matching sellers found to update.",
+  "SELLER_ACTIVATED_SUCCESSFULLY": "Seller activated successfully",
+  "SELLER_DEACTIVATED_SUCCESSFULLY": "Seller deactivated successfully",
+  "FAILED_TO_CREATE_SELLER": "Failed to create seller.",
+  "SELLER_NAME_EXISTS": "A seller with this name already exists.",
+  "SELLER_CREATED_SUCCESSFULLY": "Seller created successfully",
+  "SELLER_FETCHED_SUCCESSFULLY": "Seller fetched successfully",
+  "NO_SELLER_FIND": "No seller found"
 }

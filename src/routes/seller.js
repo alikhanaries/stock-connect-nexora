@@ -21,8 +21,15 @@ const seller = express.Router();
 
 const allowedRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.MASTER_ADMIN];
 
-seller.post('/create', authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), createSellerValidator, createSeller);
-seller.get('/', authMiddleware, authorize(allowedRoles), getAllSellerValidator, getAllSeller);
+seller.post(
+  '/create',
+  authMiddleware,
+  authorize(USER_ROLES.MASTER_ADMIN),
+  createSellerValidator,
+  checkLanguage,
+  createSeller
+);
+seller.get('/', authMiddleware, authorize(allowedRoles), getAllSellerValidator, checkLanguage, getAllSeller);
 seller.delete(
   '/bulk-delete',
   softDeleteSellerValidator,
@@ -34,12 +41,20 @@ seller.delete(
 seller.patch(
   '/status-update',
   updateSellerStatusValidator,
+  checkLanguage,
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
   updateSellerStatus
 );
 
 seller.get('/:id', getSellerByIdValidator, checkLanguage, authMiddleware, getSellerById);
-seller.patch('/:id', updateSellerValidator, authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), updateSeller);
+seller.patch(
+  '/:id',
+  updateSellerValidator,
+  checkLanguage,
+  authMiddleware,
+  authorize(USER_ROLES.MASTER_ADMIN),
+  updateSeller
+);
 
 export default seller;
