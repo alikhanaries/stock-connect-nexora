@@ -285,18 +285,15 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     const perPage = parseInt(size);
     const skip = (currentPage - 1) * perPage;
 
-    const matchStage = {};
+    const matchStage = {
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+    };
 
     // Applied filters object
     const appliedFilters = {};
     if (status) {
       matchStage.status = status;
       appliedFilters.status = status;
-    }
-    // Filter by sellerId
-    if (sellerId) {
-      matchStage.sellerId = new mongoose.Types.ObjectId(sellerId);
-      appliedFilters.sellerId = sellerId;
     }
     // Aggregation pipeline
     const aggregationPipeline = [
