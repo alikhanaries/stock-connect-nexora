@@ -57,6 +57,7 @@
   "ORDER_STATUS_STATS_FETCHED_SUCCESSFULLY": "Order status statistics fetched successfully",
   "ALREADY_UP_TO_DATE": "Already up to date",
   "ORDER_COMPARISON_CALC_FAILED": "Could not calculate order comparison data",
+  "NO_NEW_ORDERS_FOUND": "No new orders found",
   "NEW_ORDERS_SYNCED_SUCCESSFULLY": "new order(s) were synced successfully.",
   "INVALID_PERIOD": "Invalid period. Please use one of:",
   "ORDER_COMPARISON_FETCHED_SUCCESSFULLY": "order comparison fetched successfully.",
@@ -84,7 +85,6 @@
   "MARKETPLACE_NOT_FOUND": "Marketplace not found",
   "CATEGORY_PROCESSED_SUCCESS": "Categories processed successfully",
   "CATEGORY_NOT_SAVED": "Categories could not be saved",
-  "MARKET_PLACE_NOT_FOUND": "Marketplace not found",
   "PRODUCT_IMPORTED_PROCESSING": "Product import is processing",
 
   "CATEGORY_IMPORTED_PROCESSING": "Category importing is under processed",
