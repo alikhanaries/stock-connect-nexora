@@ -1,61 +1,15 @@
-const sanitizeOrdersData = (orders) => {
-  return orders.map((data) => {
-    const updatePayload = {
-      orderId: data.Id,
-      channelId: data.ChannelId,
-      channelName: data.ChannelName,
-      globalChannelName: data.GlobalChannelName,
-      globalChannelId: data.GlobalChannelId,
-      status: data.Status,
-      orderDate: data.OrderDate,
-      merchantComment: data.MerchantComment,
-      merchantOrderNo: data.MerchantOrderNo,
-      isBusinessOrder: data.IsBusinessOrder,
-      subTotalInclVat: data.SubTotalInclVat,
-      subTotalVat: data.SubTotalVat,
-      shippingCostsInclVat: data.ShippingCostsInclVat,
-      totalInclVat: data.TotalInclVat,
-      totalVat: data.TotalVat,
-      originalSubTotalInclVat: data.OriginalSubTotalInclVat,
-      originalSubTotalVat: data.OriginalSubTotalVat,
-      originalShippingCostsInclVat: data.OriginalShippingCostsInclVat,
-      originalShippingCostsVat: data.OriginalShippingCostsVat,
-      originalTotalInclVat: data.OriginalTotalInclVat,
-      originalTotalVat: data.OriginalTotalVat,
-      subTotalExclVat: data.SubTotalExclVat,
-      totalExclVat: data.TotalExclVat,
-      shippingCostsExclVat: data.ShippingCostsExclVat,
-      originalSubTotalExclVat: data.OriginalSubTotalExclVat,
-      originalShippingCostsExclVat: data.OriginalShippingCostsExclVat,
-      originalTotalExclVat: data.OriginalTotalExclVat,
-      originalSubTotalFee: data.OriginalSubTotalFee,
-      subTotalFee: data.SubTotalFee,
-      originalOrderFee: data.OriginalOrderFee,
-      orderFee: data.OrderFee,
-      originalTotalFee: data.OriginalTotalFee,
-      totalFee: data.TotalFee,
-      orderCustomer: {
-        orderId: data.Id,
-        gender: data.BillingAddress.Gender,
-        firstName: data.BillingAddress.FirstName,
-        lastName: data.BillingAddress.LastName,
-        phone: data.Phone,
-        email: data.Email,
-        languageCode: data.LanguageCode,
-        companyRegistrationNo: data.CompanyRegistrationNo,
-        channelCustomerNo: data.ChannelCustomerNo,
-      },
-      orderPaymentDetails: {
-        orderId: data.Id,
-        vatNo: data.VatNo,
-        paymentMethod: data.PaymentMethod,
-        paymentReferenceNo: data.PaymentReferenceNo,
-        currencyCode: data.CurrencyCode,
-      },
-      orderSkuList: {
-        orderId: data.Id,
-        skuList: Array.isArray(data.Lines)
-          ? data.Lines.map((line) => ({
+import Order from '#models/Orders.js';
+const sanitizeOrdersData = async (orders, sellerId) => {
+  return Promise.all(
+    orders.map(async (data) => {
+      // Fetch existing order to preserve airWaybillNo
+      const existingOrder = await Order.findOne({ orderId: data.Id });
+
+      const skuList = Array.isArray(data.Lines)
+        ? data.Lines.map((line) => {
+            // Preserve existing airWaybillNo if it exists
+            const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => s.id === line.Id);
+            return {
               id: line.Id,
               channelOrderLineNo: line.ChannelOrderLineNo,
               status: line.Status,
@@ -95,51 +49,117 @@ const sanitizeOrdersData = (orders) => {
               exactShipmentDate: line.ExactShipmentDate,
               expectedShipmentDate: line.ExpectedShipmentDate,
               latestShipmentDate: line.LatestShipmentDate,
-            }))
-          : [],
-      },
-      orderShippingAddress: {
-        line1: data.ShippingAddress.Line1,
-        line2: data.ShippingAddress.Line2,
-        line3: data.ShippingAddress.Line3,
-        gender: data.ShippingAddress.Gender,
-        companyName: data.ShippingAddress.CompanyName,
-        firstName: data.ShippingAddress.FirstName,
-        lastName: data.ShippingAddress.LastName,
-        streetName: data.ShippingAddress.StreetName,
-        houseNr: data.ShippingAddress.HouseNr,
-        houseNrAddition: data.ShippingAddress.HouseNrAddition,
-        zipCode: data.ShippingAddress.ZipCode,
-        city: data.ShippingAddress.City,
-        region: data.ShippingAddress.Region,
-        countryIso: data.ShippingAddress.CountryIso,
-      },
-      orderBillingAddress: {
-        line1: data.BillingAddress.Line1,
-        line2: data.BillingAddress.Line2,
-        line3: data.BillingAddress.Line3,
-        gender: data.BillingAddress.Gender,
-        companyName: data.BillingAddress.CompanyName,
-        firstName: data.BillingAddress.FirstName,
-        lastName: data.BillingAddress.LastName,
-        streetName: data.BillingAddress.StreetName,
-        houseNr: data.BillingAddress.HouseNr,
-        houseNrAddition: data.BillingAddress.HouseNrAddition,
-        zipCode: data.BillingAddress.ZipCode,
-        city: data.BillingAddress.City,
-        region: data.BillingAddress.Region,
-        countryIso: data.BillingAddress.CountryIso,
-      },
-    };
+              airWaybillNo: existingSku?.airWaybillNo ?? null, // preserve existing value
+            };
+          })
+        : [];
 
-    return {
-      updateOne: {
-        filter: { orderId: data.Id },
-        update: { $set: updatePayload },
-        upsert: true,
-      },
-    };
-  });
+      const updatePayload = {
+        orderId: data.Id,
+        channelId: data.ChannelId,
+        channelName: data.ChannelName,
+        globalChannelName: data.GlobalChannelName,
+        globalChannelId: data.GlobalChannelId,
+        status: data.Status,
+        orderDate: data.OrderDate,
+        merchantComment: data.MerchantComment,
+        merchantOrderNo: data.MerchantOrderNo,
+        isBusinessOrder: data.IsBusinessOrder,
+        subTotalInclVat: data.SubTotalInclVat,
+        subTotalVat: data.SubTotalVat,
+        shippingCostsInclVat: data.ShippingCostsInclVat,
+        totalInclVat: data.TotalInclVat,
+        totalVat: data.TotalVat,
+        originalSubTotalInclVat: data.OriginalSubTotalInclVat,
+        originalSubTotalVat: data.OriginalSubTotalVat,
+        originalShippingCostsInclVat: data.OriginalShippingCostsInclVat,
+        originalShippingCostsVat: data.OriginalShippingCostsVat,
+        originalTotalInclVat: data.OriginalTotalInclVat,
+        originalTotalVat: data.OriginalTotalVat,
+        subTotalExclVat: data.SubTotalExclVat,
+        totalExclVat: data.TotalExclVat,
+        shippingCostsExclVat: data.ShippingCostsExclVat,
+        originalSubTotalExclVat: data.OriginalSubTotalExclVat,
+        originalShippingCostsExclVat: data.OriginalShippingCostsExclVat,
+        originalTotalExclVat: data.OriginalTotalExclVat,
+        originalSubTotalFee: data.OriginalSubTotalFee,
+        subTotalFee: data.SubTotalFee,
+        originalOrderFee: data.OriginalOrderFee,
+        orderFee: data.OrderFee,
+        originalTotalFee: data.OriginalTotalFee,
+        totalFee: data.TotalFee,
+        orderCustomer: {
+          orderId: data.Id,
+          gender: data.BillingAddress.Gender,
+          firstName: data.BillingAddress.FirstName,
+          lastName: data.BillingAddress.LastName,
+          phone: data.Phone,
+          email: data.Email,
+          languageCode: data.LanguageCode,
+          companyRegistrationNo: data.CompanyRegistrationNo,
+          channelCustomerNo: data.ChannelCustomerNo,
+        },
+        orderPaymentDetails: {
+          orderId: data.Id,
+          vatNo: data.VatNo,
+          paymentMethod: data.PaymentMethod,
+          paymentReferenceNo: data.PaymentReferenceNo,
+          currencyCode: data.CurrencyCode,
+        },
+        orderSkuList: {
+          orderId: data.Id,
+          skuList,
+        },
+        orderShippingAddress: {
+          line1: data.ShippingAddress.Line1,
+          line2: data.ShippingAddress.Line2,
+          line3: data.ShippingAddress.Line3,
+          gender: data.ShippingAddress.Gender,
+          companyName: data.ShippingAddress.CompanyName,
+          firstName: data.ShippingAddress.FirstName,
+          lastName: data.ShippingAddress.LastName,
+          streetName: data.ShippingAddress.StreetName,
+          houseNr: data.ShippingAddress.HouseNr,
+          houseNrAddition: data.ShippingAddress.HouseNrAddition,
+          zipCode: data.ShippingAddress.ZipCode,
+          city: data.ShippingAddress.City,
+          region: data.ShippingAddress.Region,
+          countryIso: data.ShippingAddress.CountryIso,
+        },
+        orderBillingAddress: {
+          line1: data.BillingAddress.Line1,
+          line2: data.BillingAddress.Line2,
+          line3: data.BillingAddress.Line3,
+          gender: data.BillingAddress.Gender,
+          companyName: data.BillingAddress.CompanyName,
+          firstName: data.BillingAddress.FirstName,
+          lastName: data.BillingAddress.LastName,
+          streetName: data.BillingAddress.StreetName,
+          houseNr: data.BillingAddress.HouseNr,
+          houseNrAddition: data.BillingAddress.HouseNrAddition,
+          zipCode: data.BillingAddress.ZipCode,
+          city: data.BillingAddress.City,
+          region: data.BillingAddress.Region,
+          countryIso: data.BillingAddress.CountryIso,
+        },
+      };
+
+      const updateOperation = {
+        $set: updatePayload,
+        $setOnInsert: {
+          sellerId: sellerId,
+        },
+      };
+
+      return {
+        updateOne: {
+          filter: { orderId: data.Id },
+          update: updateOperation,
+          upsert: true,
+        },
+      };
+    })
+  );
 };
 
 const getPeriodDate = (lowercasedPeriod) => {

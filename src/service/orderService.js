@@ -128,7 +128,7 @@ const getOrderStats = async () => {
 
 const processOrders = async (orders) => {
   try {
-    const operations = orderhelper.sanitizeOrdersData(orders);
+    const operations = await orderhelper.sanitizeOrdersData(orders);
     const result = await Order.bulkWrite(operations);
 
     return { success: true, data: { ...result } };
