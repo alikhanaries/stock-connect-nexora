@@ -165,19 +165,27 @@ export const createPartialShipmentService = async (shipmentData) => {
   try {
     const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
 
-    // Validate required fields early
-    if (!id || !sellerId || !userId || !pickUpId || !products) {
-      throw new Error('Missing required shipment fields');
+    // Collect missing fields
+    const missingFields = [];
+    if (!id) missingFields.push('id');
+    if (!sellerId) missingFields.push('sellerId');
+    if (!userId) missingFields.push('userId');
+    if (!pickUpId) missingFields.push('pickUpId');
+    if (!products || products.length === 0) missingFields.push('products');
+
+    // Throw error if any fields are missing
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required shipment fields: ${missingFields.join(', ')}`);
     }
-    // Fetch order details
 
-    const orderDetails = await Order.findById(id).lean();
+    // Fetch order as a Mongoose document (no .lean()
 
-    if (!orderDetails) {
+    const order = await Order.findById(id);
+    if (!order) {
       return { success: false, message: 'Order not found.' };
     }
 
-    const { orderSkuList, merchantOrderNo, orderId } = orderDetails;
+    const { orderSkuList, merchantOrderNo, orderId } = order;
 
     // Validate SKU list
     if (!orderSkuList?.skuList || orderSkuList.skuList.length === 0) {
@@ -185,38 +193,34 @@ export const createPartialShipmentService = async (shipmentData) => {
     }
 
     // Resolve or create delivery & collection
-    const deliveryData = await formatShipmentDeliveryAddress(
-      orderDetails?.orderShippingAddress,
-      orderDetails?.orderCustomer
-    );
-
+    const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
     const deliveryDetails = await saveDeliveryAddress(deliveryData);
 
     const collectionData = await getPickUpAddress(pickUpId);
-
     if (!collectionData) throw new Error('Invalid pickup information');
 
     // Call Aymakan API
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
-      deliveryData: deliveryData,
-      collectionData: collectionData,
+      deliveryData,
+      collectionData,
       pieces,
     });
 
-    const trackingNumber = aymakanResult.shipping.tracking_number;
     if (!aymakanResult?.success) {
-      return { success: false, message: 'Shipment by Aymakan having error' };
+      return { success: false, message: 'Shipment by Aymakan encountered an error' };
     }
 
-    const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
+    const trackingNumber = aymakanResult.shipping.tracking_number;
+
     // Call ChannelEngine API
+    const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
     const channelResult = await createShipmentWithChannelEngine({
-      merchantShipmentNo: merchantShipmentNo,
-      merchantOrderNo: merchantOrderNo,
+      merchantShipmentNo,
+      merchantOrderNo,
       lines: products,
-      trackTraceNo: aymakanResult.shipping.tracking_number,
+      trackTraceNo: trackingNumber,
       trackTraceUrl: '',
       returnTrackTraceNo: '',
       method: '',
@@ -232,6 +236,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       return { success: false, message: 'Channel engine error' };
     }
 
+    // Track shipment for status info
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo =
       aymakanTrackingResult?.trackingInfo?.map((info) => ({
@@ -243,19 +248,22 @@ export const createPartialShipmentService = async (shipmentData) => {
         reasonAr: info.reason_ar,
         createdAt: info.created_at,
       })) || [];
+
     const isFullShipment = products.length === orderSkuList.skuList.length;
-    const shpmentData = {
+
+    // Prepare shipment document
+    const shipmentDocument = new Shipment({
       orderId: new mongoose.Types.ObjectId(id),
       sellerId: new mongoose.Types.ObjectId(sellerId),
       userId: new mongoose.Types.ObjectId(userId),
       deliveryId: deliveryDetails?._id,
       pickUpId: collectionData?._id,
       airWaybillNo: trackingNumber,
-      merchantShipmentNo: merchantShipmentNo,
-      merchantOrderNo: merchantOrderNo,
+      merchantShipmentNo,
+      merchantOrderNo,
       status: 'PENDING',
-      trackingInfo: trackingInfo,
-      products: products,
+      trackingInfo,
+      products,
       extraData: {
         aymakan: aymakanResult,
         channelEngine: channelResult,
@@ -266,15 +274,24 @@ export const createPartialShipmentService = async (shipmentData) => {
       },
       isFullShipment,
       pieces,
-    };
+    });
 
-    // Save shipment in MongoDB
-    const shipment = new Shipment(shpmentData);
+    // Save shipment
+    await shipmentDocument.save();
 
-    await shipment.save();
-    return { success: true, shipmentId: shipment?._id };
+    // Update all matching SKUs in order
+    for (const product of products) {
+      const sku = order.orderSkuList.skuList.find((s) => s.id === product.orderLineId);
+      if (sku) {
+        sku.airWaybillNo = trackingNumber;
+      }
+    }
+
+    await order.save();
+
+    return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
-    console.error('Error in createShipmentService2:', error.message);
+    console.error('Error in createPartialShipmentService:', error);
     throw error;
   }
 };
