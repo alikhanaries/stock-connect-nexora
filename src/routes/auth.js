@@ -14,17 +14,17 @@ import {
   resetPasswordValidator,
   resetTokenValidator,
 } from '#validations/auth.js';
-import { authMiddleware, authorize } from '#middleware/index.js';
+import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 const allowedRoles = Object.values(USER_ROLES);
 
 const router = express.Router();
 
-router.post('/login', loginValidator, login);
-router.post('/register', registerValidator, authMiddleware, authorize(allowedRoles), register);
-router.post('/refresh-token', refreshToken);
-router.post('/forget-password', forgetPasswordValidator, forgotPassword);
-router.post('/validate-reset-token', resetTokenValidator, validateResetToken);
-router.post('/reset-password', resetPasswordValidator, resetPassword);
+router.post('/login', loginValidator, checkLanguage, login);
+router.post('/register', registerValidator, checkLanguage, authMiddleware, authorize(allowedRoles), register);
+router.post('/refresh-token', checkLanguage, refreshToken);
+router.post('/forget-password', forgetPasswordValidator, checkLanguage, forgotPassword);
+router.post('/validate-reset-token', resetTokenValidator, checkLanguage, validateResetToken);
+router.post('/reset-password', resetPasswordValidator, checkLanguage, resetPassword);
 
 export default router;
