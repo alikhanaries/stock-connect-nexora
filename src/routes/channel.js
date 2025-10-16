@@ -29,7 +29,7 @@ router.get(
   getAllChannelsFromChannelPartner
 );
 // /* GET ALL CHANNEL LIST FROM DATABASE */
-router.get('/getAllChannels', getAllChannelsValidator, authMiddleware, getAllChannels);
+router.get('/getAllChannels', getAllChannelsValidator, authMiddleware, verifySellerAccess, getAllChannels);
 // /* SAVE USER CHANNELS  */
 router.put('/addChannels', saveUserChannelsValidator, authMiddleware, verifySellerAccess, saveUserChannels);
 /* GET USER CHANNEL LIST */
@@ -50,12 +50,6 @@ router.delete(
   removeUserChannels
 );
 
-router.get(
-  '/getAllUserChannels/:userId',
-  getAllUserChannelsValidator,
-  authMiddleware,
-  verifySellerAccess,
-  getAllUserChannels
-);
+router.get('/getAllUserChannels', getAllUserChannelsValidator, authMiddleware, verifySellerAccess, getAllUserChannels);
 
 export default router;

@@ -34,13 +34,6 @@ export const headerSchema = z
 /* GET USER CHANNEL LIST VALIDATOR */
 export const getAllUserChannelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    userId: z
-      .string()
-      .length(24, 'userId must be 24 characters long')
-      .regex(/^[0-9a-fA-F]+$/, 'userId must be a hex string'),
-  });
-  paramsSchema.parse(req.params);
   // validate query (for pagination + search)
   const querySchema = z.object({
     page: z

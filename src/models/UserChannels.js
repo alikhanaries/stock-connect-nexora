@@ -28,13 +28,6 @@ const userChannelsSchema = new mongoose.Schema(
       ref: 'Seller',
       required: true,
     },
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-      index: true,
-      ref: 'User',
-    },
-
     channelIds: [channelSubSchema], // 👈 use sub-schema here
 
     isActive: {
