@@ -1,4 +1,4 @@
-import { createPartialShipmentService } from '#service/shipmentService.js';
+import { createPartialShipmentService, getAllShipmentsService } from '#service/shipmentService.js';
 import { errorResponse, successResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 
@@ -27,5 +27,32 @@ export const createShipment = async (req, res) => {
     errorLog(error);
 
     return errorResponse(res, error?.message || 'Shipment could not be created', 400);
+  }
+};
+
+export const getAllShipments = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { page = 1, size = 10, status, search } = req.query;
+
+    const { shipments, pagination, appliedFilters } = await getAllShipmentsService({
+      page,
+      size,
+      status,
+      sellerId,
+      search,
+    });
+    const responseData = {
+      content: shipments || [],
+      appliedFilters: appliedFilters || {},
+      ...pagination,
+    };
+    const message = shipments && shipments.length > 0 ? 'Shipments fetched successfully' : 'No shipments found';
+
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Get Shipment Controller Error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error?.message || 'Internal server error', 400);
   }
 };

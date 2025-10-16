@@ -1,8 +1,20 @@
 import express from 'express';
 import { checkLanguage } from '#middleware/index.js';
-import { createShipment } from '#root/src/controllers/ShipmentController.js';
-import { authMiddleware } from '#middleware/index.js';
+import { createShipment, getAllShipments } from '#root/src/controllers/ShipmentController.js';
+import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
+import { getShipmentValidator, createShipmentValidator } from '#validations/shipment.js';
 
 const router = express.Router();
-router.post('/createShipment', checkLanguage, authMiddleware, createShipment);
+// CREATE SHIPMENT
+router.post('/createShipment', createShipmentValidator, checkLanguage, authMiddleware, createShipment);
+
+// GET ALL SHIPMENT
+router.get(
+  '/getAllShipments',
+  getShipmentValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getAllShipments
+);
 export default router;

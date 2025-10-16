@@ -65,3 +65,25 @@ export const createShipmentValidator = validate(async (req) => {
   });
   bodySchema.parse(req.body);
 });
+
+export const getShipmentValidator = validate(async (req) => {
+  await headerSchema.parseAsync(req.headers);
+
+  const querySchema = z.object({
+    page: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 1))
+      .refine((val) => val > 0, { message: 'Page must be greater than 0' }),
+    size: z
+      .string()
+      .optional()
+      .transform((val) => (val ? parseInt(val, 10) : 10))
+      .refine((val) => val > 0, { message: 'Limit must be greater than 0' }),
+    status: z.string().optional(),
+    search: z.string().optional(),
+    sellerId: z.string().optional(),
+  });
+
+  await querySchema.parseAsync(req.query);
+});

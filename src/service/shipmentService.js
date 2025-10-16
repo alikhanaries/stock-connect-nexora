@@ -8,6 +8,7 @@ import { formatShipmentDeliveryAddress } from '../helpers/formatShipmentDelivery
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+import { getPagination } from '#helpers/PaginationHandler.js';
 
 const SHIPMENT_MERCHANT_INFO = {
   NAME: 'Aymakan',
@@ -275,5 +276,99 @@ export const createPartialShipmentService = async (shipmentData) => {
   } catch (error) {
     console.error('Error in createShipmentService2:', error.message);
     throw error;
+  }
+};
+
+export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, status, search }) => {
+  try {
+    const currentPage = parseInt(page);
+    const perPage = parseInt(size);
+    const skip = (currentPage - 1) * perPage;
+
+    const matchStage = {
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+    };
+
+    // Applied filters object
+    const appliedFilters = {};
+    if (status) {
+      matchStage.status = status;
+      appliedFilters.status = status;
+    }
+    // Aggregation pipeline
+    const aggregationPipeline = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'deliveryaddresses',
+          localField: 'deliveryId',
+          foreignField: '_id',
+          as: 'deliveryInfo',
+        },
+      },
+      { $unwind: { path: '$deliveryInfo', preserveNullAndEmptyArrays: true } },
+    ];
+
+    // Build OR search conditions
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i'); // case-insensitive search
+
+      const orConditions = [
+        { 'shipmentMerchantDetails.name': { $regex: searchRegex } },
+        { 'shipmentMerchantDetails.email': { $regex: searchRegex } },
+        { 'deliveryInfo.name': { $regex: searchRegex } },
+        { 'deliveryInfo.email': { $regex: searchRegex } },
+        { airWaybillNo: { $regex: searchRegex } },
+        { status: { $regex: searchRegex } },
+      ];
+
+      aggregationPipeline.push({ $match: { $or: orConditions } });
+    }
+
+    aggregationPipeline.push(
+      {
+        $project: {
+          orderId: 1,
+          createdAt: '$createdAt',
+          status: 1,
+          airWaybillNo: 1,
+          sellerId: 1,
+          shipmentMerchantDetails: 1,
+          deliveryCustomer: {
+            name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
+            email: { $ifNull: ['$deliveryInfo.email', '$shipmentMerchantDetails.email'] },
+          },
+        },
+      },
+      { $sort: { createdAt: -1 } }, // latest first
+      { $skip: skip }, // skip for pagination
+      { $limit: perPage } // limit for pagination
+    );
+
+    const shipmentData = await Shipment.aggregate(aggregationPipeline);
+
+    // Total count with same filters (without skip/limit)
+    const totalCountMatch = { ...matchStage };
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      totalCountMatch.$or = [
+        { 'shipmentMerchantDetails.name': { $regex: searchRegex } },
+        { 'shipmentMerchantDetails.email': { $regex: searchRegex } },
+        { 'deliveryInfo.name': { $regex: searchRegex } },
+        { 'deliveryInfo.email': { $regex: searchRegex } },
+        { airWaybillNo: { $regex: searchRegex } },
+        { status: { $regex: searchRegex } },
+      ];
+    }
+    const total = await Shipment.countDocuments(totalCountMatch);
+
+    return {
+      shipments: shipmentData,
+      pagination: getPagination(total, currentPage, perPage),
+      appliedFilters,
+    };
+  } catch (error) {
+    console.error('Error fetching shipments:', error);
+    throw new Error('Failed to fetch shipments');
   }
 };
