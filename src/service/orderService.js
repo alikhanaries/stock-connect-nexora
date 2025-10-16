@@ -5,6 +5,7 @@ import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
+import Shipment from '../models/Shipment/Shipment.js';
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -105,11 +106,87 @@ const getAllOrders = async (query, sellerId) => {
 };
 
 const getOrderById = async (id) => {
+  // Fetch the order
   const order = await Order.findById(id).lean();
-  if (!order) {
-    return false;
-  }
-  return order;
+  if (!order) return false;
+
+  // Fetch shipments for this order
+  const shipments = await Shipment.find({ orderId: id }).lean();
+
+  // Track shipped quantities per merchantProductNo
+  const shippedMap = {}; // key: merchantProductNo
+
+  shipments.forEach((shipment) => {
+    (shipment.products || []).forEach((product) => {
+      const key = product.merchantProductNo;
+      shippedMap[key] = (shippedMap[key] || 0) + product.quantity;
+    });
+  });
+
+  // Prepare unshipped items
+  const unshippedItems = [];
+  const cancelledItems = [];
+  (order.orderSkuList?.skuList || []).forEach((product) => {
+    const shippedQty = shippedMap[product.merchantProductNo] || 0;
+    const notShippedQty = product.quantity - shippedQty;
+
+    if (notShippedQty > 0) {
+      unshippedItems.push({
+        id: product?.id,
+        merchantProductNo: product.merchantProductNo,
+        channelProductNo: product?.channelProductNo,
+        description: product?.description,
+        unitPriceInclVat: product?.unitPriceInclVat,
+        unitPriceExclVat: product?.unitPriceExclVat,
+        unitVat: product?.unitVat,
+        lineTotalInclVat: product?.lineTotalInclVat,
+        lineTotalExclVat: product?.lineTotalExclVat,
+        lineVat: product?.lineVat,
+
+        quantity: notShippedQty,
+      });
+    }
+  });
+
+  const allOrderSkus = order.orderSkuList?.skuList || [];
+  // Prepare shipped items array
+  const shippedItems = shipments.map((shipment) => ({
+    shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
+    shipmentId: shipment._id,
+    trackingNumber: shipment.airWaybillNo || null,
+    lineItems:
+      (shipment.products || []).map((shipmentSku) => {
+        // Match shipment SKU with order SKU by merchantProductNo
+        const orderSku = allOrderSkus.find((oSku) => oSku.merchantProductNo === shipmentSku.merchantProductNo);
+
+        return {
+          id: orderSku?.id,
+          merchantProductNo: shipmentSku.merchantProductNo,
+          channelProductNo: orderSku?.channelProductNo,
+          description: orderSku?.description,
+          quantity: shipmentSku.quantity,
+          unitPriceInclVat: orderSku?.unitPriceInclVat,
+          unitPriceExclVat: orderSku?.unitPriceExclVat,
+          unitVat: orderSku?.unitVat,
+          lineTotalInclVat: orderSku?.lineTotalInclVat,
+          lineTotalExclVat: orderSku?.lineTotalExclVat,
+          lineVat: orderSku?.lineVat,
+
+          airWaybillNo: shipment.airWaybillNo,
+        };
+      }) || [],
+    shipmentMode: shipment.shipmentMode || 'AYMAKAN',
+  }));
+
+  const filteredData = transformOrderResponse(order);
+  const result = {
+    ...filteredData,
+    shippedItems,
+    unshippedItems,
+    cancelledItems,
+  };
+
+  return result;
 };
 
 const getOrderStats = async (sellerId) => {
@@ -293,6 +370,43 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
   if (successfulOrdersToSave.length > 0) {
     await processOrders(successfulOrdersToSave);
   }
+};
+
+const transformOrderResponse = (response) => {
+  if (!response) return null;
+  const data = response;
+  // Payment Info
+  const paymentInfo = {
+    channelName: data.channelName,
+    paymentMethod: data.orderPaymentDetails?.paymentMethod,
+    currencyCode: data.orderPaymentDetails?.currencyCode,
+  };
+  // Customer Info
+  const customerInfo = {
+    name: `${data.orderCustomer?.firstName || ''} ${data.orderCustomer?.lastName || ''}`.trim(),
+    email: data.orderCustomer?.email,
+    phoneNo: data.orderCustomer?.phone,
+  };
+  // Shipping Address
+  const shippingAddress = {
+    address: [data.orderShippingAddress?.line1, data.orderShippingAddress?.line2, data.orderShippingAddress?.line3]
+      .filter(Boolean)
+      .join(', '),
+    city: data.orderShippingAddress?.city,
+    region: data.orderShippingAddress?.region,
+    zipCode: data.orderShippingAddress?.zipCode,
+  };
+
+  return {
+    paymentInfo,
+    customerInfo,
+    shippingAddress,
+    status: data.status,
+    subtotal: data.totalExclVat,
+    tax: data.totalVat,
+    total: data.totalInclVat,
+    shippingFee: data.shippingCostsInclVat,
+  };
 };
 
 export default {
