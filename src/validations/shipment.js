@@ -45,7 +45,6 @@ export const getShipmentValidator = validate(async (req) => {
       .refine((val) => val > 0, { message: 'Limit must be greater than 0' }),
     status: z.string().optional(),
     search: z.string().optional(),
-    sellerId: z.string().optional(),
   });
 
   await querySchema.parseAsync(req.query);
