@@ -279,10 +279,10 @@ export const createPartialShipmentService = async (shipmentData) => {
   }
 };
 
-export const getAllShipmentsService = async ({ page = 1, limit = 10, sellerId, status, search }) => {
+export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, status, search }) => {
   try {
     const currentPage = parseInt(page);
-    const perPage = parseInt(limit);
+    const perPage = parseInt(size);
     const skip = (currentPage - 1) * perPage;
 
     const matchStage = {};

@@ -75,7 +75,7 @@ export const getShipmentValidator = validate(async (req) => {
       .optional()
       .transform((val) => (val ? parseInt(val, 10) : 1))
       .refine((val) => val > 0, { message: 'Page must be greater than 0' }),
-    limit: z
+    size: z
       .string()
       .optional()
       .transform((val) => (val ? parseInt(val, 10) : 10))
