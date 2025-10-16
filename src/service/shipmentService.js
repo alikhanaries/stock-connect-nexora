@@ -314,7 +314,6 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
 
     // Build OR search conditions
     if (search && search.trim() !== '') {
-      appliedFilters.search = search.trim();
       const searchRegex = new RegExp(search.trim(), 'i'); // case-insensitive search
 
       const orConditions = [
