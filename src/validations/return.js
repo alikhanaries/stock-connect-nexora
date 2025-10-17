@@ -226,10 +226,21 @@ export const validateReturnData = (returnData) => {
     };
   }
 };
+export const validateReturnAck = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const acknowledgeReturnSchema = z.object({
+    ReturnId: z.number().int().nonnegative('ReturnId is required and must be a non-negative number'),
+    MerchantReturnNo: z.string().min(1, 'MerchantReturnNo is required and cannot be empty'),
+  });
+
+  acknowledgeReturnSchema.parse(req.body);
+});
 
 export default {
   getAllReturnsValidator,
   syncReturnsValidator,
   validateReturnData,
+  validateReturnAck,
   returnValidator,
 };

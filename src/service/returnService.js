@@ -37,9 +37,7 @@ export const getReturns = async (queryParams = {}) => {
   }
 };
 
-/**
- * Saves return data to the database with simplified structure.
- */
+//Saves return data to the database with simplified structure.
 export const saveReturnToDatabase = async (returnData) => {
   try {
     // Sanitize return data using helper
@@ -359,6 +357,41 @@ export const createReturn = async (returnData) => {
     };
   }
 };
+//Sends an acknowledgement for a merchant return to ChannelEngine.
+export const acknowledgeReturn = async (ackData) => {
+  try {
+    const response = await fetch(
+      `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(ackData),
+      }
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message: responseData.Message || `ChannelEngine API error: ${response.status} ${response.statusText}`,
+        error: responseData,
+      };
+    }
+
+    return { success: true, data: responseData };
+  } catch (error) {
+    console.error('Error in acknowledgeReturn:', error.message);
+    return {
+      success: false,
+      message: 'Error communicating with ChannelEngine.',
+      error: error.message,
+    };
+  }
+};
 
 export default {
   getReturns,
@@ -366,4 +399,5 @@ export default {
   saveReturnToDatabase,
   createReturn,
   getReturnStats,
+  acknowledgeReturn,
 };

@@ -91,10 +91,27 @@ export const getReturnStats = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+// Acknowledges a merchant return in ChannelEngine.
+export const acknowledgeMerchantReturn = async (req, res) => {
+  try {
+    const result = await returnService.acknowledgeReturn(req.body);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || 'Failed to acknowledge return', 400);
+    }
+
+    return Responses.successResponse(res, 'Return acknowledged successfully', 200, result.data);
+  } catch (error) {
+    console.error('Controller Error: acknowledgeMerchantReturn:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
 
 export default {
   getAllReturns,
   syncReturns,
   createMerchantReturn,
   getReturnStats,
+  acknowledgeMerchantReturn,
 };
