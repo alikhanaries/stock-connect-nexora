@@ -2,7 +2,7 @@ import express from 'express';
 import { checkLanguage } from '#middleware/index.js';
 import { createShipment, getAllShipments, getSingleShipment } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
-import { getShipmentValidator, createShipmentValidator } from '#validations/shipment.js';
+import { getShipmentValidator, createShipmentValidator, getSingleShipmentValidator } from '#validations/shipment.js';
 
 const router = express.Router();
 // CREATE SHIPMENT
@@ -19,9 +19,5 @@ router.get(
 );
 
 // GET SINGLE SHIPMENT
-router.get(
-  '/getSingleShipment/:shipmentId',
-
-  getSingleShipment
-);
+router.get('/getSingleShipment/:id', getSingleShipmentValidator, checkLanguage, authMiddleware, getSingleShipment);
 export default router;

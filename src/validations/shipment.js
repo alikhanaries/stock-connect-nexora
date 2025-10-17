@@ -49,3 +49,17 @@ export const getShipmentValidator = validate(async (req) => {
 
   await querySchema.parseAsync(req.query);
 });
+
+export const getSingleShipmentValidator = validate(async (req) => {
+  //  await headerSchema.parseAsync(req.headers);
+  const paramsSchema = z.object({
+    id: z
+      .string({
+        required_error: 'id is required',
+        invalid_type_error: 'id must be a string',
+      })
+      .length(24, 'id must be exactly 24 characters') // ObjectId length
+      .regex(/^[0-9a-fA-F]{24}$/, 'id must be a valid hex string'), // ObjectId format
+  });
+  paramsSchema.parse(req.params);
+});

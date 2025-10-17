@@ -63,9 +63,9 @@ export const getAllShipments = async (req, res) => {
 
 export const getSingleShipment = async (req, res) => {
   try {
-    const { shipmentId } = req.params;
+    const { id } = req.params;
 
-    const result = await getSingleShipmentService(shipmentId);
+    const result = await getSingleShipmentService(id);
     if (!result) return failResponse(res, 'Shipment not found', 404, null);
     return successResponse(res, 'Shipment found', 200, result);
   } catch (error) {

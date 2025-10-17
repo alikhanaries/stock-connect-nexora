@@ -424,7 +424,7 @@ export const getSingleShipmentService = async (id) => {
     // Lookup order details
     {
       $lookup: {
-        from: 'orders',
+        from: 'channelengineorders',
         localField: 'orderId',
         foreignField: '_id',
         as: 'orderDetails',
@@ -436,9 +436,9 @@ export const getSingleShipmentService = async (id) => {
     {
       $lookup: {
         from: 'products',
-        let: { productIds: '$products.productId' }, // assuming shipment.products has `productId`
+        let: { productIds: '$products.merchantProductNo' }, // assuming shipment.products has `productId`
         pipeline: [
-          { $match: { $expr: { $in: ['$_id', '$$productIds'] } } },
+          { $match: { $expr: { $in: ['$productSkuCode', '$$productIds'] } } },
           { $project: { images: 1, name: 1, productSkuCode: 1 } }, // include only needed fields
         ],
         as: 'productDetails',
@@ -462,7 +462,7 @@ export const getSingleShipmentService = async (id) => {
                         $filter: {
                           input: '$productDetails',
                           as: 'pd',
-                          cond: { $eq: ['$$pd._id', '$$p.productId'] },
+                          cond: { $eq: ['$$pd.merchantProductNo', '$$p.productId'] },
                         },
                       },
                       0,
@@ -494,19 +494,21 @@ export const getSingleShipmentService = async (id) => {
         pieces: 1,
         submissionDate: 1,
         pickupDate: 1,
+        products: 1,
         deliveryDate: 1,
         createdAt: 1,
         updatedAt: 1,
         shipmentMerchantDetails: 1,
         deliveryDetails: 1,
         pickupDetails: 1,
-
-        orderSummary: {
-          subTotalInclVat: '$orderDetails.subTotalInclVat',
-          totalInclVat: '$orderDetails.totalInclVat',
-          totalVat: '$orderDetails.totalVat',
-          shippingCostsInclVat: '$orderDetails.shippingCostsInclVat',
-        },
+        productDetails: 1,
+        //  orderDetails: 1,
+        // orderSummary: {
+        //   subTotalInclVat: '$orderDetails.subTotalInclVat',
+        //   totalInclVat: '$orderDetails.totalInclVat',
+        //   totalVat: '$orderDetails.totalVat',
+        //   shippingCostsInclVat: '$orderDetails.shippingCostsInclVat',
+        // },
 
         customerInfo: '$orderDetails.orderCustomer',
         paymentInfo: '$orderDetails.orderPaymentDetails',
