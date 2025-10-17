@@ -309,7 +309,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     // Applied filters object
     const appliedFilters = {};
     if (status) {
-      matchStage.status = status;
+      matchStage.status = status.toUpperCase();
       appliedFilters.status = status;
     }
     // Aggregation pipeline
@@ -388,4 +388,135 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     console.error('Error fetching shipments:', error);
     throw new Error('Failed to fetch shipments');
   }
+};
+
+export const getSingleShipmentService = async (id) => {
+  console.log(id);
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new Error('Invalid shipment ID');
+  }
+
+  const shipment = await Shipment.aggregate([
+    { $match: { _id: new mongoose.Types.ObjectId(id) } },
+
+    // Lookup delivery address
+    {
+      $lookup: {
+        from: 'deliveryaddresses',
+        localField: 'deliveryId',
+        foreignField: '_id',
+        as: 'deliveryDetails',
+      },
+    },
+    { $unwind: { path: '$deliveryDetails', preserveNullAndEmptyArrays: true } },
+
+    // Lookup pickup address
+    {
+      $lookup: {
+        from: 'pickupaddresses',
+        localField: 'pickUpId',
+        foreignField: '_id',
+        as: 'pickupDetails',
+      },
+    },
+    { $unwind: { path: '$pickupDetails', preserveNullAndEmptyArrays: true } },
+
+    // Lookup order details
+    {
+      $lookup: {
+        from: 'orders',
+        localField: 'orderId',
+        foreignField: '_id',
+        as: 'orderDetails',
+      },
+    },
+    { $unwind: { path: '$orderDetails', preserveNullAndEmptyArrays: true } },
+
+    // Lookup product details for each product in shipment
+    {
+      $lookup: {
+        from: 'products',
+        let: { productIds: '$products.productId' }, // assuming shipment.products has `productId`
+        pipeline: [
+          { $match: { $expr: { $in: ['$_id', '$$productIds'] } } },
+          { $project: { images: 1, name: 1, productSkuCode: 1 } }, // include only needed fields
+        ],
+        as: 'productDetails',
+      },
+    },
+
+    // Map shipment products to include product details
+    {
+      $addFields: {
+        products: {
+          $map: {
+            input: '$products',
+            as: 'p',
+            in: {
+              $mergeObjects: [
+                '$$p',
+                {
+                  productInfo: {
+                    $arrayElemAt: [
+                      {
+                        $filter: {
+                          input: '$productDetails',
+                          as: 'pd',
+                          cond: { $eq: ['$$pd._id', '$$p.productId'] },
+                        },
+                      },
+                      0,
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+
+    {
+      $project: {
+        productDetails: 0, // remove temp array
+      },
+    },
+
+    // Shape final output
+    {
+      $project: {
+        _id: 1,
+        status: 1,
+        airWaybillNo: 1,
+        merchantShipmentNo: 1,
+        merchantOrderNo: 1,
+        method: 1,
+        pieces: 1,
+        submissionDate: 1,
+        pickupDate: 1,
+        deliveryDate: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        shipmentMerchantDetails: 1,
+        deliveryDetails: 1,
+        pickupDetails: 1,
+
+        orderSummary: {
+          subTotalInclVat: '$orderDetails.subTotalInclVat',
+          totalInclVat: '$orderDetails.totalInclVat',
+          totalVat: '$orderDetails.totalVat',
+          shippingCostsInclVat: '$orderDetails.shippingCostsInclVat',
+        },
+
+        customerInfo: '$orderDetails.orderCustomer',
+        paymentInfo: '$orderDetails.orderPaymentDetails',
+      },
+    },
+  ]);
+
+  if (!shipment || shipment.length === 0) {
+    throw new Error('Shipment not found');
+  }
+
+  return shipment[0];
 };

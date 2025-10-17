@@ -1,5 +1,9 @@
-import { createPartialShipmentService, getAllShipmentsService } from '#service/shipmentService.js';
-import { errorResponse, successResponse } from '#helpers/response.js';
+import {
+  createPartialShipmentService,
+  getAllShipmentsService,
+  getSingleShipmentService,
+} from '#service/shipmentService.js';
+import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 
 export const createShipment = async (req, res) => {
@@ -50,6 +54,20 @@ export const getAllShipments = async (req, res) => {
     const message = shipments && shipments.length > 0 ? 'Shipments fetched successfully' : 'No shipments found';
 
     return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Get Shipment Controller Error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error?.message || 'Internal server error', 400);
+  }
+};
+
+export const getSingleShipment = async (req, res) => {
+  try {
+    const { shipmentId } = req.params;
+
+    const result = await getSingleShipmentService(shipmentId);
+    if (!result) return failResponse(res, 'Shipment not found', 404, null);
+    return successResponse(res, 'Shipment found', 200, result);
   } catch (error) {
     console.error('Get Shipment Controller Error:', error.message, error.stack);
     errorLog(error);

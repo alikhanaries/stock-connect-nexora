@@ -3,7 +3,7 @@ dotenv.config();
 
 export const config = {
   PORT: process.env.PORT || 3000,
-  DB_URL: process.env.DB_URL,
+  DB_URL: process.env.DB_URL3,
   JWT_SECRET: process.env.JWT_SECRET,
   ACCESS_KEY: process.env.ACCESS_KEY,
   SECRET_KEY: process.env.SECRET_KEY,

@@ -1,6 +1,6 @@
 import express from 'express';
 import { checkLanguage } from '#middleware/index.js';
-import { createShipment, getAllShipments } from '#root/src/controllers/ShipmentController.js';
+import { createShipment, getAllShipments, getSingleShipment } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
 import { getShipmentValidator, createShipmentValidator } from '#validations/shipment.js';
 
@@ -16,5 +16,12 @@ router.get(
   authMiddleware,
   verifySellerAccess,
   getAllShipments
+);
+
+// GET SINGLE SHIPMENT
+router.get(
+  '/getSingleShipment/:shipmentId',
+
+  getSingleShipment
 );
 export default router;
