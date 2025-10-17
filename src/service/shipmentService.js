@@ -310,7 +310,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     const appliedFilters = {};
     if (status) {
       matchStage.status = status;
-      appliedFilters.status = status;
+      appliedFilters.status = status.toUpperCase();
     }
     // Aggregation pipeline
     const aggregationPipeline = [

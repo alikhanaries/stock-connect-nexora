@@ -9,7 +9,4 @@ const lineSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Compound index: merchantProductNo + orderLineId unique
-lineSchema.index({ merchantProductNo: 1, orderLineId: 1 }, { unique: true });
-
 export default lineSchema;

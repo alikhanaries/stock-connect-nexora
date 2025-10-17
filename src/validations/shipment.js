@@ -20,7 +20,7 @@ export const createShipmentValidator = validate(async (req) => {
       .array(
         z.object({
           merchantProductNo: z.string().nonempty({ message: 'merchantProductNo is required' }),
-          orderLineId: z.string().nonempty({ message: 'orderLineId is required' }),
+          orderLineId: z.number().min(1, { message: 'orderLineId must be at least 1' }),
           quantity: z.number().min(1, { message: 'quantity must be at least 1' }),
         })
       )
