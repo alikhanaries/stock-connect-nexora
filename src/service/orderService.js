@@ -273,17 +273,17 @@ const getOrderComparison = async (lowercasedPeriod, sellerId) => {
   return response;
 };
 
-const cancelOrder = async (orderId, reason) => {
+const cancelOrder = async (orderId, reason, specifics) => {
   try {
     const existenceOfOrder = await Order.findById(orderId).lean();
     if (!existenceOfOrder) {
       return { success: false, error: { message: 'Order not found', status: 404 } };
     }
 
-    const lines = existenceOfOrder.orderSkuList.skuList.map((oItem) => {
+    const lines = specifics?.map((oItem) => {
       return {
         MerchantProductNo: oItem.merchantProductNo,
-        OrderLineId: oItem.id,
+        OrderLineId: oItem.orderLineId,
         Quantity: oItem.quantity,
       };
     });
