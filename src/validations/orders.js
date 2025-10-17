@@ -6,9 +6,9 @@ import { headerSchema } from './headerSchema.js';
 import mongoose from 'mongoose';
 
 const orderLineSchema = z.object({
-  MerchantProductNo: z.string(),
-  OrderLineId: z.number().int().positive(),
-  Quantity: z.number().int().min(1, 'You must cancel at least 1 item if you want to cancel'),
+  merchantProductNo: z.string(),
+  orderLineId: z.number().int().positive(),
+  quantity: z.number().int().min(1, 'You must cancel at least 1 item if you want to cancel'),
 });
 
 export const getAllOrdersValidator = validate(async (req) => {

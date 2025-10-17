@@ -5,6 +5,8 @@ import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
+import Shipment from '../models/Shipment/Shipment.js';
+import Product from '../models/Product.js';
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -104,12 +106,101 @@ const getAllOrders = async (query, sellerId) => {
   }
 };
 
-const getOrderById = async (id) => {
+export const getOrderById = async (id) => {
+  //  Fetch the order
   const order = await Order.findById(id).lean();
-  if (!order) {
-    return false;
-  }
-  return order;
+  if (!order) return false;
+
+  //  Fetch all shipments for this order
+  const shipments = await Shipment.find({ orderId: id }).lean();
+
+  //  Track shipped quantities per merchantProductNo
+  const shippedMap = {};
+  shipments.forEach((shipment) => {
+    (shipment.products || []).forEach((product) => {
+      const key = product.merchantProductNo;
+      shippedMap[key] = (shippedMap[key] || 0) + product.quantity;
+    });
+  });
+
+  const allOrderSkus = order.orderSkuList?.skuList || [];
+
+  // Gather all merchantProductNos for image lookup
+  const allMerchantNos = allOrderSkus.map((sku) => sku.merchantProductNo);
+
+  //  Fetch product images in ONE query
+  const productsMap = await Product.find({ productSkuCode: { $in: allMerchantNos } }, { productSkuCode: 1, images: 1 })
+    .lean()
+    .then((products) =>
+      products.reduce((acc, p) => {
+        acc[p.productSkuCode] = p.images?.[0] || null; // first image
+        return acc;
+      }, {})
+    );
+
+  //  Build unshipped items
+  const unshippedItems = [];
+  const cancelledItems = [];
+
+  allOrderSkus.forEach((product) => {
+    const shippedQty = shippedMap[product.merchantProductNo] || 0;
+    const notShippedQty = product.quantity - shippedQty;
+
+    if (notShippedQty > 0) {
+      unshippedItems.push({
+        id: product?.id,
+        merchantProductNo: product.merchantProductNo,
+        channelProductNo: product?.channelProductNo,
+        name: product?.description,
+        imageUrl: productsMap[product.merchantProductNo] || null, // ✅ from Product
+        unitPriceInclVat: product?.unitPriceInclVat,
+        unitPriceExclVat: product?.unitPriceExclVat,
+        unitVat: product?.unitVat,
+        lineTotalInclVat: product?.lineTotalInclVat,
+        lineTotalExclVat: product?.lineTotalExclVat,
+        lineVat: product?.lineVat,
+        quantity: notShippedQty,
+      });
+    }
+  });
+
+  //  Build shipped items
+  const shippedItems = shipments.map((shipment) => ({
+    shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
+    shipmentId: shipment._id,
+    trackingNumber: shipment.airWaybillNo || null,
+    lineItems:
+      (shipment.products || []).map((shipmentSku) => {
+        const orderSku = allOrderSkus.find((oSku) => oSku.merchantProductNo === shipmentSku.merchantProductNo);
+
+        return {
+          id: orderSku?.id,
+          merchantProductNo: shipmentSku.merchantProductNo,
+          channelProductNo: orderSku?.channelProductNo,
+          name: orderSku?.description,
+          imageUrl: productsMap[shipmentSku.merchantProductNo] || null, // ✅ from Product
+          quantity: shipmentSku.quantity,
+          unitPriceInclVat: orderSku?.unitPriceInclVat,
+          unitPriceExclVat: orderSku?.unitPriceExclVat,
+          unitVat: orderSku?.unitVat,
+          lineTotalInclVat: orderSku?.lineTotalInclVat,
+          lineTotalExclVat: orderSku?.lineTotalExclVat,
+          lineVat: orderSku?.lineVat,
+          airWaybillNo: shipment.airWaybillNo,
+        };
+      }) || [],
+    shipmentMode: shipment.shipmentMode || 'AYMAKAN',
+  }));
+
+  // Final response
+  const filteredData = transformOrderResponse(order);
+
+  return {
+    ...filteredData,
+    shippedItems,
+    unshippedItems,
+    cancelledItems,
+  };
 };
 
 const getOrderStats = async (sellerId) => {
@@ -128,7 +219,7 @@ const getOrderStats = async (sellerId) => {
 
 const processOrders = async (orders, sellerId) => {
   try {
-    const operations = orderhelper.sanitizeOrdersData(orders, sellerId);
+    const operations = await orderhelper.sanitizeOrdersData(orders, sellerId);
     const result = await Order.bulkWrite(operations);
 
     return { success: true, data: { ...result } };
@@ -182,17 +273,17 @@ const getOrderComparison = async (lowercasedPeriod, sellerId) => {
   return response;
 };
 
-const cancelOrder = async (orderId, reason) => {
+const cancelOrder = async (orderId, reason, specifics) => {
   try {
     const existenceOfOrder = await Order.findById(orderId).lean();
     if (!existenceOfOrder) {
       return { success: false, error: { message: 'Order not found', status: 404 } };
     }
 
-    const lines = existenceOfOrder.orderSkuList.skuList.map((oItem) => {
+    const lines = specifics?.map((oItem) => {
       return {
         MerchantProductNo: oItem.merchantProductNo,
-        OrderLineId: oItem.id,
+        OrderLineId: oItem.orderLineId,
         Quantity: oItem.quantity,
       };
     });
@@ -293,6 +384,45 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
   if (successfulOrdersToSave.length > 0) {
     await processOrders(successfulOrdersToSave);
   }
+};
+
+const transformOrderResponse = (response) => {
+  if (!response) return null;
+  const data = response;
+  // Payment Info
+  const paymentInfo = {
+    channelName: data.channelName,
+    paymentMethod: data.orderPaymentDetails?.paymentMethod,
+    currencyCode: data.orderPaymentDetails?.currencyCode,
+  };
+  // Customer Info
+  const customerInfo = {
+    name: `${data.orderCustomer?.firstName || ''} ${data.orderCustomer?.lastName || ''}`.trim(),
+    email: data.orderCustomer?.email,
+    phoneNo: data.orderCustomer?.phone,
+  };
+  // Shipping Address
+  const shippingAddress = {
+    address: [data.orderShippingAddress?.line1, data.orderShippingAddress?.line2, data.orderShippingAddress?.line3]
+      .filter(Boolean)
+      .join(', '),
+    city: data.orderShippingAddress?.city,
+    region: data.orderShippingAddress?.region,
+    zipCode: data.orderShippingAddress?.zipCode,
+  };
+
+  return {
+    _id: data?._id,
+    orderId: data?.orderId,
+    paymentInfo,
+    customerInfo,
+    shippingAddress,
+    status: data.status,
+    subtotal: data.totalExclVat,
+    tax: data.totalVat,
+    total: data.totalInclVat,
+    shippingFee: data.shippingCostsInclVat,
+  };
 };
 
 export default {

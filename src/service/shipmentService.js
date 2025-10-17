@@ -309,7 +309,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     // Applied filters object
     const appliedFilters = {};
     if (status) {
-      matchStage.status = status;
+      matchStage.status = status.toUpperCase();
       appliedFilters.status = status;
     }
     // Aggregation pipeline

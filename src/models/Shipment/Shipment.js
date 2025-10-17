@@ -58,9 +58,5 @@ const shipmentSchema = new mongoose.Schema(
   }
 );
 
-// Compound unique indexes
-shipmentSchema.index({ orderId: 1, airWaybillNo: 1 }, { unique: true });
-shipmentSchema.index({ merchantShipmentNo: 1, airWaybillNo: 1 }, { unique: true });
-
 const Shipment = mongoose.model('Shipment', shipmentSchema);
 export default Shipment;
