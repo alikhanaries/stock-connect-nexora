@@ -1,6 +1,11 @@
 import { config } from '#config/config.js';
 import Return from '#models/Return.js';
-import { sanitizeReturnData, isNameOrEmailSearch } from '#helpers/ReturnHandler.js';
+import {
+  sanitizeReturnData,
+  isNameOrEmailSearch,
+  buildReturnAggregationPipeline,
+  formatReturnDetails,
+} from '#helpers/ReturnHandler.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -84,29 +89,8 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
 
-    const pipeline = [];
-
-    pipeline.push({
-      $lookup: {
-        from: 'channelengineorders',
-        localField: 'merchantOrderNo',
-        foreignField: 'merchantOrderNo',
-        as: 'orderData',
-      },
-    });
-
-    pipeline.push({
-      $addFields: {
-        orderInfo: { $arrayElemAt: ['$orderData', 0] },
-        totalQuantity: {
-          $reduce: {
-            input: '$products',
-            initialValue: 0,
-            in: { $add: ['$$value', { $ifNull: ['$$this.quantity', 0] }] },
-          },
-        },
-      },
-    });
+    // Use the shared pipeline builder
+    const pipeline = buildReturnAggregationPipeline();
 
     const matchConditions = {};
 
@@ -190,22 +174,9 @@ export const getReturnsFromDatabase = async (query = {}) => {
       pipeline.push({ $match: matchConditions });
     }
 
+    // Add formatting for list view
     pipeline.push({
-      $project: {
-        _id: 1,
-        returnId: 1,
-        merchantReturnNo: 1,
-        merchantOrderNo: 1,
-        channelOrderNo: 1,
-        channelReturnNo: 1,
-        channelId: 1,
-        placedOn: 1,
-        acknowledgeDate: 1,
-        platform: 1,
-        products: 1,
-        status: 1,
-        totalPrice: 1,
-        totalQuantity: 1,
+      $addFields: {
         orderID: '$orderInfo.orderId',
         customer: {
           $concat: [
@@ -437,33 +408,24 @@ export const acceptOrRejectReturn = async (returnData) => {
 
 export const getReturnById = async (id) => {
   try {
-    // Check if the return exists first
     const returnExists = await Return.findById(id).lean();
     if (!returnExists) {
       return null;
     }
 
-    const result = await getReturnsFromDatabase({
-      page: 1,
-      size: 1,
-      // Filter by the specific return ID using MongoDB ObjectId
-      returnId: returnExists.returnId,
+    const pipeline = buildReturnAggregationPipeline();
+
+    pipeline.push({
+      $match: { _id: returnExists._id },
     });
 
-    if (!result.success || !result.data || result.data.length === 0) {
-      // If the aggregation approach doesn't work, fall back to basic return data
-      return returnExists;
+    const [aggregatedResult] = await Return.aggregate(pipeline);
+
+    if (!aggregatedResult) {
+      return null;
     }
 
-    const returnWithOrderData = result.data[0];
-
-    return {
-      ...returnExists,
-      ...returnWithOrderData,
-      products: returnExists.products,
-      createdAt: returnExists.createdAt,
-      updatedAt: returnExists.updatedAt,
-    };
+    return formatReturnDetails(aggregatedResult);
   } catch (error) {
     console.error('Error fetching return by ID:', error.message);
     throw error;
