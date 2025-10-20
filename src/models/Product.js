@@ -7,6 +7,10 @@ const ProductSchema = new mongoose.Schema(
       ref: 'Seller',
       required: true,
     },
+    longDescriptionAr: {
+      type: String,
+      trim: true,
+    },
     parentProductId: { type: String, trim: true },
     parentProductSkuCode: { type: String, trim: true },
     productSkuCode: { type: String, trim: true, unique: true },
