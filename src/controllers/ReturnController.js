@@ -135,6 +135,5 @@ export default {
   createMerchantReturn,
   getReturnStats,
   acknowledgeMerchantReturn,
-  markReturnReceived,
   updateReturn,
 };

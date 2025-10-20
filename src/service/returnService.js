@@ -441,10 +441,6 @@ export default {
   saveReturnToDatabase,
   createReturn,
   getReturnStats,
-<<<<<<< HEAD
   acknowledgeReturn,
-  markReturnAsReceived,
-=======
   acceptOrRejectReturn,
->>>>>>> 5a190cb (feat: Added /update api to accept or reject return)
 };
