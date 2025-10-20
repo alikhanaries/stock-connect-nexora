@@ -131,7 +131,7 @@
   "SELLER_NAME_EXISTS": "具有此名称的卖家已存在。",
   "SELLER_CREATED_SUCCESSFULLY": "卖家创建成功",
   "SELLER_FETCHED_SUCCESSFULLY": "成功获取卖家",
-  "NO_SELLER_FIND": "未找到卖家"
+  "NO_SELLER_FIND": "未找到卖家",
   "MISSING_CREDENTIALS": "缺少凭证",
   "NO_ACCOUNT": "没有与此电子邮件关联的帐户。请注册以继续。",
   "INVALID_CREDENTIALS": "凭证无效",

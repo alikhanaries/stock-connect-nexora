@@ -125,7 +125,7 @@
   "SELLER_NAME_EXISTS": "بائع بهذا الاسم موجود بالفعل.",
   "SELLER_CREATED_SUCCESSFULLY": "تم إنشاء البائع بنجاح",
   "SELLER_FETCHED_SUCCESSFULLY": "تم جلب البائع بنجاح",
-  "NO_SELLER_FIND": "لم يتم العثور على أي بائع"
+  "NO_SELLER_FIND": "لم يتم العثور على أي بائع",
   "MISSING_CREDENTIALS": "بيانات الاعتماد مفقودة",
   "NO_ACCOUNT": "لا يوجد حساب مرتبط بهذا البريد الإلكتروني. الرجاء التسجيل للمتابعة.",
   "INVALID_CREDENTIALS": "بيانات الاعتماد غير صالحة",
