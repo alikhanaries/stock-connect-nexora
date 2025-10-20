@@ -120,5 +120,7 @@
   "ALL_PRODUCTS_PUSH_SUCCESS": "所有产品已成功推送",
   "ALL_PRODUCTS_PUSH_FAILED": "所有产品推送失败",
   "PRODUCTS_PUSH_PARTIAL_SUCCESS": "部分产品推送失败",
-  "INVALID_CATEGORY_TRAIL": "部分产品推送成功，部分失败"
+  "INVALID_CATEGORY_TRAIL": "部分产品推送成功，部分失败",
+  "INVALID_USER_IDS_TO_DELETE": "提供的用户列表中没有与该卖家关联的用户。",
+  "NO_VALID_USERS_FOUND": "请提供有效的用户。"
 }

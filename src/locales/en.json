@@ -114,5 +114,7 @@
   "ALL_PRODUCTS_PUSH_SUCCESS": "All products pushed successfully",
   "ALL_PRODUCTS_PUSH_FAILED": "All products push failed",
   "PRODUCTS_PUSH_PARTIAL_SUCCESS": "Some products pushed successfully, some failed",
-  "INVALID_CATEGORY_TRAIL": "Invalid category trail"
+  "INVALID_CATEGORY_TRAIL": "Invalid category trail",
+  "INVALID_USER_IDS_TO_DELETE": "No users in the provided list are connected to this seller.",
+  "NO_VALID_USERS_FOUND": "Please provide valid users"
 }

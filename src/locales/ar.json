@@ -106,5 +106,7 @@
   "ALL_PRODUCTS_PUSH_SUCCESS": "تم دفع جميع المنتجات بنجاح",
   "ALL_PRODUCTS_PUSH_FAILED": "فشل دفع جميع المنتجات",
   "PRODUCTS_PUSH_PARTIAL_SUCCESS": "تم دفع بعض المنتجات بنجاح، وفشلت بعض المنتجات",
-  "INVALID_CATEGORY_TRAIL": "مسار الفئة غير صالح"
+  "INVALID_CATEGORY_TRAIL": "مسار الفئة غير صالح",
+  "INVALID_USER_IDS_TO_DELETE": "لا يوجد مستخدمون مرتبطون بهذا البائع في القائمة المقدمة.",
+  "NO_VALID_USERS_FOUND": "يرجى تقديم مستخدمين صالحين."
 }
