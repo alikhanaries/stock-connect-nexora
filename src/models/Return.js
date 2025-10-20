@@ -42,10 +42,6 @@ const ReturnSchema = new mongoose.Schema(
     platform: {
       type: String,
     },
-    totalPrice: {
-      type: Number,
-      default: 0,
-    },
     products: [
       {
         _id: false,
