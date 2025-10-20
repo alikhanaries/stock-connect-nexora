@@ -111,7 +111,6 @@
   "CATEGORYTRAILS_FOUND_SUCCESS": "已成功找到市场类别路径",
   "UNABLE_FETCH_SELLER": "没有卖家与该用户关联",
   "PASSWORD_LENGTH": "密码长度必须至少为6个字符",
-
   "PRODUCT_SKUCODE_MISSING": "产品SKU代码缺失",
   "PRODUCT_PRICE_MISSING": "产品价格缺失",
   "PRODUCT_CATEGORYTRAIL_MISSING": "产品类别路径缺失",
