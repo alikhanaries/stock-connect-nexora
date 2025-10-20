@@ -42,28 +42,24 @@ const getSellerIds = async (id) => {
   return sellerIds;
 };
 
-const userAndSellerConnection = async (role, sellerId, newUserId) => {
-  let finalSellerId;
-
+const userAndSellerConnection = async (role, sellerIds, newUserId) => {
   if (role === USER_ROLES.MASTER_ADMIN) {
     const masterSeller = await Seller.findOne({ type: SELLER_TYPE.BASE }).lean();
-
     if (!masterSeller) {
       throw new Error('Cannot create MASTER_ADMIN: No "base" seller found in the database.');
     }
-
-    finalSellerId = masterSeller._id;
+    const userSellerConnection = new UserSeller({
+      userId: newUserId,
+      sellerId: masterSeller._id,
+    });
+    return await userSellerConnection.save();
   } else {
-    finalSellerId = sellerId;
+    const connectionsToCreate = sellerIds.map((sId) => ({
+      userId: newUserId,
+      sellerId: sId,
+    }));
+    return await UserSeller.insertMany(connectionsToCreate);
   }
-
-  const userSellerConnection = new UserSeller({
-    userId: newUserId,
-    sellerId: finalSellerId,
-  });
-
-  await userSellerConnection.save();
-  return userSellerConnection;
 };
 
 const getUserConnectedToThisSellers = async (seller) => {
