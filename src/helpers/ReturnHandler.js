@@ -67,7 +67,6 @@ export const formatReturnWithOrderData = async (returns, searchTerm = null, Orde
       ? `${orderInfo.orderCustomer.firstName || ''} ${orderInfo.orderCustomer.lastName || ''}`.trim()
       : '';
 
-    // Calculate total quantity from products
     const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
 
     return {
