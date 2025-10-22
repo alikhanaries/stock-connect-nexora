@@ -391,7 +391,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
 };
 
 export const getSingleShipmentService = async (id) => {
-  console.log(id);
+  
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new Error('Invalid shipment ID');
   }
@@ -502,14 +502,6 @@ export const getSingleShipmentService = async (id) => {
         deliveryDetails: 1,
         pickupDetails: 1,
         productDetails: 1,
-        //  orderDetails: 1,
-        // orderSummary: {
-        //   subTotalInclVat: '$orderDetails.subTotalInclVat',
-        //   totalInclVat: '$orderDetails.totalInclVat',
-        //   totalVat: '$orderDetails.totalVat',
-        //   shippingCostsInclVat: '$orderDetails.shippingCostsInclVat',
-        // },
-
         customerInfo: '$orderDetails.orderCustomer',
         paymentInfo: '$orderDetails.orderPaymentDetails',
       },
