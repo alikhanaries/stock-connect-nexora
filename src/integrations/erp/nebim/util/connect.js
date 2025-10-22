@@ -28,6 +28,6 @@ export const connectNebim = async () => {
   }
 
   sessionId = data.SessionID;
-  console.log('✅ Connected to Nebim | SessionID:', sessionId);
+  console.log('Connected to Nebim | SessionID:', sessionId);
   return sessionId;
 };

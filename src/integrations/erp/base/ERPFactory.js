@@ -7,6 +7,6 @@ export const createERPAdapter = (type, configOverride = null) => {
       return createNebimAdapter(configOverride || defaultNebimConfig);
 
     default:
-      throw new Error(`❌ Unknown ERP type: ${type}`);
+      throw new Error(`Unknown ERP type: ${type}`);
   }
 };
