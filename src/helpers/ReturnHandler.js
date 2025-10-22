@@ -113,6 +113,8 @@ export const sanitizeReturnData = (returnData) => {
         ? returnData.Lines.map((line) => ({
             productSkuCode: line.MerchantProductNo,
             quantity: line.Quantity || 0,
+            acceptedQuantity: line.AcceptedQuantity || 0,
+            rejectedQuantity: line.RejectedQuantity || 0,
           }))
         : [],
     };

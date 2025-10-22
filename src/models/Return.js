@@ -52,6 +52,14 @@ const ReturnSchema = new mongoose.Schema(
           type: Number,
           default: 0,
         },
+        acceptedQuantity: {
+          type: Number,
+          default: 0,
+        },
+        rejectedQuantity: {
+          type: Number,
+          default: 0,
+        },
       },
     ],
   },
