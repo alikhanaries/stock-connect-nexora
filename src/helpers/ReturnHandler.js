@@ -60,7 +60,6 @@ export const formatReturnWithOrderData = async (returns, searchTerm = null, Orde
     orderMap[order.merchantOrderNo] = order;
   });
 
-  // Format returns with matched order data
   const formattedReturns = returns.map((returnItem) => {
     const orderInfo = orderMap[returnItem.merchantOrderNo] || {};
 
@@ -129,8 +128,193 @@ export const sanitizeReturnData = (returnData) => {
   }
 };
 
+export const buildReturnAggregationPipeline = () => {
+  return [
+    {
+      $lookup: {
+        from: 'channelengineorders',
+        localField: 'merchantOrderNo',
+        foreignField: 'merchantOrderNo',
+        as: 'orderData',
+      },
+    },
+    {
+      $addFields: {
+        orderInfo: { $arrayElemAt: ['$orderData', 0] },
+        totalQuantity: {
+          $reduce: {
+            input: '$products',
+            initialValue: 0,
+            in: { $add: ['$$value', { $ifNull: ['$$this.quantity', 0] }] },
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        returnId: 1,
+        merchantReturnNo: 1,
+        merchantOrderNo: 1,
+        channelOrderNo: 1,
+        channelReturnNo: 1,
+        channelId: 1,
+        placedOn: 1,
+        acknowledgeDate: 1,
+        platform: 1,
+        products: 1,
+        status: 1,
+        totalPrice: 1,
+        totalQuantity: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        orderInfo: 1,
+      },
+    },
+  ];
+};
+
+export const formatReturnDetails = (aggregatedResult) => {
+  if (!aggregatedResult) {
+    return null;
+  }
+
+  const returnData = aggregatedResult;
+  const orderInfo = aggregatedResult.orderInfo;
+
+  if (!orderInfo) {
+    return {
+      orderInfo: {
+        returnId: returnData.returnId,
+        merchantReturnNo: returnData.merchantReturnNo,
+        status: returnData.status,
+        placedOn: returnData.placedOn,
+        acknowledgeDate: returnData.acknowledgeDate,
+      },
+      paymentInfo: {
+        platform: returnData.platform || null,
+        mode: null,
+        amount: null,
+        paidOn: returnData.placedOn || null,
+        currencyCode: null,
+      },
+      customerInfo: {
+        name: null,
+        email: null,
+        phone: null,
+      },
+      shippingAddress: null,
+      items:
+        returnData.products?.map((product) => ({
+          productName: null,
+          sku: product.productSkuCode,
+          quantity: product.quantity,
+          unitPrice: null,
+          totalPrice: null,
+        })) || [],
+      priceBreakdown: {
+        subtotal: null,
+        shipping: null,
+        taxes: null,
+        total: null,
+        currencyCode: null,
+      },
+    };
+  }
+
+  const returnedSkus = returnData.products || [];
+  const orderSkus = orderInfo.orderSkuList?.skuList || [];
+
+  const returnItems = returnedSkus.map((returnProduct) => {
+    const matchingSku = orderSkus.find((sku) => sku.merchantProductNo === returnProduct.productSkuCode);
+
+    return {
+      productName: matchingSku?.description || 'Product',
+      sku: returnProduct.productSkuCode,
+      quantity: returnProduct.quantity,
+      unitPrice: matchingSku?.unitPriceInclVat || 0,
+      totalPrice: matchingSku ? matchingSku.unitPriceInclVat * returnProduct.quantity : 0,
+    };
+  });
+
+  const totalQuantity = returnedSkus.reduce((sum, product) => sum + (product.quantity || 0), 0);
+  const totalOrderQuantity = orderSkus.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
+  const returnProportion = totalOrderQuantity > 0 ? totalQuantity / totalOrderQuantity : 0;
+
+  const subtotalExclVat = (orderInfo.subTotalExclVat || 0) * returnProportion;
+  const subtotalVat = (orderInfo.subTotalVat || 0) * returnProportion;
+
+  const shippingExclVat = (orderInfo.shippingCostsExclVat || 0) * returnProportion;
+  const shippingVat = (orderInfo.shippingCostsVat || 0) * returnProportion;
+
+  // Total taxes (VAT) for the return
+  const totalTaxes = subtotalVat + shippingVat;
+
+  // Calculate totals
+  // Total (including VAT) = Subtotal (ExclVat) + Shipping (ExclVat) + Total Taxes
+  const totalInclVat = subtotalExclVat + shippingExclVat + totalTaxes;
+
+  return {
+    orderInfo: {
+      orderId: orderInfo.orderId,
+      returnId: returnData.returnId,
+      merchantReturnNo: returnData.merchantReturnNo,
+      status: returnData.status,
+      placedOn: returnData.placedOn,
+      acknowledgeDate: returnData.acknowledgeDate,
+    },
+    paymentInfo: {
+      platform: returnData.platform || orderInfo.channelName,
+      mode: orderInfo.orderPaymentDetails?.paymentMethod || 'N/A',
+      amount: totalInclVat,
+      paidOn: orderInfo.orderDate,
+      currencyCode: orderInfo.orderPaymentDetails?.currencyCode || 'SAR',
+    },
+    customerInfo: {
+      name: orderInfo.orderCustomer
+        ? `${orderInfo.orderCustomer.firstName || ''} ${orderInfo.orderCustomer.lastName || ''}`.trim()
+        : null,
+      email: orderInfo.orderCustomer?.email || null,
+      phone: orderInfo.orderCustomer?.phone || null,
+    },
+    shippingAddress: orderInfo.orderShippingAddress
+      ? {
+          line1: orderInfo.orderShippingAddress.line1,
+          line2: orderInfo.orderShippingAddress.line2,
+          line3: orderInfo.orderShippingAddress.line3,
+          streetName: orderInfo.orderShippingAddress.streetName,
+          houseNr: orderInfo.orderShippingAddress.houseNr,
+          houseNrAddition: orderInfo.orderShippingAddress.houseNrAddition,
+          city: orderInfo.orderShippingAddress.city,
+          region: orderInfo.orderShippingAddress.region,
+          zipCode: orderInfo.orderShippingAddress.zipCode,
+          countryIso: orderInfo.orderShippingAddress.countryIso,
+          fullAddress: [
+            orderInfo.orderShippingAddress.streetName,
+            orderInfo.orderShippingAddress.city,
+            orderInfo.orderShippingAddress.region,
+            orderInfo.orderShippingAddress.countryIso,
+            orderInfo.orderShippingAddress.zipCode,
+          ]
+            .filter(Boolean)
+            .join(', '),
+        }
+      : null,
+    items: returnItems,
+    priceBreakdown: {
+      subtotal: subtotalExclVat, // Subtotal BEFORE tax
+      shipping: shippingExclVat, // Shipping BEFORE tax
+      taxes: totalTaxes, // Total taxes (VAT)
+      total: totalInclVat, // Total = subtotal + shipping + taxes
+      currencyCode: orderInfo.orderPaymentDetails?.currencyCode || 'SAR',
+    },
+  };
+};
+
 export default {
   sanitizeReturnData,
   isNameOrEmailSearch,
   formatReturnWithOrderData,
+  buildReturnAggregationPipeline,
+  formatReturnDetails,
 };

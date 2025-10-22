@@ -201,6 +201,17 @@ export const returnValidator = validate(async (req) => {
   createReturnSchema.parse(req.body);
 });
 
+export const getReturnByIdValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const paramsSchema = z.object({
+    id: z
+      .string()
+      .length(24, 'return id must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'return id must be a hex string'),
+  });
+  paramsSchema.parse(req.params);
+});
+
 //Validates return data structure for saving to database
 export const validateReturnData = (returnData) => {
   try {
@@ -261,4 +272,5 @@ export default {
   validateReturnAck,
   returnValidator,
   updateReturnValidator,
+  getReturnByIdValidator,
 };

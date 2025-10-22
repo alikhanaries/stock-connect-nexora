@@ -1,6 +1,7 @@
 import returnService from '#service/returnService.js';
 import Responses from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
+import mongoose from 'mongoose';
 
 // Gets all returns stored in the database with pagination and filtering.
 
@@ -76,7 +77,6 @@ export const createMerchantReturn = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
-
 // Gets return stats grouped by status.
 export const getReturnStats = async (req, res) => {
   try {
@@ -129,6 +129,34 @@ export const updateReturn = async (req, res) => {
   }
 };
 
+// Gets a single return by ID.
+export const getReturnById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return Responses.failResponse(res, req.locale.INVALID_RETURN_ID_FORMAT || 'Invalid return ID format', 400);
+    }
+
+    const returnData = await returnService.getReturnById(id);
+    if (!returnData) {
+      return Responses.failResponse(res, req.locale.NO_RETURNS_FOUND || 'Return not found', 404);
+    }
+
+    return Responses.successResponse(
+      res,
+      req.locale.RETURN_FETCHED_SUCCESSFULLY || 'Return fetched successfully',
+      200,
+      returnData
+    );
+  } catch (error) {
+    console.error('Controller Error: getReturnById:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+
 export default {
   getAllReturns,
   syncReturns,
@@ -136,4 +164,5 @@ export default {
   getReturnStats,
   acknowledgeMerchantReturn,
   updateReturn,
+  getReturnById,
 };

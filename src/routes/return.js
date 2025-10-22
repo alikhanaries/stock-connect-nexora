@@ -6,6 +6,7 @@ import {
   getReturnStats,
   acknowledgeMerchantReturn,
   updateReturn,
+  getReturnById,
 } from '#controllers/ReturnController.js';
 import { authMiddleware, checkLanguage } from '#middleware/index.js';
 import {
@@ -14,6 +15,7 @@ import {
   returnValidator,
   validateReturnAck,
   updateReturnValidator,
+  getReturnByIdValidator,
 } from '#validations/return.js';
 
 const router = express.Router();
@@ -24,7 +26,8 @@ router.get('/', getAllReturnsValidator, checkLanguage, authMiddleware, getAllRet
 router.get('/stats', checkLanguage, authMiddleware, getReturnStats);
 // Sync returns from ChannelEngine to database
 router.get('/sync', syncReturnsValidator, checkLanguage, authMiddleware, syncReturns);
-
+// Get a specific return by ID
+router.get('/:id', getReturnByIdValidator, checkLanguage, authMiddleware, getReturnById);
 // Create a new return
 router.post('/create', returnValidator, checkLanguage, authMiddleware, createMerchantReturn);
 // Acknowledge a return
