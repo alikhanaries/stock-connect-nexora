@@ -16,6 +16,7 @@ import {
   merchantCancelIdValidator,
   orderStatsValidator,
   syncOrdersValidator,
+  cancelFullOrderValidator,
 } from '#validations/orders.js';
 const router = express.Router();
 
@@ -33,5 +34,5 @@ router.get(
 router.patch('/merchant-cancellation', merchantCancelIdValidator, checkLanguage, authMiddleware, merchantCancelById);
 router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, getOrderById);
 // /* CANCEL ORDER (FULL CANCELLATION) */
-router.put('/cancelFullOrder', cancelFullOrder);
+router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMiddleware, cancelFullOrder);
 export default router;

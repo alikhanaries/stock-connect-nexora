@@ -478,8 +478,8 @@ const cancelFullOrder = async (orderId, reason) => {
         orderId,
         {
           $set: {
-            status: ORDER_STATUS_MAP.MANCO,
-            'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.MANCO,
+            status: ORDER_STATUS_MAP.CANCELED,
+            'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.CANCELED,
           },
         },
         { new: true }
@@ -498,7 +498,7 @@ const cancelFullOrder = async (orderId, reason) => {
     await Promise.all(
       shipments.map(async (s) => {
         await cancelAymakanShipment(s.airWaybillNo);
-        await Shipment.updateOne({ _id: s._id }, { status: 'CANCELLED' });
+        await Shipment.updateOne({ _id: s._id }, { status: 'CANCELED' });
       })
     );
 
