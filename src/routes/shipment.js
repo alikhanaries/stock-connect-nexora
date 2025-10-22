@@ -1,6 +1,6 @@
 import express from 'express';
 import { checkLanguage } from '#middleware/index.js';
-import { createShipment, getAllShipments } from '#root/src/controllers/ShipmentController.js';
+import { createShipment, getAllShipments, ayMakanWebHook } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
 import { getShipmentValidator, createShipmentValidator } from '#validations/shipment.js';
 
@@ -17,4 +17,7 @@ router.get(
   verifySellerAccess,
   getAllShipments
 );
+
+router.post('/web-hook', ayMakanWebHook);
+
 export default router;
