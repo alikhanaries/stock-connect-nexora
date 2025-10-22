@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 
 export const canonicalProductMapper = (item = {}, sellerId) => {
-  console.log(item);
 
   const mappedProduct = {
     sellerId: mongoose.Types.ObjectId.isValid(sellerId) ? new mongoose.Types.ObjectId(sellerId) : null,
