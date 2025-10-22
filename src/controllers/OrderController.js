@@ -1,5 +1,6 @@
 import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
+import nebimErpOrderService from '#root/src/integrations/erp/nebim/service/orderService.js';
 import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS } from '#constants/common.js';
@@ -65,7 +66,6 @@ export const getSyncedOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const { success, data } = await orderService.getNewOrders();
-
     if (!success) {
       return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
     }
@@ -73,6 +73,15 @@ export const getSyncedOrders = async (req, res) => {
     if (data.length === 0) {
       return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
     }
+
+    setImmediate(async () => {
+      try {
+        await nebimErpOrderService.fetchAndPushOrderInToNebim(data, sellerId);
+      } catch (err) {
+        console.error('Background Nebim push failed:', err);
+      }
+    });
+
     const dataSavedInDb = await orderService.processOrders(data, sellerId);
 
     if (!dataSavedInDb.success) {
