@@ -1,12 +1,12 @@
 import express from 'express';
 import { checkLanguage } from '#middleware/index.js';
 import { createShipment, getAllShipments, ayMakanWebHook } from '#root/src/controllers/ShipmentController.js';
-import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
-import { getShipmentValidator, createShipmentValidator } from '#validations/shipment.js';
+import { authMiddleware, verifySellerAccess, webHookAuthMiddleware } from '#middleware/index.js';
+import { getShipmentValidator, createShipmentValidator, ayMakanWebHookValidator } from '#validations/shipment.js';
 
 const router = express.Router();
 // CREATE SHIPMENT
-router.post('/createShipment', createShipmentValidator, checkLanguage, authMiddleware, createShipment);
+router.post('/createShipment', createShipmentValidator, checkLanguage, createShipment);
 
 // GET ALL SHIPMENT
 router.get(
@@ -18,6 +18,6 @@ router.get(
   getAllShipments
 );
 
-router.post('/web-hook', ayMakanWebHook);
+router.post('/ayMakanWebHook', ayMakanWebHookValidator, webHookAuthMiddleware, ayMakanWebHook);
 
 export default router;

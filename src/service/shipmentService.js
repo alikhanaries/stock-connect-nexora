@@ -106,7 +106,7 @@ export const createShipmentWithChannelEngine = async ({
       ReturnTrackTraceNo: returnTrackTraceNo,
       Method: method,
       ShippedFromCountryCode: shippedFromCountryCode,
-      ShipmentDate: shipmentDate instanceof Date ? shipmentDate.toISOString() : new Date(shipmentDate).toISOString(),
+      ShipmentDate: shipmentDate,
       ReturnMethod: returnMethod,
       IsMerchantCreator: isMerchantCreator,
       AirWaybillNo: airWaybillNo,
@@ -124,7 +124,6 @@ export const createShipmentWithChannelEngine = async ({
       });
 
       if (response.ok) break;
-      console.warn(`Attempt ${attempt} failed for ${merchantShipmentNo}: ${response.status}`);
 
       if (attempt === 1) await new Promise((r) => setTimeout(r, 1000));
     }
@@ -135,19 +134,20 @@ export const createShipmentWithChannelEngine = async ({
       try {
         const errorData = await response.json();
         message = errorData?.Message || message;
+        console.log(message);
       } catch {
         // ignore parse errors
       }
-      throw new Error(message);
+      //throw new Error(message);
     }
 
     const result = await response.json();
 
-    console.log(`ChannelEngine shipment created for ${merchantShipmentNo}`);
     return { success: true, message: 'Shipment created successfully', data: result };
   } catch (error) {
     console.error(`Error in createShipmentWithChannelEngine for ${merchantShipmentNo}:`, error.message);
-    throw error;
+    //throw error;
+    return { success: false, message: 'Shipment created failed' };
   }
 };
 
@@ -161,12 +161,9 @@ export const updateShipmentDeliveryStateChannelEngine = async (status, deliveryD
     if (!status) throw new Error('status is required');
     if (!deliveryDate) throw new Error('deliveryDate is required');
 
-    // Ensure deliveryDate is ISO format
-    const isoDeliveryDate = new Date(deliveryDate).toISOString();
-
     const payload = {
-      status,
-      deliveryDate: isoDeliveryDate,
+      Status: status,
+      DeliveredAt: deliveryDate || new Date(),
     };
 
     const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/${merchantShipmentNo}/delivery-state?apikey=${CHANNEL_ENGINE_API_KEY}`;
@@ -181,7 +178,6 @@ export const updateShipmentDeliveryStateChannelEngine = async (status, deliveryD
       });
 
       if (response.ok) break;
-      console.warn(`Attempt ${attempt} failed for ${merchantShipmentNo}: ${response.status}`);
 
       // Delay before retry (only for first attempt)
       if (attempt === 1) await new Promise((res) => setTimeout(res, 1000));
@@ -193,6 +189,7 @@ export const updateShipmentDeliveryStateChannelEngine = async (status, deliveryD
 
       try {
         const errorData = await response.json();
+
         errorMessage = errorData?.Message || errorMessage;
       } catch {
         // JSON parse failed, leave as default
@@ -256,6 +253,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     // Fetch order as a Mongoose document (no .lean()
 
     const order = await Order.findById(id);
+
     if (!order) {
       return { success: false, message: 'Order not found.' };
     }
@@ -337,7 +335,9 @@ export const createPartialShipmentService = async (shipmentData) => {
         sku.airWaybillNo = trackingNumber;
       }
     }
-
+    if (!order?.sellerId) {
+      order['sellerId'] = sellerId;
+    }
     await order.save();
 
     return { success: true, shipmentId: shipmentDocument._id };
@@ -456,6 +456,7 @@ export const ayMakanWebHookService = async (data) => {
         products: 1,
         airWaybillNo: 1,
         status: 1, // needed for duplicate status check
+        orderId: 1,
       }
     ).lean();
 
@@ -466,26 +467,26 @@ export const ayMakanWebHookService = async (data) => {
     const statusLabel = (data.status_label || '').trim().toLowerCase();
 
     // Duplicate check (case-insensitive)
-    if ((shipmentData.status || '').toLowerCase() === statusLabel) {
-      return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
-    }
+    // if ((shipmentData.status || '').toLowerCase() === statusLabel) {
+    //   return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
+    // }
 
     // 1. When shipment is picked
     if (statusLabel === 'picked') {
       const payload = {
-        MerchantShipmentNo: shipmentData.merchantShipmentNo,
-        MerchantOrderNo: shipmentData.merchantOrderNo,
-        Lines: shipmentData.products || [],
-        ExtraData: {},
-        TrackTraceNo: shipmentData.airWaybillNo,
-        TrackTraceUrl: '',
-        ReturnTrackTraceNo: '',
-        Method: 'Aymakan',
-        ShippedFromCountryCode: data.delivery_country,
-        ShipmentDate: data.date_time,
-        ReturnMethod: '',
-        IsMerchantCreator: true,
-        AirWaybillNo: shipmentData.airWaybillNo,
+        merchantShipmentNo: shipmentData.merchantShipmentNo,
+        merchantOrderNo: shipmentData.merchantOrderNo,
+        lines: shipmentData.products || [],
+        extraData: {},
+        trackTraceNo: shipmentData.airWaybillNo,
+        trackTraceUrl: '',
+        returnTrackTraceNo: '',
+        method: 'Aymakan',
+        shippedFromCountryCode: data.delivery_country,
+        shipmentDate: data.date_time,
+        returnMethod: '',
+        isMerchantCreator: true,
+        airWaybillNo: shipmentData.airWaybillNo,
       };
 
       try {
@@ -517,17 +518,31 @@ export const ayMakanWebHookService = async (data) => {
             createdAt: info.created_at,
           }))
         : [];
-
+    // UPDATE SHIPMENT STATUS
     const updatedShipment = await Shipment.findOneAndUpdate(
       { _id: shipmentData._id },
       {
         status: data.status_label?.toUpperCase(),
         trackingInfo,
-        lastUpdatedAt: new Date(),
       },
       { new: true }
     );
+    // UPDATE ORDER STATUS
+    const orderLineIdsToUpdate = shipmentData.products.map((p) => p.orderLineId);
 
+    await Order.findOneAndUpdate(
+      { _id: shipmentData?.orderId },
+      {
+        $set: {
+          status: data.status_label?.toUpperCase(),
+          'orderSkuList.skuList.$[sku].status': data.status_label?.toUpperCase(),
+        },
+      },
+      {
+        arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }],
+        new: false, // returns the document before update
+      }
+    );
     return {
       success: true,
       message: `Shipment ${data.tracking_number} updated successfully (${data.status_label})`,

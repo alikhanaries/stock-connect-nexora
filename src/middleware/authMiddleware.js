@@ -3,6 +3,7 @@ import User from '#models/User.js';
 import { config } from '#config/config.js';
 import Responses from '#helpers/response.js';
 import { USER_ROLES } from '#constants/common.js';
+import crypto from 'crypto';
 
 export const authMiddleware = async (req, res, next) => {
   console.time('authMiddleware');
@@ -51,4 +52,44 @@ export const authorize = (roles) => {
       return Responses.errorResponse(res, 'Server error', 500);
     }
   };
+};
+
+export const webHookAuthMiddleware = async (req, res, next) => {
+  console.time('webHookAuthMiddleware');
+
+  try {
+    const headerName = config.AYMAKAN_WEBHOOK_HEADER || 'X-Custom-Auth';
+    const expectedSecret = config.AYMAKAN_WEBHOOK_SECRET;
+
+    if (!expectedSecret) {
+      console.error('AYMAKAN_WEBHOOK_SECRET missing in environment');
+      return Responses.failResponse(res, 'Server misconfiguration', 500);
+    }
+
+    // Extract header value (case-insensitive)
+    const receivedToken = req.headers[headerName.toLowerCase()];
+
+    if (!receivedToken) {
+      return Responses.failResponse(res, `Missing ${headerName} header`, 401);
+    }
+
+    const receivedBuffer = Buffer.from(receivedToken);
+    const expectedBuffer = Buffer.from(expectedSecret);
+
+    if (receivedBuffer.length !== expectedBuffer.length) {
+      return Responses.failResponse(res, 'Unauthorized', 403);
+    }
+
+    const isValid = crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
+
+    if (!isValid) {
+      return Responses.failResponse(res, 'Unauthorized', 403);
+    }
+
+    console.timeEnd('webHookAuthMiddleware');
+    next();
+  } catch (error) {
+    console.error('webHookAuthMiddleware error:', error.message);
+    return Responses.failResponse(res, 'Server error', 500);
+  }
 };
