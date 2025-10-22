@@ -7,7 +7,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
-
+import { cancelAymakanShipment } from '#service/aymakanService.js';
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
   const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
@@ -425,6 +425,114 @@ const transformOrderResponse = (response) => {
   };
 };
 
+const cancelFullOrder = async (orderId, reason) => {
+  try {
+    // Validate order
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      return { success: false, error: { message: 'Order not found', status: 404 } };
+    }
+
+    // Prepare cancellation payload
+    const lines = order.orderSkuList.skuList.map((item) => ({
+      MerchantProductNo: item.merchantProductNo,
+      OrderLineId: item.id,
+      Quantity: item.quantity,
+    }));
+
+    const cancelPayload = {
+      MerchantCancellationNo: randomBytes(6).toString('hex'),
+      MerchantOrderNo: order.merchantOrderNo,
+      Lines: lines,
+      Reason: reason,
+      ReasonCode: '0',
+      IsMerchantCreator: true,
+    };
+
+    // Check shipments
+    const shipments = await Shipment.find({ orderId }).lean();
+
+    // Case A: No shipment found
+    if (!shipments.length) {
+      if (BLOCKED_STATUSES[order.status]) {
+        return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
+      }
+
+      // Cancel in ChannelEngine
+      const ceRes = await fetch(
+        `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cancelPayload),
+        }
+      );
+
+      if (!ceRes.ok) {
+        const err = await ceRes.text();
+        throw new Error(`ChannelEngine cancel failed: ${err}`);
+      }
+
+      // Update order status
+      const updatedOrder = await Order.findByIdAndUpdate(
+        orderId,
+        {
+          $set: {
+            status: ORDER_STATUS_MAP.CANCELED,
+            'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.CANCELED,
+          },
+        },
+        { new: true }
+      );
+
+      return { success: true, data: updatedOrder.toObject() };
+    }
+
+    // Case B: Some shipments exist
+    const shippedShipment = shipments.find((s) => s.status === 'SHIPPED');
+    if (shippedShipment) {
+      return { success: false, error: { message: 'Cannot cancel shipped order', status: 400 } };
+    }
+
+    // Cancel shipments in Aymakan and DB
+    await Promise.all(
+      shipments.map(async (s) => {
+        await cancelAymakanShipment(s.airWaybillNo);
+        await Shipment.updateOne({ _id: s._id }, { status: 'CANCELED' });
+      })
+    );
+
+    // Cancel order in ChannelEngine
+    const ceRes2 = await fetch(`${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cancelPayload),
+    });
+
+    if (!ceRes2.ok) {
+      const err = await ceRes2.text();
+      throw new Error(`ChannelEngine cancel failed: ${err}`);
+    }
+
+    // Update order in DB
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        $set: {
+          status: ORDER_STATUS_MAP.CANCELED,
+          'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.CANCELED,
+        },
+      },
+      { new: true }
+    );
+
+    return { success: true, data: updatedOrder.toObject() };
+  } catch (error) {
+    console.error('cancelFullOrder error:', error);
+    return { success: false, error: { message: error.message, stack: error.stack } };
+  }
+};
+
 export default {
   getAllOrders,
   getOrderById,
@@ -435,4 +543,5 @@ export default {
   cancelOrder,
   acknowledgeOrder,
   backgroundAcknowledgementOrders,
+  cancelFullOrder,
 };

@@ -184,3 +184,23 @@ export const merchantCancelIdValidator = validate(async (req) => {
   });
   merchantCancelByIdSchema.parse(req.body);
 });
+
+export const cancelFullOrderValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const bodySchema = z.object({
+    orderId: z
+      .string()
+      .length(24, 'order id must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'order id must be a hex string'),
+
+    reason: z
+      .string()
+      .min(1, 'Reason should be long enough to have a meaning.')
+      .max(500, 'Reason must be within 500 characters.')
+      .regex(/^[a-zA-Z0-9\s.,:'"]+$/, 'Reason must be a valid statement.')
+      .optional(), // 👈 makes it optional
+  });
+
+  bodySchema.parse(req.body);
+});
