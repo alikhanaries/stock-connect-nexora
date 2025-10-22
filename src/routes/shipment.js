@@ -6,7 +6,7 @@ import { getShipmentValidator, createShipmentValidator, ayMakanWebHookValidator 
 
 const router = express.Router();
 // CREATE SHIPMENT
-router.post('/createShipment', createShipmentValidator, checkLanguage, createShipment);
+router.post('/createShipment', createShipmentValidator, checkLanguage,authMiddleware, createShipment);
 
 // GET ALL SHIPMENT
 router.get(
