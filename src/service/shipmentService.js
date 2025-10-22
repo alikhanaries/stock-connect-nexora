@@ -466,10 +466,10 @@ export const ayMakanWebHookService = async (data) => {
 
     const statusLabel = (data.status_label || '').trim().toLowerCase();
 
-    // Duplicate check (case-insensitive)
-    // if ((shipmentData.status || '').toLowerCase() === statusLabel) {
-    //   return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
-    // }
+   // Duplicate check (case-insensitive)
+    if ((shipmentData.status || '').toLowerCase() === statusLabel) {
+      return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
+    }
 
     // 1. When shipment is picked
     if (statusLabel === 'picked') {
