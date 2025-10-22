@@ -108,10 +108,32 @@ export const acknowledgeMerchantReturn = async (req, res) => {
   }
 };
 
+// Updates a return status in ChannelEngine.
+export const updateReturn = async (req, res) => {
+  try {
+    const result = await returnService.acceptOrRejectReturn(req.body);
+
+    if (result.isConflict) {
+      return Responses.failResponse(res, result.message || 'Return with this reference already exists', 409);
+    }
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || 'Failed to update return', result.statusCode || 400);
+    }
+
+    return Responses.successResponse(res, 'Return updated successfully', 200, result.data);
+  } catch (error) {
+    console.error('Controller Error: updateReturn:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllReturns,
   syncReturns,
   createMerchantReturn,
   getReturnStats,
   acknowledgeMerchantReturn,
+  updateReturn,
 };
