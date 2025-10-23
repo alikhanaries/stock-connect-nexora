@@ -175,27 +175,12 @@ export const cancelPartialOrder = async (req, res) => {
   try {
     const { orderId, reason, products } = req.body;
 
-    // Validate orderId
-    if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
-    }
-
-    // Validate reason
-    if (!reason || typeof reason !== 'string' || !reason.trim()) {
-      return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
-    }
-
-    // ✅ Validate products only as a non-empty array
-    if (!Array.isArray(products) || products.length === 0) {
-      return Responses.failResponse(res, 'Invalid products array', 400);
-    }
-
     const orderResponse = await orderService.cancelPartialOrder(orderId, products, reason);
     if (!orderResponse.success) {
       return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, null);
     }
 
-    return Responses.successResponse(res, req?.locale?.CANCEL_ORDER || 'Order is cancelled', 200, null);
+    return Responses.successResponse(res, 'Order is cancelled', 200, null);
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);

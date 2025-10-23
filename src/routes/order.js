@@ -18,6 +18,7 @@ import {
   orderStatsValidator,
   syncOrdersValidator,
   cancelFullOrderValidator,
+  cancelPartialOrderValidator,
 } from '#validations/orders.js';
 const router = express.Router();
 
@@ -37,5 +38,5 @@ router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, getOrde
 // /* CANCEL ORDER (FULL CANCELLATION) */
 router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMiddleware, cancelFullOrder);
 // /* CANCEL PARTIAL ORDER (PARTIAL CANCELLATION) */
-router.put('/cancelPartialOrder', cancelPartialOrder);
+router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
 export default router;

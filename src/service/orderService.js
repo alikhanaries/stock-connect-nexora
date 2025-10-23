@@ -535,149 +535,104 @@ const cancelFullOrder = async (orderId, reason) => {
 
 const cancelPartialOrder = async (orderId, products, reason) => {
   try {
-    console.log('innnnnnnnn');
-    // Validate order
     const order = await Order.findById(orderId).lean();
-    if (!order) {
-      return { success: false, error: { message: 'Order not found', status: 404 } };
+    if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
+
+    const productIds = products.map((p) => p.id.toString());
+    const inProgressSet = new Set(
+      order.orderSkuList?.skuList?.filter((sku) => sku.status === 'IN_PROGRESS').map((sku) => sku.id.toString())
+    );
+
+    if (!products.every((p) => inProgressSet.has(p.id.toString()))) {
+      return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
     }
-
-    // Flatten all SKU lines that are in progress
-    const inProgressLines =
-      order.orderSkuList?.skuList?.filter((sku) => sku.status === 'IN_PROGRESS').map((sku) => sku.id.toString()) || [];
-
-    // Check if all requested cancellation products are in progress
-    const allInProgress = products.every((p) => inProgressLines.includes(p.id.toString()));
-
-    if (!allInProgress) {
-      return { success: false, error: { message: 'Order can not be cancelled', status: 404 } };
-    }
-
-    // Prepare cancellation payload
-    const lines = products.map((item) => ({
-      MerchantProductNo: item.merchantProductNo,
-      OrderLineId: item.id,
-      Quantity: item.quantity,
-    }));
 
     const cancelPayload = {
       MerchantCancellationNo: randomBytes(6).toString('hex'),
       MerchantOrderNo: order.merchantOrderNo,
-      Lines: lines,
+      Lines: products.map((p) => ({
+        MerchantProductNo: p.merchantProductNo,
+        OrderLineId: p.id,
+        Quantity: p.quantity,
+      })),
       Reason: reason,
       ReasonCode: '0',
       IsMerchantCreator: true,
     };
-    console.log('cancelPayload', cancelPayload);
 
-    // Check shipments
     const shipments = await Shipment.find({ orderId }).lean();
-    console.log('shipments-------', shipments);
-    // Case A: No shipment found
+
+    const cancelInChannelEngine = async () => {
+      try {
+        const res = await fetch(
+          `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cancelPayload),
+          }
+        );
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.warn('ChannelEngine cancel failed:', errText);
+        } else {
+          console.log('ChannelEngine cancellation sent successfully');
+        }
+      } catch (err) {
+        console.error('ChannelEngine API error (ignored):', err.message);
+      }
+    };
+
     if (!shipments.length) {
       if (BLOCKED_STATUSES[order.status]) {
         return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
       }
+      await cancelInChannelEngine();
+    } else {
+      // Map shipment -> SKU IDs
+      const shipmentMap = shipments.map((s) => ({
+        shipmentId: s._id,
+        airWaybillNo: s.airWaybillNo,
+        skuIds: (s.products || []).map((p) => p.orderLineId.toString()),
+        status: s.status.toUpperCase(),
+      }));
 
-      // Cancel in ChannelEngine
-      const ceRes = await fetch(
-        `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cancelPayload),
-        }
+      // Filter shipments to only cancel those containing requested SKUs
+      const shipmentsToCancel = shipmentMap.filter((s) => s.skuIds.some((id) => productIds.includes(id)));
+
+      const canCancel = shipmentsToCancel.every((s) => s.status === 'PENDING');
+      if (!canCancel) return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
+
+      // Cancel selected shipments
+      await Promise.all(
+        shipmentsToCancel.map(async (s) => {
+          await cancelAymakanShipment(s.airWaybillNo);
+          await Shipment.updateOne({ _id: s.shipmentId }, { status: 'CANCELED' });
+        })
       );
 
-      if (!ceRes.ok) {
-        const err = await ceRes.text();
-        throw new Error(`ChannelEngine cancel failed: ${err}`);
-      }
-
-      const productIds = products.map((p) => p.id); // IDs of products to cancel
-      // Update order status
-      const updatedOrder = await Order.findByIdAndUpdate(
-        orderId,
-        {
-          $set: {
-            'orderSkuList.skuList.$[sku].status': ORDER_STATUS_MAP.CANCELED,
-          },
-        },
-        {
-          new: true,
-          arrayFilters: [{ 'sku.id': { $in: productIds } }], // Only update SKUs that match product IDs
-        }
-      );
-
-      return { success: true, data: updatedOrder.toObject() };
+      await cancelInChannelEngine();
     }
 
-    ///////////////////
-    // Build a map of shipment products by orderLineId for faster lookup
-    const shipmentMap = new Map();
-    shipments.forEach((shipment) => {
-      (shipment.products || []).forEach((p) => {
-        const existing = shipmentMap.get(p.orderLineId.toString()) || [];
-        existing.push(shipment.status.toUpperCase());
-        shipmentMap.set(p.orderLineId.toString(), existing);
-      });
-    });
-
-    // Check if cancellation is allowed
-    const canCancel = lines.every((line) => {
-      const statuses = shipmentMap.get(line.OrderLineId.toString());
-      console.log('statuses---------', statuses);
-      // If no shipment found for this product, allow cancellation
-      if (!statuses) return true;
-
-      // If any shipment containing this product is pending, allow cancellation
-      return statuses.includes('PENDING');
-    });
-
-    if (!canCancel) {
-      return { success: false, error: { message: 'Cannot cancel shipped order', status: 404 } };
-    }
-
-    ////////////////////
-
-    // Cancel shipments in Aymakan and DB
-    await Promise.all(
-      shipments.map(async (s) => {
-        await cancelAymakanShipment(s.airWaybillNo);
-        await Shipment.updateOne({ _id: s._id }, { status: 'CANCELED' });
-      })
+    // Update only requested SKUs
+    await Order.updateOne(
+      { _id: orderId },
+      { $set: { 'orderSkuList.skuList.$[sku].status': ORDER_STATUS_MAP.CANCELED } },
+      { arrayFilters: [{ 'sku.id': { $in: productIds } }] }
     );
 
-    // Cancel order in ChannelEngine
-    const ceRes2 = await fetch(`${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cancelPayload),
-    });
-
-    if (!ceRes2.ok) {
-      const err = await ceRes2.text();
-      throw new Error(`ChannelEngine cancel failed: ${err}`);
+    // Reload order to update overall status if needed
+    const updatedOrder = await Order.findById(orderId).lean();
+    const allCanceled = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === ORDER_STATUS_MAP.CANCELED);
+    if (allCanceled && updatedOrder.status !== ORDER_STATUS_MAP.CANCELED) {
+      await Order.updateOne({ _id: orderId }, { $set: { status: ORDER_STATUS_MAP.CANCELED } });
+      updatedOrder.status = ORDER_STATUS_MAP.CANCELED;
     }
 
-    const productIds = products.map((p) => p.id); // IDs of products to cancel
-    // Update order status
-    const updatedOrder = await Order.findByIdAndUpdate(
-      orderId,
-      {
-        $set: {
-          'orderSkuList.skuList.$[sku].status': ORDER_STATUS_MAP.CANCELED,
-        },
-      },
-      {
-        new: true,
-        arrayFilters: [{ 'sku.id': { $in: productIds } }], // Only update SKUs that match product IDs
-      }
-    );
-
-    return { success: true, data: updatedOrder.toObject() };
+    return { success: true, data: updatedOrder };
   } catch (error) {
-    console.error('cancelFullOrder error:', error);
+    console.error('cancelPartialOrder error:', error);
     return { success: false, error: { message: error.message, stack: error.stack } };
   }
 };
