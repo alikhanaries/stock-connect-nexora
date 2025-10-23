@@ -107,3 +107,38 @@ export const getAymakanShipmentCities = async () => {
     throw error;
   }
 };
+
+export const cancelAymakanShipment = async (trackingNumber) => {
+  try {
+    if (!trackingNumber) {
+      throw new Error('Tracking number is required for Aymakan API');
+    }
+
+    const payload = { tracking: trackingNumber };
+
+    const response = await fetch(`${AYMAKAN_API_URL}shipping/cancel`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: AYMAKAN_API_KEY, // or `Bearer ${AYMAKAN_API_KEY}`
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.message || 'Failed to cancel shipment with Aymakan API');
+    }
+
+    const aymakanResult = await response.json();
+
+    if (!aymakanResult.success) {
+      throw new Error(`Aymakan Cancel Failed: ${aymakanResult.message || 'Unknown error'}`);
+    }
+
+    return aymakanResult;
+  } catch (error) {
+    console.error('Error cancelling Aymakan shipment:', error.message);
+    throw new Error(error.message || 'Unexpected error occurred while cancelling Aymakan shipment');
+  }
+};

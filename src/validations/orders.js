@@ -6,9 +6,9 @@ import { headerSchema } from './headerSchema.js';
 import mongoose from 'mongoose';
 
 const orderLineSchema = z.object({
-  MerchantProductNo: z.string(),
-  OrderLineId: z.number().int().positive(),
-  Quantity: z.number().int().min(1, 'You must cancel at least 1 item if you want to cancel'),
+  merchantProductNo: z.string(),
+  orderLineId: z.number().int().positive(),
+  quantity: z.number().int().min(1, 'You must cancel at least 1 item if you want to cancel'),
 });
 
 export const getAllOrdersValidator = validate(async (req) => {
@@ -183,4 +183,24 @@ export const merchantCancelIdValidator = validate(async (req) => {
     specifics: z.array(orderLineSchema).optional().default([]),
   });
   merchantCancelByIdSchema.parse(req.body);
+});
+
+export const cancelFullOrderValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const bodySchema = z.object({
+    orderId: z
+      .string()
+      .length(24, 'order id must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'order id must be a hex string'),
+
+    reason: z
+      .string()
+      .min(1, 'Reason should be long enough to have a meaning.')
+      .max(500, 'Reason must be within 500 characters.')
+      .regex(/^[a-zA-Z0-9\s.,:'"]+$/, 'Reason must be a valid statement.')
+      .optional(), // 👈 makes it optional
+  });
+
+  bodySchema.parse(req.body);
 });

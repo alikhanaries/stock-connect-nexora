@@ -147,3 +147,27 @@ export const merchantCancelById = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const cancelFullOrder = async (req, res) => {
+  try {
+    const { orderId, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
+    }
+
+    if (!reason) {
+      return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+
+    const orderResponse = await orderService.cancelFullOrder(orderId, reason);
+    if (!orderResponse.success) {
+      return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, null);
+    }
+
+    return Responses.successResponse(res, req?.locale?.CANCEL_ORDER || 'Order is cancelled', 200, null);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};

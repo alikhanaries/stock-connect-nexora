@@ -5,7 +5,9 @@ import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
-
+import Shipment from '../models/Shipment/Shipment.js';
+import Product from '../models/Product.js';
+import { cancelAymakanShipment } from '#service/aymakanService.js';
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
   const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
@@ -104,12 +106,101 @@ const getAllOrders = async (query, sellerId) => {
   }
 };
 
-const getOrderById = async (id) => {
+export const getOrderById = async (id) => {
+  //  Fetch the order
   const order = await Order.findById(id).lean();
-  if (!order) {
-    return false;
-  }
-  return order;
+  if (!order) return false;
+
+  //  Fetch all shipments for this order
+  const shipments = await Shipment.find({ orderId: id }).lean();
+
+  //  Track shipped quantities per merchantProductNo
+  const shippedMap = {};
+  shipments.forEach((shipment) => {
+    (shipment.products || []).forEach((product) => {
+      const key = product.merchantProductNo;
+      shippedMap[key] = (shippedMap[key] || 0) + product.quantity;
+    });
+  });
+
+  const allOrderSkus = order.orderSkuList?.skuList || [];
+
+  // Gather all merchantProductNos for image lookup
+  const allMerchantNos = allOrderSkus.map((sku) => sku.merchantProductNo);
+
+  //  Fetch product images in ONE query
+  const productsMap = await Product.find({ productSkuCode: { $in: allMerchantNos } }, { productSkuCode: 1, images: 1 })
+    .lean()
+    .then((products) =>
+      products.reduce((acc, p) => {
+        acc[p.productSkuCode] = p.images?.[0] || null; // first image
+        return acc;
+      }, {})
+    );
+
+  //  Build unshipped items
+  const unshippedItems = [];
+  const cancelledItems = [];
+
+  allOrderSkus.forEach((product) => {
+    const shippedQty = shippedMap[product.merchantProductNo] || 0;
+    const notShippedQty = product.quantity - shippedQty;
+
+    if (notShippedQty > 0) {
+      unshippedItems.push({
+        id: product?.id,
+        merchantProductNo: product.merchantProductNo,
+        channelProductNo: product?.channelProductNo,
+        name: product?.description,
+        imageUrl: productsMap[product.merchantProductNo] || null, // ✅ from Product
+        unitPriceInclVat: product?.unitPriceInclVat,
+        unitPriceExclVat: product?.unitPriceExclVat,
+        unitVat: product?.unitVat,
+        lineTotalInclVat: product?.lineTotalInclVat,
+        lineTotalExclVat: product?.lineTotalExclVat,
+        lineVat: product?.lineVat,
+        quantity: notShippedQty,
+      });
+    }
+  });
+
+  //  Build shipped items
+  const shippedItems = shipments.map((shipment) => ({
+    shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
+    shipmentId: shipment._id,
+    trackingNumber: shipment.airWaybillNo || null,
+    lineItems:
+      (shipment.products || []).map((shipmentSku) => {
+        const orderSku = allOrderSkus.find((oSku) => oSku.merchantProductNo === shipmentSku.merchantProductNo);
+
+        return {
+          id: orderSku?.id,
+          merchantProductNo: shipmentSku.merchantProductNo,
+          channelProductNo: orderSku?.channelProductNo,
+          name: orderSku?.description,
+          imageUrl: productsMap[shipmentSku.merchantProductNo] || null, // ✅ from Product
+          quantity: shipmentSku.quantity,
+          unitPriceInclVat: orderSku?.unitPriceInclVat,
+          unitPriceExclVat: orderSku?.unitPriceExclVat,
+          unitVat: orderSku?.unitVat,
+          lineTotalInclVat: orderSku?.lineTotalInclVat,
+          lineTotalExclVat: orderSku?.lineTotalExclVat,
+          lineVat: orderSku?.lineVat,
+          airWaybillNo: shipment.airWaybillNo,
+        };
+      }) || [],
+    shipmentMode: shipment.shipmentMode || 'AYMAKAN',
+  }));
+
+  // Final response
+  const filteredData = transformOrderResponse(order);
+
+  return {
+    ...filteredData,
+    shippedItems,
+    unshippedItems,
+    cancelledItems,
+  };
 };
 
 const getOrderStats = async (sellerId) => {
@@ -128,7 +219,7 @@ const getOrderStats = async (sellerId) => {
 
 const processOrders = async (orders, sellerId) => {
   try {
-    const operations = orderhelper.sanitizeOrdersData(orders, sellerId);
+    const operations = await orderhelper.sanitizeOrdersData(orders, sellerId);
     const result = await Order.bulkWrite(operations);
 
     return { success: true, data: { ...result } };
@@ -295,6 +386,153 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
   }
 };
 
+const transformOrderResponse = (response) => {
+  if (!response) return null;
+  const data = response;
+  // Payment Info
+  const paymentInfo = {
+    channelName: data.channelName,
+    paymentMethod: data.orderPaymentDetails?.paymentMethod,
+    currencyCode: data.orderPaymentDetails?.currencyCode,
+  };
+  // Customer Info
+  const customerInfo = {
+    name: `${data.orderCustomer?.firstName || ''} ${data.orderCustomer?.lastName || ''}`.trim(),
+    email: data.orderCustomer?.email,
+    phoneNo: data.orderCustomer?.phone,
+  };
+  // Shipping Address
+  const shippingAddress = {
+    address: [data.orderShippingAddress?.line1, data.orderShippingAddress?.line2, data.orderShippingAddress?.line3]
+      .filter(Boolean)
+      .join(', '),
+    city: data.orderShippingAddress?.city,
+    region: data.orderShippingAddress?.region,
+    zipCode: data.orderShippingAddress?.zipCode,
+  };
+
+  return {
+    _id: data?._id,
+    orderId: data?.orderId,
+    paymentInfo,
+    customerInfo,
+    shippingAddress,
+    status: data.status,
+    subtotal: data.totalExclVat,
+    tax: data.totalVat,
+    total: data.totalInclVat,
+    shippingFee: data.shippingCostsInclVat,
+  };
+};
+
+const cancelFullOrder = async (orderId, reason) => {
+  try {
+    // Validate order
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      return { success: false, error: { message: 'Order not found', status: 404 } };
+    }
+
+    // Prepare cancellation payload
+    const lines = order.orderSkuList.skuList.map((item) => ({
+      MerchantProductNo: item.merchantProductNo,
+      OrderLineId: item.id,
+      Quantity: item.quantity,
+    }));
+
+    const cancelPayload = {
+      MerchantCancellationNo: randomBytes(6).toString('hex'),
+      MerchantOrderNo: order.merchantOrderNo,
+      Lines: lines,
+      Reason: reason,
+      ReasonCode: '0',
+      IsMerchantCreator: true,
+    };
+
+    // Check shipments
+    const shipments = await Shipment.find({ orderId }).lean();
+
+    // Case A: No shipment found
+    if (!shipments.length) {
+      if (BLOCKED_STATUSES[order.status]) {
+        return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
+      }
+
+      // Cancel in ChannelEngine
+      const ceRes = await fetch(
+        `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cancelPayload),
+        }
+      );
+
+      if (!ceRes.ok) {
+        const err = await ceRes.text();
+        throw new Error(`ChannelEngine cancel failed: ${err}`);
+      }
+
+      // Update order status
+      const updatedOrder = await Order.findByIdAndUpdate(
+        orderId,
+        {
+          $set: {
+            status: ORDER_STATUS_MAP.CANCELED,
+            'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.CANCELED,
+          },
+        },
+        { new: true }
+      );
+
+      return { success: true, data: updatedOrder.toObject() };
+    }
+
+    // Case B: Some shipments exist
+    const shippedShipment = shipments.find((s) => s.status === 'SHIPPED');
+    if (shippedShipment) {
+      return { success: false, error: { message: 'Cannot cancel shipped order', status: 400 } };
+    }
+
+    // Cancel shipments in Aymakan and DB
+    await Promise.all(
+      shipments.map(async (s) => {
+        await cancelAymakanShipment(s.airWaybillNo);
+        await Shipment.updateOne({ _id: s._id }, { status: 'CANCELED' });
+      })
+    );
+
+    // Cancel order in ChannelEngine
+    const ceRes2 = await fetch(`${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cancelPayload),
+    });
+
+    if (!ceRes2.ok) {
+      const err = await ceRes2.text();
+      throw new Error(`ChannelEngine cancel failed: ${err}`);
+    }
+
+    // Update order in DB
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        $set: {
+          status: ORDER_STATUS_MAP.CANCELED,
+          'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.CANCELED,
+        },
+      },
+      { new: true }
+    );
+
+    return { success: true, data: updatedOrder.toObject() };
+  } catch (error) {
+    console.error('cancelFullOrder error:', error);
+    return { success: false, error: { message: error.message, stack: error.stack } };
+  }
+};
+
 export default {
   getAllOrders,
   getOrderById,
@@ -305,4 +543,5 @@ export default {
   cancelOrder,
   acknowledgeOrder,
   backgroundAcknowledgementOrders,
+  cancelFullOrder,
 };

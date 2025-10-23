@@ -68,4 +68,5 @@ export const BLOCKED_STATUSES = {
   CLOSED: 'Order has already been closed',
   RETURNED: 'Order has been returned, cannot cancel',
   SHIPPED: 'Order has been shipped, cannot cancel now',
+  CANCELED: 'Order has already been cancelled',
 };

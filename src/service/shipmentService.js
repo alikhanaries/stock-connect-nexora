@@ -214,27 +214,7 @@ export const createPartialShipmentService = async (shipmentData) => {
 
     const trackingNumber = aymakanResult.shipping.tracking_number;
 
-    // Call ChannelEngine API
     const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
-    const channelResult = await createShipmentWithChannelEngine({
-      merchantShipmentNo,
-      merchantOrderNo,
-      lines: products,
-      trackTraceNo: trackingNumber,
-      trackTraceUrl: '',
-      returnTrackTraceNo: '',
-      method: '',
-      shippedFromCountryCode: collectionData?.country || 'SA',
-      shipmentDate: new Date(),
-      returnMethod: '',
-      isMerchantCreator: true,
-      airWaybillNo: trackingNumber,
-      extraData: {},
-    });
-
-    if (!channelResult?.Success) {
-      return { success: false, message: 'Channel engine error' };
-    }
 
     // Track shipment for status info
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
@@ -248,8 +228,6 @@ export const createPartialShipmentService = async (shipmentData) => {
         reasonAr: info.reason_ar,
         createdAt: info.created_at,
       })) || [];
-
-    const isFullShipment = products.length === orderSkuList.skuList.length;
 
     // Prepare shipment document
     const shipmentDocument = new Shipment({
@@ -266,13 +244,11 @@ export const createPartialShipmentService = async (shipmentData) => {
       products,
       extraData: {
         aymakan: aymakanResult,
-        channelEngine: channelResult,
       },
       shipmentMerchantDetails: {
         name: SHIPMENT_MERCHANT_INFO.NAME,
         email: SHIPMENT_MERCHANT_INFO.EMAIL,
       },
-      isFullShipment,
       pieces,
     });
 
@@ -391,7 +367,6 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
 };
 
 export const getSingleShipmentService = async (id) => {
-  
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new Error('Invalid shipment ID');
   }
