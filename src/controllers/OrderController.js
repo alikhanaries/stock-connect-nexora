@@ -74,13 +74,8 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    setImmediate(async () => {
-      try {
-        await nebimErpOrderService.fetchAndPushOrderInToNebim(data, sellerId);
-      } catch (err) {
-        console.error('Background Nebim push failed:', err);
-      }
-    });
+    // Push orders to Nebim ERP
+    nebimErpOrderService.fetchAndPushOrderInToNebim(data, sellerId);
 
     const dataSavedInDb = await orderService.processOrders(data, sellerId);
 
