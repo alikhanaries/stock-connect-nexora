@@ -2,8 +2,9 @@ import {
   createPartialShipmentService,
   getAllShipmentsService,
   ayMakanWebHookService,
+  getSingleShipmentService,
 } from '#service/shipmentService.js';
-import { errorResponse, successResponse } from '#helpers/response.js';
+import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 
 export const createShipment = async (req, res) => {
@@ -86,5 +87,19 @@ export const ayMakanWebHook = async (req, res) => {
     errorLog(error);
 
     return errorResponse(res, error?.message || 'Unexpected error while updating shipment', 500);
+  }
+};
+
+export const getSingleShipment = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await getSingleShipmentService(id);
+    if (!result) return failResponse(res, 'Shipment not found', 404, null);
+    return successResponse(res, 'Shipment found', 200, result);
+  } catch (error) {
+    console.error('Get Shipment Controller Error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error?.message || 'Internal server error', 400);
   }
 };

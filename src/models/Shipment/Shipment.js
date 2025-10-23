@@ -8,7 +8,7 @@ const shipmentSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     status: {
       type: String,
-      enum: ['PENDING', 'PICKED', 'RETURNED', 'RETURN REQUESTED', 'DAMAGED', 'CANCELED'],
+      enum: ['PENDING', 'PICKED', 'RETURNED', 'RETURN REQUESTED', 'DAMAGED', 'CANCELLED', 'DELIVERED'],
       default: 'PENDING',
       index: true,
     },
