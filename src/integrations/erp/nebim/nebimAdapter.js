@@ -7,7 +7,6 @@ export const createNebimAdapter = () => {
     pushOrders: async (orders = []) => {
       try {
         if (!Array.isArray(orders) || orders.length === 0) {
-          console.warn('No orders to push to Nebim.');
           return { success: false, message: 'Empty order batch' };
         }
         const payload = { Orders: orders };
