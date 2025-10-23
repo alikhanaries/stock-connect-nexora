@@ -72,7 +72,7 @@ export const createShipmentWithChannelEngine = async ({
   trackTraceNo = '',
   trackTraceUrl = '',
   returnTrackTraceNo = '',
-  method = '',
+  method = 'Aymakan',
   shippedFromCountryCode = 'SA',
   shipmentDate = new Date(),
   returnMethod = '',
@@ -81,20 +81,21 @@ export const createShipmentWithChannelEngine = async ({
   extraData = {},
 }) => {
   try {
-    // Validations
+    // Basic validations
     if (!merchantShipmentNo) throw new Error('merchantShipmentNo is required');
     if (!merchantOrderNo) throw new Error('merchantOrderNo is required');
     if (!Array.isArray(lines) || lines.length === 0) throw new Error('lines must be a non-empty array');
     if (!airWaybillNo) throw new Error('airWaybillNo is required');
 
-    // Map lines to ChannelEngine format
-    const mappedLines = lines.map((line) => ({
-      MerchantProductNo: line.merchantProductNo || line.sku || 'UNKNOWN',
+    // Normalize and map lines
+    const mappedLines = lines.map((line, i) => ({
+      MerchantProductNo: line.merchantProductNo || line.sku || `UNKNOWN-${i}`,
       OrderLineId: line.orderLineId || 0,
+      Quantity: line.quantity || 1,
       ExtraData: line.extraData || { additionalProp1: '', additionalProp2: '', additionalProp3: '' },
-      Quantity: line.quantity || 0,
     }));
 
+    // Build ChannelEngine payload
     const payload = {
       MerchantShipmentNo: merchantShipmentNo,
       MerchantOrderNo: merchantOrderNo,
@@ -105,7 +106,7 @@ export const createShipmentWithChannelEngine = async ({
       ReturnTrackTraceNo: returnTrackTraceNo,
       Method: method,
       ShippedFromCountryCode: shippedFromCountryCode,
-      ShipmentDate: shipmentDate instanceof Date ? shipmentDate.toISOString() : shipmentDate,
+      ShipmentDate: shipmentDate,
       ReturnMethod: returnMethod,
       IsMerchantCreator: isMerchantCreator,
       AirWaybillNo: airWaybillNo,
@@ -113,23 +114,94 @@ export const createShipmentWithChannelEngine = async ({
 
     const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
 
-    const response = await fetch(ceUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    // Add one retry for transient network errors
+    let response;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      response = await fetch(ceUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
+      if (response.ok) break;
+
+      if (attempt === 1) await new Promise((r) => setTimeout(r, 1000));
+    }
+
+    // Handle failed response
     if (!response.ok) {
-      const errorData = await response.json();
-
-      throw new Error(errorData?.Message);
+      let message = `Failed to create shipment for ${merchantShipmentNo} (${response.status})`;
+      try {
+        const errorData = await response.json();
+        message = errorData?.Message || message;
+        console.log(message);
+      } catch {
+        // ignore parse errors
+      }
+      //throw new Error(message);
     }
 
     const result = await response.json();
 
+    return { success: true, message: 'Shipment created successfully', data: result };
+  } catch (error) {
+    console.error(`Error in createShipmentWithChannelEngine for ${merchantShipmentNo}:`, error.message);
+    //throw error;
+    return { success: false, message: 'Shipment created failed' };
+  }
+};
+
+/**
+ * Call Update delivery state of ChannelEngine API
+ */
+export const updateShipmentDeliveryStateChannelEngine = async (status, deliveryDate, merchantShipmentNo) => {
+  try {
+    // Validate inputs
+    if (!merchantShipmentNo) throw new Error('merchantShipmentNo is required');
+    if (!status) throw new Error('status is required');
+    if (!deliveryDate) throw new Error('deliveryDate is required');
+
+    const payload = {
+      Status: status,
+      DeliveredAt: deliveryDate || new Date(),
+    };
+
+    const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/${merchantShipmentNo}/delivery-state?apikey=${CHANNEL_ENGINE_API_KEY}`;
+
+    // Attempt request with one retry if transient failure
+    let response;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      response = await fetch(ceUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) break;
+
+      // Delay before retry (only for first attempt)
+      if (attempt === 1) await new Promise((res) => setTimeout(res, 1000));
+    }
+
+    // Handle non-OK responses safely
+    if (!response.ok) {
+      let errorMessage = `Failed to update delivery state for ${merchantShipmentNo} (${response.status})`;
+
+      try {
+        const errorData = await response.json();
+
+        errorMessage = errorData?.Message || errorMessage;
+      } catch {
+        // JSON parse failed, leave as default
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    const result = await response.json();
     return result;
   } catch (error) {
-    console.error('Error in createShipmentWithChannelEngine:', error.message);
+    console.error(`Error in updateShipmentDeliveryStateChannelEngine for ${merchantShipmentNo}:`, error.message);
     throw error;
   }
 };
@@ -181,6 +253,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     // Fetch order as a Mongoose document (no .lean()
 
     const order = await Order.findById(id);
+
     if (!order) {
       return { success: false, message: 'Order not found.' };
     }
@@ -262,7 +335,9 @@ export const createPartialShipmentService = async (shipmentData) => {
         sku.airWaybillNo = trackingNumber;
       }
     }
-
+    if (!order?.sellerId) {
+      order['sellerId'] = sellerId;
+    }
     await order.save();
 
     return { success: true, shipmentId: shipmentDocument._id };
@@ -363,6 +438,119 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
   } catch (error) {
     console.error('Error fetching shipments:', error);
     throw new Error('Failed to fetch shipments');
+  }
+};
+
+export const ayMakanWebHookService = async (data) => {
+  try {
+    if (!data?.tracking_number) {
+      return { success: false, message: 'Missing tracking_number in webhook payload' };
+    }
+
+    const shipmentData = await Shipment.findOne(
+      { airWaybillNo: data.tracking_number },
+      {
+        _id: 1,
+        merchantShipmentNo: 1,
+        merchantOrderNo: 1,
+        products: 1,
+        airWaybillNo: 1,
+        status: 1, // needed for duplicate status check
+        orderId: 1,
+      }
+    ).lean();
+
+    if (!shipmentData) {
+      return { success: false, message: `Shipment not found for AWB: ${data.tracking_number}` };
+    }
+
+    const statusLabel = (data.status_label || '').trim().toLowerCase();
+
+    // Duplicate check (case-insensitive)
+    if ((shipmentData.status || '').toLowerCase() === statusLabel) {
+      return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
+    }
+
+    // 1. When shipment is picked
+    if (statusLabel === 'picked') {
+      const payload = {
+        merchantShipmentNo: shipmentData.merchantShipmentNo,
+        merchantOrderNo: shipmentData.merchantOrderNo,
+        lines: shipmentData.products || [],
+        extraData: {},
+        trackTraceNo: shipmentData.airWaybillNo,
+        trackTraceUrl: '',
+        returnTrackTraceNo: '',
+        method: 'Aymakan',
+        shippedFromCountryCode: data.delivery_country,
+        shipmentDate: data.date_time,
+        returnMethod: '',
+        isMerchantCreator: true,
+        airWaybillNo: shipmentData.airWaybillNo,
+      };
+
+      try {
+        await createShipmentWithChannelEngine(payload);
+      } catch (err) {
+        console.error('Error creating shipment in ChannelEngine:', err.message);
+      }
+    }
+
+    // 2. When shipment is delivered
+    if (statusLabel === 'delivered') {
+      try {
+        await updateShipmentDeliveryStateChannelEngine('DELIVERED', data.date_time, shipmentData.merchantShipmentNo);
+      } catch (err) {
+        console.error('Error updating delivery state in ChannelEngine:', err.message);
+      }
+    }
+
+    // 3. Update local shipment record
+    const trackingInfo =
+      Array.isArray(data.tracking_info) && data.tracking_info.length > 0
+        ? data.tracking_info.map((info) => ({
+            statusCode: info.status_code,
+            description: info.description,
+            descriptionAr: info.description_ar,
+            reasonCode: info.reason_code,
+            reasonEn: info.reason_en,
+            reasonAr: info.reason_ar,
+            createdAt: info.created_at,
+          }))
+        : [];
+    // UPDATE SHIPMENT STATUS
+    const updatedShipment = await Shipment.findOneAndUpdate(
+      { _id: shipmentData._id },
+      {
+        status: data.status_label?.toUpperCase(),
+        trackingInfo,
+      },
+      { new: true }
+    );
+    // UPDATE ORDER STATUS
+    const orderLineIdsToUpdate = shipmentData.products.map((p) => p.orderLineId);
+
+    await Order.findOneAndUpdate(
+      { _id: shipmentData?.orderId },
+      {
+        $set: {
+          status: data.status_label?.toUpperCase(),
+          'orderSkuList.skuList.$[sku].status': data.status_label?.toUpperCase(),
+        },
+      },
+      {
+        arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }],
+        new: false, // returns the document before update
+      }
+    );
+    return {
+      success: true,
+      message: `Shipment ${data.tracking_number} updated successfully (${data.status_label})`,
+      shipmentId: updatedShipment._id,
+    };
+  } catch (error) {
+    console.error(' Error in ayMakanWebHookService:', error.message, error.stack);
+    throw new Error('Failed to process AyMakan webhook: ' + error.message);
   }
 };
 

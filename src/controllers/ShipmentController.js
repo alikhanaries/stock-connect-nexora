@@ -1,6 +1,7 @@
 import {
   createPartialShipmentService,
   getAllShipmentsService,
+  ayMakanWebHookService,
   getSingleShipmentService,
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
@@ -58,6 +59,34 @@ export const getAllShipments = async (req, res) => {
     console.error('Get Shipment Controller Error:', error.message, error.stack);
     errorLog(error);
     return errorResponse(res, error?.message || 'Internal server error', 400);
+  }
+};
+
+export const ayMakanWebHook = async (req, res) => {
+  try {
+    const payload = req.body;
+
+    // Basic validation: check for tracking number & status
+    if (!payload?.tracking_number || !payload?.status) {
+      return errorResponse(res, 'Invalid webhook payload: missing tracking_number or status', 400);
+    }
+
+    // Process webhook
+    const result = await ayMakanWebHookService(payload);
+
+    if (!result || result.success === false) {
+      return errorResponse(res, result?.message || 'Shipment could not be updated', 400);
+    }
+
+    // Respond with 200 instead of 201 (nothing is “created” here)
+    return successResponse(res, result?.message || 'Shipment updated successfully', 200, {
+      shipmentId: result?.shipmentId,
+    });
+  } catch (error) {
+    console.error(' AyMakan Webhook Error:', error.message, error.stack);
+    errorLog(error);
+
+    return errorResponse(res, error?.message || 'Unexpected error while updating shipment', 500);
   }
 };
 

@@ -12,7 +12,8 @@ const sanitizeOrdersData = async (orders, sellerId) => {
             return {
               id: line.Id,
               channelOrderLineNo: line.ChannelOrderLineNo,
-              status: line.Status,
+              // Preserve status if SKU already exists
+              status: existingSku ? existingSku.status : line.Status,
               isFulfillmentByMarketplace: line.IsFulfillmentByMarketplace,
               gtin: line.Gtin,
               description: line.Description,
@@ -60,7 +61,6 @@ const sanitizeOrdersData = async (orders, sellerId) => {
         channelName: data.ChannelName,
         globalChannelName: data.GlobalChannelName,
         globalChannelId: data.GlobalChannelId,
-        status: data.Status,
         orderDate: data.OrderDate,
         merchantComment: data.MerchantComment,
         merchantOrderNo: data.MerchantOrderNo,
@@ -143,7 +143,10 @@ const sanitizeOrdersData = async (orders, sellerId) => {
           countryIso: data.BillingAddress.CountryIso,
         },
       };
-
+      // Only set status if the order is new
+      if (!existingOrder) {
+        updatePayload.status = data.Status;
+      }
       const updateOperation = {
         $set: updatePayload,
         $setOnInsert: {

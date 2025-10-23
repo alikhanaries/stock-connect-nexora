@@ -50,8 +50,21 @@ export const getShipmentValidator = validate(async (req) => {
   await querySchema.parseAsync(req.query);
 });
 
+export const ayMakanWebHookValidator = validate(async (req) => {
+  const headerSchema = z.object({
+    'x-custom-auth': z
+      .string({
+        required_error: 'X-Custom-Auth header is required',
+        invalid_type_error: 'X-Custom-Auth must be a string',
+      })
+      .nonempty('X-Custom-Auth header cannot be empty'),
+  });
+
+  await headerSchema.parseAsync(req.headers);
+});
+
 export const getSingleShipmentValidator = validate(async (req) => {
-  //  await headerSchema.parseAsync(req.headers);
+  await headerSchema.parseAsync(req.headers);
   const paramsSchema = z.object({
     id: z
       .string({
