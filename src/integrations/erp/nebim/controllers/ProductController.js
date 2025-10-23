@@ -7,10 +7,9 @@ export const fetchProducts = async (req, res) => {
     successResponse(res, 'Nebim product sync started in background', 202);
     process.nextTick(async () => {
       try {
-        const { totalInserted, totalUpdated } = await fetchAndStoreNebimProducts(sellerId);
-        console.log(`✅ Nebim sync completed: Inserted ${totalInserted}, Updated ${totalUpdated}`);
+        await fetchAndStoreNebimProducts(sellerId);
       } catch (err) {
-        console.error('❌ Background sync failed:', err);
+        console.error('Background sync failed:', err);
       }
     });
   } catch (error) {
