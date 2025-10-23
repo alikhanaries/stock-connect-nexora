@@ -3,6 +3,7 @@ import { createBaseERPAdapter } from '../base/BaseERPAdapter.js';
 import { connectNebim } from './util/connect.js';
 import { fetchFromNebim } from './util/fetch.js';
 import { handleNebimError } from './util/handleError.js';
+
 export const createNebimAdapter = () => {
   const base = createBaseERPAdapter();
 
@@ -32,7 +33,6 @@ export const createNebimAdapter = () => {
         await handleNebimError(err, 'fetchProducts');
       }
     },
-
     pushOrders: async (orders = []) => {
       try {
         if (!Array.isArray(orders) || orders.length === 0) {
