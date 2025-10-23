@@ -5,8 +5,8 @@ import { errorLog } from '#middleware/index.js';
 export const createShipment = async (req, res) => {
   try {
     const shipmentData = req.body;
-    // const userId = req.user._id;
-    // shipmentData['userId'] = userId;
+     const userId = req.user._id;
+     shipmentData['userId'] = userId;
     // Validate request body early
     if (!shipmentData || Object.keys(shipmentData).length === 0) {
       return errorResponse(res, 'Shipment data is required', 400);
