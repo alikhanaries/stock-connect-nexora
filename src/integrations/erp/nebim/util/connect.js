@@ -26,8 +26,6 @@ export const connectNebim = async () => {
   if (!response.ok || !data?.SessionID) {
     throw new Error(`Nebim Connect failed: ${data?.Message || 'No SessionID returned'}`);
   }
-
   sessionId = data.SessionID;
-  console.log('Connected to Nebim | SessionID:', sessionId);
   return sessionId;
 };
