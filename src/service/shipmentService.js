@@ -184,7 +184,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     if (!order) {
       return { success: false, message: 'Order not found.' };
     }
-    console.log('order-----------', order.orderSkuList);
+
     const { orderSkuList, merchantOrderNo, orderId } = order;
 
     // Validate SKU list
