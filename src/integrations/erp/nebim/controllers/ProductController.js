@@ -3,7 +3,7 @@ import { fetchAndStoreNebimProducts } from '../service/productService.js';
 
 export const fetchProducts = async (req, res) => {
   try {
-    const { sellerId } = req;
+    const sellerId = req.sellerId;
     successResponse(res, 'Nebim product sync started in background', 202);
     process.nextTick(async () => {
       try {

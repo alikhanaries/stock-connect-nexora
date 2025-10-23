@@ -1,22 +1,9 @@
-import { nebimConfig as defaultConfig } from './config/config.js';
-import { connectNebim } from './util/connect.js';
+import { NEBIM_ENDPOINTS } from '../../erp/nebim/constants/common.js';
 import { fetchFromNebim } from './util/fetch.js';
 import { handleNebimError } from './util/handleError.js';
-import { NEBIM_ENDPOINTS } from '../../erp/nebim/constants/common.js';
 
-export const createNebimAdapter = (config = defaultConfig) => {
-  const cfg = { ...defaultConfig, ...config };
-
+export const createNebimAdapter = () => {
   return {
-    connect: async () => {
-      try {
-        return await connectNebim(cfg);
-      } catch (err) {
-        console.error('Nebim connect error:', err.message);
-        throw err;
-      }
-    },
-
     fetchProducts: async (options = {}) => {
       try {
         const payload = {
