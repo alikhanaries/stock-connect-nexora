@@ -5,12 +5,12 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
   const mappedProduct = {
     sellerId: mongoose.Types.ObjectId.isValid(sellerId) ? new mongoose.Types.ObjectId(sellerId) : null,
 
-    // 🔹 Identification
+    //  Identification
     parentProductId: null,
     parentProductSkuCode: item.ItemCode || null,
     productSkuCode: item.ItemCode || null,
 
-    // 🔹 Basic Info
+    //  Basic Info
     name: item.ItemName || '',
     description: item.ItemDesc || '',
     brand: item.BrandDesc || '',
@@ -24,41 +24,38 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
       Category2: item.Cat02Desc || '',
     }),
 
-    // 🔹 Pricing
+    //  Pricing
     price: Number(item.Price ?? 0),
     purchasePrice: Number(item.Price ?? 0),
     vatRateType: item.Vat > 0 ? 'STANDARD' : 'ZERO',
 
-    // 🔹 Stock
+    //  Stock
     currentStockCount: Number(item.Qty ?? 0),
 
-    // 🔹 Category & Brand
+    //  Category & Brand
     categories: [],
     categoryTrail: [item.Cat01Desc, item.Cat02Desc].filter(Boolean).join(' > ') || '',
 
-    // 🔹 Media
+    //  Media
     images: item.images || [],
     extraImageUrl1: null,
     extraImageUrl2: null,
     extraImageUrl3: null,
 
-    // 🔹 Variants
+    //  Variants
     size: item.ItemDim1Desc || '',
     color: item.ColorDesc || '',
 
-    // 🔹 Logistics
+    //  Logistics
     volumetricWeightCm: 1,
     hsCodeAE: '000000',
     hsCodeSA: '000000',
 
-    // 🔹 Misc
+    //  Misc
     status: 'active',
     shippingCost: 0,
     shippingTime: '',
     url: '',
   };
-
-  console.log('Mapped Product:', mappedProduct); // ✅ Log the mapped object
-
   return mappedProduct;
 };
