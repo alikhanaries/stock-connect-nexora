@@ -185,130 +185,142 @@ export const formatReturnDetails = (aggregatedResult) => {
 
   if (!orderInfo) {
     return {
-      orderInfo: {
-        returnId: returnData.returnId,
-        merchantReturnNo: returnData.merchantReturnNo,
-        status: returnData.status,
-        placedOn: returnData.placedOn,
-        acknowledgeDate: returnData.acknowledgeDate,
-      },
+      _id: returnData._id,
+      returnId: returnData.returnId || null,
+      orderId: null,
       paymentInfo: {
-        platform: returnData.platform || null,
-        mode: null,
-        amount: null,
-        paidOn: returnData.placedOn || null,
+        channelName: returnData.platform || null,
+        paymentMethod: null,
         currencyCode: null,
       },
       customerInfo: {
         name: null,
         email: null,
-        phone: null,
+        phoneNo: null,
       },
-      shippingAddress: null,
-      items:
-        returnData.products?.map((product) => ({
-          productName: null,
-          sku: product.productSkuCode,
-          quantity: product.quantity,
-          unitPrice: null,
-          totalPrice: null,
+      shippingAddress: {
+        address: null,
+        city: null,
+        region: null,
+        zipCode: null,
+      },
+      status: returnData.status || null,
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+      shippingFee: 0,
+      shippedItems: [],
+      unshippedItems:
+        returnData.products?.map((product, index) => ({
+          id: index + 1,
+          merchantProductNo: product.productSkuCode,
+          channelProductNo: null,
+          name: 'Product',
+          imageUrl: null,
+          unitPriceInclVat: 0,
+          unitPriceExclVat: 0,
+          unitVat: 0,
+          lineTotalInclVat: 0,
+          lineTotalExclVat: 0,
+          lineVat: 0,
+          quantity: product.quantity || 0,
         })) || [],
-      priceBreakdown: {
-        subtotal: null,
-        shipping: null,
-        taxes: null,
-        total: null,
-        currencyCode: null,
-      },
     };
   }
 
   const returnedSkus = returnData.products || [];
   const orderSkus = orderInfo.orderSkuList?.skuList || [];
 
-  const returnItems = returnedSkus.map((returnProduct) => {
+  // Calculate shipping and total quantities
+  const totalReturnQuantity = returnedSkus.reduce((sum, product) => sum + (product.quantity || 0), 0);
+  const totalOrderQuantity = orderSkus.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
+  const returnProportion = totalOrderQuantity > 0 ? totalReturnQuantity / totalOrderQuantity : 0;
+
+  // Calculate proportional costs
+  const proportionalSubtotalExclVat = (orderInfo.subTotalExclVat || 0) * returnProportion;
+  const proportionalSubtotalVat = (orderInfo.subTotalVat || 0) * returnProportion;
+  const proportionalShippingExclVat = (orderInfo.shippingCostsExclVat || 0) * returnProportion;
+  const proportionalShippingVat = (orderInfo.shippingCostsVat || 0) * returnProportion;
+
+  // Calculate totals
+  const subtotal = proportionalSubtotalExclVat;
+  const tax = proportionalSubtotalVat + proportionalShippingVat;
+  const shippingFee = proportionalShippingExclVat;
+  const total = subtotal + tax + shippingFee;
+
+  // Map returned items to unshipped format
+  const unshippedItems = returnedSkus.map((returnProduct, index) => {
     const matchingSku = orderSkus.find((sku) => sku.merchantProductNo === returnProduct.productSkuCode);
 
+    const unitPriceExclVat = matchingSku?.unitPriceExclVat || 0;
+    const unitVat = matchingSku?.unitVat || 0;
+    const unitPriceInclVat = unitPriceExclVat + unitVat;
+    const quantity = returnProduct.quantity || 0;
+
     return {
-      productName: matchingSku?.description || 'Product',
-      sku: returnProduct.productSkuCode,
-      quantity: returnProduct.quantity,
-      unitPrice: matchingSku?.unitPriceInclVat || 0,
-      totalPrice: matchingSku ? matchingSku.unitPriceInclVat * returnProduct.quantity : 0,
+      id: index + 1,
+      merchantProductNo: returnProduct.productSkuCode,
+      channelProductNo: matchingSku?.channelProductNo || null,
+      name: matchingSku?.description || 'Product',
+      imageUrl: null,
+      unitPriceInclVat: unitPriceInclVat,
+      unitPriceExclVat: unitPriceExclVat,
+      unitVat: unitVat,
+      lineTotalInclVat: unitPriceInclVat * quantity,
+      lineTotalExclVat: unitPriceExclVat * quantity,
+      lineVat: unitVat * quantity,
+      quantity: quantity,
     };
   });
 
-  const totalQuantity = returnedSkus.reduce((sum, product) => sum + (product.quantity || 0), 0);
-  const totalOrderQuantity = orderSkus.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
-  const returnProportion = totalOrderQuantity > 0 ? totalQuantity / totalOrderQuantity : 0;
-
-  const subtotalExclVat = (orderInfo.subTotalExclVat || 0) * returnProportion;
-  const subtotalVat = (orderInfo.subTotalVat || 0) * returnProportion;
-
-  const shippingExclVat = (orderInfo.shippingCostsExclVat || 0) * returnProportion;
-  const shippingVat = (orderInfo.shippingCostsVat || 0) * returnProportion;
-
-  // Total taxes (VAT) for the return
-  const totalTaxes = subtotalVat + shippingVat;
-
-  // Calculate totals
-  // Total (including VAT) = Subtotal (ExclVat) + Shipping (ExclVat) + Total Taxes
-  const totalInclVat = subtotalExclVat + shippingExclVat + totalTaxes;
+  // Build shipping address
+  const shippingAddress = orderInfo.orderShippingAddress
+    ? {
+        address: [
+          orderInfo.orderShippingAddress.line1,
+          orderInfo.orderShippingAddress.line2,
+          orderInfo.orderShippingAddress.line3,
+          orderInfo.orderShippingAddress.streetName,
+          orderInfo.orderShippingAddress.houseNr,
+          orderInfo.orderShippingAddress.houseNrAddition,
+        ]
+          .filter(Boolean)
+          .join(' '),
+        city: orderInfo.orderShippingAddress.city || '',
+        region: orderInfo.orderShippingAddress.region || '',
+        zipCode: orderInfo.orderShippingAddress.zipCode || '',
+      }
+    : {
+        address: '',
+        city: '',
+        region: '',
+        zipCode: '',
+      };
 
   return {
-    orderInfo: {
-      orderId: orderInfo.orderId,
-      returnId: returnData.returnId,
-      merchantReturnNo: returnData.merchantReturnNo,
-      status: returnData.status,
-      placedOn: returnData.placedOn,
-      acknowledgeDate: returnData.acknowledgeDate,
-    },
+    _id: returnData._id,
+    returnId: returnData.returnId || null,
+    orderId: orderInfo.orderId || null,
     paymentInfo: {
-      platform: returnData.platform || orderInfo.channelName,
-      mode: orderInfo.orderPaymentDetails?.paymentMethod || 'N/A',
-      amount: totalInclVat,
-      paidOn: orderInfo.orderDate,
+      channelName: returnData.platform || orderInfo.channelName || null,
+      paymentMethod: orderInfo.orderPaymentDetails?.paymentMethod || null,
       currencyCode: orderInfo.orderPaymentDetails?.currencyCode || 'SAR',
     },
     customerInfo: {
       name: orderInfo.orderCustomer
-        ? `${orderInfo.orderCustomer.firstName || ''} ${orderInfo.orderCustomer.lastName || ''}`.trim()
+        ? `${orderInfo.orderCustomer.firstName || ''} ${orderInfo.orderCustomer.lastName || ''}`.trim() || null
         : null,
       email: orderInfo.orderCustomer?.email || null,
-      phone: orderInfo.orderCustomer?.phone || null,
+      phoneNo: orderInfo.orderCustomer?.phone || null,
     },
-    shippingAddress: orderInfo.orderShippingAddress
-      ? {
-          line1: orderInfo.orderShippingAddress.line1,
-          line2: orderInfo.orderShippingAddress.line2,
-          line3: orderInfo.orderShippingAddress.line3,
-          streetName: orderInfo.orderShippingAddress.streetName,
-          houseNr: orderInfo.orderShippingAddress.houseNr,
-          houseNrAddition: orderInfo.orderShippingAddress.houseNrAddition,
-          city: orderInfo.orderShippingAddress.city,
-          region: orderInfo.orderShippingAddress.region,
-          zipCode: orderInfo.orderShippingAddress.zipCode,
-          countryIso: orderInfo.orderShippingAddress.countryIso,
-          fullAddress: [
-            orderInfo.orderShippingAddress.streetName,
-            orderInfo.orderShippingAddress.city,
-            orderInfo.orderShippingAddress.region,
-            orderInfo.orderShippingAddress.countryIso,
-            orderInfo.orderShippingAddress.zipCode,
-          ]
-            .filter(Boolean)
-            .join(', '),
-        }
-      : null,
-    items: returnItems,
-    priceBreakdown: {
-      subtotal: subtotalExclVat, // Subtotal BEFORE tax
-      shipping: shippingExclVat, // Shipping BEFORE tax
-      taxes: totalTaxes, // Total taxes (VAT)
-      total: totalInclVat, // Total = subtotal + shipping + taxes
-      currencyCode: orderInfo.orderPaymentDetails?.currencyCode || 'SAR',
-    },
+    shippingAddress: shippingAddress,
+    status: returnData.status || 'UNKNOWN',
+    subtotal: parseFloat(subtotal.toFixed(2)),
+    tax: parseFloat(tax.toFixed(2)),
+    total: parseFloat(total.toFixed(2)),
+    shippingFee: parseFloat(shippingFee.toFixed(2)),
+    shippedItems: [],
+    unshippedItems: unshippedItems,
   };
 };
 
