@@ -8,8 +8,19 @@ const shipmentSchema = new mongoose.Schema(
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     status: {
       type: String,
-      enum: ['PENDING', 'PICKED', 'RETURNED', 'RETURN REQUESTED', 'DAMAGED', 'CANCELLED', 'DELIVERED'],
-      default: 'PENDING',
+      enum: [
+        'SHIPMENT_CREATED',
+        'PICKED',
+        'OUT_FOR_DELIVERY',
+        'RETURNED',
+        'RETURN REQUESTED',
+        'DAMAGED',
+        'CANCELED',
+        'DELIVERED',
+        'NOT_DELIVERED',
+        'SHIPMENT_REPROCESSING',
+      ],
+      default: 'SHIPMENT_CREATED',
       index: true,
     },
     trackingInfo: { type: [TrackingInfoSchema], default: [] }, // embed TrackingInfoSchema
