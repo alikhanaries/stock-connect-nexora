@@ -9,7 +9,7 @@ const SkuSchema = new mongoose.Schema(
     channelOrderLineNo: { type: String, trim: true },
     status: {
       type: String,
-      enum: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'RETURNED', 'CANCELLED', 'CLOSED', 'IN_COMBI', 'DELIVERED'],
+      enum: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'RETURNED', 'CANCELED', 'CLOSED', 'IN_COMBI', 'DELIVERED'],
       default: 'NEW',
       index: true,
     },
