@@ -332,7 +332,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       airWaybillNo: trackingNumber,
       merchantShipmentNo,
       merchantOrderNo,
-      status: AYMAKAN_STATUS.AY_0001,
+      status: AYMAKAN_STATUS.AY-0001,
       trackingInfo,
       products,
       extraData: {
