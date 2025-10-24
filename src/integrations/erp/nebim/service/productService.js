@@ -1,5 +1,4 @@
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
-import Product from '#root/src/models/Product.js';
 import { createERPAdapter } from '../../base/ERPFactory.js';
 import { formatNebimProducts } from '../helpers/formatter.js';
 import { handleNebimError } from '../util/handleError.js';
@@ -9,18 +8,15 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
   try {
     const rawProducts = await adapter.fetchProducts();
     if (!rawProducts?.length) return;
-    const canonicalProducts = await formatNebimProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
-    const bulkOps = canonicalProducts.map((product) => ({
-      updateOne: {
-        filter: { productSkuCode: product.productSkuCode, sellerId: product.sellerId },
-        update: { $set: product },
-        upsert: true,
-      },
-    }));
 
-    if (bulkOps.length > 0) {
-      await Product.bulkWrite(bulkOps, { ordered: false });
-    }
+    const canonicalProducts = await formatNebimProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
+    return canonicalProducts;
+    /**
+     * TODO [DB WRITE - FRONTEND INTEGRATION PENDING]:
+     * Once frontend integration is complete, add code here to persist
+     * canonicalProducts to the database (e.g., Product.bulkWrite or equivalent).
+     * For now, products are prepared but not stored.
+     */
   } catch (err) {
     await handleNebimError(err, 'fetchAndStoreNebimProducts');
   }
