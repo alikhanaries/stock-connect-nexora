@@ -540,7 +540,6 @@ export const ayMakanWebHookService = async (data) => {
           }))
         : [];
     // UPDATE SHIPMENT STATUS
-    console.log('shipmentStatus------', shipmentStatus);
     const updatedShipment = await Shipment.findOneAndUpdate(
       { _id: shipmentData._id },
       {
