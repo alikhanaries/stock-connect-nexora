@@ -1,6 +1,12 @@
+import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { processInBatches } from './batchHelper.js';
 
-export const formatNebimOrders = async (orders = [], batchSize = 100) => {
+export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) => {
+  if (!Array.isArray(raw)) return [];
+  return await processInBatches(raw, batchSize, (item) => canonicalProductMapper(item, sellerId));
+};
+
+export const formatNebimOrders = async (orders = [], batchSize = 500) => {
   if (!Array.isArray(orders) || orders.length === 0) return [];
   return await processInBatches(orders, batchSize, (order) => ({
     ModelType: 4,
@@ -36,4 +42,5 @@ export const formatNebimOrders = async (orders = [], batchSize = 100) => {
     Status: order.status || '',
     IsBusinessOrder: order.isBusinessOrder || false,
   }));
+   
 };
