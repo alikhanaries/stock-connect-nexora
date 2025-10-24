@@ -18,7 +18,7 @@ export const createAymakanShipment = async (payload) => {
       throw new Error(errorData?.message);
     }
 
-    // 6️⃣ Parse JSON body
+    //  Parse JSON body
     const result = await response.json().catch(async () => {
       const errorData = await response.json();
       throw new Error(errorData?.message);

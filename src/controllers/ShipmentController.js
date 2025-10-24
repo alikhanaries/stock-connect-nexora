@@ -3,7 +3,7 @@ import {
   getAllShipmentsService,
   ayMakanWebHookService,
 } from '#service/shipmentService.js';
-import { errorResponse, successResponse } from '#helpers/response.js';
+import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 
 export const createShipment = async (req, res) => {
@@ -20,7 +20,7 @@ export const createShipment = async (req, res) => {
 
     if (!result.success) {
       // This can happen if service returns false for invalid inputs
-      return errorResponse(res, result?.message || 'Shipment could not be created', 400);
+      return failResponse(res, result?.message || 'Shipment could not be created', 400);
     }
 
     return successResponse(res, result?.message || 'Shipment created successfully', 201, {
