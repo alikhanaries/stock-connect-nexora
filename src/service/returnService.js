@@ -250,30 +250,45 @@ export const getReturnsFromDatabase = async (query = {}) => {
   }
 };
 
-// Gets return statistics grouped by status.
 export const getReturnStats = async () => {
   try {
-    const statsAggregation = await Return.aggregate([
+    // Get total quantities for accepted, rejected, and in-progress products
+    const [quantityStats] = await Return.aggregate([
+      { $unwind: '$products' },
       {
         $group: {
-          _id: '$status',
-          count: { $sum: 1 },
+          _id: null,
+          acceptedQuantity: { $sum: { $max: ['$products.acceptedQuantity', 0] } },
+          rejectedQuantity: { $sum: { $max: ['$products.rejectedQuantity', 0] } },
+          inProgressQuantity: {
+            $sum: {
+              $cond: [
+                { $and: [{ $lte: ['$products.acceptedQuantity', 0] }, { $lte: ['$products.rejectedQuantity', 0] }] },
+                '$products.quantity',
+                0,
+              ],
+            },
+          },
         },
-      },
-      {
-        $sort: { _id: 1 },
       },
     ]);
 
-    const stats = statsAggregation.reduce((acc, stat) => {
-      const status = stat._id || 'Unknown';
-      acc[status] = stat.count;
-      return acc;
-    }, {});
-    statsAggregation.forEach((stat) => {
-      const status = stat._id || 'Unknown';
-      stats[status] = stat.count;
-    });
+    // Get total quantity grouped by return status
+    const statusStats = await Return.aggregate([
+      { $unwind: '$products' },
+      { $group: { _id: '$status', totalQuantity: { $sum: '$products.quantity' } } },
+      { $sort: { _id: 1 } },
+    ]);
+
+    const stats = {
+      ...statusStats.reduce((acc, { _id, totalQuantity }) => {
+        acc[_id || 'Unknown'] = totalQuantity;
+        return acc;
+      }, {}),
+      REQUEST_ACCEPTED: quantityStats?.acceptedQuantity ?? 0,
+      REQUEST_REJECTED: quantityStats?.rejectedQuantity ?? 0,
+      IN_PROGRESS: quantityStats?.inProgressQuantity ?? 0,
+    };
 
     return stats;
   } catch (error) {
@@ -283,7 +298,6 @@ export const getReturnStats = async () => {
 };
 
 //Creates a return in ChannelEngine.
-
 export const createReturn = async (returnData) => {
   try {
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`, {
