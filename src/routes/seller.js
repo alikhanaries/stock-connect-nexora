@@ -19,8 +19,6 @@ import {
 } from '#validations/sellers.js';
 const seller = express.Router();
 
-const allowedRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.MASTER_ADMIN];
-
 seller.post(
   '/create',
   authMiddleware,
@@ -29,7 +27,7 @@ seller.post(
   checkLanguage,
   createSeller
 );
-seller.get('/', authMiddleware, authorize(allowedRoles), getAllSellerValidator, checkLanguage, getAllSeller);
+seller.get('/', authMiddleware, getAllSellerValidator, checkLanguage, getAllSeller);
 seller.delete(
   '/bulk-delete',
   softDeleteSellerValidator,
