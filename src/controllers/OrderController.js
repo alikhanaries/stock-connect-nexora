@@ -171,3 +171,18 @@ export const cancelFullOrder = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+export const cancelPartialOrder = async (req, res) => {
+  try {
+    const { orderId, reason, products } = req.body;
+
+    const orderResponse = await orderService.cancelPartialOrder(orderId, products, reason);
+    if (!orderResponse.success) {
+      return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, null);
+    }
+
+    return Responses.successResponse(res, 'Order is cancelled', 200, null);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};

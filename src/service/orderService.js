@@ -533,6 +533,110 @@ const cancelFullOrder = async (orderId, reason) => {
   }
 };
 
+const cancelPartialOrder = async (orderId, products, reason) => {
+  try {
+    const order = await Order.findById(orderId).lean();
+    if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
+
+    const productIds = products.map((p) => p.id.toString());
+    const inProgressSet = new Set(
+      order.orderSkuList?.skuList?.filter((sku) => sku.status === 'IN_PROGRESS').map((sku) => sku.id.toString())
+    );
+
+    if (!products.every((p) => inProgressSet.has(p.id.toString()))) {
+      return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
+    }
+
+    const cancelPayload = {
+      MerchantCancellationNo: randomBytes(6).toString('hex'),
+      MerchantOrderNo: order.merchantOrderNo,
+      Lines: products.map((p) => ({
+        MerchantProductNo: p.merchantProductNo,
+        OrderLineId: p.id,
+        Quantity: p.quantity,
+      })),
+      Reason: reason,
+      ReasonCode: '0',
+      IsMerchantCreator: true,
+    };
+
+    const shipments = await Shipment.find({ orderId }).lean();
+
+    const cancelInChannelEngine = async () => {
+      try {
+        const res = await fetch(
+          `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cancelPayload),
+          }
+        );
+
+        if (!res.ok) {
+          const errText = await res.text();
+          console.warn('ChannelEngine cancel failed:', errText);
+        } else {
+          console.log('ChannelEngine cancellation sent successfully');
+        }
+      } catch (err) {
+        console.error('ChannelEngine API error (ignored):', err.message);
+      }
+    };
+
+    if (!shipments.length) {
+      if (BLOCKED_STATUSES[order.status]) {
+        return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
+      }
+      await cancelInChannelEngine();
+    } else {
+      // Map shipment -> SKU IDs
+      const shipmentMap = shipments.map((s) => ({
+        shipmentId: s._id,
+        airWaybillNo: s.airWaybillNo,
+        skuIds: (s.products || []).map((p) => p.orderLineId.toString()),
+        status: s.status.toUpperCase(),
+      }));
+
+      // Filter shipments to only cancel those containing requested SKUs
+      const shipmentsToCancel = shipmentMap.filter((s) => s.skuIds.some((id) => productIds.includes(id)));
+
+      const canCancel = shipmentsToCancel.every((s) => s.status === 'PENDING');
+      if (!canCancel) return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
+
+      // Cancel selected shipments
+      await Promise.all(
+        shipmentsToCancel.map(async (s) => {
+          await cancelAymakanShipment(s.airWaybillNo);
+          await Shipment.updateOne({ _id: s.shipmentId }, { status: 'CANCELED' });
+        })
+      );
+
+      await cancelInChannelEngine();
+    }
+
+    // Update only requested SKUs
+    await Order.updateOne(
+      { _id: orderId },
+      { $set: { 'orderSkuList.skuList.$[sku].status': ORDER_STATUS_MAP.CANCELED } },
+      { arrayFilters: [{ 'sku.id': { $in: productIds } }] }
+    );
+
+    // Reload order to update overall status if needed
+    const updatedOrder = await Order.findById(orderId).lean();
+    const allCanceled = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === ORDER_STATUS_MAP.CANCELED);
+    if (allCanceled && updatedOrder.status !== ORDER_STATUS_MAP.CANCELED) {
+      await Order.updateOne({ _id: orderId }, { $set: { status: ORDER_STATUS_MAP.CANCELED } });
+      updatedOrder.status = ORDER_STATUS_MAP.CANCELED;
+    }
+
+    return { success: true, data: updatedOrder };
+  } catch (error) {
+    console.error('cancelPartialOrder error:', error);
+    return { success: false, error: { message: error.message, stack: error.stack } };
+  }
+};
+
 export default {
   getAllOrders,
   getOrderById,
@@ -544,4 +648,5 @@ export default {
   acknowledgeOrder,
   backgroundAcknowledgementOrders,
   cancelFullOrder,
+  cancelPartialOrder,
 };
