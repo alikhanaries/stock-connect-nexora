@@ -540,7 +540,7 @@ export const ayMakanWebHookService = async (data) => {
           }))
         : [];
     // UPDATE SHIPMENT STATUS
-    console.log('shipmentStatus------', shipmentStatus);
+
     const updatedShipment = await Shipment.findOneAndUpdate(
       { _id: shipmentData._id },
       {
@@ -552,19 +552,33 @@ export const ayMakanWebHookService = async (data) => {
     // UPDATE ORDER STATUS
     const orderLineIdsToUpdate = shipmentData.products.map((p) => p.orderLineId);
 
+    // Step 1: Update the SKU statuses first
     await Order.findOneAndUpdate(
       { _id: shipmentData?.orderId },
       {
         $set: {
-          status: shipmentStatus?.toUpperCase(),
           'orderSkuList.skuList.$[sku].status': shipmentStatus?.toUpperCase(),
         },
       },
       {
         arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }],
-        new: false, // returns the document before update
+        new: false,
       }
     );
+
+    // Step 2: Fetch the updated order
+    const order = await Order.findById(shipmentData?.orderId).lean();
+
+    // Step 3: Check if all SKUs have the same target status
+    const allMatch = order.orderSkuList?.skuList?.every((sku) => sku.status === shipmentStatus.toUpperCase());
+
+    // Step 4: Update order status if all SKUs match
+    if (allMatch) {
+      await Order.findByIdAndUpdate(shipmentData?.orderId, {
+        $set: { status: shipmentStatus.toUpperCase() },
+      });
+    }
+
     return {
       success: true,
       message: `Shipment ${data.tracking_number} updated successfully (${data.status_label})`,
