@@ -175,6 +175,66 @@ export const buildReturnAggregationPipeline = () => {
   ];
 };
 
+export const addStatusManipulationStages = () => {
+  return [
+    {
+      $addFields: {
+        totalAcceptedQuantity: {
+          $sum: {
+            $map: {
+              input: '$products',
+              as: 'p',
+              in: { $ifNull: ['$$p.acceptedQuantity', 0] },
+            },
+          },
+        },
+        totalRejectedQuantity: {
+          $sum: {
+            $map: {
+              input: '$products',
+              as: 'p',
+              in: { $ifNull: ['$$p.rejectedQuantity', 0] },
+            },
+          },
+        },
+      },
+    },
+    {
+      $addFields: {
+        status: {
+          $switch: {
+            branches: [
+              {
+                case: {
+                  $and: [
+                    { $eq: ['$status', 'IN_PROGRESS'] },
+                    { $eq: ['$totalAcceptedQuantity', 0] },
+                    { $eq: ['$totalRejectedQuantity', 0] },
+                  ],
+                },
+                then: 'RETURN_REQUESTED',
+              },
+              {
+                case: {
+                  $and: [{ $in: ['$status', ['IN_PROGRESS', 'RECEIVED']] }, { $gt: ['$totalAcceptedQuantity', 0] }],
+                },
+                then: 'REQUEST_ACCEPTED',
+              },
+              {
+                case: {
+                  $and: [{ $in: ['$status', ['IN_PROGRESS', 'RECEIVED']] }, { $gt: ['$totalRejectedQuantity', 0] }],
+                },
+                then: 'REQUEST_REJECTED',
+              },
+            ],
+            default: '$status',
+          },
+        },
+      },
+    },
+  ];
+};
+
 export const formatReturnDetails = (aggregatedResult) => {
   if (!aggregatedResult) {
     return null;
@@ -329,5 +389,6 @@ export default {
   isNameOrEmailSearch,
   formatReturnWithOrderData,
   buildReturnAggregationPipeline,
+  addStatusManipulationStages,
   formatReturnDetails,
 };

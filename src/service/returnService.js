@@ -4,6 +4,7 @@ import {
   sanitizeReturnData,
   isNameOrEmailSearch,
   buildReturnAggregationPipeline,
+  addStatusManipulationStages,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
@@ -80,130 +81,112 @@ export const getReturnsFromDatabase = async (query = {}) => {
       dateTo,
       sortOrder = 'asc',
       sortBy = 'returnId',
+      page = 1,
+      size = 10,
     } = query;
 
-    const page = parseInt(query.page, 10) || 1;
-    const size = parseInt(query.size, 10) || 10;
-
-    const skip = (page - 1) * size;
+    const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
-
-    // Use the shared pipeline builder
-    const pipeline = buildReturnAggregationPipeline();
-
     const matchConditions = {};
 
-    if (status) {
-      matchConditions.status = { $regex: new RegExp(`^${status}$`, 'i') };
-      appliedFilters.status = status;
-    }
+    // ====== Filters ======
+    const addFilter = (key, value, transform = (v) => v) => {
+      if (value !== undefined && value !== null && value !== '') {
+        matchConditions[key] = transform(value);
+        appliedFilters[key] = value;
+      }
+    };
 
-    if (channelId) {
-      const channelIdNum = parseInt(channelId, 10);
-      matchConditions.channelId = channelIdNum;
-      appliedFilters.channelId = channelIdNum;
-    }
+    addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }));
+    addFilter('channelId', channelId, (v) => parseInt(v, 10));
+    addFilter('returnId', returnId);
+    addFilter('orderInfo.orderId', orderID);
 
-    if (returnId) {
-      matchConditions.returnId = returnId;
-      appliedFilters.returnId = returnId;
-    }
-
-    // OrderID filter
-    if (orderID) {
-      matchConditions['orderInfo.orderId'] = orderID;
-      appliedFilters.orderID = orderID;
-    }
-
-    // Search filter
+    // ====== Search Filter ======
     if (search) {
       const searchRegex = new RegExp(search, 'i');
-      const searchConditions = [];
+      const searchConditions = [
+        { returnId: { $regex: searchRegex } },
+        { 'orderInfo.orderId': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
+      ];
 
-      // Search by returnId
-      searchConditions.push({ returnId: { $regex: searchRegex } });
-
-      // Search by orderID
-      searchConditions.push({ 'orderInfo.orderId': { $regex: searchRegex } });
-
-      // Search by customer name and email
-      searchConditions.push({ 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } });
-      searchConditions.push({ 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } });
-      searchConditions.push({ 'orderInfo.orderCustomer.email': { $regex: searchRegex } });
-
-      // Handle full name search
+      // Handle full name searches
       const searchTerms = search.trim().split(/\s+/);
       if (searchTerms.length > 1) {
-        const [firstTerm, ...restTerms] = searchTerms;
-        const lastTerm = restTerms.join(' ');
+        const [firstTerm, ...rest] = searchTerms;
+        const lastTerm = rest.join(' ');
+        const firstRegex = new RegExp(firstTerm, 'i');
+        const lastRegex = new RegExp(lastTerm, 'i');
 
-        searchConditions.push({
-          $and: [
-            { 'orderInfo.orderCustomer.firstName': { $regex: new RegExp(firstTerm, 'i') } },
-            { 'orderInfo.orderCustomer.lastName': { $regex: new RegExp(lastTerm, 'i') } },
-          ],
-        });
-        searchConditions.push({
-          $and: [
-            { 'orderInfo.orderCustomer.lastName': { $regex: new RegExp(firstTerm, 'i') } },
-            { 'orderInfo.orderCustomer.firstName': { $regex: new RegExp(lastTerm, 'i') } },
-          ],
-        });
+        searchConditions.push(
+          {
+            $and: [
+              { 'orderInfo.orderCustomer.firstName': firstRegex },
+              { 'orderInfo.orderCustomer.lastName': lastRegex },
+            ],
+          },
+          {
+            $and: [
+              { 'orderInfo.orderCustomer.lastName': firstRegex },
+              { 'orderInfo.orderCustomer.firstName': lastRegex },
+            ],
+          }
+        );
       }
 
       matchConditions.$or = searchConditions;
       appliedFilters.search = search;
     }
 
-    // Date filter
+    // ====== Date Range Filter ======
     if (dateFrom || dateTo) {
       matchConditions.createdAt = {};
-
-      if (dateFrom) {
-        matchConditions.createdAt.$gte = new Date(dateFrom);
-        appliedFilters.dateFrom = dateFrom;
-      }
-      if (dateTo) {
-        matchConditions.createdAt.$lte = new Date(dateTo);
-        appliedFilters.dateTo = dateTo;
-      }
+      if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
+      appliedFilters.dateFrom = dateFrom;
+      appliedFilters.dateTo = dateTo;
     }
+
+    // ====== Build Aggregation Pipeline ======
+    const pipeline = buildReturnAggregationPipeline();
 
     if (Object.keys(matchConditions).length > 0) {
       pipeline.push({ $match: matchConditions });
     }
 
-    // Add formatting for list view
-    pipeline.push({
-      $addFields: {
-        orderID: '$orderInfo.orderId',
-        customer: {
-          $concat: [
-            { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
-            ' ',
-            { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
-          ],
-        },
-        email: '$orderInfo.orderCustomer.email',
-        phoneNumber: '$orderInfo.orderCustomer.phone',
-        orderTotalPrice: '$orderInfo.totalInclVat',
-      },
-    });
+    // Add status manipulation logic
+    pipeline.push(...addStatusManipulationStages());
 
-    pipeline.push({
-      $addFields: {
-        customer: {
-          $cond: {
-            if: { $eq: [{ $trim: { input: '$customer' } }, ''] },
-            then: null,
-            else: { $trim: { input: '$customer' } },
+    pipeline.push(
+      {
+        $addFields: {
+          orderID: '$orderInfo.orderId',
+          customer: {
+            $concat: [
+              { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
+              ' ',
+              { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
+            ],
           },
+          email: '$orderInfo.orderCustomer.email',
+          phoneNumber: '$orderInfo.orderCustomer.phone',
+          orderTotalPrice: '$orderInfo.totalInclVat',
         },
-        quantity: '$totalQuantity',
-        totalPrice: { $ifNull: ['$orderTotalPrice', '$totalPrice'] },
       },
-    });
+      {
+        $addFields: {
+          customer: {
+            $cond: [{ $eq: [{ $trim: { input: '$customer' } }, ''] }, null, { $trim: { input: '$customer' } }],
+          },
+          quantity: '$totalQuantity',
+          totalPrice: { $ifNull: ['$orderTotalPrice', '$totalPrice'] },
+        },
+      }
+    );
 
     if (search && isNameOrEmailSearch(search)) {
       pipeline.push({
@@ -213,29 +196,26 @@ export const getReturnsFromDatabase = async (query = {}) => {
       });
     }
 
-    // Create a separate pipeline for counting
-    const countPipeline = [...pipeline];
-    countPipeline.push({ $count: 'total' });
+    // ====== Count and Paginate ======
+    const countPipeline = [...pipeline, { $count: 'total' }];
 
-    pipeline.push({ $sort: { [sortBy]: sortDirection } });
-    pipeline.push({ $skip: skip });
-    pipeline.push({ $limit: size });
+    pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
     const [results, countResult] = await Promise.all([Return.aggregate(pipeline), Return.aggregate(countPipeline)]);
 
-    const totalReturns = countResult.length > 0 ? countResult[0].total : 0;
+    const totalReturns = countResult?.[0]?.total || 0;
 
-    const formattedReturns = results.map((returnItem) => ({
-      _id: returnItem._id,
-      orderID: returnItem.orderID || null,
-      quantity: returnItem.quantity || 0,
-      totalPrice: returnItem.totalPrice || null,
-      customer: returnItem.customer || null,
-      placedOn: returnItem.placedOn,
-      email: returnItem.email || null,
-      phoneNumber: returnItem.phoneNumber || null,
-      status: returnItem.status,
-      platform: returnItem.platform,
+    const formattedReturns = results.map((r) => ({
+      _id: r._id,
+      orderID: r.orderID || null,
+      quantity: r.quantity || 0,
+      totalPrice: r.totalPrice || null,
+      customer: r.customer || null,
+      placedOn: r.placedOn,
+      email: r.email || null,
+      phoneNumber: r.phoneNumber || null,
+      status: r.status,
+      platform: r.platform,
     }));
 
     return {
@@ -245,7 +225,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       appliedFilters,
     };
   } catch (err) {
-    console.error('Error fetching returns:', err.message);
+    console.error('Error fetching returns:', err);
     return { success: false, message: err.message };
   }
 };
@@ -432,6 +412,9 @@ export const getReturnById = async (id) => {
     pipeline.push({
       $match: { _id: returnExists._id },
     });
+
+    // Add the same status manipulation logic as in getReturnsFromDatabase
+    pipeline.push(...addStatusManipulationStages());
 
     const [aggregatedResult] = await Return.aggregate(pipeline);
 
