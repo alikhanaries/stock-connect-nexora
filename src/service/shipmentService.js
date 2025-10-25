@@ -10,11 +10,8 @@ import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { parseInvoiceData } from '#service/orderService.js';
+import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 
-const SHIPMENT_MERCHANT_INFO = {
-  NAME: 'Aymakan',
-  EMAIL: 'deliver@aymakan.com',
-};
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
     const {
@@ -297,7 +294,29 @@ export const createPartialShipmentService = async (shipmentData) => {
       return { success: false, message: 'No valid SKUs found in order for shipment.' };
     }
 
-    // Resolve delivery and collection
+    // Check if shipment already exists for any of the selected SKUs
+    const productLineIds = products.map((p) => p.orderLineId?.toString());
+    const existingShipments = await Shipment.find({
+      orderId: id,
+      status: { $ne: 'CANCELED' }, // only consider non-canceled shipments
+      'products.orderLineId': { $in: productLineIds },
+    }).lean();
+
+    if (existingShipments?.length > 0) {
+      const alreadyShippedIds = [
+        ...new Set(
+          existingShipments.flatMap((s) =>
+            s.products.filter((p) => productLineIds.includes(p.orderLineId?.toString())).map((p) => p.orderLineId)
+          )
+        ),
+      ];
+
+      return {
+        success: false,
+        message: `Shipment already created for products: ${alreadyShippedIds.join(', ')}`,
+      };
+    }
+
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
     const deliveryDetails = await saveDeliveryAddress(deliveryData);
@@ -345,13 +364,13 @@ export const createPartialShipmentService = async (shipmentData) => {
       airWaybillNo: trackingNumber,
       merchantShipmentNo,
       merchantOrderNo,
-      status: 'PENDING',
+      status: AYMAKAN_STATUS['AY-0001'],
       trackingInfo,
       products: validProducts,
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
-        name: SHIPMENT_MERCHANT_INFO.NAME,
-        email: SHIPMENT_MERCHANT_INFO.EMAIL,
+        name: AYMAKAN_INFO.NAME,
+        email: AYMAKAN_INFO.EMAIL,
       },
       pieces,
     });
@@ -490,16 +509,17 @@ export const ayMakanWebHookService = async (data) => {
     if (!shipmentData) {
       return { success: false, message: `Shipment not found for AWB: ${data.tracking_number}` };
     }
+    const statusCode = data.status; //AY-0002
 
-    const statusLabel = (data.status_label || '').trim().toLowerCase();
+    const shipmentStatus = AYMAKAN_STATUS[statusCode]?.status;
 
     // Duplicate check (case-insensitive)
-    if ((shipmentData.status || '').toLowerCase() === statusLabel) {
+    if ((shipmentData.status || '').toUpperCase() === shipmentStatus) {
       return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
     }
 
     // 1. When shipment is picked
-    if (statusLabel === 'picked') {
+    if (shipmentStatus === 'PICKED') {
       const payload = {
         merchantShipmentNo: shipmentData.merchantShipmentNo,
         merchantOrderNo: shipmentData.merchantOrderNo,
@@ -524,7 +544,7 @@ export const ayMakanWebHookService = async (data) => {
     }
 
     // 2. When shipment is delivered
-    if (statusLabel === 'delivered') {
+    if (shipmentStatus === 'DELIVERED') {
       try {
         await updateShipmentDeliveryStateChannelEngine('DELIVERED', data.date_time, shipmentData.merchantShipmentNo);
       } catch (err) {
@@ -546,10 +566,11 @@ export const ayMakanWebHookService = async (data) => {
           }))
         : [];
     // UPDATE SHIPMENT STATUS
+
     const updatedShipment = await Shipment.findOneAndUpdate(
       { _id: shipmentData._id },
       {
-        status: data.status_label?.toUpperCase(),
+        status: shipmentStatus?.toUpperCase(),
         trackingInfo,
       },
       { new: true }
@@ -557,19 +578,33 @@ export const ayMakanWebHookService = async (data) => {
     // UPDATE ORDER STATUS
     const orderLineIdsToUpdate = shipmentData.products.map((p) => p.orderLineId);
 
+    // Step 1: Update the SKU statuses first
     await Order.findOneAndUpdate(
       { _id: shipmentData?.orderId },
       {
         $set: {
-          status: data.status_label?.toUpperCase(),
-          'orderSkuList.skuList.$[sku].status': data.status_label?.toUpperCase(),
+          'orderSkuList.skuList.$[sku].status': shipmentStatus?.toUpperCase(),
         },
       },
       {
         arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }],
-        new: false, // returns the document before update
+        new: false,
       }
     );
+
+    // Step 2: Fetch the updated order
+    const order = await Order.findById(shipmentData?.orderId).lean();
+
+    // Step 3: Check if all SKUs have the same target status
+    const allMatch = order.orderSkuList?.skuList?.every((sku) => sku.status === shipmentStatus.toUpperCase());
+
+    // Step 4: Update order status if all SKUs match
+    if (allMatch) {
+      await Order.findByIdAndUpdate(shipmentData?.orderId, {
+        $set: { status: shipmentStatus.toUpperCase() },
+      });
+    }
+
     return {
       success: true,
       message: `Shipment ${data.tracking_number} updated successfully (${data.status_label})`,
@@ -703,4 +738,16 @@ export const getSingleShipmentService = async (id) => {
   }
 
   return shipment[0];
+};
+
+export default {
+  ayMakanWebHookService,
+  getAllShipmentsService,
+  createPartialShipmentService,
+  saveDeliveryAddress,
+  getPickUpAddress,
+  updateShipmentDeliveryStateChannelEngine,
+  createShipmentWithChannelEngine,
+  createShipmentWithAymakan,
+  getSingleShipmentService,
 };
