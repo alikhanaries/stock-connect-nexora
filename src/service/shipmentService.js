@@ -63,7 +63,6 @@ export const createShipmentWithAymakan = async (shipmentData) => {
 
     // --- Validate response ---
     if (!result?.success || !result?.shipping?.tracking_number) {
-      console.error('Aymakan API payload:', payload);
       throw new Error('Aymakan shipment creation failed');
     }
 
