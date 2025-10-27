@@ -693,16 +693,10 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
     const updatedOrder = await Order.findById(orderId).lean();
 
     const allCanceled = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === ORDER_STATUS_MAP.CANCELED);
-    const anyPartial = updatedOrder.orderSkuList.skuList.some(
-      (sku) => sku.status === ORDER_STATUS_MAP.PARTIALLY_CANCELED
-    );
 
     if (allCanceled && updatedOrder.status !== ORDER_STATUS_MAP.CANCELED) {
       await Order.updateOne({ _id: orderId }, { $set: { status: ORDER_STATUS_MAP.CANCELED } });
       updatedOrder.status = ORDER_STATUS_MAP.CANCELED;
-    } else if (anyPartial) {
-      await Order.updateOne({ _id: orderId }, { $set: { status: ORDER_STATUS_MAP.PARTIALLY_CANCELED } });
-      updatedOrder.status = ORDER_STATUS_MAP.PARTIALLY_CANCELED;
     }
 
     return { success: true, data: updatedOrder };
