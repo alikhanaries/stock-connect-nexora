@@ -129,15 +129,18 @@ export const getOrderById = async (id) => {
     // Gather all merchantProductNos for image lookup
     const allMerchantNos = allOrderSkus.map((sku) => sku.merchantProductNo);
 
-    //  Fetch product images in ONE query
+    //  Fetch product images and hsCodeSA in ONE query
     const productsMap = await Product.find(
       { productSkuCode: { $in: allMerchantNos } },
-      { productSkuCode: 1, images: 1 }
+      { productSkuCode: 1, images: 1, hsCodeSA: 1 }
     )
       .lean()
       .then((products) =>
         products.reduce((acc, p) => {
-          acc[p.productSkuCode] = p.images?.[0] || null; // first image
+          acc[p.productSkuCode] = {
+            image: p.images?.[0] || null,
+            hsCode: p.hsCodeSA || null,
+          };
           return acc;
         }, {})
       );
@@ -158,7 +161,7 @@ export const getOrderById = async (id) => {
           merchantProductNo: product.merchantProductNo,
           channelProductNo: product?.channelProductNo,
           name: product?.description,
-          imageUrl: productsMap[product.merchantProductNo] || null,
+          imageUrl: productsMap[product.merchantProductNo]?.image || null,
           unitPriceInclVat: product?.unitPriceInclVat,
           unitPriceExclVat: product?.unitPriceExclVat,
           unitVat: product?.unitVat,
@@ -167,7 +170,7 @@ export const getOrderById = async (id) => {
           lineVat: product?.lineVat,
           quantity: product.quantity,
           status: product?.status,
-          hsnCode: product?.hsnCode || null,
+          hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
         });
         return; //  Don't include cancelled items in unshipped
       }
@@ -179,7 +182,7 @@ export const getOrderById = async (id) => {
           merchantProductNo: product.merchantProductNo,
           channelProductNo: product?.channelProductNo,
           name: product?.description,
-          imageUrl: productsMap[product.merchantProductNo] || null,
+          imageUrl: productsMap[product.merchantProductNo]?.image || null,
           unitPriceInclVat: product?.unitPriceInclVat,
           unitPriceExclVat: product?.unitPriceExclVat,
           unitVat: product?.unitVat,
@@ -188,7 +191,7 @@ export const getOrderById = async (id) => {
           lineVat: product?.lineVat,
           quantity: notShippedQty,
           status: product?.status,
-          hsnCode: product?.hsnCode || null,
+          hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
         });
       }
     });
@@ -207,7 +210,7 @@ export const getOrderById = async (id) => {
             merchantProductNo: shipmentSku.merchantProductNo,
             channelProductNo: orderSku?.channelProductNo,
             name: orderSku?.description,
-            imageUrl: productsMap[shipmentSku.merchantProductNo] || null,
+            imageUrl: productsMap[shipmentSku.merchantProductNo]?.image || null,
             quantity: shipmentSku.quantity,
             unitPriceInclVat: orderSku?.unitPriceInclVat,
             unitPriceExclVat: orderSku?.unitPriceExclVat,
@@ -217,7 +220,7 @@ export const getOrderById = async (id) => {
             lineVat: orderSku?.lineVat,
             airWaybillNo: shipment.airWaybillNo,
             status: orderSku?.status,
-            hsnCode: orderSku?.hsnCode || null,
+            hsCode: productsMap[shipmentSku.merchantProductNo]?.hsCode || null,
           };
         }) || [],
       shipmentMode: shipment.shipmentMode || 'AYMAKAN',
