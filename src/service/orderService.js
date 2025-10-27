@@ -156,7 +156,7 @@ export const getOrderById = async (id) => {
       const status = product.status?.toUpperCase() || '';
 
       // Skip cancelled items from unshipped and collect separately
-      if (status === 'CANCELED' || status === 'PARTIALLY_CANCELED') {
+      if (status === 'CANCELED' || status === 'PARTIALLY_CANCELED' || status === 'IN_COMBI') {
         cancelledItems.push({
           id: product?.id,
           merchantProductNo: product.merchantProductNo,
@@ -169,8 +169,12 @@ export const getOrderById = async (id) => {
           lineTotalInclVat: product?.lineTotalInclVat,
           lineTotalExclVat: product?.lineTotalExclVat,
           lineVat: product?.lineVat,
-          quantity: status === 'PARTIALLY_CANCELED' ? product?.cancellationRequestedQuantity : product.quantity,
-          status: product?.status,
+          quantity:
+            status === 'PARTIALLY_CANCELED' || product?.status === 'IN_COMBI'
+              ? product?.cancellationRequestedQuantity
+              : product.quantity,
+          status:
+            product?.status === 'PARTIALLY_CANCELED' || product?.status === 'IN_COMBI' ? 'CANCELED' : product?.status,
           hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
         });
         if (status === 'CANCELED') {
