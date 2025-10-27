@@ -157,5 +157,7 @@
   "RESET_TOKEN_GENERATION_SUCCESS": "重置令牌生成成功",
   "MISSING_INPUTS": "缺少输入",
   "INVALID_OR_EXPIRED_TOKEN": "令牌无效或已过期",
-  "PASSWORD_RESET_SUCCESS": "密码重置成功"
+  "PASSWORD_RESET_SUCCESS": "密码重置成功",
+  "INVALID_USER_IDS_TO_DELETE": "提供的用户列表中没有与该卖家关联的用户。",
+  "NO_VALID_USERS_FOUND": "请提供有效的用户。"
 }

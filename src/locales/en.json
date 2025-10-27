@@ -153,5 +153,7 @@
   "RESET_TOKEN_GENERATION_SUCCESS": "Reset-token generation successful",
   "MISSING_INPUTS": "Missing inputs",
   "INVALID_OR_EXPIRED_TOKEN": "Invalid or expired token",
-  "PASSWORD_RESET_SUCCESS": "Password reset successful"
+  "PASSWORD_RESET_SUCCESS": "Password reset successful",
+  "INVALID_USER_IDS_TO_DELETE": "No users in the provided list are connected to this seller.",
+  "NO_VALID_USERS_FOUND": "Please provide valid users"
 }
