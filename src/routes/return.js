@@ -16,6 +16,7 @@ import {
   validateReturnAck,
   updateReturnValidator,
   getReturnByIdValidator,
+  getReturnStatsValidator,
 } from '#validations/return.js';
 
 const router = express.Router();
@@ -23,7 +24,7 @@ const router = express.Router();
 // Get returns
 router.get('/', getAllReturnsValidator, checkLanguage, authMiddleware, getAllReturns);
 // Get return statistics grouped by status
-router.get('/stats', checkLanguage, authMiddleware, getReturnStats);
+router.get('/stats', getReturnStatsValidator, checkLanguage, authMiddleware, getReturnStats);
 // Sync returns from ChannelEngine to database
 router.get('/sync', syncReturnsValidator, checkLanguage, authMiddleware, syncReturns);
 // Get a specific return by ID

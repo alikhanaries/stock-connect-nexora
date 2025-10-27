@@ -80,11 +80,18 @@ export const createMerchantReturn = async (req, res) => {
 // Gets return stats grouped by status.
 export const getReturnStats = async (req, res) => {
   try {
-    const stats = await returnService.getReturnStats();
-    if (!stats) {
+    const { sellerId } = req.query;
+    const result = await returnService.getReturnStats(sellerId);
+    if (!result || !result.stats) {
       return Responses.failResponse(res, 'Failed to get return stats', 404);
     }
-    return Responses.successResponse(res, 'Return stats fetched successfully', 200, stats);
+
+    const responseData = {
+      ...result.stats,
+      appliedFilters: result.appliedFilters || {},
+    };
+
+    return Responses.successResponse(res, 'Return stats fetched successfully', 200, responseData);
   } catch (error) {
     console.error('Controller Error: getReturnStats:', error.message);
     errorLog(error);
@@ -155,7 +162,6 @@ export const getReturnById = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
-
 
 export default {
   getAllReturns,
