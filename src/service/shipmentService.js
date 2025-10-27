@@ -280,6 +280,7 @@ export const createPartialShipmentService = async (shipmentData) => {
         sku: item?.merchantProductNo,
         qty: Number(item?.quantity || 0),
         price: Number(item?.lineTotalInclVat || 0),
+        hs_code: item.hsCode || null,
       }));
     }
 

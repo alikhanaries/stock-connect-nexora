@@ -22,6 +22,8 @@ export const createShipmentValidator = validate(async (req) => {
           merchantProductNo: z.string().nonempty({ message: 'merchantProductNo is required' }),
           orderLineId: z.number().min(1, { message: 'orderLineId must be at least 1' }),
           quantity: z.number().min(1, { message: 'quantity must be at least 1' }),
+          hsCode: z.string().nonempty({ message: 'hsCode is required' }),
+          // hsCode: z.string().optional(),
         })
       )
       .nonempty({ message: 'products must contain at least one item' }),
