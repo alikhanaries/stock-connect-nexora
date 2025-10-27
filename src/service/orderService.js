@@ -581,7 +581,7 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
     const order = await Order.findById(orderId).lean();
     if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
 
-    const productIds = products.map((p) => p.id.toString());
+    const productIds = products.map((p) => p.orderLineId.toString());
 
     // Collect shipped (PICKED or DELIVERED) product IDs
     const shippedProducts = new Set(
@@ -591,7 +591,7 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
     );
 
     // Block cancel if any requested SKU is shipped
-    const hasShipped = products.some((p) => shippedProducts.has(p.id.toString()));
+    const hasShipped = products.some((p) => shippedProducts.has(p.orderLineId.toString()));
     if (hasShipped) {
       return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
     }
@@ -602,7 +602,7 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
       MerchantOrderNo: order.merchantOrderNo,
       Lines: products.map((p) => ({
         MerchantProductNo: p.merchantProductNo,
-        OrderLineId: p.id,
+        OrderLineId: p.orderLineId,
         Quantity: p.quantity,
       })),
       Reason: reason,
@@ -675,7 +675,7 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
     const orderBeforeUpdate = await Order.findById(orderId).lean();
 
     const updatedSkuList = orderBeforeUpdate.orderSkuList.skuList.map((sku) => {
-      const cancelItem = products.find((p) => p.id.toString() === sku.id.toString());
+      const cancelItem = products.find((p) => p.orderLineId.toString() === sku.id.toString());
       if (!cancelItem) return sku;
 
       const cancelQty = cancelItem.quantity;
