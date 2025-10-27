@@ -35,7 +35,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
     }
 
     // --- Helper to safely build delivery/collection info ---
-    const buildPartyPayload = (data = {}, prefix) => ({
+    const customerInfo = (data = {}, prefix) => ({
       [`${prefix}_name`]: data?.name || '',
       [`${prefix}_email`]: data?.email || '',
       [`${prefix}_city`]: data?.city || '',
@@ -51,8 +51,8 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       cod_amount: Number(codAmount) || 0,
       currency,
       pieces: Number(pieces) || 0,
-      ...buildPartyPayload(deliveryData, 'delivery'),
-      ...buildPartyPayload(collectionData, 'collection'),
+      ...customerInfo(deliveryData, 'delivery'),
+      ...customerInfo(collectionData, 'collection'),
     };
 
     if (taxData) payload['international_metadata'] = taxData;
@@ -270,16 +270,16 @@ export const createPartialShipmentService = async (shipmentData) => {
     const invoiceData = await parseInvoiceData(id);
     if (invoiceData?.success) {
       taxData = {
-        tax_identification_number: invoiceData.invoiceData?.taxIdentificationNumber || null,
-        invoice_number: invoiceData.invoiceData?.invoiceNumber || null,
-        invoice_date: invoiceData.invoiceData?.invoiceDate || null,
+        tax_identification_number: invoiceData.invoiceData?.taxIdentificationNumber || '',
+        invoice_number: invoiceData.invoiceData?.invoiceNumber || '',
+        invoice_date: invoiceData.invoiceData?.invoiceDate || '',
       };
 
       productsData = products.map((item) => ({
         sku: item?.merchantProductNo,
         qty: Number(item?.quantity || 0),
         price: Number(item?.lineTotalInclVat || 0),
-        hs_code: item.hsCode || null,
+        hs_code: item.hsCode || '',
       }));
     }
 
@@ -345,13 +345,13 @@ export const createPartialShipmentService = async (shipmentData) => {
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo =
       aymakanTrackingResult?.trackingInfo?.map((info) => ({
-        statusCode: info?.status_code || null,
-        description: info?.description || null,
-        descriptionAr: info?.description_ar || null,
-        reasonCode: info?.reason_code || null,
-        reasonEn: info?.reason_en || null,
-        reasonAr: info?.reason_ar || null,
-        createdAt: info?.created_at ? new Date(info.created_at) : null,
+        statusCode: info?.status_code || '',
+        description: info?.description || '',
+        descriptionAr: info?.description_ar || '',
+        reasonCode: info?.reason_code || '',
+        reasonEn: info?.reason_en || '',
+        reasonAr: info?.reason_ar || '',
+        createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
       })) || [];
 
     // Prepare shipment document
