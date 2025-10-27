@@ -173,8 +173,7 @@ export const getOrderById = async (id) => {
             status === 'PARTIALLY_CANCELED' || product?.status === 'IN_COMBI'
               ? product?.cancellationRequestedQuantity
               : product.quantity,
-          status:
-            product?.status === 'PARTIALLY_CANCELED' || product?.status === 'IN_COMBI' ? 'CANCELED' : product?.status,
+          status: product?.status === 'IN_COMBI' ? 'PARTIALLY_CANCELED' : product?.status,
           hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
         });
         if (status === 'CANCELED') {
@@ -680,23 +679,12 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
       if (!cancelItem) return sku;
 
       const cancelQty = cancelItem.quantity;
-      const totalQty = sku.quantity || 0;
 
-      if (cancelQty >= totalQty) {
-        // Full cancel
-        return {
-          ...sku,
-          status: ORDER_STATUS_MAP.CANCELED,
-          cancellationRequestedQuantity: cancelQty,
-        };
-      } else {
-        // Partial cancel
-        return {
-          ...sku,
-          status: ORDER_STATUS_MAP.PARTIALLY_CANCELED,
-          cancellationRequestedQuantity: cancelQty,
-        };
-      }
+      // Partial cancel
+      return {
+        ...sku,
+        cancellationRequestedQuantity: cancelQty,
+      };
     });
 
     await Order.updateOne({ _id: orderId }, { $set: { 'orderSkuList.skuList': updatedSkuList } });

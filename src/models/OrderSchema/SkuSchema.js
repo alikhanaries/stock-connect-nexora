@@ -18,7 +18,7 @@ const SkuSchema = new mongoose.Schema(
         'CLOSED',
         'IN_COMBI',
         'DELIVERED',
-        'PARTIALY_CANCELED',
+        'PARTIALLY_CANCELED',
         'MANCO',
       ],
       default: 'NEW',
