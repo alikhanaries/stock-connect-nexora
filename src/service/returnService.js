@@ -1,5 +1,6 @@
 import { config } from '#config/config.js';
 import Return from '#models/Return.js';
+import mongoose from 'mongoose';
 import {
   sanitizeReturnData,
   isNameOrEmailSearch,
@@ -76,6 +77,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       channelId,
       returnId,
       orderID,
+      sellerId,
       search,
       dateFrom,
       dateTo,
@@ -102,6 +104,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
     addFilter('channelId', channelId, (v) => parseInt(v, 10));
     addFilter('returnId', returnId);
     addFilter('orderInfo.orderId', orderID);
+    addFilter('orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
 
     // ====== Search Filter ======
     if (search) {
