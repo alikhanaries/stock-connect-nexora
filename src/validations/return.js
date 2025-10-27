@@ -51,6 +51,19 @@ export const getAllReturnsValidator = validate(async (req) => {
         message: 'orderID cannot be empty',
       }),
 
+    sellerId: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.trim().length > 0, {
+        message: 'sellerId cannot be empty',
+      })
+      .refine((val) => !val || val.length === 24, {
+        message: 'sellerId must be 24 characters long',
+      })
+      .refine((val) => !val || /^[0-9a-fA-F]+$/.test(val), {
+        message: 'sellerId must be a valid hex string',
+      }),
+
     search: z
       .string()
       .optional()
