@@ -479,7 +479,7 @@ const cancelFullOrder = async (orderId, reason) => {
     const lines = order.orderSkuList.skuList.map((item) => ({
       MerchantProductNo: item.merchantProductNo,
       OrderLineId: item.id,
-      Quantity: item.quantity,
+      Quantity: parseInt(item.quantity) - parseInt(item.cancellationRequestedQuantity),
     }));
 
     const cancelPayload = {
@@ -650,13 +650,13 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
         skuIds: (s.products || []).map((p) => p.orderLineId.toString()),
         status: s.status.toUpperCase(),
       }));
-      console.log('shipmentMap', shipmentMap);
+
       // Shipments that contain canceled SKUs
       const shipmentsToCancel = shipmentMap.filter((s) => s.skuIds.some((id) => productIds.includes(id)));
-      console.log('shipmentsToCancel', shipmentsToCancel);
+
       // Cancel only pending shipments
       const cancelableShipments = shipmentsToCancel.filter((s) => s.status === 'SHIPMENT_CREATED');
-      console.log('cancelableShipments', cancelableShipments);
+
       if (!cancelableShipments.length && shipmentsToCancel?.length) {
         return { success: false, error: { message: 'No pending shipments can be canceled', status: 409 } };
       }
@@ -683,6 +683,7 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
       // Partial cancel
       return {
         ...sku,
+        status: ORDER_STATUS_MAP.PARTIALLY_CANCELED,
         cancellationRequestedQuantity: cancelQty,
       };
     });
