@@ -152,7 +152,7 @@ export const getOrderById = async (id) => {
     allOrderSkus.forEach((product) => {
       const shippedQty = shippedMap[product.merchantProductNo] || 0;
 
-      const notShippedQty = product.quantity - shippedQty;
+      const notShippedQty = product.quantity - product.cancellationRequestedQuantity - shippedQty;
       const status = product.status?.toUpperCase() || '';
 
       // Skip cancelled items from unshipped and collect separately
