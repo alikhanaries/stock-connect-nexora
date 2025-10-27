@@ -142,35 +142,17 @@ export const getOrderById = async (id) => {
         }, {})
       );
 
-    //  Build unshipped items
+    //  Build item groups
     const unshippedItems = [];
     const cancelledItems = [];
 
     allOrderSkus.forEach((product) => {
       const shippedQty = shippedMap[product.merchantProductNo] || 0;
       const notShippedQty = product.quantity - shippedQty;
+      const status = product.status?.toUpperCase() || '';
 
-      if (notShippedQty > 0) {
-        unshippedItems.push({
-          id: product?.id,
-          merchantProductNo: product.merchantProductNo,
-          channelProductNo: product?.channelProductNo,
-          name: product?.description,
-          imageUrl: productsMap[product.merchantProductNo] || null, // ✅ from Product
-          unitPriceInclVat: product?.unitPriceInclVat,
-          unitPriceExclVat: product?.unitPriceExclVat,
-          unitVat: product?.unitVat,
-          lineTotalInclVat: product?.lineTotalInclVat,
-          lineTotalExclVat: product?.lineTotalExclVat,
-          lineVat: product?.lineVat,
-          quantity: notShippedQty,
-          status: product?.status,
-          hsnCode: product?.hsnCode || null,
-        });
-      }
-
-      //  Cancelled items
-      if (product.status?.toUpperCase() === 'CANCELED') {
+      // Skip cancelled items from unshipped and collect separately
+      if (status === 'CANCELED') {
         cancelledItems.push({
           id: product?.id,
           merchantProductNo: product.merchantProductNo,
@@ -184,6 +166,27 @@ export const getOrderById = async (id) => {
           lineTotalExclVat: product?.lineTotalExclVat,
           lineVat: product?.lineVat,
           quantity: product.quantity,
+          status: product?.status,
+          hsnCode: product?.hsnCode || null,
+        });
+        return; //  Don't include cancelled items in unshipped
+      }
+
+      //  Only include non-cancelled unshipped items
+      if (notShippedQty > 0) {
+        unshippedItems.push({
+          id: product?.id,
+          merchantProductNo: product.merchantProductNo,
+          channelProductNo: product?.channelProductNo,
+          name: product?.description,
+          imageUrl: productsMap[product.merchantProductNo] || null,
+          unitPriceInclVat: product?.unitPriceInclVat,
+          unitPriceExclVat: product?.unitPriceExclVat,
+          unitVat: product?.unitVat,
+          lineTotalInclVat: product?.lineTotalInclVat,
+          lineTotalExclVat: product?.lineTotalExclVat,
+          lineVat: product?.lineVat,
+          quantity: notShippedQty,
           status: product?.status,
           hsnCode: product?.hsnCode || null,
         });
@@ -204,7 +207,7 @@ export const getOrderById = async (id) => {
             merchantProductNo: shipmentSku.merchantProductNo,
             channelProductNo: orderSku?.channelProductNo,
             name: orderSku?.description,
-            imageUrl: productsMap[shipmentSku.merchantProductNo] || null, // ✅ from Product
+            imageUrl: productsMap[shipmentSku.merchantProductNo] || null,
             quantity: shipmentSku.quantity,
             unitPriceInclVat: orderSku?.unitPriceInclVat,
             unitPriceExclVat: orderSku?.unitPriceExclVat,
@@ -233,7 +236,6 @@ export const getOrderById = async (id) => {
     console.log(err);
   }
 };
-
 const getOrderStats = async (sellerId) => {
   try {
     const statuses = Object.keys(ORDER_STATUS_MAP);
@@ -578,8 +580,6 @@ const cancelPartialOrder = async (orderId, products, reason) => {
         ?.filter((sku) => ['PICKED', 'DELIVERED'].includes(sku.status))
         .map((sku) => sku.id.toString())
     );
-
-    console.log('shippedProducts', shippedProducts);
 
     // Allow cancel if no shipped products found
     if (shippedProducts.size > 0) {
