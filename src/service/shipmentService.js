@@ -9,13 +9,24 @@ import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { parseInvoiceData } from '#helpers/ParseInvoice.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, declaredValue, deliveryData, collectionData, pieces = 0 } = shipmentData;
+    const {
+      userId,
+      declaredValue = 0,
+      codAmount = 0,
+      deliveryData,
+      collectionData,
+      pieces = 0,
+      taxData,
+      productsData,
+      currency = 'SAR',
+    } = shipmentData;
 
-    // --- 1Resolve requested_by from userId ---
+    // --- Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
       const user = await User.findById(userId).lean();
@@ -23,8 +34,8 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       requestedBy = user.firstName || user.username || 'Unknown';
     }
 
-    // ---  Helper to safely build delivery/collection info ---
-    const buildPartyPayload = (data = {}, prefix) => ({
+    // --- Helper to safely build delivery/collection info ---
+    const customerInfo = (data = {}, prefix) => ({
       [`${prefix}_name`]: data?.name || '',
       [`${prefix}_email`]: data?.email || '',
       [`${prefix}_city`]: data?.city || '',
@@ -33,21 +44,24 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       [`${prefix}_phone`]: data?.phone || '',
     });
 
-    // ---  Build final payload for Aymakan ---
+    // --- Build payload for Aymakan ---
     const payload = {
       requested_by: requestedBy,
-      declared_value: declaredValue || 0,
-      cod_amount: shipmentData.codAmount || 0,
-      currency: shipmentData.currency || 'SAR',
-      ...buildPartyPayload(deliveryData, 'delivery'),
-      ...buildPartyPayload(collectionData, 'collection'),
-      pieces,
+      declared_value: Number(declaredValue) || 0,
+      cod_amount: Number(codAmount) || 0,
+      currency,
+      pieces: Number(pieces) || 0,
+      ...customerInfo(deliveryData, 'delivery'),
+      ...customerInfo(collectionData, 'collection'),
     };
 
-    // ---  Call Aymakan API ---
+    if (taxData) payload['international_metadata'] = taxData;
+    if (productsData && productsData.length > 0) payload['products'] = productsData;
+
+    // --- Call Aymakan API ---
     const result = await createAymakanShipment(payload);
 
-    // ---  Validate Aymakan response ---
+    // --- Validate response ---
     if (!result?.success || !result?.shipping?.tracking_number) {
       throw new Error('Aymakan shipment creation failed');
     }
@@ -234,7 +248,7 @@ export const createPartialShipmentService = async (shipmentData) => {
   try {
     const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
 
-    // Collect missing fields
+    // Collect missing required fields
     const missingFields = [];
     if (!id) missingFields.push('id');
     if (!sellerId) missingFields.push('sellerId');
@@ -242,24 +256,42 @@ export const createPartialShipmentService = async (shipmentData) => {
     if (!pickUpId) missingFields.push('pickUpId');
     if (!products || products.length === 0) missingFields.push('products');
 
-    // Throw error if any fields are missing
     if (missingFields.length > 0) {
-      throw new Error(`Missing required shipment fields: ${missingFields.join(', ')}`);
+      return { success: false, message: `Missing required shipment fields: ${missingFields.join(', ')}` };
     }
 
-    // Fetch order as a Mongoose document (no .lean()
-
+    // Fetch order as a Mongoose document
     const order = await Order.findById(id);
+    if (!order) return { success: false, message: 'Order not found.' };
 
-    if (!order) {
-      return { success: false, message: 'Order not found.' };
+    // Parse invoice data
+    let taxData = null;
+    let productsData = null;
+    const invoiceData = await parseInvoiceData(id);
+    if (invoiceData?.success) {
+      taxData = {
+        tax_identification_number: invoiceData.invoiceData?.taxIdentificationNumber || '',
+        invoice_number: invoiceData.invoiceData?.invoiceNumber || '',
+        invoice_date: invoiceData.invoiceData?.invoiceDate || '',
+      };
+
+      productsData = products.map((item) => ({
+        sku: item?.merchantProductNo,
+        qty: Number(item?.quantity || 0),
+        price: Number(item?.lineTotalInclVat || 0),
+        hs_code: item.hsCode || '',
+      }));
     }
 
     const { orderSkuList, merchantOrderNo, orderId } = order;
 
-    // Validate SKU list
     if (!orderSkuList?.skuList || orderSkuList.skuList.length === 0) {
       return { success: false, message: 'Order has empty line items.' };
+    }
+    // Filter products to valid SKUs
+    const validProducts = products.filter((product) => orderSkuList.skuList.some((s) => s.id === product.orderLineId));
+    if (validProducts.length === 0) {
+      return { success: false, message: 'No valid SKUs found in order for shipment.' };
     }
 
     // Check if shipment already exists for any of the selected SKUs
@@ -285,7 +317,6 @@ export const createPartialShipmentService = async (shipmentData) => {
       };
     }
 
-    // Resolve or create delivery & collection
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
     const deliveryDetails = await saveDeliveryAddress(deliveryData);
@@ -299,6 +330,8 @@ export const createPartialShipmentService = async (shipmentData) => {
       deliveryData,
       collectionData,
       pieces,
+      taxData,
+      productsData,
     });
 
     if (!aymakanResult?.success) {
@@ -306,20 +339,19 @@ export const createPartialShipmentService = async (shipmentData) => {
     }
 
     const trackingNumber = aymakanResult.shipping.tracking_number;
-
-    const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
+    const merchantShipmentNo = `MS-${orderId}-${new mongoose.Types.ObjectId().toString()}`;
 
     // Track shipment for status info
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo =
       aymakanTrackingResult?.trackingInfo?.map((info) => ({
-        statusCode: info.status_code,
-        description: info.description,
-        descriptionAr: info.description_ar,
-        reasonCode: info.reason_code,
-        reasonEn: info.reason_en,
-        reasonAr: info.reason_ar,
-        createdAt: info.created_at,
+        statusCode: info?.status_code || '',
+        description: info?.description || '',
+        descriptionAr: info?.description_ar || '',
+        reasonCode: info?.reason_code || '',
+        reasonEn: info?.reason_en || '',
+        reasonAr: info?.reason_ar || '',
+        createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
       })) || [];
 
     // Prepare shipment document
@@ -334,10 +366,8 @@ export const createPartialShipmentService = async (shipmentData) => {
       merchantOrderNo,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
-      products,
-      extraData: {
-        aymakan: aymakanResult,
-      },
+      products: validProducts,
+      extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
         email: AYMAKAN_INFO.EMAIL,
@@ -345,25 +375,21 @@ export const createPartialShipmentService = async (shipmentData) => {
       pieces,
     });
 
-    // Save shipment
     await shipmentDocument.save();
 
-    // Update all matching SKUs in order
-    for (const product of products) {
+    // Atomic update of SKUs in order
+    validProducts.forEach((product) => {
       const sku = order.orderSkuList.skuList.find((s) => s.id === product.orderLineId);
-      if (sku) {
-        sku.airWaybillNo = trackingNumber;
-      }
-    }
-    if (!order?.sellerId) {
-      order['sellerId'] = sellerId;
-    }
+      if (sku) sku.airWaybillNo = trackingNumber;
+    });
+
+    if (!order?.sellerId) order.sellerId = sellerId;
     await order.save();
 
-    return { success: true, shipmentId: shipmentDocument._id };
+    return { success: true, shipmentId: shipmentDocument._id, trackingNumber };
   } catch (error) {
     console.error('Error in createPartialShipmentService:', error);
-    throw error;
+    return { success: false, message: error.message || 'Internal server error' };
   }
 };
 
