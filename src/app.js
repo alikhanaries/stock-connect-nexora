@@ -3,6 +3,7 @@ import cors from 'cors';
 import { corsOptions } from './config/cors.js';
 import apiRoutes from './routes/api.js';
 import nebimApiRoutes from './integrations/erp/nebim/routes/api.js';
+import gurmanApiRoutes from './integrations/erp/gurman/routes/api.js';
 
 const app = express();
 
@@ -16,6 +17,8 @@ app.get('/', (req, res) => {
 
 app.use('/api', apiRoutes);
 app.use('/api/erp/nebim', nebimApiRoutes);
+app.use('/api/erp/gurman', gurmanApiRoutes);
+
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
