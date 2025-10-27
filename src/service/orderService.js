@@ -520,7 +520,8 @@ const cancelFullOrder = async (orderId, reason) => {
     }
 
     // Case B: Some shipments exist
-    const shippedShipment = shipments.find((s) => s.status === 'SHIPPED');
+    const shippedShipment = shipments.find((s) => ['PICKED', 'DELIVERED'].includes(s.status));
+
     if (shippedShipment) {
       return { success: false, error: { message: 'Cannot cancel shipped order', status: 400 } };
     }
@@ -571,9 +572,11 @@ const cancelPartialOrder = async (orderId, products, reason) => {
 
     const productIds = products.map((p) => p.id.toString());
 
-    // Collect all shipped product IDs
+    // Collect all shipped (PICKED or DELIVERED) product IDs
     const shippedProducts = new Set(
-      order.orderSkuList?.skuList?.filter((sku) => sku.status === 'SHIPPED').map((sku) => sku.id.toString())
+      order.orderSkuList?.skuList
+        ?.filter((sku) => ['PICKED', 'DELIVERED'].includes(sku.status))
+        .map((sku) => sku.id.toString())
     );
 
     console.log('shippedProducts', shippedProducts);
