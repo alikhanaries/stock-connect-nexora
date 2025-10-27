@@ -572,7 +572,7 @@ const cancelPartialOrder = async (orderId, products, reason) => {
     const order = await Order.findById(orderId).lean();
     if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
 
-    const productIds = products.map((p) => p.id.toString());
+    const productIds = products.map((p) => p.orderLineId.toString());
 
     // Collect all shipped (PICKED or DELIVERED) product IDs
     const shippedProducts = new Set(
@@ -584,7 +584,7 @@ const cancelPartialOrder = async (orderId, products, reason) => {
     // Allow cancel if no shipped products found
     if (shippedProducts.size > 0) {
       // Only block cancel if any of the requested products are shipped
-      const hasShipped = products.some((p) => shippedProducts.has(p.id.toString()));
+      const hasShipped = products.some((p) => shippedProducts.has(p.orderLineId.toString()));
       if (hasShipped) {
         return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
       }
