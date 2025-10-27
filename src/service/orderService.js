@@ -641,21 +641,21 @@ const cancelPartialOrder = async (orderId, products, reason) => {
 
 export const parseInvoiceData = async (orderId) => {
   try {
-    // 1️⃣ Fetch order
+    // 1️ Fetch order
     const orderData = await Order.findOne({ _id: orderId }, { merchantOrderNo: 1 }).lean();
     if (!orderData) return { success: false, message: 'No order found for this order id' };
 
     const { merchantOrderNo } = orderData;
     const url = `${process.env.CHANNEL_ENGINE_BASE_URL}orders/${merchantOrderNo}/invoice?apiKey=${process.env.CHANNEL_ENGINE_API_KEY}`;
 
-    // 2️⃣ Fetch PDF from ChannelEngine
+    // 2️ Fetch PDF from ChannelEngine
     const response = await fetch(url, { headers: { Accept: 'application/pdf' } });
     if (!response.ok) throw new Error(`Failed to fetch invoice: ${response.statusText}`);
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 3️⃣ Parse PDF using pdfjs-dist (in-memory)
+    // 3️ Parse PDF using pdfjs-dist (in-memory)
     const pdfDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
 
     let rawText = '';
@@ -666,7 +666,7 @@ export const parseInvoiceData = async (orderId) => {
       rawText += strings.join(' ') + ' ';
     }
 
-    // 4️⃣ Clean text
+    // 4️ Clean text
     let cleaned = rawText
       .replace(/[^\w/:.\-\s]/g, ' ') // removed unnecessary escapes
       .replace(/\s+/g, ' ')
@@ -674,15 +674,15 @@ export const parseInvoiceData = async (orderId) => {
       .replace(/([A-Z])\s(?=[A-Z])/g, '$1') // join split capitals
       .replace(/(\d)\s(?=\d)/g, '$1'); // join split numbers
 
-    // 5️⃣ Extract invoice number (e.g., CE-12345-678)
+    // 5️ Extract invoice number (e.g., CE-12345-678)
     const invMatch = cleaned.match(/\b[A-Z]{1,5}(?:-[A-Z0-9]+){1,3}\b/i);
     const invoiceNumber = invMatch ? invMatch[0] : null;
 
-    // 6️⃣ Extract invoice date (MM/DD/YYYY HH:MM:SS)
+    // 6️ Extract invoice date (MM/DD/YYYY HH:MM:SS)
     const dateMatch = cleaned.match(/\d{2}\/\d{2}\/\d{4}\s*\d{2}:\d{2}:\d{2}/);
     const invoiceDate = dateMatch ? dateMatch[0].replace(/\s+/g, ' ') : null;
 
-    // 7️⃣ Hardcoded tax number (you can replace with actual extraction)
+    // 7️ Hardcoded tax number (you can replace with actual extraction)
     const taxIdentificationNumber = '1234567';
 
     return {
