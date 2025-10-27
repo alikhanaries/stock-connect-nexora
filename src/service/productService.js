@@ -468,7 +468,7 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
     if (result.modifiedCount === 0) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
-
+    await removeSkuFromUserChannelProducts(sellerId, ids);
     return {
       success: true,
       message: `${result.modifiedCount} ${locale?.PRODUCT_MARKED_DELETED}`,
@@ -828,6 +828,29 @@ const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
   } catch (err) {
     console.error('Service error in unlinkProductFromChannel:', err);
     throw new Error(err.message);
+  }
+};
+
+export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => {
+  try {
+    const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+
+    const products = await Product.find({
+      _id: { $in: productIds },
+      sellerId: sellerObjectId,
+    }).select('productSkuCode');
+
+    if (!products?.length) return;
+
+    const skuCodes = products.map((p) => p.productSkuCode).filter(Boolean);
+    if (!skuCodes.length) return;
+
+    await UserChannelProducts.updateMany(
+      { sellerId: sellerObjectId },
+      { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
+    );
+  } catch (error) {
+    console.error('Error in removeSkuFromUserChannelProducts:', error);
   }
 };
 
