@@ -631,20 +631,35 @@ export const getSingleShipmentService = async (id) => {
     },
     { $unwind: { path: '$orderDetails', preserveNullAndEmptyArrays: true } },
 
-    // Lookup product details for each product in shipment
+    //  Lookup matching products (handles case & type mismatch)
     {
       $lookup: {
         from: 'products',
-        let: { productIds: '$products.merchantProductNo' }, // assuming shipment.products has `productId`
+        let: { productSkuCodes: '$products.merchantProductNo' },
         pipeline: [
-          { $match: { $expr: { $in: ['$productSkuCode', '$$productIds'] } } },
-          { $project: { images: 1, name: 1, productSkuCode: 1 } }, // include only needed fields
+          {
+            $match: {
+              $expr: {
+                $in: [
+                  { $toLower: '$productSkuCode' },
+                  {
+                    $map: {
+                      input: '$$productSkuCodes',
+                      as: 'sku',
+                      in: { $toLower: { $toString: '$$sku' } },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          { $project: { images: 1, name: 1, productSkuCode: 1 } },
         ],
         as: 'productDetails',
       },
     },
 
-    // Map shipment products to include product details
+    //  Optionally merge product details into shipment products
     {
       $addFields: {
         products: {
@@ -661,7 +676,12 @@ export const getSingleShipmentService = async (id) => {
                         $filter: {
                           input: '$productDetails',
                           as: 'pd',
-                          cond: { $eq: ['$$pd.merchantProductNo', '$$p.productId'] },
+                          cond: {
+                            $eq: [
+                              { $toLower: '$$pd.productSkuCode' },
+                              { $toLower: { $toString: '$$p.merchantProductNo' } },
+                            ],
+                          },
                         },
                       },
                       0,
@@ -675,13 +695,7 @@ export const getSingleShipmentService = async (id) => {
       },
     },
 
-    {
-      $project: {
-        productDetails: 0, // remove temp array
-      },
-    },
-
-    // Shape final output
+    // Final shape of output
     {
       $project: {
         _id: 1,
@@ -700,7 +714,6 @@ export const getSingleShipmentService = async (id) => {
         shipmentMerchantDetails: 1,
         deliveryDetails: 1,
         pickupDetails: 1,
-        productDetails: 1,
         customerInfo: '$orderDetails.orderCustomer',
         paymentInfo: '$orderDetails.orderPaymentDetails',
       },
