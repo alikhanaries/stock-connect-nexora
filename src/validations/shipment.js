@@ -77,3 +77,16 @@ export const getSingleShipmentValidator = validate(async (req) => {
   });
   paramsSchema.parse(req.params);
 });
+
+// CANCEL SHIPMENT VALIDATOR
+export const cancelShipmentValidator = validate(async (req) => {
+  // Validate headers (if needed)
+  headerSchema.parse(req.headers);
+
+  // Validate request body
+  const bodySchema = z.object({
+    shipmentId: z.string().nonempty({ message: 'shipmentId is required' }),
+  });
+
+  bodySchema.parse(req.body);
+});

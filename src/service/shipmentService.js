@@ -3,7 +3,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import User from '../models/User.js';
 import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
-import { createAymakanShipment, trackAymakanShipment } from './aymakanService.js';
+import { createAymakanShipment, trackAymakanShipment, cancelAymakanShipment } from './aymakanService.js';
 import { formatShipmentDeliveryAddress } from '../helpers/formatShipmentDeliveryAddress.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
@@ -740,6 +740,60 @@ export const getSingleShipmentService = async (id) => {
   return shipment[0];
 };
 
+// CANCEL SHIPMENT STARTS HERE
+export const cancelShipmentService = async (shipmentId) => {
+  try {
+    const shipmentData = await Shipment.findOne(
+      { _id: shipmentId, status: AYMAKAN_STATUS['AY-0001'].status },
+      { _id: 1, airWaybillNo: 1 }
+    );
+    if (!shipmentData) {
+      return {
+        success: false,
+        message: 'No shipment found',
+      };
+    }
+    const trackingNumber = shipmentData?.airWaybillNo;
+    //  Call Aymakan API
+    await cancelAymakanShipment(trackingNumber);
+
+    // Track shipment for status info
+    const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
+    const trackingInfo =
+      aymakanTrackingResult?.trackingInfo?.map((info) => ({
+        statusCode: info?.status_code || '',
+        description: info?.description || '',
+        descriptionAr: info?.description_ar || '',
+        reasonCode: info?.reason_code || '',
+        reasonEn: info?.reason_en || '',
+        reasonAr: info?.reason_ar || '',
+        createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
+      })) || [];
+
+    // Update shipment in MongoDB
+    const updatedShipment = await Shipment.findOneAndUpdate(
+      { airWaybillNo: trackingNumber },
+      {
+        status: 'CANCELED',
+        trackingInfo: trackingInfo,
+      },
+      { new: true }
+    );
+
+    if (!updatedShipment) {
+      console.warn(`No shipment found with tracking number: ${trackingNumber}`);
+    }
+
+    return {
+      success: true,
+      message: 'Shipment cancelled',
+      shipmentId: updatedShipment?._id,
+    };
+  } catch (error) {
+    console.error('Aymakan Service Error:', error.message);
+    throw error;
+  }
+};
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -750,4 +804,5 @@ export default {
   createShipmentWithChannelEngine,
   createShipmentWithAymakan,
   getSingleShipmentService,
+  cancelShipmentService,
 };
