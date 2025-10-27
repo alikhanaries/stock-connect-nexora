@@ -723,8 +723,69 @@ export const getSingleShipmentService = async (id) => {
   if (!shipment || shipment.length === 0) {
     throw new Error('Shipment not found');
   }
+  const formattedShipmentData = transformShipmentResponse(shipment[0]);
+  return formattedShipmentData;
+};
 
-  return shipment[0];
+const transformShipmentResponse = (response) => {
+  console.log(response);
+  if (!response) return null;
+  const data = response;
+
+  // Delivery Address
+  const deliveryDetails = {
+    address: [data.deliveryDetails?.address].filter(Boolean).join(', '),
+    city: data.deliveryDetails?.city,
+    region: data.deliveryDetails?.country,
+    zipCode: data.deliveryDetails?.postcode,
+    name: data.deliveryDetails.name,
+    email: data.deliveryDetails.email,
+    country: data.deliveryDetails.country,
+    phoneNumber: data.deliveryDetails.phone,
+  };
+  // Pickup Address
+  const pickUpDetails = {
+    address: data.pickupDetails?.address,
+    city: data.pickupDetails?.city,
+    region: data.pickupDetails?.country,
+    zipCode: data.pickupDetails?.postcode,
+    name: data.pickupDetails.name,
+    email: data.pickupDetails.email,
+    country: data.pickupDetails.country,
+    phoneNumber: data.pickupDetails.phone,
+  };
+
+  // Payment Info
+  const paymentInfo = {
+    paymentReferenceNo: data.paymentInfo.paymentReferenceNo,
+    paymentMethod: data?.paymentInfo?.paymentMethod,
+    currencyCode: data?.paymentInfo?.currencyCode,
+    vatNo: data?.paymentInfo?.vatNo,
+    orderId: data?.paymentInfo?.orderId,
+  };
+
+  // Customer Info
+  const customerInfo = {
+    name: `${data.customerInfo?.firstName || ''} ${data.customerInfo?.lastName || ''}`.trim(),
+    email: data.customerInfo?.email,
+    phoneNo: data.customerInfo?.phone,
+  };
+
+  return {
+    _id: data?._id,
+    orderId: data?.orderId,
+    paymentInfo,
+    customerInfo,
+    status: data.status,
+    products: data.products,
+    airWaybillNo: data.airWaybillNo,
+    merchantShipmentNo: data.merchantShipmentNo,
+    createdAt: data?.createdAt,
+    pieces: data.pieces,
+    merchantOrderNo: data.merchantOrderNo,
+    deliveryDetails,
+    pickUpDetails,
+  };
 };
 
 export default {
@@ -737,4 +798,5 @@ export default {
   createShipmentWithChannelEngine,
   createShipmentWithAymakan,
   getSingleShipmentService,
+  transformShipmentResponse,
 };

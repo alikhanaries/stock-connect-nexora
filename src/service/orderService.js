@@ -151,11 +151,12 @@ export const getOrderById = async (id) => {
 
     allOrderSkus.forEach((product) => {
       const shippedQty = shippedMap[product.merchantProductNo] || 0;
+
       const notShippedQty = product.quantity - shippedQty;
       const status = product.status?.toUpperCase() || '';
 
       // Skip cancelled items from unshipped and collect separately
-      if (status === 'CANCELED') {
+      if (status === 'CANCELED' || status === 'PARTIALLY_CANCELED') {
         cancelledItems.push({
           id: product?.id,
           merchantProductNo: product.merchantProductNo,
@@ -168,11 +169,13 @@ export const getOrderById = async (id) => {
           lineTotalInclVat: product?.lineTotalInclVat,
           lineTotalExclVat: product?.lineTotalExclVat,
           lineVat: product?.lineVat,
-          quantity: product.quantity,
+          quantity: status === 'PARTIALLY_CANCELED' ? product?.cancellationRequestedQuantity : product.quantity,
           status: product?.status,
           hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
         });
-        return; //  Don't include cancelled items in unshipped
+        if (status === 'CANCELED') {
+          return; //  Don't include cancelled items in unshipped
+        }
       }
 
       //  Only include non-cancelled unshipped items
@@ -189,7 +192,7 @@ export const getOrderById = async (id) => {
           lineTotalInclVat: product?.lineTotalInclVat,
           lineTotalExclVat: product?.lineTotalExclVat,
           lineVat: product?.lineVat,
-          quantity: notShippedQty,
+          quantity: notShippedQty - product?.cancellationRequestedQuantity,
           status: product?.status,
           hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
         });
@@ -570,29 +573,27 @@ const cancelFullOrder = async (orderId, reason) => {
   }
 };
 
-const cancelPartialOrder = async (orderId, products, reason) => {
+export const cancelPartialOrder = async (orderId, products, reason) => {
   try {
     const order = await Order.findById(orderId).lean();
     if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
 
-    const productIds = products.map((p) => p.orderLineId.toString());
+    const productIds = products.map((p) => p.id.toString());
 
-    // Collect all shipped (PICKED or DELIVERED) product IDs
+    // Collect shipped (PICKED or DELIVERED) product IDs
     const shippedProducts = new Set(
       order.orderSkuList?.skuList
         ?.filter((sku) => ['PICKED', 'DELIVERED'].includes(sku.status))
         .map((sku) => sku.id.toString())
     );
 
-    // Allow cancel if no shipped products found
-    if (shippedProducts.size > 0) {
-      // Only block cancel if any of the requested products are shipped
-      const hasShipped = products.some((p) => shippedProducts.has(p.orderLineId.toString()));
-      if (hasShipped) {
-        return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
-      }
+    // Block cancel if any requested SKU is shipped
+    const hasShipped = products.some((p) => shippedProducts.has(p.id.toString()));
+    if (hasShipped) {
+      return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
     }
 
+    // Prepare cancel payload for ChannelEngine
     const cancelPayload = {
       MerchantCancellationNo: randomBytes(6).toString('hex'),
       MerchantOrderNo: order.merchantOrderNo,
@@ -606,8 +607,7 @@ const cancelPartialOrder = async (orderId, products, reason) => {
       IsMerchantCreator: true,
     };
 
-    const shipments = await Shipment.find({ orderId }).lean();
-
+    // ChannelEngine cancellation function (safe, non-throwing)
     const cancelInChannelEngine = async () => {
       try {
         const res = await fetch(
@@ -623,36 +623,43 @@ const cancelPartialOrder = async (orderId, products, reason) => {
           const errText = await res.text();
           console.warn('ChannelEngine cancel failed:', errText);
         } else {
-          console.log('ChannelEngine cancellation sent successfully');
+          console.log(`[CancelPartialOrder] ${orderId}: ChannelEngine cancellation sent`);
         }
       } catch (err) {
-        console.error('ChannelEngine API error (ignored):', err.message);
+        console.error(`[CancelPartialOrder] ${orderId}: ChannelEngine API error (ignored):`, err.message);
       }
     };
 
+    // Fetch related shipments
+    const shipments = await Shipment.find({ orderId }).lean();
+
     if (!shipments.length) {
-      if (BLOCKED_STATUSES[order.status]) {
+      // Order-level cancel (no shipment yet)
+      if (typeof BLOCKED_STATUSES === 'object' && BLOCKED_STATUSES[order.status]) {
         return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
       }
       await cancelInChannelEngine();
     } else {
-      // Map shipment -> SKU IDs
+      // Shipment-level cancel
       const shipmentMap = shipments.map((s) => ({
         shipmentId: s._id,
         airWaybillNo: s.airWaybillNo,
         skuIds: (s.products || []).map((p) => p.orderLineId.toString()),
         status: s.status.toUpperCase(),
       }));
-
-      // Filter shipments to only cancel those containing requested SKUs
+      console.log('shipmentMap', shipmentMap);
+      // Shipments that contain canceled SKUs
       const shipmentsToCancel = shipmentMap.filter((s) => s.skuIds.some((id) => productIds.includes(id)));
+      console.log('shipmentsToCancel', shipmentsToCancel);
+      // Cancel only pending shipments
+      const cancelableShipments = shipmentsToCancel.filter((s) => s.status === 'SHIPMENT_CREATED');
+      console.log('cancelableShipments', cancelableShipments);
+      if (!cancelableShipments.length && shipmentsToCancel?.length) {
+        return { success: false, error: { message: 'No pending shipments can be canceled', status: 409 } };
+      }
 
-      const canCancel = shipmentsToCancel.every((s) => s.status === 'PENDING');
-      if (!canCancel) return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
-
-      // Cancel selected shipments
       await Promise.all(
-        shipmentsToCancel.map(async (s) => {
+        cancelableShipments.map(async (s) => {
           await cancelAymakanShipment(s.airWaybillNo);
           await Shipment.updateOne({ _id: s.shipmentId }, { status: 'CANCELED' });
         })
@@ -661,19 +668,49 @@ const cancelPartialOrder = async (orderId, products, reason) => {
       await cancelInChannelEngine();
     }
 
-    // Update only requested SKUs
-    await Order.updateOne(
-      { _id: orderId },
-      { $set: { 'orderSkuList.skuList.$[sku].status': ORDER_STATUS_MAP.CANCELED } },
-      { arrayFilters: [{ 'sku.id': { $in: productIds } }] }
+    // ---- Update SKU-level status and cancellation quantity ----
+    const orderBeforeUpdate = await Order.findById(orderId).lean();
+
+    const updatedSkuList = orderBeforeUpdate.orderSkuList.skuList.map((sku) => {
+      const cancelItem = products.find((p) => p.id.toString() === sku.id.toString());
+      if (!cancelItem) return sku;
+
+      const cancelQty = cancelItem.quantity;
+      const totalQty = sku.quantity || 0;
+
+      if (cancelQty >= totalQty) {
+        // Full cancel
+        return {
+          ...sku,
+          status: ORDER_STATUS_MAP.CANCELED,
+          cancellationRequestedQuantity: cancelQty,
+        };
+      } else {
+        // Partial cancel
+        return {
+          ...sku,
+          status: ORDER_STATUS_MAP.PARTIALLY_CANCELED,
+          cancellationRequestedQuantity: cancelQty,
+        };
+      }
+    });
+
+    await Order.updateOne({ _id: orderId }, { $set: { 'orderSkuList.skuList': updatedSkuList } });
+
+    // ---- Update overall order status ----
+    const updatedOrder = await Order.findById(orderId).lean();
+
+    const allCanceled = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === ORDER_STATUS_MAP.CANCELED);
+    const anyPartial = updatedOrder.orderSkuList.skuList.some(
+      (sku) => sku.status === ORDER_STATUS_MAP.PARTIALLY_CANCELED
     );
 
-    // Reload order to update overall status if needed
-    const updatedOrder = await Order.findById(orderId).lean();
-    const allCanceled = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === ORDER_STATUS_MAP.CANCELED);
     if (allCanceled && updatedOrder.status !== ORDER_STATUS_MAP.CANCELED) {
       await Order.updateOne({ _id: orderId }, { $set: { status: ORDER_STATUS_MAP.CANCELED } });
       updatedOrder.status = ORDER_STATUS_MAP.CANCELED;
+    } else if (anyPartial) {
+      await Order.updateOne({ _id: orderId }, { $set: { status: ORDER_STATUS_MAP.PARTIALLY_CANCELED } });
+      updatedOrder.status = ORDER_STATUS_MAP.PARTIALLY_CANCELED;
     }
 
     return { success: true, data: updatedOrder };
