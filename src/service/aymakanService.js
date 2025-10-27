@@ -39,7 +39,6 @@ export const createAymakanShipment = async (payload) => {
 export const trackAymakanShipment = async (trackingNumber) => {
   try {
     if (!trackingNumber) {
-      console.warn('Aymakan tracking skipped: no tracking number provided');
       return {
         status: 'UNKNOWN',
         statusLabel: null,
