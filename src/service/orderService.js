@@ -195,7 +195,7 @@ export const getOrderById = async (id) => {
           lineTotalInclVat: product?.lineTotalInclVat,
           lineTotalExclVat: product?.lineTotalExclVat,
           lineVat: product?.lineVat,
-          quantity: notShippedQty - product?.cancellationRequestedQuantity,
+          quantity: notShippedQty,
           status: product?.status,
           hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
         });
