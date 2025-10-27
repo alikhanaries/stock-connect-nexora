@@ -1,4 +1,4 @@
-import { parseXMLFeed } from '../../common/helpers/parser.js';
+import { parseXMLFeed } from '../../common/helpers/xmlParser.js';
 import { createBaseERPAdapter } from '../base/BaseERPAdapter.js';
 import { gurmanConfig } from './config/config.js';
 import { fetchXml } from './utils/fetchXml.js';
