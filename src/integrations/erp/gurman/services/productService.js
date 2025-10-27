@@ -1,4 +1,4 @@
-import { parseXMLFeed } from '#root/src/integrations/common/helpers/parser.js';
+import { parseXMLFeed } from '#root/src/integrations/common/helpers/xmlParser.js';
 import { gurmanConfig } from '../config/config.js';
 import { formatGurmanProduct } from '../helpers/formatter.js';
 import { fetchXml } from '../utils/fetchXml.js';
