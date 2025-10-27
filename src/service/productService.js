@@ -833,12 +833,17 @@ const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
 
 export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => {
   try {
+    if (!sellerId || !Array.isArray(productIds) || productIds.length === 0) {
+      console.warn('Invalid sellerId or productIds in removeSkuFromUserChannelProducts');
+      return;
+    }
+
     const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
 
-    const products = await Product.find({
-      _id: { $in: productIds },
-      sellerId: sellerObjectId,
-    }).select('productSkuCode');
+    const products = await Product.find(
+      { _id: { $in: productIds }, sellerId: sellerObjectId },
+      { productSkuCode: 1 }
+    ).lean();
 
     if (!products?.length) return;
 
