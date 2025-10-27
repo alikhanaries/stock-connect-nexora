@@ -40,7 +40,12 @@ export const getOrderById = async (req, res) => {
     if (!order) {
       return Responses.failResponse(res, req.locale.NO_ORDERS_FOUND, 404);
     }
-    return Responses.successResponse(res, req.locale.ORDER_FETCHED_SUCCESSFULLY, 200, order);
+    return Responses.successResponse(
+      res,
+      req?.locale?.ORDER_FETCHED_SUCCESSFULLY || 'Order Fetched Successfully',
+      200,
+      order
+    );
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);

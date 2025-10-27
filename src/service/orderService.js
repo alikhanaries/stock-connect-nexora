@@ -107,100 +107,131 @@ const getAllOrders = async (query, sellerId) => {
 };
 
 export const getOrderById = async (id) => {
-  //  Fetch the order
-  const order = await Order.findById(id).lean();
-  if (!order) return false;
+  try {
+    //  Fetch the order
+    const order = await Order.findById(id).lean();
+    if (!order) return false;
 
-  //  Fetch all shipments for this order
-  const shipments = await Shipment.find({ orderId: id }).lean();
+    //  Fetch all shipments for this order
+    const shipments = await Shipment.find({ orderId: id }).lean();
 
-  //  Track shipped quantities per merchantProductNo
-  const shippedMap = {};
-  shipments.forEach((shipment) => {
-    (shipment.products || []).forEach((product) => {
-      const key = product.merchantProductNo;
-      shippedMap[key] = (shippedMap[key] || 0) + product.quantity;
-    });
-  });
-
-  const allOrderSkus = order.orderSkuList?.skuList || [];
-
-  // Gather all merchantProductNos for image lookup
-  const allMerchantNos = allOrderSkus.map((sku) => sku.merchantProductNo);
-
-  //  Fetch product images in ONE query
-  const productsMap = await Product.find({ productSkuCode: { $in: allMerchantNos } }, { productSkuCode: 1, images: 1 })
-    .lean()
-    .then((products) =>
-      products.reduce((acc, p) => {
-        acc[p.productSkuCode] = p.images?.[0] || null; // first image
-        return acc;
-      }, {})
-    );
-
-  //  Build unshipped items
-  const unshippedItems = [];
-  const cancelledItems = [];
-
-  allOrderSkus.forEach((product) => {
-    const shippedQty = shippedMap[product.merchantProductNo] || 0;
-    const notShippedQty = product.quantity - shippedQty;
-
-    if (notShippedQty > 0) {
-      unshippedItems.push({
-        id: product?.id,
-        merchantProductNo: product.merchantProductNo,
-        channelProductNo: product?.channelProductNo,
-        name: product?.description,
-        imageUrl: productsMap[product.merchantProductNo] || null, // ✅ from Product
-        unitPriceInclVat: product?.unitPriceInclVat,
-        unitPriceExclVat: product?.unitPriceExclVat,
-        unitVat: product?.unitVat,
-        lineTotalInclVat: product?.lineTotalInclVat,
-        lineTotalExclVat: product?.lineTotalExclVat,
-        lineVat: product?.lineVat,
-        quantity: notShippedQty,
+    //  Track shipped quantities per merchantProductNo
+    const shippedMap = {};
+    shipments.forEach((shipment) => {
+      (shipment.products || []).forEach((product) => {
+        const key = product.merchantProductNo;
+        shippedMap[key] = (shippedMap[key] || 0) + product.quantity;
       });
-    }
-  });
+    });
 
-  //  Build shipped items
-  const shippedItems = shipments.map((shipment) => ({
-    shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
-    shipmentId: shipment._id,
-    trackingNumber: shipment.airWaybillNo || null,
-    lineItems:
-      (shipment.products || []).map((shipmentSku) => {
-        const orderSku = allOrderSkus.find((oSku) => oSku.merchantProductNo === shipmentSku.merchantProductNo);
+    const allOrderSkus = order.orderSkuList?.skuList || [];
 
-        return {
-          id: orderSku?.id,
-          merchantProductNo: shipmentSku.merchantProductNo,
-          channelProductNo: orderSku?.channelProductNo,
-          name: orderSku?.description,
-          imageUrl: productsMap[shipmentSku.merchantProductNo] || null, // ✅ from Product
-          quantity: shipmentSku.quantity,
-          unitPriceInclVat: orderSku?.unitPriceInclVat,
-          unitPriceExclVat: orderSku?.unitPriceExclVat,
-          unitVat: orderSku?.unitVat,
-          lineTotalInclVat: orderSku?.lineTotalInclVat,
-          lineTotalExclVat: orderSku?.lineTotalExclVat,
-          lineVat: orderSku?.lineVat,
-          airWaybillNo: shipment.airWaybillNo,
-        };
-      }) || [],
-    shipmentMode: shipment.shipmentMode || 'AYMAKAN',
-  }));
+    // Gather all merchantProductNos for image lookup
+    const allMerchantNos = allOrderSkus.map((sku) => sku.merchantProductNo);
 
-  // Final response
-  const filteredData = transformOrderResponse(order);
+    //  Fetch product images in ONE query
+    const productsMap = await Product.find(
+      { productSkuCode: { $in: allMerchantNos } },
+      { productSkuCode: 1, images: 1 }
+    )
+      .lean()
+      .then((products) =>
+        products.reduce((acc, p) => {
+          acc[p.productSkuCode] = p.images?.[0] || null; // first image
+          return acc;
+        }, {})
+      );
 
-  return {
-    ...filteredData,
-    shippedItems,
-    unshippedItems,
-    cancelledItems,
-  };
+    //  Build unshipped items
+    const unshippedItems = [];
+    const cancelledItems = [];
+
+    allOrderSkus.forEach((product) => {
+      const shippedQty = shippedMap[product.merchantProductNo] || 0;
+      const notShippedQty = product.quantity - shippedQty;
+
+      if (notShippedQty > 0) {
+        unshippedItems.push({
+          id: product?.id,
+          merchantProductNo: product.merchantProductNo,
+          channelProductNo: product?.channelProductNo,
+          name: product?.description,
+          imageUrl: productsMap[product.merchantProductNo] || null, // ✅ from Product
+          unitPriceInclVat: product?.unitPriceInclVat,
+          unitPriceExclVat: product?.unitPriceExclVat,
+          unitVat: product?.unitVat,
+          lineTotalInclVat: product?.lineTotalInclVat,
+          lineTotalExclVat: product?.lineTotalExclVat,
+          lineVat: product?.lineVat,
+          quantity: notShippedQty,
+          status: product?.status,
+          hsnCode: product?.hsnCode || null,
+        });
+      }
+
+      //  Cancelled items
+      if (product.status?.toUpperCase() === 'CANCELED') {
+        cancelledItems.push({
+          id: product?.id,
+          merchantProductNo: product.merchantProductNo,
+          channelProductNo: product?.channelProductNo,
+          name: product?.description,
+          imageUrl: productsMap[product.merchantProductNo] || null,
+          unitPriceInclVat: product?.unitPriceInclVat,
+          unitPriceExclVat: product?.unitPriceExclVat,
+          unitVat: product?.unitVat,
+          lineTotalInclVat: product?.lineTotalInclVat,
+          lineTotalExclVat: product?.lineTotalExclVat,
+          lineVat: product?.lineVat,
+          quantity: product.quantity,
+          status: product?.status,
+          hsnCode: product?.hsnCode || null,
+        });
+      }
+    });
+
+    //  Build shipped items
+    const shippedItems = shipments.map((shipment) => ({
+      shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
+      shipmentId: shipment._id,
+      trackingNumber: shipment.airWaybillNo || null,
+      lineItems:
+        (shipment.products || []).map((shipmentSku) => {
+          const orderSku = allOrderSkus.find((oSku) => oSku.merchantProductNo === shipmentSku.merchantProductNo);
+
+          return {
+            id: orderSku?.id,
+            merchantProductNo: shipmentSku.merchantProductNo,
+            channelProductNo: orderSku?.channelProductNo,
+            name: orderSku?.description,
+            imageUrl: productsMap[shipmentSku.merchantProductNo] || null, // ✅ from Product
+            quantity: shipmentSku.quantity,
+            unitPriceInclVat: orderSku?.unitPriceInclVat,
+            unitPriceExclVat: orderSku?.unitPriceExclVat,
+            unitVat: orderSku?.unitVat,
+            lineTotalInclVat: orderSku?.lineTotalInclVat,
+            lineTotalExclVat: orderSku?.lineTotalExclVat,
+            lineVat: orderSku?.lineVat,
+            airWaybillNo: shipment.airWaybillNo,
+            status: orderSku?.status,
+            hsnCode: orderSku?.hsnCode || null,
+          };
+        }) || [],
+      shipmentMode: shipment.shipmentMode || 'AYMAKAN',
+    }));
+
+    // Final response
+    const filteredData = transformOrderResponse(order);
+
+    return {
+      ...filteredData,
+      shippedItems,
+      unshippedItems,
+      cancelledItems,
+    };
+  } catch (err) {
+    console.log(err);
+  }
 };
 
 const getOrderStats = async (sellerId) => {
@@ -539,12 +570,21 @@ const cancelPartialOrder = async (orderId, products, reason) => {
     if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
 
     const productIds = products.map((p) => p.id.toString());
-    const inProgressSet = new Set(
-      order.orderSkuList?.skuList?.filter((sku) => sku.status === 'IN_PROGRESS').map((sku) => sku.id.toString())
+
+    // Collect all shipped product IDs
+    const shippedProducts = new Set(
+      order.orderSkuList?.skuList?.filter((sku) => sku.status === 'SHIPPED').map((sku) => sku.id.toString())
     );
 
-    if (!products.every((p) => inProgressSet.has(p.id.toString()))) {
-      return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
+    console.log('shippedProducts', shippedProducts);
+
+    // Allow cancel if no shipped products found
+    if (shippedProducts.size > 0) {
+      // Only block cancel if any of the requested products are shipped
+      const hasShipped = products.some((p) => shippedProducts.has(p.id.toString()));
+      if (hasShipped) {
+        return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
+      }
     }
 
     const cancelPayload = {
