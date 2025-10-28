@@ -657,20 +657,35 @@ export const getSingleShipmentService = async (id) => {
     },
     { $unwind: { path: '$orderDetails', preserveNullAndEmptyArrays: true } },
 
-    // Lookup product details for each product in shipment
+    //  Lookup matching products (handles case & type mismatch)
     {
       $lookup: {
         from: 'products',
-        let: { productIds: '$products.merchantProductNo' }, // assuming shipment.products has `productId`
+        let: { productSkuCodes: '$products.merchantProductNo' },
         pipeline: [
-          { $match: { $expr: { $in: ['$productSkuCode', '$$productIds'] } } },
-          { $project: { images: 1, name: 1, productSkuCode: 1 } }, // include only needed fields
+          {
+            $match: {
+              $expr: {
+                $in: [
+                  { $toLower: '$productSkuCode' },
+                  {
+                    $map: {
+                      input: '$$productSkuCodes',
+                      as: 'sku',
+                      in: { $toLower: { $toString: '$$sku' } },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          { $project: { images: 1, name: 1, productSkuCode: 1 } },
         ],
         as: 'productDetails',
       },
     },
 
-    // Map shipment products to include product details
+    //  Optionally merge product details into shipment products
     {
       $addFields: {
         products: {
@@ -687,7 +702,12 @@ export const getSingleShipmentService = async (id) => {
                         $filter: {
                           input: '$productDetails',
                           as: 'pd',
-                          cond: { $eq: ['$$pd.merchantProductNo', '$$p.productId'] },
+                          cond: {
+                            $eq: [
+                              { $toLower: '$$pd.productSkuCode' },
+                              { $toLower: { $toString: '$$p.merchantProductNo' } },
+                            ],
+                          },
                         },
                       },
                       0,
@@ -701,13 +721,7 @@ export const getSingleShipmentService = async (id) => {
       },
     },
 
-    {
-      $project: {
-        productDetails: 0, // remove temp array
-      },
-    },
-
-    // Shape final output
+    // Final shape of output
     {
       $project: {
         _id: 1,
@@ -726,7 +740,6 @@ export const getSingleShipmentService = async (id) => {
         shipmentMerchantDetails: 1,
         deliveryDetails: 1,
         pickupDetails: 1,
-        productDetails: 1,
         customerInfo: '$orderDetails.orderCustomer',
         paymentInfo: '$orderDetails.orderPaymentDetails',
       },
@@ -736,8 +749,69 @@ export const getSingleShipmentService = async (id) => {
   if (!shipment || shipment.length === 0) {
     throw new Error('Shipment not found');
   }
+  const formattedShipmentData = transformShipmentResponse(shipment[0]);
+  return formattedShipmentData;
+};
 
-  return shipment[0];
+const transformShipmentResponse = (response) => {
+  console.log(response);
+  if (!response) return null;
+  const data = response;
+
+  // Delivery Address
+  const deliveryDetails = {
+    address: [data.deliveryDetails?.address].filter(Boolean).join(', '),
+    city: data.deliveryDetails?.city,
+    region: data.deliveryDetails?.country,
+    zipCode: data.deliveryDetails?.postcode,
+    name: data.deliveryDetails.name,
+    email: data.deliveryDetails.email,
+    country: data.deliveryDetails.country,
+    phoneNumber: data.deliveryDetails.phone,
+  };
+  // Pickup Address
+  const pickUpDetails = {
+    address: data.pickupDetails?.address,
+    city: data.pickupDetails?.city,
+    region: data.pickupDetails?.country,
+    zipCode: data.pickupDetails?.postcode,
+    name: data.pickupDetails.name,
+    email: data.pickupDetails.email,
+    country: data.pickupDetails.country,
+    phoneNumber: data.pickupDetails.phone,
+  };
+
+  // Payment Info
+  const paymentInfo = {
+    paymentReferenceNo: data.paymentInfo.paymentReferenceNo,
+    paymentMethod: data?.paymentInfo?.paymentMethod,
+    currencyCode: data?.paymentInfo?.currencyCode,
+    vatNo: data?.paymentInfo?.vatNo,
+    orderId: data?.paymentInfo?.orderId,
+  };
+
+  // Customer Info
+  const customerInfo = {
+    name: `${data.customerInfo?.firstName || ''} ${data.customerInfo?.lastName || ''}`.trim(),
+    email: data.customerInfo?.email,
+    phoneNo: data.customerInfo?.phone,
+  };
+
+  return {
+    _id: data?._id,
+    orderId: data?.orderId,
+    paymentInfo,
+    customerInfo,
+    status: data.status,
+    products: data.products,
+    airWaybillNo: data.airWaybillNo,
+    merchantShipmentNo: data.merchantShipmentNo,
+    createdAt: data?.createdAt,
+    pieces: data.pieces,
+    merchantOrderNo: data.merchantOrderNo,
+    deliveryDetails,
+    pickUpDetails,
+  };
 };
 
 // CANCEL SHIPMENT STARTS HERE
@@ -805,4 +879,5 @@ export default {
   createShipmentWithAymakan,
   getSingleShipmentService,
   cancelShipmentService,
+  transformShipmentResponse,
 };

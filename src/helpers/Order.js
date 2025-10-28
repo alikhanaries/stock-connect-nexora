@@ -39,7 +39,8 @@ const sanitizeOrdersData = async (orders, sellerId) => {
               channelProductNo: line.ChannelProductNo,
               merchantProductNo: line.MerchantProductNo,
               quantity: line.Quantity,
-              cancellationRequestedQuantity: line.CancellationRequestedQuantity,
+              cancellationRequestedQuantity:
+                existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity,
               unitPriceInclVat: line.UnitPriceInclVat,
               feeFixed: line.FeeFixed,
               feeRate: line.FeeRate,
