@@ -37,46 +37,88 @@ export const createAymakanShipment = async (payload) => {
 };
 
 export const trackAymakanShipment = async (trackingNumber) => {
-  if (!trackingNumber) {
-    throw new Error('Tracking number is required for Aymakan API');
+  try {
+    if (!trackingNumber) {
+      return {
+        status: 'UNKNOWN',
+        statusLabel: '',
+        createdAt: '',
+        idCustomer: 2,
+        isReversePickup: 0,
+        trackingInfo: [],
+        collection_country: '',
+        pickup_date: '',
+        delivery_date: '',
+      };
+    }
+
+    const url = `${AYMAKAN_API_URL}shipping/track/${trackingNumber}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: AYMAKAN_API_KEY,
+      },
+    });
+
+    if (!response.ok) {
+      return {
+        status: 'UNKNOWN',
+        statusLabel: '',
+        createdAt: '',
+        idCustomer: 2,
+        isReversePickup: 0,
+        trackingInfo: [],
+        collection_country: '',
+        pickup_date: '',
+        delivery_date: '',
+      };
+    }
+
+    const aymakanResult = await response.json();
+
+    if (!aymakanResult.success || !aymakanResult.data?.shipments?.length) {
+      return {
+        status: 'UNKNOWN',
+        statusLabel: '',
+        createdAt: '',
+        idCustomer: 2,
+        isReversePickup: 0,
+        trackingInfo: [],
+        collection_country: '',
+        pickup_date: '',
+        delivery_date: '',
+      };
+    }
+
+    const shipment = aymakanResult.data.shipments[0];
+
+    return {
+      status: shipment.status || 'UNKNOWN',
+      statusLabel: shipment.status_label || null,
+      createdAt: shipment.created_at || null,
+      idCustomer: 2,
+      isReversePickup: 0,
+      trackingInfo: Array.isArray(shipment.tracking_info) ? shipment.tracking_info : [],
+      collection_country: shipment.collection_country || null,
+      pickup_date: shipment.pickup_date || null,
+      delivery_date: shipment.delivery_date || null,
+    };
+  } catch (err) {
+    console.error(`Silent error tracking Aymakan shipment for ${trackingNumber}:`, err.message);
+    return {
+      status: 'UNKNOWN',
+      statusLabel: '',
+      createdAt: '',
+      idCustomer: 2,
+      isReversePickup: 0,
+      trackingInfo: [],
+      collection_country: '',
+      pickup_date: '',
+      delivery_date: '',
+    };
   }
-
-  const url = `${AYMAKAN_API_URL}shipping/track/${trackingNumber}`;
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: AYMAKAN_API_KEY,
-    },
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData?.message);
-  }
-
-  const aymakanResult = await response.json();
-
-  if (!aymakanResult.success) {
-    throw new Error(`Aymakan Tracking Failed: ${aymakanResult.message}`);
-  }
-
-  const shipment = aymakanResult.data.shipments[0]; // take the first shipment
-
-  if (!shipment) {
-    throw new Error('No shipment data found for this tracking number.');
-  }
-
-  // Return only the required fields as a single object
-  return {
-    status: shipment.status,
-    statusLabel: shipment.status_label,
-    createdAt: shipment.created_at,
-    idCustomer: 2, // static value
-    isReversePickup: 0, // static value
-    trackingInfo: shipment.tracking_info,
-  };
 };
 
 export const getAymakanShipmentCities = async () => {
@@ -95,7 +137,7 @@ export const getAymakanShipmentCities = async () => {
       throw new Error(errorData?.message);
     }
 
-    // 6️⃣ Parse JSON body
+    // 6️ Parse JSON body
     const result = await response.json().catch(async () => {
       const errorData = await response.json();
       throw new Error(errorData?.message);
