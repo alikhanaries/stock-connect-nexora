@@ -831,23 +831,23 @@ export const syncShipmentStatus = async (orderId) => {
         const aymakanTrackingResult = await trackAymakanShipment(shipment.airWaybillNo);
 
         // Normalize tracking info
-        const trackingInfo = Array.isArray(aymakanTrackingResult.trackingInfo)
+        const trackingInfo = Array.isArray(aymakanTrackingResult?.trackingInfo)
           ? aymakanTrackingResult.trackingInfo.map((info) => ({
-              statusCode: info.status_code,
-              description: info.description,
-              descriptionAr: info.description_ar,
-              reasonCode: info.reason_code,
-              reasonEn: info.reason_en,
-              reasonAr: info.reason_ar,
-              createdAt: info.created_at,
+              statusCode: info?.status_code || '',
+              description: info?.description || '',
+              descriptionAr: info?.description_ar || '',
+              reasonCode: info?.reason_code || '',
+              reasonEn: info?.reason_en || '',
+              reasonAr: info?.reason_ar || '',
+              createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
             }))
           : [];
 
-        const lastTracking = trackingInfo[trackingInfo.length - 1];
-        const shipmentStatus = AYMAKAN_STATUS[lastTracking?.statusCode].status || 'UNKNOWN';
+        const lastestTrackingInfo = trackingInfo[0];
+        const shipmentStatus = AYMAKAN_STATUS[lastestTrackingInfo?.statusCode].status || 'UNKNOWN';
 
         if (shipmentStatus === 'UNKNOWN') {
-          console.warn(`Unknown Aymakan status for shipment ${shipment._id}: ${lastTracking?.statusCode}`);
+          console.warn(`Unknown Aymakan status for shipment ${shipment._id}: ${lastestTrackingInfo?.statusCode}`);
         }
 
         // 1️ When shipment is picked
@@ -896,21 +896,20 @@ export const syncShipmentStatus = async (orderId) => {
 
         // 4️ Update order SKUs
         const orderLineIdsToUpdate = shipment.products.map((p) => p.orderLineId).filter(Boolean);
+        const orderStatus = shipmentStatus.toUpperCase() === 'CANCELED' ? 'IN_PROGRESS' : shipmentStatus.toUpperCase();
         if (orderLineIdsToUpdate.length > 0) {
           await Order.updateOne(
             { _id: orderId },
-            { $set: { 'orderSkuList.skuList.$[sku].status': shipmentStatus.toUpperCase() } },
+            { $set: { 'orderSkuList.skuList.$[sku].status': orderStatus } },
             { arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }] }
           );
         }
 
         // 5️ Update order status if all SKUs match
         const updatedOrder = await Order.findById(orderId).lean();
-        const allMatch = updatedOrder.orderSkuList?.skuList?.every(
-          (sku) => sku.status === shipmentStatus.toUpperCase()
-        );
+        const allMatch = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === orderStatus);
         if (allMatch) {
-          await Order.findByIdAndUpdate(orderId, { $set: { status: shipmentStatus.toUpperCase() } });
+          await Order.findByIdAndUpdate(orderId, { $set: { status: orderStatus } });
         }
       } catch (shipmentErr) {
         console.error(`Error processing shipment ${shipment._id}:`, shipmentErr.message);

@@ -28,7 +28,7 @@ export const AYMAKAN_STATUS = {
     description: 'Shipment was not delivered - delivery was delayed by customer',
   },
   'AY-0029': {
-    status: 'CANCELLED',
+    status: 'CANCELED',
     description: 'Pickup Cancelled - By Customer: OCP',
   },
   'AY-0032': {
