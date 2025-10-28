@@ -41,14 +41,14 @@ export const trackAymakanShipment = async (trackingNumber) => {
     if (!trackingNumber) {
       return {
         status: 'UNKNOWN',
-        statusLabel: null,
-        createdAt: null,
+        statusLabel: '',
+        createdAt: '',
         idCustomer: 2,
         isReversePickup: 0,
         trackingInfo: [],
-        collection_country: null,
-        pickup_date: null,
-        delivery_date: null,
+        collection_country: '',
+        pickup_date: '',
+        delivery_date: '',
       };
     }
 
@@ -63,34 +63,32 @@ export const trackAymakanShipment = async (trackingNumber) => {
     });
 
     if (!response.ok) {
-      console.warn(`Aymakan API request failed for ${trackingNumber} with status ${response.status}`);
       return {
         status: 'UNKNOWN',
-        statusLabel: null,
-        createdAt: null,
+        statusLabel: '',
+        createdAt: '',
         idCustomer: 2,
         isReversePickup: 0,
         trackingInfo: [],
-        collection_country: null,
-        pickup_date: null,
-        delivery_date: null,
+        collection_country: '',
+        pickup_date: '',
+        delivery_date: '',
       };
     }
 
     const aymakanResult = await response.json();
 
     if (!aymakanResult.success || !aymakanResult.data?.shipments?.length) {
-      console.warn(`Aymakan Tracking Failed for ${trackingNumber}: ${aymakanResult.message || 'No shipment data'}`);
       return {
         status: 'UNKNOWN',
-        statusLabel: null,
-        createdAt: null,
+        statusLabel: '',
+        createdAt: '',
         idCustomer: 2,
         isReversePickup: 0,
         trackingInfo: [],
-        collection_country: null,
-        pickup_date: null,
-        delivery_date: null,
+        collection_country: '',
+        pickup_date: '',
+        delivery_date: '',
       };
     }
 
@@ -111,14 +109,14 @@ export const trackAymakanShipment = async (trackingNumber) => {
     console.error(`Silent error tracking Aymakan shipment for ${trackingNumber}:`, err.message);
     return {
       status: 'UNKNOWN',
-      statusLabel: null,
-      createdAt: null,
+      statusLabel: '',
+      createdAt: '',
       idCustomer: 2,
       isReversePickup: 0,
       trackingInfo: [],
-      collection_country: null,
-      pickup_date: null,
-      delivery_date: null,
+      collection_country: '',
+      pickup_date: '',
+      delivery_date: '',
     };
   }
 };
