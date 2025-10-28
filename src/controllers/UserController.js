@@ -24,7 +24,7 @@ export const getUserById = async (req, res) => {
     if (resSellerId && resSellerId.length === 0) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
     }
-    user.sellerId = resSellerId;
+    user.sellerIds = resSellerId;
 
     res.status(200).json(formatSuccessResponse(user, req.locale.USER_FETCHED_SUCCESSFULLY));
   } catch (err) {
