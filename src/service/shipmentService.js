@@ -611,7 +611,12 @@ export const ayMakanWebHookService = async (data) => {
         },
       },
       {
-        arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }],
+        arrayFilters: [
+          {
+            'sku.id': { $in: orderLineIdsToUpdate },
+            'sku.status': { $ne: 'PARTIALLY_CANCELED' }, //  skip partially canceled items
+          },
+        ],
         new: false,
       }
     );

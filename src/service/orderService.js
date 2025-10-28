@@ -542,10 +542,10 @@ const cancelFullOrder = async (orderId, reason) => {
     }
 
     // Case B: Some shipments exist
-    const shippedShipment = shipments.find((s) => ['PICKED', 'DELIVERED'].includes(s.status));
+    const shippedShipment = shipments.find((s) => ['DELIVERED'].includes(s.status));
 
     if (shippedShipment) {
-      return { success: false, error: { message: 'Cannot cancel shipped order', status: 400 } };
+      return { success: false, error: { message: 'Cannot cancel delivered order', status: 400 } };
     }
 
     // Cancel shipments in Aymakan and DB
@@ -592,17 +592,15 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
     const order = await Order.findById(orderId).lean();
     if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
 
-    // Collect shipped (PICKED or DELIVERED) product IDs
+    // Collect shipped (DELIVERED) product IDs
     const shippedProducts = new Set(
-      order.orderSkuList?.skuList
-        ?.filter((sku) => ['PICKED', 'DELIVERED'].includes(sku.status))
-        .map((sku) => sku.id.toString())
+      order.orderSkuList?.skuList?.filter((sku) => ['DELIVERED'].includes(sku.status)).map((sku) => sku.id.toString())
     );
 
     // Block cancel if any requested SKU is shipped
     const hasShipped = products.some((p) => shippedProducts.has(p.orderLineId.toString()));
     if (hasShipped) {
-      return { success: false, error: { message: 'Cannot cancel shipped order', status: 409 } };
+      return { success: false, error: { message: 'Cannot cancel delivered order', status: 409 } };
     }
 
     // Prepare cancel payload for ChannelEngine
