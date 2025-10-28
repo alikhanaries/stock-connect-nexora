@@ -10,7 +10,7 @@ import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
-
+import { formatDateTime } from '#helpers/CommonHelper.js';
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
     const { userId, declaredValue, deliveryData, collectionData, pieces = 0 } = shipmentData;
@@ -750,7 +750,6 @@ export const getSingleShipmentService = async (id) => {
 };
 
 const transformShipmentResponse = (response) => {
-  console.log(response);
   if (!response) return null;
   const data = response;
 
@@ -809,6 +808,19 @@ const transformShipmentResponse = (response) => {
     pickUpDetails,
   };
 };
+export const formatShipmentTrackingInfo = (data) => {
+  if (!Array.isArray(data) || data.length === 0) return [];
+
+  return data.map((item) => {
+    const formatted = formatDateTime(item?.createdAt);
+
+    return {
+      status: item?.description || '',
+      date: formatted?.date || '',
+      time: formatted?.time || '',
+    };
+  });
+};
 
 export default {
   ayMakanWebHookService,
@@ -821,4 +833,5 @@ export default {
   createShipmentWithAymakan,
   getSingleShipmentService,
   transformShipmentResponse,
+  formatShipmentTrackingInfo,
 };

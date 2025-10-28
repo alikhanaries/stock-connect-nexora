@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
+import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
   const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
@@ -230,6 +231,7 @@ export const getOrderById = async (id) => {
             airWaybillNo: shipment.airWaybillNo,
             status: orderSku?.status,
             hsCode: productsMap[shipmentSku.merchantProductNo]?.hsCode || null,
+            trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
           };
         }) || [],
       shipmentMode: shipment.shipmentMode || 'AYMAKAN',
