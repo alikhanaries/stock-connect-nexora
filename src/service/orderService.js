@@ -114,12 +114,12 @@ export const getOrderById = async (id) => {
     const order = await Order.findById(id).lean();
     if (!order) return false;
 
-    //  Fetch all shipments for this order
-
+    // Fetch all shipments for this order except those with status 'CANCELED'
     const shipments = await Shipment.find({
       orderId: id,
       status: { $ne: 'CANCELED' },
     }).lean();
+
     //  Track shipped quantities per merchantProductNo
     const shippedMap = {};
     shipments.forEach((shipment) => {
