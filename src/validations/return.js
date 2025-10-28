@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { validate } from './validate.js';
 import { headerSchema } from './headerSchema.js';
+import mongoose from 'mongoose';
 
 export const getAllReturnsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
@@ -278,6 +279,24 @@ export const updateReturnValidator = validate(async (req) => {
   updateReturnSchema.parse(req.body);
 });
 
+export const getReturnStatsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z.object({
+    sellerId: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.trim().length > 0, {
+        message: 'sellerId cannot be empty',
+      })
+      .refine((val) => !val || mongoose.Types.ObjectId.isValid(val), {
+        message: 'sellerId must be a valid ObjectId',
+      }),
+  });
+
+  querySchema.parse(req.query);
+});
+
 export default {
   getAllReturnsValidator,
   syncReturnsValidator,
@@ -286,4 +305,5 @@ export default {
   returnValidator,
   updateReturnValidator,
   getReturnByIdValidator,
+  getReturnStatsValidator,
 };

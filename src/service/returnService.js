@@ -233,10 +233,24 @@ export const getReturnsFromDatabase = async (query = {}) => {
   }
 };
 
-export const getReturnStats = async () => {
+export const getReturnStats = async (sellerId = null) => {
   try {
+    const appliedFilters = {};
+
+    const basePipeline = buildReturnAggregationPipeline();
+
+    if (sellerId) {
+      basePipeline.push({
+        $match: {
+          'orderInfo.sellerId': sellerId,
+        },
+      });
+      appliedFilters['orderInfo.sellerId'] = sellerId.toString();
+    }
+
     // Get total quantities for accepted, rejected, and in-progress products
-    const [quantityStats] = await Return.aggregate([
+    const quantityPipeline = [
+      ...basePipeline,
       { $unwind: '$products' },
       {
         $group: {
@@ -254,14 +268,19 @@ export const getReturnStats = async () => {
           },
         },
       },
-    ]);
+    ];
+
+    const [quantityStats] = await Return.aggregate(quantityPipeline);
 
     // Get total quantity grouped by return status
-    const statusStats = await Return.aggregate([
+    const statusPipeline = [
+      ...basePipeline,
       { $unwind: '$products' },
       { $group: { _id: '$status', totalQuantity: { $sum: '$products.quantity' } } },
       { $sort: { _id: 1 } },
-    ]);
+    ];
+
+    const statusStats = await Return.aggregate(statusPipeline);
 
     const stats = {
       ...statusStats.reduce((acc, { _id, totalQuantity }) => {
@@ -273,7 +292,10 @@ export const getReturnStats = async () => {
       IN_PROGRESS: quantityStats?.inProgressQuantity ?? 0,
     };
 
-    return stats;
+    return {
+      stats,
+      appliedFilters,
+    };
   } catch (error) {
     console.error('Error getting return stats:', error.message);
     throw error;
