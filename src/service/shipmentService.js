@@ -234,7 +234,7 @@ export const createPartialShipmentService = async (shipmentData) => {
   try {
     const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
 
-    // Collect missing fields
+    //  Step 1: Validate required fields
     const missingFields = [];
     if (!id) missingFields.push('id');
     if (!sellerId) missingFields.push('sellerId');
@@ -242,18 +242,13 @@ export const createPartialShipmentService = async (shipmentData) => {
     if (!pickUpId) missingFields.push('pickUpId');
     if (!products || products.length === 0) missingFields.push('products');
 
-    // Throw error if any fields are missing
     if (missingFields.length > 0) {
       throw new Error(`Missing required shipment fields: ${missingFields.join(', ')}`);
     }
 
-    // Fetch order as a Mongoose document (no .lean()
-
+    //  Step 2: Fetch order as a Mongoose document (no .lean())
     const order = await Order.findById(id);
-
-    if (!order) {
-      return { success: false, message: 'Order not found.' };
-    }
+    if (!order) return { success: false, message: 'Order not found.' };
 
     const { orderSkuList, merchantOrderNo, orderId } = order;
 
@@ -262,30 +257,61 @@ export const createPartialShipmentService = async (shipmentData) => {
       return { success: false, message: 'Order has empty line items.' };
     }
 
-    // Check if shipment already exists for any of the selected SKUs
+    //  Step 3: Find existing shipments for given SKUs
     const productLineIds = products.map((p) => p.orderLineId?.toString());
+
     const existingShipments = await Shipment.find({
       orderId: id,
-      status: { $ne: 'CANCELED' }, // only consider non-canceled shipments
+      status: { $ne: 'CANCELED' },
       'products.orderLineId': { $in: productLineIds },
     }).lean();
 
-    if (existingShipments?.length > 0) {
-      const alreadyShippedIds = [
-        ...new Set(
-          existingShipments.flatMap((s) =>
-            s.products.filter((p) => productLineIds.includes(p.orderLineId?.toString())).map((p) => p.orderLineId)
-          )
-        ),
-      ];
+    //  Step 4: Build shipped quantity map
+    const shippedQtyMap = {};
+    for (const shipment of existingShipments || []) {
+      if (!['SHIPMENT_CREATED', 'PICKED', 'DELIVERED'].includes(shipment.status)) continue;
 
-      return {
-        success: false,
-        message: `Shipment already created for products: ${alreadyShippedIds.join(', ')}`,
-      };
+      for (const product of shipment.products || []) {
+        const orderLineId = String(product.orderLineId);
+        const quantity = product.quantity || 0;
+
+        if (productLineIds.includes(orderLineId)) {
+          shippedQtyMap[orderLineId] = (shippedQtyMap[orderLineId] || 0) + quantity;
+        }
+      }
     }
 
-    // Resolve or create delivery & collection
+    //  Step 5: Validate shipping quantities against available quantities
+    for (const product of products) {
+      const orderLineId = String(product.orderLineId);
+
+      const matchedSku = order.orderSkuList?.skuList?.find((sku) => String(sku.id) === orderLineId);
+
+      if (!matchedSku) {
+        return { success: false, message: `Product ${orderLineId} not found in order.` };
+      }
+
+      const cancellationRequestedQty = matchedSku.cancellationRequestedQuantity || 0;
+      const availableQty = matchedSku.quantity - cancellationRequestedQty;
+      const alreadyShippedQty = shippedQtyMap[orderLineId] || 0;
+      const remainingQty = availableQty - alreadyShippedQty;
+
+      if (remainingQty <= 0) {
+        return {
+          success: false,
+          message: `No available quantity left to ship for product ${orderLineId}.`,
+        };
+      }
+
+      if (product.quantity > remainingQty) {
+        return {
+          success: false,
+          message: `Cannot ship ${product.quantity} units of product ${orderLineId}, only ${remainingQty} units available.`,
+        };
+      }
+    }
+
+    //  Step 6: Prepare delivery & pickup details
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
     const deliveryDetails = await saveDeliveryAddress(deliveryData);
@@ -293,7 +319,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
 
-    // Call Aymakan API
+    //  Step 7: Create shipment in Aymakan
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
@@ -302,14 +328,13 @@ export const createPartialShipmentService = async (shipmentData) => {
     });
 
     if (!aymakanResult?.success) {
-      return { success: false, message: 'Shipment by Aymakan encountered an error' };
+      return { success: false, message: 'Shipment by Aymakan encountered an error.' };
     }
 
     const trackingNumber = aymakanResult.shipping.tracking_number;
-
     const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
 
-    // Track shipment for status info
+    //  Step 8: Track shipment for initial status info
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo =
       aymakanTrackingResult?.trackingInfo?.map((info) => ({
@@ -319,10 +344,10 @@ export const createPartialShipmentService = async (shipmentData) => {
         reasonCode: info.reason_code,
         reasonEn: info.reason_en,
         reasonAr: info.reason_ar,
-        createdAt: info.created_at,
+        createdAt: info.created_at ? new Date(info.created_at) : new Date(),
       })) || [];
 
-    // Prepare shipment document
+    //  Step 9: Prepare & save shipment document
     const shipmentDocument = new Shipment({
       orderId: new mongoose.Types.ObjectId(id),
       sellerId: new mongoose.Types.ObjectId(sellerId),
@@ -335,9 +360,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
       products,
-      extraData: {
-        aymakan: aymakanResult,
-      },
+      extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
         email: AYMAKAN_INFO.EMAIL,
@@ -345,19 +368,18 @@ export const createPartialShipmentService = async (shipmentData) => {
       pieces,
     });
 
-    // Save shipment
     await shipmentDocument.save();
 
-    // Update all matching SKUs in order
+    //  Step 10: Update order SKUs with AWB number
     for (const product of products) {
-      const sku = order.orderSkuList.skuList.find((s) => s.id === product.orderLineId);
-      if (sku) {
-        sku.airWaybillNo = trackingNumber;
-      }
+      const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
+      if (sku) sku.airWaybillNo = trackingNumber;
     }
+
     if (!order?.sellerId) {
-      order['sellerId'] = sellerId;
+      order.sellerId = sellerId;
     }
+
     await order.save();
 
     return { success: true, shipmentId: shipmentDocument._id };
