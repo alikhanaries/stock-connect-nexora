@@ -503,7 +503,10 @@ const cancelFullOrder = async (orderId, reason) => {
     };
 
     // Check shipments
-    const shipments = await Shipment.find({ orderId }).lean();
+    const shipments = await Shipment.find({
+      orderId,
+      status: { $nin: ['CANCELED', 'DELIVERED'] },
+    }).lean();
 
     // Case A: No shipment found
     if (!shipments.length) {
@@ -539,13 +542,6 @@ const cancelFullOrder = async (orderId, reason) => {
       );
 
       return { success: true, data: updatedOrder.toObject() };
-    }
-
-    // Case B: Some shipments exist
-    const shippedShipment = shipments.find((s) => ['DELIVERED'].includes(s.status));
-
-    if (shippedShipment) {
-      return { success: false, error: { message: 'Cannot cancel delivered order', status: 400 } };
     }
 
     // Cancel shipments in Aymakan and DB

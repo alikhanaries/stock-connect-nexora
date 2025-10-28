@@ -12,6 +12,8 @@ const SkuSchema = new mongoose.Schema(
       enum: [
         'NEW',
         'IN_PROGRESS',
+        'SHIPMENT_CREATED',
+        'PICKED',
         'SHIPPED',
         'RETURNED',
         'CANCELED',

@@ -364,16 +364,17 @@ export const createPartialShipmentService = async (shipmentData) => {
 
     //  Step 8: Track shipment for initial status info
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
-    const trackingInfo =
-      aymakanTrackingResult?.trackingInfo?.map((info) => ({
-        statusCode: info.status_code,
-        description: info.description,
-        descriptionAr: info.description_ar,
-        reasonCode: info.reason_code,
-        reasonEn: info.reason_en,
-        reasonAr: info.reason_ar,
-        createdAt: info.created_at ? new Date(info.created_at) : new Date(),
-      })) || [];
+    const trackingInfo = Array.isArray(aymakanTrackingResult?.trackingInfo)
+      ? aymakanTrackingResult.trackingInfo.map((info) => ({
+          statusCode: info?.status_code ?? '',
+          description: info?.description ?? '',
+          descriptionAr: info?.description_ar ?? '',
+          reasonCode: info?.reason_code ?? '',
+          reasonEn: info?.reason_en ?? '',
+          reasonAr: info?.reason_ar ?? '',
+          createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
+        }))
+      : [];
 
     //  Step 9: Prepare & save shipment document
     const shipmentDocument = new Shipment({
