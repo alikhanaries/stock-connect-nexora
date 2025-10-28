@@ -63,6 +63,7 @@ const shipmentSchema = new mongoose.Schema(
         },
       },
     },
+    cancelReason: { type: String },
   },
   {
     timestamps: true,

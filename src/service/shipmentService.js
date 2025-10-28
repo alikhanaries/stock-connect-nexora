@@ -851,23 +851,29 @@ export const formatShipmentTrackingInfo = (data) => {
 };
 
 // CANCEL SHIPMENT STARTS HERE
-export const cancelShipmentService = async (shipmentId) => {
+export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
   try {
+    // Ensure fallback reason is always non-empty
+    const cancelReason = reason?.trim() || 'NA';
+
     const shipmentData = await Shipment.findOne(
       { _id: shipmentId, status: AYMAKAN_STATUS['AY-0001'].status },
       { _id: 1, airWaybillNo: 1 }
     );
+
     if (!shipmentData) {
       return {
         success: false,
         message: 'No shipment found',
       };
     }
-    const trackingNumber = shipmentData?.airWaybillNo;
-    //  Call Aymakan API
+
+    const trackingNumber = shipmentData.airWaybillNo;
+
+    // Cancel shipment via Aymakan API
     await cancelAymakanShipment(trackingNumber);
 
-    // Track shipment for status info
+    // Get latest tracking info
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo =
       aymakanTrackingResult?.trackingInfo?.map((info) => ({
@@ -880,12 +886,13 @@ export const cancelShipmentService = async (shipmentId) => {
         createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
       })) || [];
 
-    // Update shipment in MongoDB
+    // Update shipment status in DB
     const updatedShipment = await Shipment.findOneAndUpdate(
       { airWaybillNo: trackingNumber },
       {
         status: 'CANCELED',
-        trackingInfo: trackingInfo,
+        trackingInfo,
+        cancelReason,
       },
       { new: true }
     );
@@ -896,11 +903,11 @@ export const cancelShipmentService = async (shipmentId) => {
 
     return {
       success: true,
-      message: 'Shipment cancelled',
+      message: 'Shipment cancelled successfully',
       shipmentId: updatedShipment?._id,
     };
   } catch (error) {
-    console.error('Aymakan Service Error:', error.message);
+    console.error('Aymakan Service Error:', error.message, error.stack);
     throw error;
   }
 };
@@ -991,8 +998,19 @@ export const syncShipmentStatus = async (orderId) => {
         if (orderLineIdsToUpdate.length > 0) {
           await Order.updateOne(
             { _id: orderId },
-            { $set: { 'orderSkuList.skuList.$[sku].status': orderSkuStatus } },
-            { arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }] }
+            {
+              $set: {
+                'orderSkuList.skuList.$[sku].status': orderSkuStatus,
+              },
+            },
+            {
+              arrayFilters: [
+                {
+                  'sku.id': { $in: orderLineIdsToUpdate },
+                  'sku.status': { $ne: 'PARTIALLY_CANCELED' }, //  skip partially canceled items
+                },
+              ],
+            }
           );
         }
 
