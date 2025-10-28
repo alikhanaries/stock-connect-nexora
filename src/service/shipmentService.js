@@ -951,7 +951,7 @@ export const syncShipmentStatus = async (orderId) => {
 
         // 4️ Update order SKUs
         const orderLineIdsToUpdate = shipment.products.map((p) => p.orderLineId).filter(Boolean);
-        const orderStatus = shipmentStatus.toUpperCase() === 'CANCELED' ? 'IN_PROGRESS' : shipmentStatus.toUpperCase();
+        const orderStatus = shipmentStatus.toUpperCase() === 'CANCELED' ? 'NEW' : shipmentStatus.toUpperCase();
         if (orderLineIdsToUpdate.length > 0) {
           await Order.updateOne(
             { _id: orderId },
