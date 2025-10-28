@@ -10,7 +10,7 @@ import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
-import { formatDateTime } from '#root/src/helpers/Common.js';
+import { formatDateTime } from '#root/src/helpers/common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
