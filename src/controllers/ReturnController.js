@@ -80,7 +80,7 @@ export const createMerchantReturn = async (req, res) => {
 // Gets return stats grouped by status.
 export const getReturnStats = async (req, res) => {
   try {
-    const { sellerId } = req.query;
+    const sellerId = req.sellerId;
     const result = await returnService.getReturnStats(sellerId);
     if (!result || !result.stats) {
       return Responses.failResponse(res, 'Failed to get return stats', 404);

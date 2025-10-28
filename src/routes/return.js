@@ -8,7 +8,7 @@ import {
   updateReturn,
   getReturnById,
 } from '#controllers/ReturnController.js';
-import { authMiddleware, checkLanguage } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
   getAllReturnsValidator,
   syncReturnsValidator,
@@ -24,7 +24,7 @@ const router = express.Router();
 // Get returns
 router.get('/', getAllReturnsValidator, checkLanguage, authMiddleware, getAllReturns);
 // Get return statistics grouped by status
-router.get('/stats', getReturnStatsValidator, checkLanguage, authMiddleware, getReturnStats);
+router.get('/stats', getReturnStatsValidator, checkLanguage, authMiddleware, verifySellerAccess, getReturnStats);
 // Sync returns from ChannelEngine to database
 router.get('/sync', syncReturnsValidator, checkLanguage, authMiddleware, syncReturns);
 // Get a specific return by ID

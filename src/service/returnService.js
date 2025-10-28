@@ -242,10 +242,10 @@ export const getReturnStats = async (sellerId = null) => {
     if (sellerId) {
       basePipeline.push({
         $match: {
-          'orderInfo.sellerId': new mongoose.Types.ObjectId(sellerId),
+          'orderInfo.sellerId': sellerId,
         },
       });
-      appliedFilters['orderInfo.sellerId'] = sellerId;
+      appliedFilters['orderInfo.sellerId'] = sellerId.toString();
     }
 
     // Get total quantities for accepted, rejected, and in-progress products
