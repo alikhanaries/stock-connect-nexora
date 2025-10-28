@@ -11,6 +11,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 import { formatDateTime } from '#helpers/CommonHelper.js';
+import { parseInvoiceData } from '#helpers/ParseInvoice.js';
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
     const { userId, declaredValue, deliveryData, collectionData, pieces = 0 } = shipmentData;
@@ -257,6 +258,31 @@ export const createPartialShipmentService = async (shipmentData) => {
       return { success: false, message: 'Order has empty line items.' };
     }
 
+    // Filter products to valid SKUs
+    const validProducts = products.filter((product) => orderSkuList.skuList.some((s) => s.id === product.orderLineId));
+    if (validProducts.length === 0) {
+      return { success: false, message: 'No valid SKUs found in order for shipment.' };
+    }
+
+    // Parse invoice data
+    let taxData = null;
+    let productsData = null;
+    const invoiceData = await parseInvoiceData(id);
+    if (invoiceData?.success) {
+      taxData = {
+        tax_identification_number: invoiceData.invoiceData?.taxIdentificationNumber || '',
+        invoice_number: invoiceData.invoiceData?.invoiceNumber || '',
+        invoice_date: invoiceData.invoiceData?.invoiceDate || '',
+      };
+
+      productsData = products.map((item) => ({
+        sku: item?.merchantProductNo,
+        qty: Number(item?.quantity || 0),
+        price: Number(item?.lineTotalInclVat || 0),
+        hs_code: item.hsCode || '',
+      }));
+    }
+
     //  Step 3: Find existing shipments for given SKUs
     const productLineIds = products.map((p) => p.orderLineId?.toString());
 
@@ -325,6 +351,8 @@ export const createPartialShipmentService = async (shipmentData) => {
       deliveryData,
       collectionData,
       pieces,
+      taxData,
+      productsData,
     });
 
     if (!aymakanResult?.success) {
@@ -359,7 +387,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       merchantOrderNo,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
-      products,
+      products: validProducts,
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
@@ -371,7 +399,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     await shipmentDocument.save();
 
     //  Step 10: Update order SKUs with AWB number
-    for (const product of products) {
+    for (const product of validProducts) {
       const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
       if (sku) sku.airWaybillNo = trackingNumber;
     }
