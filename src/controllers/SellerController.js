@@ -2,6 +2,7 @@ import response from '#helpers/response.js';
 import sellerService from '#service/sellerService.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import mongoose from 'mongoose';
+import { getAymakanShipmentCities } from '../service/aymakanService.js';
 
 export const getSellerById = async (req, res) => {
   try {
@@ -128,5 +129,77 @@ export const getAllSeller = async (req, res) => {
     return response.successResponse(res, message, 200, responseData);
   } catch (error) {
     return response.errorResponse(res, error.message, 500);
+  }
+};
+
+export const getAllPickupAddresses = async (req, res) => {
+  try {
+    const sellerId = req.params.id;
+
+    // Directly query PickupAddress collection
+    const pickupAddresses = await sellerService.getAllPickupAddresses(sellerId);
+    const message =
+      pickupAddresses && pickupAddresses.length > 0
+        ? 'Pickup addresses fetched successfully'
+        : 'No Pickup addresse found';
+
+    return response.successResponse(res, message, 200, pickupAddresses);
+  } catch (error) {
+    return response.errorResponse(res, error.message, 500);
+  }
+};
+
+export const savePickupAddress = async (req, res) => {
+  try {
+    const result = await sellerService.saveSellerPickUpAdressDetails(req.body);
+
+    if (!result) {
+      return response.failResponse(res, 'Failed to save seller pick up address.', 500);
+    }
+
+    return response.successResponse(res, 'Seller pick up adress saved successfully', 201, null);
+  } catch (error) {
+    console.error('Error creating seller:', error);
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
+export const getAyMakanCities = async (req, res) => {
+  try {
+    const result = await getAymakanShipmentCities();
+
+    if (!result.data.cities) {
+      // This can happen if service returns false for invalid inputs
+      return response.errorResponse(res, 'No city found', 400, null);
+    }
+
+    return response.successResponse(res, 'Cities found', 200, result.data.cities);
+  } catch (error) {
+    console.error('Create Shipment Controller Error:', error.message, error.stack);
+    return response.errorResponse(res, error?.message || 'Internal error', 400);
+  }
+};
+
+// Update pickup address
+export const updatePickupAddress = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const payload = req.body;
+
+    const updated = await sellerService.updatePickupAddress(id, payload);
+    return response.successResponse(res, 'Pickup address updated successfully', 200, updated);
+  } catch (error) {
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
+
+// Delete pickup address
+export const deletePickupAddress = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const deleted = await sellerService.deletePickupAddress(id);
+
+    return response.successResponse(res, 'Pickup address deleted successfully', 200, deleted);
+  } catch (error) {
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
   }
 };

@@ -9,7 +9,18 @@ const SkuSchema = new mongoose.Schema(
     channelOrderLineNo: { type: String, trim: true },
     status: {
       type: String,
-      enum: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'RETURNED', 'CANCELLED', 'CLOSED'],
+      enum: [
+        'NEW',
+        'IN_PROGRESS',
+        'SHIPPED',
+        'RETURNED',
+        'CANCELED',
+        'CLOSED',
+        'IN_COMBI',
+        'DELIVERED',
+        'PARTIALLY_CANCELED',
+        'MANCO',
+      ],
       default: 'NEW',
       index: true,
     },
@@ -84,6 +95,7 @@ const SkuSchema = new mongoose.Schema(
     exactShipmentDate: Date,
     expectedShipmentDate: Date,
     latestShipmentDate: Date,
+    airWaybillNo: { type: String, index: true },
   },
   { _id: false }
 );

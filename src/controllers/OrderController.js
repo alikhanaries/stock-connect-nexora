@@ -40,7 +40,12 @@ export const getOrderById = async (req, res) => {
     if (!order) {
       return Responses.failResponse(res, req.locale.NO_ORDERS_FOUND, 404);
     }
-    return Responses.successResponse(res, req.locale.ORDER_FETCHED_SUCCESSFULLY, 200, order);
+    return Responses.successResponse(
+      res,
+      req?.locale?.ORDER_FETCHED_SUCCESSFULLY || 'Order Fetched Successfully',
+      200,
+      order
+    );
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);
@@ -142,6 +147,45 @@ export const merchantCancelById = async (req, res) => {
     }
 
     return Responses.successResponse(res, req.locale.CANCEL_ORDER, 200, orderResponse);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const cancelFullOrder = async (req, res) => {
+  try {
+    const { orderId, reason } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
+    }
+
+    if (!reason) {
+      return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+
+    const orderResponse = await orderService.cancelFullOrder(orderId, reason);
+    if (!orderResponse.success) {
+      return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, null);
+    }
+
+    return Responses.successResponse(res, req?.locale?.CANCEL_ORDER || 'Order is cancelled', 200, null);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+export const cancelPartialOrder = async (req, res) => {
+  try {
+    const { orderId, reason, products } = req.body;
+
+    const orderResponse = await orderService.cancelPartialOrder(orderId, products, reason);
+    if (!orderResponse.success) {
+      return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, null);
+    }
+
+    return Responses.successResponse(res, 'Order is cancelled', 200, null);
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);

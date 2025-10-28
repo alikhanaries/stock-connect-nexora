@@ -6,6 +6,8 @@ import {
   getOrderStats,
   getOrderComparison,
   merchantCancelById,
+  cancelFullOrder,
+  cancelPartialOrder,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -15,6 +17,8 @@ import {
   merchantCancelIdValidator,
   orderStatsValidator,
   syncOrdersValidator,
+  cancelFullOrderValidator,
+  cancelPartialOrderValidator,
 } from '#validations/orders.js';
 const router = express.Router();
 
@@ -31,5 +35,8 @@ router.get(
 );
 router.patch('/merchant-cancellation', merchantCancelIdValidator, checkLanguage, authMiddleware, merchantCancelById);
 router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, getOrderById);
-
+// /* CANCEL ORDER (FULL CANCELLATION) */
+router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMiddleware, cancelFullOrder);
+// /* CANCEL PARTIAL ORDER (PARTIAL CANCELLATION) */
+router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
 export default router;

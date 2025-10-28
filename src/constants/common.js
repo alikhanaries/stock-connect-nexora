@@ -53,6 +53,7 @@ export const ORDER_STATUS_MAP = {
   CLOSED: 'CLOSED',
   MANCO: 'MANCO',
   IN_COMBI: 'IN_COMBI',
+  PARTIALLY_CANCELED: 'PARTIALLY_CANCELED',
 };
 
 export const SELECTED_FIELDS = [
@@ -74,4 +75,5 @@ export const BLOCKED_STATUSES = {
   CLOSED: 'Order has already been closed',
   RETURNED: 'Order has been returned, cannot cancel',
   SHIPPED: 'Order has been shipped, cannot cancel now',
+  CANCELED: 'Order has already been cancelled',
 };

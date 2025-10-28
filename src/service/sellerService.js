@@ -2,6 +2,7 @@ import Seller from '#models/Seller.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { PRODUCT_STATUSES, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
+import PickupAddress from '#models/PickUpAddress.js';
 
 const createSeller = async (sellerData) => {
   const { name } = sellerData;
@@ -112,5 +113,89 @@ export const getSellerById = async (id) => {
   const user = await Seller.findById({ _id: id, isDeleted: false }).lean();
   return user;
 };
+export const saveSellerPickUpAdressDetails = async (payload) => {
+  try {
+    const { sellerId, city, address, postcode, country, phone, description, email } = payload;
 
-export default { createSeller, getAllSeller, updateSeller, softDeleteSellers, updateSellerStatus, getSellerById };
+    // Check mandatory fields
+    if (!sellerId || !city || !address || !postcode || !country || !phone || !email) {
+      throw new Error('Missing required fields');
+    }
+
+    // Fetch seller info
+    const seller = await Seller.findById(sellerId);
+    if (!seller) {
+      throw new Error('Seller not found');
+    }
+    // Prepare pickup address data
+    const pickupData = {
+      sellerId: seller._id,
+      name: seller.name,
+      email: email,
+      city,
+      address,
+      postcode,
+      country,
+      phone,
+      description,
+    };
+
+    // Use sellerId + address as unique key to decide update vs insert
+    const filter = { sellerId: seller._id, address: address };
+
+    const savedAddress = await PickupAddress.findOneAndUpdate(
+      filter,
+      { $set: pickupData },
+      { new: true, upsert: true } // update if exists, insert if not
+    );
+
+    return savedAddress;
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
+export const getAllPickupAddresses = async (sellerId) => {
+  return await PickupAddress.find({ sellerId, status: 'active' }).sort({ createdAt: -1 });
+};
+
+// Update a pickup address
+export const updatePickupAddress = async (id, payload) => {
+  try {
+    const updatedAddress = await PickupAddress.findOneAndUpdate(
+      { _id: id, status: { $ne: 'removed' } },
+      { $set: payload },
+      { new: true, runValidators: true }
+    );
+    return updatedAddress;
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
+// Delete a pickup address (soft delete)
+export const deletePickupAddress = async (id) => {
+  try {
+    const deleted = await PickupAddress.findByIdAndUpdate(
+      id,
+      { $set: { status: 'removed' } },
+      { new: true, runValidators: true }
+    );
+    return deleted;
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
+export default {
+  createSeller,
+  getAllSeller,
+  updateSeller,
+  softDeleteSellers,
+  updateSellerStatus,
+  getSellerById,
+  saveSellerPickUpAdressDetails,
+  getAllPickupAddresses,
+  updatePickupAddress,
+  deletePickupAddress,
+};
