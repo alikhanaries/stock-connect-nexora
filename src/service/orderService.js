@@ -581,8 +581,6 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
     const order = await Order.findById(orderId).lean();
     if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
 
-    const productIds = products.map((p) => p.orderLineId.toString());
-
     // Collect shipped (PICKED or DELIVERED) product IDs
     const shippedProducts = new Set(
       order.orderSkuList?.skuList
@@ -633,43 +631,12 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
       }
     };
 
-    // Fetch related shipments
-    const shipments = await Shipment.find({ orderId }).lean();
-
-    if (!shipments.length) {
-      // Order-level cancel (no shipment yet)
-      if (typeof BLOCKED_STATUSES === 'object' && BLOCKED_STATUSES[order.status]) {
-        return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
-      }
-      await cancelInChannelEngine();
-    } else {
-      // Shipment-level cancel
-      const shipmentMap = shipments.map((s) => ({
-        shipmentId: s._id,
-        airWaybillNo: s.airWaybillNo,
-        skuIds: (s.products || []).map((p) => p.orderLineId.toString()),
-        status: s.status.toUpperCase(),
-      }));
-
-      // Shipments that contain canceled SKUs
-      const shipmentsToCancel = shipmentMap.filter((s) => s.skuIds.some((id) => productIds.includes(id)));
-
-      // Cancel only pending shipments
-      const cancelableShipments = shipmentsToCancel.filter((s) => s.status === 'SHIPMENT_CREATED');
-
-      if (!cancelableShipments.length && shipmentsToCancel?.length) {
-        return { success: false, error: { message: 'No pending shipments can be canceled', status: 409 } };
-      }
-
-      await Promise.all(
-        cancelableShipments.map(async (s) => {
-          await cancelAymakanShipment(s.airWaybillNo);
-          await Shipment.updateOne({ _id: s.shipmentId }, { status: 'CANCELED' });
-        })
-      );
-
-      await cancelInChannelEngine();
+    // Order-level cancel (no shipment yet)
+    if (typeof BLOCKED_STATUSES === 'object' && BLOCKED_STATUSES[order.status]) {
+      return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
     }
+
+    await cancelInChannelEngine();
 
     // ---- Update SKU-level status and cancellation quantity ----
     const orderBeforeUpdate = await Order.findById(orderId).lean();
@@ -678,7 +645,7 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
       const cancelItem = products.find((p) => p.orderLineId.toString() === sku.id.toString());
       if (!cancelItem) return sku;
 
-      const cancelQty = cancelItem.quantity;
+      const cancelQty = cancelItem.quantity + sku.cancellationRequestedQuantity;
 
       // Partial cancel
       return {
