@@ -464,6 +464,8 @@ const transformOrderResponse = (response) => {
 
   return {
     _id: data?._id,
+    channelId: data?.channelId,
+    channelName: data?.channelName,
     orderId: data?.orderId,
     paymentInfo,
     customerInfo,

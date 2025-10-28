@@ -86,6 +86,7 @@ export const cancelShipmentValidator = validate(async (req) => {
   // Validate request body
   const bodySchema = z.object({
     shipmentId: z.string().nonempty({ message: 'shipmentId is required' }),
+    reason: z.string().optional(),
   });
 
   bodySchema.parse(req.body);
