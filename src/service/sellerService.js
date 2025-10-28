@@ -34,7 +34,7 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
     filter.name = searchRegex;
   }
 
-  if (creatorRole === USER_ROLES.SUPER_ADMIN) {
+  if (creatorRole === USER_ROLES.SUPER_ADMIN || creatorRole === USER_ROLES.ADMIN) {
     const sellerLinks = await UserSeller.find({ userId: creatorId }).select('sellerId').lean();
     const sellerId = sellerLinks.map((link) => link.sellerId);
     filter._id = { $in: sellerId };

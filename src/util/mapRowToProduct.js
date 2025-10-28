@@ -88,5 +88,6 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     hsCodeAE: r.hscodeae,
     hsCodeSA: r.hscodesa,
     titleAr: r.titlear || '',
+    longDescriptionAr: r.longdescriptionar,
   };
 };

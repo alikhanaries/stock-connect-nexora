@@ -29,19 +29,15 @@ import {
 } from '#validations/sellers.js';
 const seller = express.Router();
 
-const allowedRoles = [USER_ROLES.SUPER_ADMIN, USER_ROLES.MASTER_ADMIN];
-
-//GET AYMAKN CITY LIST
-seller.get(
-  '/getAyMakanCities',
-  getAymaknCityValidator,
-  checkLanguage,
+seller.post(
+  '/create',
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
-  getAyMakanCities
+  createSellerValidator,
+  checkLanguage,
+  createSeller
 );
-seller.post('/create', authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), createSellerValidator, createSeller);
-seller.get('/', authMiddleware, authorize(allowedRoles), getAllSellerValidator, getAllSeller);
+seller.get('/', getAllSellerValidator, checkLanguage, authMiddleware, getAllSeller);
 seller.delete(
   '/bulk-delete',
   softDeleteSellerValidator,
@@ -53,6 +49,7 @@ seller.delete(
 seller.patch(
   '/status-update',
   updateSellerStatusValidator,
+  checkLanguage,
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
   updateSellerStatus
@@ -68,15 +65,13 @@ seller.get(
 );
 
 seller.get('/:id', getSellerByIdValidator, checkLanguage, authMiddleware, getSellerById);
-seller.patch('/:id', updateSellerValidator, authMiddleware, authorize(USER_ROLES.MASTER_ADMIN), updateSeller);
-// SAVE SELLER PICKUP ADDRESS API
-seller.post(
-  '/savePickupAddress',
-  savePickupAddressValidator,
+seller.patch(
+  '/:id',
+  updateSellerValidator,
   checkLanguage,
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
-  savePickupAddress
+  updateSeller
 );
 
 // Update pickup address
@@ -98,4 +93,25 @@ seller.delete(
   authorize(USER_ROLES.MASTER_ADMIN),
   deletePickupAddress
 );
+
+//GET AYMAKN CITY LIST
+seller.get(
+  '/getAyMakanCities',
+  getAymaknCityValidator,
+  checkLanguage,
+  authMiddleware,
+  authorize(USER_ROLES.MASTER_ADMIN),
+  getAyMakanCities
+);
+
+// SAVE SELLER PICKUP ADDRESS API
+seller.post(
+  '/savePickupAddress',
+  savePickupAddressValidator,
+  checkLanguage,
+  authMiddleware,
+  authorize(USER_ROLES.MASTER_ADMIN),
+  savePickupAddress
+);
+
 export default seller;

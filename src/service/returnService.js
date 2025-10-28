@@ -1,88 +1,19 @@
 import { config } from '#config/config.js';
 import Return from '#models/Return.js';
-import Order from '#models/Orders.js';
-import { sanitizeReturnData } from '#helpers/ReturnHandler.js';
+import mongoose from 'mongoose';
+import {
+  sanitizeReturnData,
+  isNameOrEmailSearch,
+  buildReturnAggregationPipeline,
+  addStatusManipulationStages,
+  formatReturnDetails,
+} from '#helpers/ReturnHandler.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
-/**
- * Formats return data with order information
- */
-const formatReturnWithOrderData = async (returns) => {
-  if (!returns || returns.length === 0) {
-    return [];
-  }
+//Fetches returns from ChannelEngine and saves them to the database.
 
-  // Get unique merchant order numbers from returns
-  const merchantOrderNos = [...new Set(returns.map((returnItem) => returnItem.merchantOrderNo).filter(Boolean))];
-
-  if (merchantOrderNos.length === 0) {
-    // No merchant order numbers found, return returns with empty order data
-    return returns.map((returnItem) => {
-      const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
-
-      return {
-        _id: returnItem._id,
-        orderID: null,
-        quantity: totalQuantity,
-        totalPrice: returnItem.totalPrice || null,
-        customer: null,
-        placedOn: returnItem.placedOn,
-        email: null,
-        phoneNumber: null,
-        status: returnItem.status,
-        platform: returnItem.platform,
-      };
-    });
-  }
-
-  // Find orders that match merchantOrderNo from returns
-  const orders = await Order.find(
-    { merchantOrderNo: { $in: merchantOrderNos } },
-    {
-      orderId: 1,
-      merchantOrderNo: 1,
-      totalInclVat: 1,
-      orderCustomer: 1, // Get the full orderCustomer object
-    }
-  ).lean();
-
-  // Create a map: merchantOrderNo -> Order data
-  const orderMap = {};
-  orders.forEach((order) => {
-    orderMap[order.merchantOrderNo] = order;
-  });
-
-  // Format returns with matched order data
-  return returns.map((returnItem) => {
-    const orderData = orderMap[returnItem.merchantOrderNo] || {};
-
-    const customerName = orderData.orderCustomer
-      ? `${orderData.orderCustomer.firstName || ''} ${orderData.orderCustomer.lastName || ''}`.trim()
-      : '';
-
-    // Calculate total quantity from products
-    const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
-
-    return {
-      _id: returnItem._id,
-      orderID: orderData.orderId || null,
-      quantity: totalQuantity,
-      totalPrice: orderData.totalInclVat || null,
-      customer: customerName || null,
-      placedOn: returnItem.placedOn,
-      email: orderData.orderCustomer?.email || null,
-      phoneNumber: orderData.orderCustomer?.phone || null,
-      status: returnItem.status,
-      platform: returnItem.platform,
-    };
-  });
-};
-
-/**
- * Fetches returns from ChannelEngine and saves them to the database.
- */
 export const getReturns = async (queryParams = {}) => {
   try {
     const params = new URLSearchParams({
@@ -113,9 +44,7 @@ export const getReturns = async (queryParams = {}) => {
   }
 };
 
-/**
- * Saves return data to the database with simplified structure.
- */
+//Saves return data to the database with simplified structure.
 export const saveReturnToDatabase = async (returnData) => {
   try {
     // Sanitize return data using helper
@@ -140,92 +69,240 @@ export const saveReturnToDatabase = async (returnData) => {
   }
 };
 
-/**
- * Gets returns from the database with pagination and filtering.
- */
+//Gets returns from the database with pagination and filtering using aggregation.
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const { status, channelId, returnId, dateFrom, dateTo, sortOrder = 'asc', sortBy = 'returnId' } = query;
+    const {
+      status,
+      channelId,
+      returnId,
+      orderID,
+      sellerId,
+      search,
+      dateFrom,
+      dateTo,
+      sortOrder = 'asc',
+      sortBy = 'returnId',
+      page = 1,
+      size = 10,
+    } = query;
 
-    const page = parseInt(query.page, 10) || 1;
-    const size = parseInt(query.size, 10) || 10;
-
-    const skip = (page - 1) * size;
+    const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
-    const filter = {};
     const appliedFilters = {};
+    const matchConditions = {};
 
-    // Build query filters
-    if (status) {
-      filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
-      appliedFilters.status = status;
-    }
-
-    if (channelId) {
-      const channelIdNum = parseInt(channelId, 10);
-      filter.channelId = channelIdNum;
-      appliedFilters.channelId = channelIdNum;
-    }
-
-    if (returnId) {
-      filter.returnId = returnId;
-      appliedFilters.returnId = returnId;
-    }
-
-    // Date filter
-    if (dateFrom || dateTo) {
-      filter.createdAt = {};
-
-      if (dateFrom) {
-        filter.createdAt.$gte = new Date(dateFrom);
-        appliedFilters.dateFrom = dateFrom;
+    // ====== Filters ======
+    const addFilter = (key, value, transform = (v) => v) => {
+      if (value !== undefined && value !== null && value !== '') {
+        matchConditions[key] = transform(value);
+        appliedFilters[key] = value;
       }
-      if (dateTo) {
-        filter.createdAt.$lte = new Date(dateTo);
-        appliedFilters.dateTo = dateTo;
-      }
-    }
-
-    const projection = {
-      returnId: 1,
-      merchantReturnNo: 1,
-      merchantOrderNo: 1,
-      channelOrderNo: 1,
-      channelId: 1,
-      placedOn: 1,
-      acknowledgeDate: 1,
-      platform: 1,
-      products: 1,
-      status: 1,
-      totalPrice: 1,
     };
 
-    const [totalReturns, returns] = await Promise.all([
-      Return.countDocuments(filter),
-      Return.find(filter, projection)
-        .skip(skip)
-        .limit(size)
-        .sort({ [sortBy]: sortDirection })
-        .lean(),
-    ]);
+    addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }));
+    addFilter('channelId', channelId, (v) => parseInt(v, 10));
+    addFilter('returnId', returnId);
+    addFilter('orderInfo.orderId', orderID);
+    addFilter('orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
 
-    // Format returns with order data
-    const formattedReturns = await formatReturnWithOrderData(returns);
+    // ====== Search Filter ======
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      const searchConditions = [
+        { returnId: { $regex: searchRegex } },
+        { 'orderInfo.orderId': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
+      ];
+
+      // Handle full name searches
+      const searchTerms = search.trim().split(/\s+/);
+      if (searchTerms.length > 1) {
+        const [firstTerm, ...rest] = searchTerms;
+        const lastTerm = rest.join(' ');
+        const firstRegex = new RegExp(firstTerm, 'i');
+        const lastRegex = new RegExp(lastTerm, 'i');
+
+        searchConditions.push(
+          {
+            $and: [
+              { 'orderInfo.orderCustomer.firstName': firstRegex },
+              { 'orderInfo.orderCustomer.lastName': lastRegex },
+            ],
+          },
+          {
+            $and: [
+              { 'orderInfo.orderCustomer.lastName': firstRegex },
+              { 'orderInfo.orderCustomer.firstName': lastRegex },
+            ],
+          }
+        );
+      }
+
+      matchConditions.$or = searchConditions;
+      appliedFilters.search = search;
+    }
+
+    // ====== Date Range Filter ======
+    if (dateFrom || dateTo) {
+      matchConditions.createdAt = {};
+      if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
+      appliedFilters.dateFrom = dateFrom;
+      appliedFilters.dateTo = dateTo;
+    }
+
+    // ====== Build Aggregation Pipeline ======
+    const pipeline = buildReturnAggregationPipeline();
+
+    if (Object.keys(matchConditions).length > 0) {
+      pipeline.push({ $match: matchConditions });
+    }
+
+    // Add status manipulation logic
+    pipeline.push(...addStatusManipulationStages());
+
+    pipeline.push(
+      {
+        $addFields: {
+          orderID: '$orderInfo.orderId',
+          customer: {
+            $concat: [
+              { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
+              ' ',
+              { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
+            ],
+          },
+          email: '$orderInfo.orderCustomer.email',
+          phoneNumber: '$orderInfo.orderCustomer.phone',
+          orderTotalPrice: '$orderInfo.totalInclVat',
+        },
+      },
+      {
+        $addFields: {
+          customer: {
+            $cond: [{ $eq: [{ $trim: { input: '$customer' } }, ''] }, null, { $trim: { input: '$customer' } }],
+          },
+          quantity: '$totalQuantity',
+          totalPrice: { $ifNull: ['$orderTotalPrice', '$totalPrice'] },
+        },
+      }
+    );
+
+    if (search && isNameOrEmailSearch(search)) {
+      pipeline.push({
+        $match: {
+          $or: [{ customer: { $ne: null } }, { email: { $ne: null } }, { orderID: { $ne: null } }],
+        },
+      });
+    }
+
+    // ====== Count and Paginate ======
+    const countPipeline = [...pipeline, { $count: 'total' }];
+
+    pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
+
+    const [results, countResult] = await Promise.all([Return.aggregate(pipeline), Return.aggregate(countPipeline)]);
+
+    const totalReturns = countResult?.[0]?.total || 0;
+
+    const formattedReturns = results.map((r) => ({
+      _id: r._id,
+      orderID: r.orderID || null,
+      quantity: r.quantity || 0,
+      totalPrice: r.totalPrice || null,
+      customer: r.customer || null,
+      placedOn: r.placedOn,
+      email: r.email || null,
+      phoneNumber: r.phoneNumber || null,
+      status: r.status,
+      platform: r.platform,
+    }));
 
     return {
-      success: true,
+      success: formattedReturns.length > 0,
       data: formattedReturns,
       pagination: getPagination(totalReturns, page, size),
       appliedFilters,
     };
   } catch (err) {
-    console.error('Error fetching returns:', err.message);
+    console.error('Error fetching returns:', err);
     return { success: false, message: err.message };
   }
 };
 
-//Creates a return in ChannelEngine.
+export const getReturnStats = async (sellerId = null) => {
+  try {
+    const appliedFilters = {};
 
+    const basePipeline = buildReturnAggregationPipeline();
+
+    if (sellerId) {
+      basePipeline.push({
+        $match: {
+          'orderInfo.sellerId': sellerId,
+        },
+      });
+      appliedFilters['orderInfo.sellerId'] = sellerId.toString();
+    }
+
+    // Get total quantities for accepted, rejected, and in-progress products
+    const quantityPipeline = [
+      ...basePipeline,
+      { $unwind: '$products' },
+      {
+        $group: {
+          _id: null,
+          acceptedQuantity: { $sum: { $max: ['$products.acceptedQuantity', 0] } },
+          rejectedQuantity: { $sum: { $max: ['$products.rejectedQuantity', 0] } },
+          inProgressQuantity: {
+            $sum: {
+              $cond: [
+                { $and: [{ $lte: ['$products.acceptedQuantity', 0] }, { $lte: ['$products.rejectedQuantity', 0] }] },
+                '$products.quantity',
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ];
+
+    const [quantityStats] = await Return.aggregate(quantityPipeline);
+
+    // Get total quantity grouped by return status
+    const statusPipeline = [
+      ...basePipeline,
+      { $unwind: '$products' },
+      { $group: { _id: '$status', totalQuantity: { $sum: '$products.quantity' } } },
+      { $sort: { _id: 1 } },
+    ];
+
+    const statusStats = await Return.aggregate(statusPipeline);
+
+    const stats = {
+      ...statusStats.reduce((acc, { _id, totalQuantity }) => {
+        acc[_id || 'Unknown'] = totalQuantity;
+        return acc;
+      }, {}),
+      REQUEST_ACCEPTED: quantityStats?.acceptedQuantity ?? 0,
+      REQUEST_REJECTED: quantityStats?.rejectedQuantity ?? 0,
+      IN_PROGRESS: quantityStats?.inProgressQuantity ?? 0,
+    };
+
+    return {
+      stats,
+      appliedFilters,
+    };
+  } catch (error) {
+    console.error('Error getting return stats:', error.message);
+    throw error;
+  }
+};
+
+//Creates a return in ChannelEngine.
 export const createReturn = async (returnData) => {
   try {
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`, {
@@ -270,10 +347,120 @@ export const createReturn = async (returnData) => {
     };
   }
 };
+//Sends an acknowledgement for a merchant return to ChannelEngine.
+export const acknowledgeReturn = async (ackData) => {
+  try {
+    const response = await fetch(
+      `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify(ackData),
+      }
+    );
+
+    const responseData = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message: responseData.Message || `ChannelEngine API error: ${response.status} ${response.statusText}`,
+        error: responseData,
+      };
+    }
+
+    return { success: true, data: responseData };
+  } catch (error) {
+    console.error('Error in acknowledgeReturn:', error.message);
+    return {
+      success: false,
+      message: 'Error communicating with ChannelEngine.',
+      error: error.message,
+    };
+  }
+};
+
+export const acceptOrRejectReturn = async (returnData) => {
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?apikey=${CHANNEL_ENGINE_API_KEY}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(returnData),
+    });
+
+    const responseData = await response.json();
+
+    if (response.status === 409) {
+      return {
+        success: false,
+        isConflict: true,
+        message: responseData.Message || 'Return with this reference already exists',
+        error: responseData,
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message: responseData.Message || `ChannelEngine API error: ${response.status}`,
+        statusCode: response.status,
+        error: responseData,
+      };
+    }
+
+    return { success: true, data: responseData };
+  } catch (error) {
+    console.error('Error in acceptOrRejectReturn:', error.message);
+    return {
+      success: false,
+      message: 'Error communicating with ChannelEngine.',
+      error: error.message,
+    };
+  }
+};
+
+export const getReturnById = async (id) => {
+  try {
+    const returnExists = await Return.findById(id).lean();
+    if (!returnExists) {
+      return null;
+    }
+
+    const pipeline = buildReturnAggregationPipeline();
+
+    pipeline.push({
+      $match: { _id: returnExists._id },
+    });
+
+    // Add the same status manipulation logic as in getReturnsFromDatabase
+    pipeline.push(...addStatusManipulationStages());
+
+    const [aggregatedResult] = await Return.aggregate(pipeline);
+
+    if (!aggregatedResult) {
+      return null;
+    }
+
+    return formatReturnDetails(aggregatedResult);
+  } catch (error) {
+    console.error('Error fetching return by ID:', error.message);
+    throw error;
+  }
+};
 
 export default {
   getReturns,
   getReturnsFromDatabase,
   saveReturnToDatabase,
   createReturn,
+  getReturnStats,
+  acknowledgeReturn,
+  acceptOrRejectReturn,
+  getReturnById,
 };

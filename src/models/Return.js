@@ -21,6 +21,10 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
+    channelReturnNo: {
+      type: String,
+      index: true,
+    },
     channelId: {
       type: Number,
       index: true,
@@ -48,12 +52,20 @@ const ReturnSchema = new mongoose.Schema(
           type: Number,
           default: 0,
         },
+        acceptedQuantity: {
+          type: Number,
+          default: 0,
+        },
+        rejectedQuantity: {
+          type: Number,
+          default: 0,
+        },
       },
     ],
   },
   {
     timestamps: true,
-    collection: 'Returns',
+    collection: 'returns',
   }
 );
 
