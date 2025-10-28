@@ -951,19 +951,20 @@ export const syncShipmentStatus = async (orderId) => {
 
         // 4️ Update order SKUs
         const orderLineIdsToUpdate = shipment.products.map((p) => p.orderLineId).filter(Boolean);
-        const orderStatus = shipmentStatus.toUpperCase() === 'CANCELED' ? 'IN_PROGRESS' : shipmentStatus.toUpperCase();
+        const orderSkuStatus = shipmentStatus.toUpperCase() === 'CANCELED' ? 'NEW' : shipmentStatus.toUpperCase();
         if (orderLineIdsToUpdate.length > 0) {
           await Order.updateOne(
             { _id: orderId },
-            { $set: { 'orderSkuList.skuList.$[sku].status': orderStatus } },
+            { $set: { 'orderSkuList.skuList.$[sku].status': orderSkuStatus } },
             { arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }] }
           );
         }
 
         // 5️ Update order status if all SKUs match
         const updatedOrder = await Order.findById(orderId).lean();
-        const allMatch = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === orderStatus);
+        const allMatch = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === orderSkuStatus);
         if (allMatch) {
+          const orderStatus = orderSkuStatus === 'NEW' ? 'IN_PROGRESS' : orderSkuStatus;
           await Order.findByIdAndUpdate(orderId, { $set: { status: orderStatus } });
         }
       } catch (shipmentErr) {
