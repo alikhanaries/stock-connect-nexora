@@ -107,7 +107,6 @@ export const getSingleShipment = async (req, res) => {
 
 export const cancelShipment = async (req, res) => {
   try {
-  
     const { shipmentId } = req.body;
     // Call service
     const result = await cancelShipmentService(shipmentId);

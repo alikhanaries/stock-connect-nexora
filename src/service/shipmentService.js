@@ -868,6 +868,116 @@ export const cancelShipmentService = async (shipmentId) => {
     throw error;
   }
 };
+
+export const syncShipmentStatus = async (orderId) => {
+  try {
+    // Fetch the order once
+    const order = await Order.findById(orderId).lean();
+    if (!order) return { success: false, message: 'Order not found' };
+
+    // Fetch all shipments for this order
+    const shipments = await Shipment.find(
+      { orderId, status: { $ne: 'CANCELED' } },
+      { airWaybillNo: 1, _id: 1, merchantShipmentNo: 1, products: 1, merchantOrderNo: 1, status: 1 }
+    ).lean();
+
+    for (const shipment of shipments) {
+      try {
+        const aymakanTrackingResult = await trackAymakanShipment(shipment.airWaybillNo);
+
+        // Normalize tracking info
+        const trackingInfo = Array.isArray(aymakanTrackingResult?.trackingInfo)
+          ? aymakanTrackingResult.trackingInfo.map((info) => ({
+              statusCode: info?.status_code || '',
+              description: info?.description || '',
+              descriptionAr: info?.description_ar || '',
+              reasonCode: info?.reason_code || '',
+              reasonEn: info?.reason_en || '',
+              reasonAr: info?.reason_ar || '',
+              createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
+            }))
+          : [];
+
+        const lastestTrackingInfo = trackingInfo[0];
+        const shipmentStatus = AYMAKAN_STATUS[lastestTrackingInfo?.statusCode].status || 'UNKNOWN';
+
+        if (shipmentStatus === 'UNKNOWN') {
+          console.warn(`Unknown Aymakan status for shipment ${shipment._id}: ${lastestTrackingInfo?.statusCode}`);
+        }
+
+        // 1️ When shipment is picked
+        if (shipmentStatus === 'PICKED') {
+          const payload = {
+            merchantShipmentNo: shipment.merchantShipmentNo,
+            merchantOrderNo: shipment.merchantOrderNo,
+            lines: shipment.products || [],
+            extraData: {},
+            trackTraceNo: shipment.airWaybillNo,
+            trackTraceUrl: '',
+            returnTrackTraceNo: '',
+            method: 'Aymakan',
+            shippedFromCountryCode: aymakanTrackingResult.collection_country,
+            shipmentDate: aymakanTrackingResult.pickup_date,
+            returnMethod: '',
+            isMerchantCreator: true,
+            airWaybillNo: shipment.airWaybillNo,
+          };
+          try {
+            await createShipmentWithChannelEngine(payload);
+          } catch (err) {
+            console.error('Error creating shipment in ChannelEngine:', err.message);
+          }
+        }
+
+        // 2️ When shipment is delivered
+        if (shipmentStatus === 'DELIVERED') {
+          try {
+            await updateShipmentDeliveryStateChannelEngine(
+              'DELIVERED',
+              aymakanTrackingResult.delivery_date || aymakanTrackingResult.pickup_date,
+              shipment.merchantShipmentNo
+            );
+          } catch (err) {
+            console.error('Error updating delivery state in ChannelEngine:', err.message);
+          }
+        }
+
+        // 3️ Update local shipment record
+        await Shipment.findByIdAndUpdate(
+          shipment._id,
+          { status: shipmentStatus.toUpperCase(), trackingInfo },
+          { new: true }
+        );
+
+        // 4️ Update order SKUs
+        const orderLineIdsToUpdate = shipment.products.map((p) => p.orderLineId).filter(Boolean);
+        const orderSkuStatus = shipmentStatus.toUpperCase() === 'CANCELED' ? 'NEW' : shipmentStatus.toUpperCase();
+        if (orderLineIdsToUpdate.length > 0) {
+          await Order.updateOne(
+            { _id: orderId },
+            { $set: { 'orderSkuList.skuList.$[sku].status': orderSkuStatus } },
+            { arrayFilters: [{ 'sku.id': { $in: orderLineIdsToUpdate } }] }
+          );
+        }
+
+        // 5️ Update order status if all SKUs match
+        const updatedOrder = await Order.findById(orderId).lean();
+        const allMatch = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === orderSkuStatus);
+        if (allMatch) {
+          const orderStatus = orderSkuStatus === 'NEW' ? 'IN_PROGRESS' : orderSkuStatus;
+          await Order.findByIdAndUpdate(orderId, { $set: { status: orderStatus } });
+        }
+      } catch (shipmentErr) {
+        console.error(`Error processing shipment ${shipment._id}:`, shipmentErr.message);
+      }
+    }
+
+    return { success: true, syncedShipments: shipments.length };
+  } catch (err) {
+    console.error('Error syncing shipment status:', err.message);
+    return { success: false, message: err.message };
+  }
+};
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -878,6 +988,7 @@ export default {
   createShipmentWithChannelEngine,
   createShipmentWithAymakan,
   getSingleShipmentService,
+  syncShipmentStatus,
   cancelShipmentService,
   transformShipmentResponse,
 };

@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
+import { syncShipmentStatus } from '#service/shipmentService.js';
 
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -109,6 +110,9 @@ const getAllOrders = async (query, sellerId) => {
 
 export const getOrderById = async (id) => {
   try {
+    // SYNC SHIPMENT & ORDER STATUSAS PER AYMAKAN TRACKING INFO
+    await syncShipmentStatus(id);
+
     //  Fetch the order
     const order = await Order.findById(id).lean();
     if (!order) return false;
