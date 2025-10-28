@@ -3,6 +3,7 @@ import {
   getAllShipmentsService,
   ayMakanWebHookService,
   getSingleShipmentService,
+  cancelShipmentService,
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
@@ -101,5 +102,26 @@ export const getSingleShipment = async (req, res) => {
     console.error('Get Shipment Controller Error:', error.message, error.stack);
     errorLog(error);
     return errorResponse(res, error?.message || 'Internal server error', 400);
+  }
+};
+
+export const cancelShipment = async (req, res) => {
+  try {
+  
+    const { shipmentId } = req.body;
+    // Call service
+    const result = await cancelShipmentService(shipmentId);
+    if (!result.success) {
+      return failResponse(res, result?.message || 'No shipment found', 404);
+    }
+
+    return successResponse(res, result.message || 'Shipment cancelled successfully', 200, {
+      shipmentId: result?.shipmentId,
+    });
+  } catch (error) {
+    console.error('Cancel Shipment Controller Error:', error.message, error.stack);
+    errorLog(error);
+
+    return errorResponse(res, error?.message || 'Shipment could not be cancelled', 500);
   }
 };

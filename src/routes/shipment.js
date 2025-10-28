@@ -5,6 +5,7 @@ import {
   getAllShipments,
   ayMakanWebHook,
   getSingleShipment,
+  cancelShipment,
 } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess, webHookAuthMiddleware } from '#middleware/index.js';
 import {
@@ -12,6 +13,7 @@ import {
   createShipmentValidator,
   ayMakanWebHookValidator,
   getSingleShipmentValidator,
+  cancelShipmentValidator,
 } from '#validations/shipment.js';
 
 const router = express.Router();
@@ -33,5 +35,8 @@ router.post('/ayMakanWebHook', ayMakanWebHookValidator, webHookAuthMiddleware, a
 
 // GET SINGLE SHIPMENT
 router.get('/getSingleShipment/:id', getSingleShipmentValidator, checkLanguage, authMiddleware, getSingleShipment);
+
+// CANCEL SHIPMENT
+router.post('/cancelShipment', cancelShipmentValidator, checkLanguage, authMiddleware, cancelShipment);
 
 export default router;
