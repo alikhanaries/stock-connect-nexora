@@ -107,10 +107,7 @@ export const getSingleShipment = async (req, res) => {
 
 export const cancelShipment = async (req, res) => {
   try {
-    // Validate request body early
-    if (!req?.body?.shipmentId) {
-      return errorResponse(res, 'Tracking number is required', 400);
-    }
+  
     const { shipmentId } = req.body;
     // Call service
     const result = await cancelShipmentService(shipmentId);
