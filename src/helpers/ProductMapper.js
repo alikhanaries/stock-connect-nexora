@@ -1,7 +1,6 @@
 export const mapProductToChannelEngine = (product) => {
   const customAttributes = [
     { Key: 'MarketPlace', Value: product.marketPlace, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
-    { Key: 'Stock', Value: product.currentStockCount || 0, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
     {
       Key: 'categoryTrailAmazon',
       Value: product.categoryTrailAmazon || null,
@@ -58,6 +57,69 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+    {
+      Key: 'gender',
+      Value: product.gender || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'modelName',
+      Value: product.modelName || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'ageRangeDescription',
+      Value: product.ageRangeDescription || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'sizeType',
+      Value: product.sizeType || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'productCareInstructions',
+      Value: product.productCareInstructions || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'countryOfOrigin',
+      Value: product.countryOfOrigin || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'departmentName',
+      Value: product.departmentName || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'fabricType',
+      Value: product.fabricType || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'style',
+      Value: product.style || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || '';
   return {
@@ -68,6 +130,7 @@ export const mapProductToChannelEngine = (product) => {
       ...customAttributes,
     ],
     Name: product.name,
+    Stock: product.currentStockCount,
     Description: product.description,
     Brand: product.brand,
     Size: product.size || '',

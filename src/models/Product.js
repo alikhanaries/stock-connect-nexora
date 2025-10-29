@@ -56,13 +56,16 @@ const ProductSchema = new mongoose.Schema(
     extraImageUrl1: { type: String },
     extraImageUrl2: { type: String },
     extraImageUrl3: { type: String },
-    productType: {
-      type: String,
-      enum: ['simple', 'configurable'],
-      required: true,
-      default: 'simple',
-      index: true,
-    },
+    gender: { type: String },
+    modelName: { type: String },
+    ageRangeDescription: { type: String },
+    sizeType: { type: String, enum: ['Age', 'Alpha', 'Numeric', 'Waist'], default: 'Alpha' },
+    productCareInstructions: { type: String },
+    countryOfOrigin: { type: String },
+    departmentName: { type: String, enum: ['Men', 'Women', 'Boys', 'Girls', 'Unisex', 'Baby'], default: 'Men' },
+    fabricType: { type: String },
+    style: { type: String },
+    weaveType: { type: String },
   },
   { timestamps: true }
 );
