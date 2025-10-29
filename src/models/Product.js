@@ -56,16 +56,56 @@ const ProductSchema = new mongoose.Schema(
     extraImageUrl1: { type: String },
     extraImageUrl2: { type: String },
     extraImageUrl3: { type: String },
-    gender: { type: String },
-    modelName: { type: String },
-    ageRangeDescription: { type: String },
-    sizeType: { type: String, enum: ['Age', 'Alpha', 'Numeric', 'Waist'], default: 'Alpha' },
-    productCareInstructions: { type: String },
-    countryOfOrigin: { type: String },
-    departmentName: { type: String, enum: ['Men', 'Women', 'Boys', 'Girls', 'Unisex', 'Baby'], default: 'Men' },
-    fabricType: { type: String },
-    style: { type: String },
-    weaveType: { type: String },
+    modelName: {
+      type: String,
+      trim: true,
+      index: true,
+    },
+    gender: {
+      type: String,
+      enum: {
+        values: ['Male', 'Female', 'Unisex'],
+        message: '{VALUE} is not a supported gender. Use Male, Female, or Unisex.',
+      },
+      trim: true,
+    },
+    ageRangeDescription: {
+      type: String,
+      trim: true,
+      enum: ['Adult', 'Kids', 'Toddler', 'Infant', 'Newborn'],
+      default: 'Adult',
+    },
+    sizeType: {
+      type: String,
+      enum: ['Age', 'Alpha', 'Numeric', 'Waist'],
+      default: 'Alpha',
+    },
+    productCareInstructions: {
+      type: String,
+      trim: true,
+    },
+    countryOfOrigin: {
+      type: String,
+      trim: true,
+    },
+    departmentName: {
+      type: String,
+      enum: ['Men', 'Women', 'Boys', 'Girls', 'Unisex', 'Baby'],
+      default: 'Men',
+      trim: true,
+    },
+    fabricType: {
+      type: String,
+      trim: true,
+    },
+    style: {
+      type: String,
+      trim: true,
+    },
+    weaveType: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );
