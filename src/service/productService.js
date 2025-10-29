@@ -311,7 +311,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
             }
 
             // map row
-            const product = await mapRowToProduct(row, rowIndex, locale);
+            const product = await mapRowToProduct(row, rowIndex, locale, sellerId);
             if (product.errorData) {
               errorDetails.push(product);
               invalidRowsCount++;
@@ -468,7 +468,7 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
     if (result.modifiedCount === 0) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
-
+    await removeSkuFromUserChannelProducts(sellerId, ids);
     return {
       success: true,
       message: `${result.modifiedCount} ${locale?.PRODUCT_MARKED_DELETED}`,
@@ -479,7 +479,7 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
   }
 };
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
-const addProductsToUserChannel = async (userId, sellerId, channelId, productIds, locale) => {
+const addProductsToUserChannel = async (sellerId, channelId, productIds, locale) => {
   try {
     const products = await Product.find(
       { _id: { $in: productIds } },
@@ -502,7 +502,7 @@ const addProductsToUserChannel = async (userId, sellerId, channelId, productIds,
     }
     const channelName = channel.channelName;
     await UserChannelProducts.findOneAndUpdate(
-      { userId, sellerId, channelId },
+      { sellerId, channelId },
       { $addToSet: { skuList: { $each: skuList } } },
       { upsert: true }
     );
@@ -530,14 +530,13 @@ const addProductsToUserChannel = async (userId, sellerId, channelId, productIds,
   }
 };
 
-export const getUserChannelProducts = async (userId, sellerId, channelId, query) => {
+export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const appliedFilters = {};
 
   const matchStage = {
-    userId: new mongoose.Types.ObjectId(userId),
     sellerId: new mongoose.Types.ObjectId(sellerId),
     channelId: Number(channelId),
   };
@@ -633,23 +632,20 @@ export const getUserChannelProducts = async (userId, sellerId, channelId, query)
   };
 };
 
-const getUserUnassignedProducts = async (userId, sellerId, channelId, query) => {
+const getUserUnassignedProducts = async (sellerId, channelId, query) => {
   const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const assignedSku = await UserChannelProducts.findOne(
     {
-      userId: new mongoose.Types.ObjectId(userId),
       sellerId: new mongoose.Types.ObjectId(sellerId),
       channelId: Number(channelId),
       isActive: true,
     },
     { 'skuList.skuCode': 1 }
   ).lean();
-
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
-
-  const filter = { status: { $ne: 'removed' } };
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
   const appliedFilters = {};
 
   if (assignedSkuCodes.length > 0) {
@@ -745,7 +741,7 @@ async function removeProductsFromChannelEngine(skuCodes) {
   }
 }
 
-const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale) => {
+const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
   /**
    * TODO [TEMPORARY EXCLUSION - CE/NOON]:
    * These SKUs are temporarily restricted from unlinking/removal.
@@ -793,7 +789,6 @@ const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale
     }
     const result = await UserChannelProducts.updateMany(
       {
-        userId: new mongoose.Types.ObjectId(userId),
         sellerId: new mongoose.Types.ObjectId(sellerId),
         channelId: Number(channelId),
       },
@@ -833,6 +828,34 @@ const unlinkProductFromChannel = async (userId, sellerId, channelId, ids, locale
   } catch (err) {
     console.error('Service error in unlinkProductFromChannel:', err);
     throw new Error(err.message);
+  }
+};
+
+export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => {
+  try {
+    if (!sellerId || !Array.isArray(productIds) || productIds.length === 0) {
+      console.warn('Invalid sellerId or productIds in removeSkuFromUserChannelProducts');
+      return;
+    }
+
+    const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+
+    const products = await Product.find(
+      { _id: { $in: productIds }, sellerId: sellerObjectId },
+      { productSkuCode: 1 }
+    ).lean();
+
+    if (!products?.length) return;
+
+    const skuCodes = products.map((p) => p.productSkuCode).filter(Boolean);
+    if (!skuCodes.length) return;
+
+    await UserChannelProducts.updateMany(
+      { sellerId: sellerObjectId },
+      { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
+    );
+  } catch (error) {
+    console.error('Error in removeSkuFromUserChannelProducts:', error);
   }
 };
 

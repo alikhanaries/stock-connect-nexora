@@ -35,6 +35,12 @@ export const ROLES_BASED_USER_FETCHING = {
   admin: ['admin', 'super_admin'],
 };
 
+export const CHANNEL_IMAGE_MAP = {
+  1733: 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/amazion123456789',
+  1892: 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/noon',
+  1635: 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/amazion123456789',
+};
+
 export const ORDER_STATUS_MAP = {
   NEW: 'NEW',
   IN_PROGRESS: 'IN_PROGRESS',
@@ -47,6 +53,7 @@ export const ORDER_STATUS_MAP = {
   CLOSED: 'CLOSED',
   MANCO: 'MANCO',
   IN_COMBI: 'IN_COMBI',
+  PARTIALLY_CANCELED: 'PARTIALLY_CANCELED',
 };
 
 export const SELECTED_FIELDS = [
@@ -68,4 +75,5 @@ export const BLOCKED_STATUSES = {
   CLOSED: 'Order has already been closed',
   RETURNED: 'Order has been returned, cannot cancel',
   SHIPPED: 'Order has been shipped, cannot cancel now',
+  CANCELED: 'Order has already been cancelled',
 };

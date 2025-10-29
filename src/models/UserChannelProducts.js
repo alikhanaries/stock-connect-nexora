@@ -30,13 +30,6 @@ const channelProductsSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-
-    userId: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-      ref: 'User',
-      index: true,
-    },
     skuList: [skuListSchema],
     isActive: {
       type: Boolean,
@@ -47,7 +40,7 @@ const channelProductsSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-channelProductsSchema.index({ channelId: 1, userId: 1 }, { unique: true });
+channelProductsSchema.index({ channelId: 1, sellerId: 1 }, { unique: true });
 
 const UserChannelProducts = mongoose.model('UserChannelProducts', channelProductsSchema);
 export default UserChannelProducts;

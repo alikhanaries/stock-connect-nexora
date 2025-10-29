@@ -8,6 +8,7 @@ import returnRoutes from './return.js';
 import categoryRoutes from './category.js'; //
 import invoiceRoutes from './invoice.js';
 import seller from './seller.js';
+import shipmentRoutes from './shipment.js';
 
 const router = express.Router();
 
@@ -20,5 +21,5 @@ router.use('/returns', returnRoutes);
 router.use('/invoice', invoiceRoutes);
 router.use('/category', categoryRoutes);
 router.use('/seller', seller);
-
+router.use('/shipment', shipmentRoutes);
 export default router;
