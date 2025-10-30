@@ -69,27 +69,8 @@ export const saveReturnToDatabase = async (returnData) => {
   }
 };
 
-/**
- * Gets returns from the database with pagination and filtering using aggregation.
- *
- * Available Status Values (defined in RETURN_STATUS enum):
- * - IN_PROGRESS: Return is being processed
- * - RECEIVED: Return has been received
- * - CANCELLED: Return has been cancelled
- *
- * Query Parameters:
- * - status: Filter by return status (case-insensitive exact match)
- * - platform: Filter by platform name (case-insensitive partial match, e.g., "Amazon" matches "Amazon.in (v3)")
- * - channelId: Filter by channel ID (exact match)
- * - returnId: Filter by return ID (exact match)
- * - orderID: Filter by order ID (exact match)
- * - sellerId: Filter by seller ID (exact match)
- * - search: Search across returnId, orderId, customer name, and email
- * - dateFrom/dateTo: Filter by creation date range
- * - sortBy: Sort field (returnId, orderID, status, platform, placedOn, etc.)
- * - sortOrder: Sort direction (asc/desc)
- * - page/size: Pagination parameters
- */
+//Gets returns from the database with pagination and filtering using aggregation.
+
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
     const {
