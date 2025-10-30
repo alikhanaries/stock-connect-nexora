@@ -245,8 +245,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
 export const getReturnStats = async (sellerId = null) => {
   try {
-    const appliedFilters = {};
-
     // Build base pipeline without status manipulation
     const basePipeline = buildReturnAggregationPipeline();
 
@@ -281,10 +279,7 @@ export const getReturnStats = async (sellerId = null) => {
       }
     });
 
-    return {
-      stats,
-      appliedFilters,
-    };
+    return { stats };
   } catch (error) {
     console.error('Error getting return stats:', error.message);
     throw error;
