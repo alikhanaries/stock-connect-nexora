@@ -5,10 +5,10 @@ import {
   sanitizeReturnData,
   isNameOrEmailSearch,
   buildReturnAggregationPipeline,
-  addStatusManipulationStages,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { RETURN_STATUS } from '#constants/common.js';
 
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
@@ -69,7 +69,27 @@ export const saveReturnToDatabase = async (returnData) => {
   }
 };
 
-//Gets returns from the database with pagination and filtering using aggregation.
+/**
+ * Gets returns from the database with pagination and filtering using aggregation.
+ *
+ * Available Status Values (defined in RETURN_STATUS enum):
+ * - IN_PROGRESS: Return is being processed
+ * - RECEIVED: Return has been received
+ * - CANCELLED: Return has been cancelled
+ *
+ * Query Parameters:
+ * - status: Filter by return status (case-insensitive exact match)
+ * - platform: Filter by platform name (case-insensitive partial match, e.g., "Amazon" matches "Amazon.in (v3)")
+ * - channelId: Filter by channel ID (exact match)
+ * - returnId: Filter by return ID (exact match)
+ * - orderID: Filter by order ID (exact match)
+ * - sellerId: Filter by seller ID (exact match)
+ * - search: Search across returnId, orderId, customer name, and email
+ * - dateFrom/dateTo: Filter by creation date range
+ * - sortBy: Sort field (returnId, orderID, status, platform, placedOn, etc.)
+ * - sortOrder: Sort direction (asc/desc)
+ * - page/size: Pagination parameters
+ */
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
     const {
@@ -102,6 +122,11 @@ export const getReturnsFromDatabase = async (query = {}) => {
         }
       }
     };
+
+    // Validate status if provided
+    if (status && !Object.values(RETURN_STATUS).includes(status.toUpperCase())) {
+      throw new Error(`Invalid status: ${status}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`);
+    }
 
     addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }), true);
     addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
@@ -161,9 +186,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
     if (Object.keys(matchConditions).length > 0) {
       pipeline.push({ $match: matchConditions });
     }
-
-    // Add status manipulation logic
-    pipeline.push(...addStatusManipulationStages());
 
     pipeline.push(
       {
@@ -415,9 +437,6 @@ export const getReturnById = async (id) => {
     pipeline.push({
       $match: { _id: returnExists._id },
     });
-
-    // Add the same status manipulation logic as in getReturnsFromDatabase
-    pipeline.push(...addStatusManipulationStages());
 
     const [aggregatedResult] = await Return.aggregate(pipeline);
 

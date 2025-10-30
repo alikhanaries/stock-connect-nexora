@@ -77,3 +77,9 @@ export const BLOCKED_STATUSES = {
   SHIPPED: 'Order has been shipped, cannot cancel now',
   CANCELED: 'Order has already been cancelled',
 };
+
+export const RETURN_STATUS = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  RECEIVED: 'RECEIVED',
+  CANCELLED: 'CANCELLED',
+};
