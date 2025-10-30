@@ -74,6 +74,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
   try {
     const {
       status,
+      platform,
       channelId,
       returnId,
       orderID,
@@ -93,14 +94,17 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const matchConditions = {};
 
     // ====== Filters ======
-    const addFilter = (key, value, transform = (v) => v) => {
+    const addFilter = (key, value, transform = (v) => v, includeInApplied = false) => {
       if (value !== undefined && value !== null && value !== '') {
         matchConditions[key] = transform(value);
-        appliedFilters[key] = value;
+        if (includeInApplied) {
+          appliedFilters[key] = value;
+        }
       }
     };
 
-    addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }));
+    addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }), true);
+    addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
     addFilter('channelId', channelId, (v) => parseInt(v, 10));
     addFilter('returnId', returnId);
     addFilter('orderInfo.orderId', orderID);
@@ -142,7 +146,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
       }
 
       matchConditions.$or = searchConditions;
-      appliedFilters.search = search;
     }
 
     // ====== Date Range Filter ======
@@ -150,8 +153,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
       matchConditions.createdAt = {};
       if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
       if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
-      appliedFilters.dateFrom = dateFrom;
-      appliedFilters.dateTo = dateTo;
     }
 
     // ====== Build Aggregation Pipeline ======
@@ -202,7 +203,13 @@ export const getReturnsFromDatabase = async (query = {}) => {
     // ====== Count and Paginate ======
     const countPipeline = [...pipeline, { $count: 'total' }];
 
-    pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
+    // Handle sorting - map orderID to the actual field name
+    let actualSortBy = sortBy;
+    if (sortBy === 'orderID') {
+      actualSortBy = 'orderID'; // This field is created in $addFields above
+    }
+
+    pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
     const [results, countResult] = await Promise.all([Return.aggregate(pipeline), Return.aggregate(countPipeline)]);
 
@@ -246,7 +253,6 @@ export const getReturnStats = async (sellerId = null) => {
           'orderInfo.sellerId': sellerId,
         },
       });
-      appliedFilters['orderInfo.sellerId'] = sellerId.toString();
     }
 
     // Get total quantity grouped by return status (raw status from DB)
