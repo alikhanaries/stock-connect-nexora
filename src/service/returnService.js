@@ -268,10 +268,18 @@ export const getReturnStats = async (sellerId = null) => {
 
     const statusStats = await Return.aggregate(statusPipeline);
 
-    const stats = statusStats.reduce((acc, { _id, totalQuantity }) => {
-      acc[_id || 'Unknown'] = totalQuantity;
+    // Initialize stats with all return statuses set to 0
+    const stats = Object.values(RETURN_STATUS).reduce((acc, status) => {
+      acc[status] = 0;
       return acc;
     }, {});
+
+    // Update stats with actual counts from database
+    statusStats.forEach(({ _id, totalQuantity }) => {
+      if (_id && Object.values(RETURN_STATUS).includes(_id)) {
+        stats[_id] = totalQuantity;
+      }
+    });
 
     return {
       stats,
