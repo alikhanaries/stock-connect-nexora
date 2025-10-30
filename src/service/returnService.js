@@ -237,6 +237,7 @@ export const getReturnStats = async (sellerId = null) => {
   try {
     const appliedFilters = {};
 
+    // Build base pipeline without status manipulation
     const basePipeline = buildReturnAggregationPipeline();
 
     if (sellerId) {
@@ -248,31 +249,7 @@ export const getReturnStats = async (sellerId = null) => {
       appliedFilters['orderInfo.sellerId'] = sellerId.toString();
     }
 
-    // Get total quantities for accepted, rejected, and in-progress products
-    const quantityPipeline = [
-      ...basePipeline,
-      { $unwind: '$products' },
-      {
-        $group: {
-          _id: null,
-          acceptedQuantity: { $sum: { $max: ['$products.acceptedQuantity', 0] } },
-          rejectedQuantity: { $sum: { $max: ['$products.rejectedQuantity', 0] } },
-          inProgressQuantity: {
-            $sum: {
-              $cond: [
-                { $and: [{ $lte: ['$products.acceptedQuantity', 0] }, { $lte: ['$products.rejectedQuantity', 0] }] },
-                '$products.quantity',
-                0,
-              ],
-            },
-          },
-        },
-      },
-    ];
-
-    const [quantityStats] = await Return.aggregate(quantityPipeline);
-
-    // Get total quantity grouped by return status
+    // Get total quantity grouped by return status (raw status from DB)
     const statusPipeline = [
       ...basePipeline,
       { $unwind: '$products' },
@@ -282,15 +259,10 @@ export const getReturnStats = async (sellerId = null) => {
 
     const statusStats = await Return.aggregate(statusPipeline);
 
-    const stats = {
-      ...statusStats.reduce((acc, { _id, totalQuantity }) => {
-        acc[_id || 'Unknown'] = totalQuantity;
-        return acc;
-      }, {}),
-      REQUEST_ACCEPTED: quantityStats?.acceptedQuantity ?? 0,
-      REQUEST_REJECTED: quantityStats?.rejectedQuantity ?? 0,
-      IN_PROGRESS: quantityStats?.inProgressQuantity ?? 0,
-    };
+    const stats = statusStats.reduce((acc, { _id, totalQuantity }) => {
+      acc[_id || 'Unknown'] = totalQuantity;
+      return acc;
+    }, {});
 
     return {
       stats,
