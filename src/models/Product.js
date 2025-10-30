@@ -11,9 +11,9 @@ const ProductSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    parentProductId: { type: String, trim: true },
-    parentProductSkuCode: { type: String, trim: true },
     productSkuCode: { type: String, trim: true },
+    parentProductSkuCode: { type: String, trim: true, default: null },
+    grandParentProductSkuCode: { type: String, trim: true, default: null },
     name: { type: String, required: true, trim: true },
     titleAr: { type: String, trim: true },
     description: { type: String },
@@ -62,7 +62,6 @@ const ProductSchema = new mongoose.Schema(
 ProductSchema.index({ productSkuCode: 1 }, { unique: true });
 ProductSchema.index({ sellerId: 1, productSkuCode: 1 });
 ProductSchema.index({ sellerId: 1, ean: 1 });
-ProductSchema.index({ sellerId: 1, parentProductSkuCode: 1 });
 ProductSchema.index({ sellerId: 1, brand: 1 });
 ProductSchema.index({ sellerId: 1, categories: 1 });
 ProductSchema.index({ sellerId: 1, marketPlace: 1 });
