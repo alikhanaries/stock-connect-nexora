@@ -90,8 +90,6 @@ const ProductSchema = new mongoose.Schema(
     },
     departmentName: {
       type: String,
-      enum: ['Men', 'Women', 'Boys', 'Girls', 'Unisex', 'Baby'],
-      default: 'Men',
       trim: true,
     },
     fabricType: {
