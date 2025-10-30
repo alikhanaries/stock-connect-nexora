@@ -63,10 +63,8 @@ const ProductSchema = new mongoose.Schema(
     },
     gender: {
       type: String,
-      enum: {
-        values: ['Male', 'Female', 'Unisex'],
-        message: '{VALUE} is not a supported gender. Use Male, Female, or Unisex.',
-      },
+      enum: ['Male', 'Female', 'Unisex'],
+      default: 'Unisex',
       trim: true,
     },
     ageRangeDescription: {
