@@ -107,9 +107,9 @@ export const getSingleShipment = async (req, res) => {
 
 export const cancelShipment = async (req, res) => {
   try {
-    const { shipmentId } = req.body;
+    const { shipmentId, reason } = req.body;
     // Call service
-    const result = await cancelShipmentService(shipmentId);
+    const result = await cancelShipmentService(shipmentId, reason);
     if (!result.success) {
       return failResponse(res, result?.message || 'No shipment found', 404);
     }
