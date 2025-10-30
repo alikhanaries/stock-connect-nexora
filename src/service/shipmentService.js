@@ -12,6 +12,10 @@ import { getPagination } from '#helpers/PaginationHandler.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
+import { ORDER_STATUS_MAP } from '#constants/common.js';
+import OrderLogs from '#models/OrderLogs.js';
+import { convetDateToUTC } from '#root/src/helpers/Common.js';
+
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
     const { userId, declaredValue, deliveryData, collectionData, pieces = 0 } = shipmentData;
@@ -410,7 +414,13 @@ export const createPartialShipmentService = async (shipmentData) => {
     }
 
     await order.save();
+    const logEntry = {
+      status: 'SHIPMENT CREATED',
+      description: `Shipment created with AWN -${trackingNumber}`,
+      createdAt: new Date(),
+    };
 
+    await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true });
     return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
     console.error('Error in createPartialShipmentService:', error);
@@ -864,7 +874,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     const shipmentData = await Shipment.findOne(
       { _id: shipmentId, status: AYMAKAN_STATUS['AY-0001'].status },
-      { _id: 1, airWaybillNo: 1 }
+      { _id: 1, airWaybillNo: 1, orderId: 1 }
     );
 
     if (!shipmentData) {
@@ -906,7 +916,13 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     if (!updatedShipment) {
       console.warn(`No shipment found with tracking number: ${trackingNumber}`);
     }
+    const logEntry = {
+      status: 'SHIPMENT CANCELED',
+      description: `Shipment canceled with AWN -${trackingNumber}`,
+      createdAt: new Date(),
+    };
 
+    await OrderLogs.updateOne({ orderId: shipmentData?.orderId }, { $push: { details: logEntry } }, { upsert: true });
     return {
       success: true,
       message: 'Shipment cancelled successfully',
@@ -1013,11 +1029,34 @@ export const syncShipmentStatus = async (orderId) => {
               arrayFilters: [
                 {
                   'sku.id': { $in: orderLineIdsToUpdate },
-                  'sku.status': { $ne: 'PARTIALLY_CANCELED' }, //  skip partially canceled items
+                  'sku.status': { $ne: ORDER_STATUS_MAP.PARTIALLY_CANCELED }, //  skip partially canceled items
                 },
               ],
             }
           );
+        }
+
+        const logEntry = {};
+        // ORDER LOG ENTRY
+        if (shipmentStatus === 'DELIVERED') {
+          ((logEntry.status = 'DELIVERED'),
+            (logEntry.description = `Shipment is delivered with AWN:${shipment?.airWaybillNo}`),
+            (logEntry.createdAt = aymakanTrackingResult?.delivery_date || new Date()));
+        }
+        if (shipmentStatus === 'PICKED') {
+          ((logEntry.status = 'PICKED'),
+            (logEntry.description = `Shipment is picked with AWN:${shipment?.airWaybillNo}`),
+            (logEntry.createdAt = aymakanTrackingResult?.pickup_date || new Date()));
+        }
+        if (shipmentStatus === 'CANCELED') {
+          const localTime = lastestTrackingInfo?.createdAt;
+          const utcTime = convetDateToUTC(localTime);
+          ((logEntry.status = 'CANCELED'),
+            (logEntry.description = `Shipment is canceled with AWN:${shipment?.airWaybillNo}`),
+            (logEntry.createdAt = utcTime || new Date()));
+        }
+        if (logEntry?.status) {
+          await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
         }
 
         // 5️ Update order status if all SKUs match
@@ -1026,6 +1065,14 @@ export const syncShipmentStatus = async (orderId) => {
         if (allMatch) {
           const orderStatus = orderSkuStatus === 'NEW' ? 'IN_PROGRESS' : orderSkuStatus;
           await Order.findByIdAndUpdate(orderId, { $set: { status: orderStatus } });
+
+          if (orderStatus === 'DELIVERED') {
+            ((logEntry.status = 'DELIVERED'),
+              (logEntry.description = `Order is delivered`),
+              (logEntry.createdAt = aymakanTrackingResult?.delivery_date || new Date()));
+          }
+
+          await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
         }
       } catch (shipmentErr) {
         console.error(`Error processing shipment ${shipment._id}:`, shipmentErr.message);
