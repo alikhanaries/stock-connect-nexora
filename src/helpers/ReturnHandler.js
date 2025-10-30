@@ -264,7 +264,7 @@ export const formatReturnDetails = (aggregatedResult) => {
         region: null,
         zipCode: null,
       },
-      productInfo:
+      products:
         returnData.products?.map((product, index) => ({
           id: index + 1,
           merchantProductNo: product.productSkuCode,
@@ -309,8 +309,8 @@ export const formatReturnDetails = (aggregatedResult) => {
   const shippingFee = proportionalShippingExclVat;
   const total = subtotal + tax + shippingFee;
 
-  // Map returned items to product info format
-  const productInfo = returnedSkus.map((returnProduct, index) => {
+  // Map returned items to products format
+  const products = returnedSkus.map((returnProduct, index) => {
     const matchingSku = orderSkus.find((sku) => sku.merchantProductNo === returnProduct.productSkuCode);
 
     const unitPriceExclVat = matchingSku?.unitPriceExclVat || 0;
@@ -377,7 +377,7 @@ export const formatReturnDetails = (aggregatedResult) => {
       phoneNo: orderInfo.orderCustomer?.phone || null,
     },
     shippingAddress: shippingAddress,
-    productInfo: productInfo,
+    products: products,
     status: returnData.status || 'UNKNOWN',
     subtotal: parseFloat(subtotal.toFixed(2)),
     tax: parseFloat(tax.toFixed(2)),
