@@ -284,6 +284,8 @@ export const formatReturnDetails = (aggregatedResult) => {
           lineTotalExclVat: 0,
           lineVat: 0,
           quantity: product.quantity || 0,
+          acceptedQuantity: product.acceptedQuantity || 0,
+          rejectedQuantity: product.rejectedQuantity || 0,
         })) || [],
     };
   }
@@ -330,6 +332,8 @@ export const formatReturnDetails = (aggregatedResult) => {
       lineTotalExclVat: unitPriceExclVat * quantity,
       lineVat: unitVat * quantity,
       quantity: quantity,
+      acceptedQuantity: returnProduct.acceptedQuantity || 0,
+      rejectedQuantity: returnProduct.rejectedQuantity || 0,
     };
   });
 
