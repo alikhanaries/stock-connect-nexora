@@ -81,7 +81,7 @@ const updateSampleTemplate = async (channelId, sampleTemplate) => {
       { channelId: numericChannelId },
       { $set: { sampleTemplate } },
       { new: true }
-    ).lean();
+    );
 
     return updated?.channelName || null;
   } catch (err) {
