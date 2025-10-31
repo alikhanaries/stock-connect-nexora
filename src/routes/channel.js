@@ -53,6 +53,6 @@ router.delete(
 
 router.get('/getAllUserChannels', getAllUserChannelsValidator, authMiddleware, verifySellerAccess, getAllUserChannels);
 
-router.put('/:channelId/sample-template', updateChannelSampleTemplate);
+router.put('/:channelId/sample-template', authMiddleware, updateChannelSampleTemplate);
 
 export default router;
