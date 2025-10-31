@@ -264,13 +264,7 @@ export const formatReturnDetails = (aggregatedResult) => {
         region: null,
         zipCode: null,
       },
-      status: returnData.status || null,
-      subtotal: 0,
-      tax: 0,
-      total: 0,
-      shippingFee: 0,
-      shippedItems: [],
-      unshippedItems:
+      products:
         returnData.products?.map((product, index) => ({
           id: index + 1,
           merchantProductNo: product.productSkuCode,
@@ -284,7 +278,14 @@ export const formatReturnDetails = (aggregatedResult) => {
           lineTotalExclVat: 0,
           lineVat: 0,
           quantity: product.quantity || 0,
+          acceptedQuantity: product.acceptedQuantity || 0,
+          rejectedQuantity: product.rejectedQuantity || 0,
         })) || [],
+      status: returnData.status || null,
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+      shippingFee: 0,
     };
   }
 
@@ -308,8 +309,8 @@ export const formatReturnDetails = (aggregatedResult) => {
   const shippingFee = proportionalShippingExclVat;
   const total = subtotal + tax + shippingFee;
 
-  // Map returned items to unshipped format
-  const unshippedItems = returnedSkus.map((returnProduct, index) => {
+  // Map returned items to products format
+  const products = returnedSkus.map((returnProduct, index) => {
     const matchingSku = orderSkus.find((sku) => sku.merchantProductNo === returnProduct.productSkuCode);
 
     const unitPriceExclVat = matchingSku?.unitPriceExclVat || 0;
@@ -330,6 +331,8 @@ export const formatReturnDetails = (aggregatedResult) => {
       lineTotalExclVat: unitPriceExclVat * quantity,
       lineVat: unitVat * quantity,
       quantity: quantity,
+      acceptedQuantity: returnProduct.acceptedQuantity || 0,
+      rejectedQuantity: returnProduct.rejectedQuantity || 0,
     };
   });
 
@@ -374,13 +377,12 @@ export const formatReturnDetails = (aggregatedResult) => {
       phoneNo: orderInfo.orderCustomer?.phone || null,
     },
     shippingAddress: shippingAddress,
+    products: products,
     status: returnData.status || 'UNKNOWN',
     subtotal: parseFloat(subtotal.toFixed(2)),
     tax: parseFloat(tax.toFixed(2)),
     total: parseFloat(total.toFixed(2)),
     shippingFee: parseFloat(shippingFee.toFixed(2)),
-    shippedItems: [],
-    unshippedItems: unshippedItems,
   };
 };
 

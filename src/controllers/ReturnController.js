@@ -88,7 +88,6 @@ export const getReturnStats = async (req, res) => {
 
     const responseData = {
       ...result.stats,
-      appliedFilters: result.appliedFilters || {},
     };
 
     return Responses.successResponse(res, 'Return stats fetched successfully', 200, responseData);

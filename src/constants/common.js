@@ -54,6 +54,7 @@ export const ORDER_STATUS_MAP = {
   MANCO: 'MANCO',
   IN_COMBI: 'IN_COMBI',
   PARTIALLY_CANCELED: 'PARTIALLY_CANCELED',
+  SHIPMENT_CREATED: 'SHIPMENT_CREATED',
 };
 
 export const SELECTED_FIELDS = [
@@ -76,4 +77,10 @@ export const BLOCKED_STATUSES = {
   RETURNED: 'Order has been returned, cannot cancel',
   SHIPPED: 'Order has been shipped, cannot cancel now',
   CANCELED: 'Order has already been cancelled',
+};
+
+export const RETURN_STATUS = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  RECEIVED: 'RECEIVED',
+  CANCELLED: 'CANCELLED',
 };

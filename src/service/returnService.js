@@ -5,10 +5,10 @@ import {
   sanitizeReturnData,
   isNameOrEmailSearch,
   buildReturnAggregationPipeline,
-  addStatusManipulationStages,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import { RETURN_STATUS } from '#constants/common.js';
 
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
@@ -70,10 +70,12 @@ export const saveReturnToDatabase = async (returnData) => {
 };
 
 //Gets returns from the database with pagination and filtering using aggregation.
+
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
     const {
       status,
+      platform,
       channelId,
       returnId,
       orderID,
@@ -93,14 +95,22 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const matchConditions = {};
 
     // ====== Filters ======
-    const addFilter = (key, value, transform = (v) => v) => {
+    const addFilter = (key, value, transform = (v) => v, includeInApplied = false) => {
       if (value !== undefined && value !== null && value !== '') {
         matchConditions[key] = transform(value);
-        appliedFilters[key] = value;
+        if (includeInApplied) {
+          appliedFilters[key] = value;
+        }
       }
     };
 
-    addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }));
+    // Validate status if provided
+    if (status && !Object.values(RETURN_STATUS).includes(status.toUpperCase())) {
+      throw new Error(`Invalid status: ${status}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`);
+    }
+
+    addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }), true);
+    addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
     addFilter('channelId', channelId, (v) => parseInt(v, 10));
     addFilter('returnId', returnId);
     addFilter('orderInfo.orderId', orderID);
@@ -142,7 +152,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
       }
 
       matchConditions.$or = searchConditions;
-      appliedFilters.search = search;
     }
 
     // ====== Date Range Filter ======
@@ -150,8 +159,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
       matchConditions.createdAt = {};
       if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
       if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
-      appliedFilters.dateFrom = dateFrom;
-      appliedFilters.dateTo = dateTo;
     }
 
     // ====== Build Aggregation Pipeline ======
@@ -160,9 +167,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
     if (Object.keys(matchConditions).length > 0) {
       pipeline.push({ $match: matchConditions });
     }
-
-    // Add status manipulation logic
-    pipeline.push(...addStatusManipulationStages());
 
     pipeline.push(
       {
@@ -202,7 +206,13 @@ export const getReturnsFromDatabase = async (query = {}) => {
     // ====== Count and Paginate ======
     const countPipeline = [...pipeline, { $count: 'total' }];
 
-    pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
+    // Handle sorting - map orderID to the actual field name
+    let actualSortBy = sortBy;
+    if (sortBy === 'orderID') {
+      actualSortBy = 'orderID'; // This field is created in $addFields above
+    }
+
+    pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
     const [results, countResult] = await Promise.all([Return.aggregate(pipeline), Return.aggregate(countPipeline)]);
 
@@ -235,8 +245,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
 export const getReturnStats = async (sellerId = null) => {
   try {
-    const appliedFilters = {};
-
+    // Build base pipeline without status manipulation
     const basePipeline = buildReturnAggregationPipeline();
 
     if (sellerId) {
@@ -245,34 +254,9 @@ export const getReturnStats = async (sellerId = null) => {
           'orderInfo.sellerId': sellerId,
         },
       });
-      appliedFilters['orderInfo.sellerId'] = sellerId.toString();
     }
 
-    // Get total quantities for accepted, rejected, and in-progress products
-    const quantityPipeline = [
-      ...basePipeline,
-      { $unwind: '$products' },
-      {
-        $group: {
-          _id: null,
-          acceptedQuantity: { $sum: { $max: ['$products.acceptedQuantity', 0] } },
-          rejectedQuantity: { $sum: { $max: ['$products.rejectedQuantity', 0] } },
-          inProgressQuantity: {
-            $sum: {
-              $cond: [
-                { $and: [{ $lte: ['$products.acceptedQuantity', 0] }, { $lte: ['$products.rejectedQuantity', 0] }] },
-                '$products.quantity',
-                0,
-              ],
-            },
-          },
-        },
-      },
-    ];
-
-    const [quantityStats] = await Return.aggregate(quantityPipeline);
-
-    // Get total quantity grouped by return status
+    // Get total quantity grouped by return status (raw status from DB)
     const statusPipeline = [
       ...basePipeline,
       { $unwind: '$products' },
@@ -282,20 +266,20 @@ export const getReturnStats = async (sellerId = null) => {
 
     const statusStats = await Return.aggregate(statusPipeline);
 
-    const stats = {
-      ...statusStats.reduce((acc, { _id, totalQuantity }) => {
-        acc[_id || 'Unknown'] = totalQuantity;
-        return acc;
-      }, {}),
-      REQUEST_ACCEPTED: quantityStats?.acceptedQuantity ?? 0,
-      REQUEST_REJECTED: quantityStats?.rejectedQuantity ?? 0,
-      IN_PROGRESS: quantityStats?.inProgressQuantity ?? 0,
-    };
+    // Initialize stats with all return statuses set to 0
+    const stats = Object.values(RETURN_STATUS).reduce((acc, status) => {
+      acc[status] = 0;
+      return acc;
+    }, {});
 
-    return {
-      stats,
-      appliedFilters,
-    };
+    // Update stats with actual counts from database
+    statusStats.forEach(({ _id, totalQuantity }) => {
+      if (_id && Object.values(RETURN_STATUS).includes(_id)) {
+        stats[_id] = totalQuantity;
+      }
+    });
+
+    return { stats };
   } catch (error) {
     console.error('Error getting return stats:', error.message);
     throw error;
@@ -437,9 +421,6 @@ export const getReturnById = async (id) => {
     pipeline.push({
       $match: { _id: returnExists._id },
     });
-
-    // Add the same status manipulation logic as in getReturnsFromDatabase
-    pipeline.push(...addStatusManipulationStages());
 
     const [aggregatedResult] = await Return.aggregate(pipeline);
 

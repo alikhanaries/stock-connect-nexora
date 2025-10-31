@@ -216,7 +216,7 @@ const validateProducts = async (channelId, sellerId) => {
       return {
         ...product,
         categoryTrailAmazon:
-          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Amazon.in (v3)')
+          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Amazon.sa (v3)')
             ?.marketplaceCategoryTrails || null,
         categoryTrailNoon:
           trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Noon V2')?.marketplaceCategoryTrails || null,
@@ -314,6 +314,20 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
             const product = await mapRowToProduct(row, rowIndex, locale, sellerId);
             if (product.errorData) {
               errorDetails.push(product);
+              invalidRowsCount++;
+              return;
+            }
+            const existingProduct = await Product.findOne({
+              productSkuCode: product.productSkuCode,
+            }).lean();
+
+            if (existingProduct) {
+              const errorMsg = `Duplicate SKU found at row ${rowIndex}: ${product.productSkuCode}`;
+              errorDetails.push({
+                rowNumber: rowIndex,
+                errorData: [errorMsg],
+              });
+
               invalidRowsCount++;
               return;
             }

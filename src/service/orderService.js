@@ -9,7 +9,8 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo, syncShipmentStatus } from '#service/shipmentService.js';
-
+import { formatDateTime } from '#root/src/helpers/Common.js';
+import OrderLogs from '#models/OrderLogs.js';
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
   const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
@@ -241,14 +242,21 @@ export const getOrderById = async (id) => {
       shipmentMode: shipment.shipmentMode || 'AYMAKAN',
     }));
 
-    // Final response
+    // Fetch main order details
     const filteredData = transformOrderResponse(order);
 
+    // Fetch order logs for this order
+    const orderLogsDetails = await OrderLogs.findOne({ orderId: id }).lean();
+    // Format the log details safely
+    const orderLogsData = orderLogsDetails?.details?.length ? formatOrderTrackingInf(orderLogsDetails.details) : [];
+
+    // Final combined response
     return {
       ...filteredData,
       shippedItems,
       unshippedItems,
       cancelledItems,
+      orderLogsData,
     };
   } catch (err) {
     console.log(err);
@@ -268,14 +276,53 @@ const getOrderStats = async (sellerId) => {
   }
 };
 
-const processOrders = async (orders, sellerId) => {
+export const processOrders = async (orders, sellerId) => {
   try {
+    // Prepare bulk operations
     const operations = await orderhelper.sanitizeOrdersData(orders, sellerId);
-    const result = await Order.bulkWrite(operations);
 
-    return { success: true, data: { ...result } };
+    // Execute the bulk write
+    const result = await Order.bulkWrite(operations);
+    // Get only newly created (upserted) orders
+    const upsertedOrderIds = Object.values(result.upsertedIds || {});
+    const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
+
+    // Build log entries for each newly created order
+    const orderLogs = upsertedIndexes.map((index, i) => {
+      const order = orders[index];
+      const orderId = upsertedOrderIds[i];
+
+      const logDetails = [
+        {
+          status: 'CREATED',
+          description: 'Order Placed',
+          createdAt: new Date(order?.OrderDate || order?.orderDate || Date.now()),
+        },
+      ];
+
+      return {
+        orderId,
+        details: logDetails,
+      };
+    });
+
+    // Insert logs only for newly created orders
+    if (orderLogs.length > 0) {
+      await OrderLogs.insertMany(orderLogs);
+      console.log('Inserted order logs:', orderLogs.length);
+    } else {
+      console.log('No new orders created — skipping log insertion');
+    }
+
+    return {
+      success: true,
+      data: {
+        ...result,
+        insertedOrderIds: upsertedOrderIds,
+      },
+    };
   } catch (error) {
-    console.error('Error :', error.message);
+    console.error('Error in processOrders:', error.message);
     return { success: false, message: error.message };
   }
 };
@@ -370,7 +417,7 @@ const cancelOrder = async (orderId, reason) => {
       orderId,
       {
         $set: {
-          status: ORDER_STATUS_MAP.MANCO,
+          status: ORDER_STATUS_MAP.CANCELED,
           'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.MANCO,
         },
       },
@@ -464,6 +511,7 @@ const transformOrderResponse = (response) => {
 
   return {
     _id: data?._id,
+    merchantOrderNo: data?.merchantOrderNo || '',
     channelId: data?.channelId,
     channelName: data?.channelName,
     orderId: data?.orderId,
@@ -478,20 +526,18 @@ const transformOrderResponse = (response) => {
   };
 };
 
-const cancelFullOrder = async (orderId, reason) => {
+const cancelFullOrder = async (orderId, reason = 'NA') => {
   try {
-    // Validate order
     const order = await Order.findById(orderId).lean();
-    if (!order) {
-      return { success: false, error: { message: 'Order not found', status: 404 } };
-    }
+    if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
 
-    // Prepare cancellation payload
-    const lines = order.orderSkuList.skuList.map((item) => ({
-      MerchantProductNo: item.merchantProductNo,
-      OrderLineId: item.id,
-      Quantity: parseInt(item.quantity) - parseInt(item.cancellationRequestedQuantity),
-    }));
+    const lines = order.orderSkuList.skuList
+      .map((item) => ({
+        MerchantProductNo: item.merchantProductNo,
+        OrderLineId: item.id,
+        Quantity: Math.max(0, parseInt(item.quantity) - parseInt(item.cancellationRequestedQuantity || 0)),
+      }))
+      .filter((line) => line.Quantity > 0);
 
     const cancelPayload = {
       MerchantCancellationNo: randomBytes(6).toString('hex'),
@@ -502,69 +548,33 @@ const cancelFullOrder = async (orderId, reason) => {
       IsMerchantCreator: true,
     };
 
-    // Check shipments
     const shipments = await Shipment.find({
       orderId,
       status: { $nin: ['CANCELED', 'DELIVERED'] },
     }).lean();
 
-    // Case A: No shipment found
-    if (!shipments.length) {
-      if (BLOCKED_STATUSES[order.status]) {
-        return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
-      }
-
-      // Cancel in ChannelEngine
-      const ceRes = await fetch(
-        `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(cancelPayload),
-        }
+    if (shipments.length) {
+      await Promise.all(
+        shipments.map(async (s) => {
+          try {
+            await cancelAymakanShipment(s.airWaybillNo);
+          } catch (err) {
+            console.warn(`Aymakan cancel failed for ${s.airWaybillNo}:`, err.message);
+          }
+          await Shipment.updateOne({ _id: s._id }, { status: 'CANCELED' });
+        })
       );
-
-      if (!ceRes.ok) {
-        const err = await ceRes.text();
-        throw new Error(`ChannelEngine cancel failed: ${err}`);
-      }
-
-      // Update order status
-      const updatedOrder = await Order.findByIdAndUpdate(
-        orderId,
-        {
-          $set: {
-            status: ORDER_STATUS_MAP.CANCELED,
-            'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.CANCELED,
-          },
-        },
-        { new: true }
-      );
-
-      return { success: true, data: updatedOrder.toObject() };
+    } else if (BLOCKED_STATUSES[order.status]) {
+      return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
     }
-
-    // Cancel shipments in Aymakan and DB
-    await Promise.all(
-      shipments.map(async (s) => {
-        await cancelAymakanShipment(s.airWaybillNo);
-        await Shipment.updateOne({ _id: s._id }, { status: 'CANCELED' });
-      })
-    );
-
-    // Cancel order in ChannelEngine
-    const ceRes2 = await fetch(`${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`, {
+    // CANCEL ORDER IN CHANNEL ENGINE
+    const res = await fetch(`${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${process.env.CHANNEL_ENGINE_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cancelPayload),
     });
+    if (!res.ok) throw new Error(`ChannelEngine cancel failed: ${await res.text()}`);
 
-    if (!ceRes2.ok) {
-      const err = await ceRes2.text();
-      throw new Error(`ChannelEngine cancel failed: ${err}`);
-    }
-
-    // Update order in DB
     const updatedOrder = await Order.findByIdAndUpdate(
       orderId,
       {
@@ -575,11 +585,18 @@ const cancelFullOrder = async (orderId, reason) => {
       },
       { new: true }
     );
+    // ORDER LOG ENTRY
+    const logEntry = {
+      status: 'CANCELED',
+      description: 'Order Canceled',
+      createdAt: new Date(),
+    };
+    await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
 
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
-    return { success: false, error: { message: error.message, stack: error.stack } };
+    return { success: false, error: { message: error.message } };
   }
 };
 
@@ -672,11 +689,38 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
       updatedOrder.status = ORDER_STATUS_MAP.CANCELED;
     }
 
+    // ORDER LOG ENTRY with canceled SKU details
+    const canceledItemsDescription = products
+      .map((p) => `Product: ${p.merchantProductNo}, Quantity: ${p.quantity}`)
+      .join('; ');
+
+    const logEntry = {
+      status: 'PARTIALLY CANCELED',
+      description: `Order partially canceled — ${canceledItemsDescription}`,
+      createdAt: new Date(),
+    };
+
+    await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
+
     return { success: true, data: updatedOrder };
   } catch (error) {
     console.error('cancelPartialOrder error:', error);
     return { success: false, error: { message: error.message, stack: error.stack } };
   }
+};
+
+export const formatOrderTrackingInf = (data) => {
+  if (!Array.isArray(data) || data.length === 0) return [];
+
+  return data.map((item) => {
+    const formatted = formatDateTime(item?.createdAt);
+
+    return {
+      status: item?.description || '',
+      date: formatted?.date || '',
+      time: formatted?.time || '',
+    };
+  });
 };
 
 export default {
