@@ -43,6 +43,11 @@ const channelsSchema = new mongoose.Schema(
       type: String,
     },
 
+    sampleTemplate: {
+      type: String,
+      default: null,
+    },
+
     isActive: {
       type: Boolean,
       required: true,

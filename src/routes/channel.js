@@ -7,6 +7,7 @@ import {
   getAllUserChannels,
   updateUserChannelsStatus,
   removeUserChannels,
+  updateChannelSampleTemplate,
 } from '#controllers/ChannelsController.js';
 import { authMiddleware } from '#middleware/index.js';
 import {
@@ -51,5 +52,7 @@ router.delete(
 );
 
 router.get('/getAllUserChannels', getAllUserChannelsValidator, authMiddleware, verifySellerAccess, getAllUserChannels);
+
+router.put('/:channelId/sample-template', updateChannelSampleTemplate);
 
 export default router;

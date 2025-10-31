@@ -121,6 +121,21 @@ export const removeUserChannels = async (req, res) => {
   }
 };
 
+export const updateChannelSampleTemplate = async (req, res) => {
+  try {
+    const { channelId } = req.params;
+    const { sampleTemplate } = req.body || {};
+    const channelName = await channelService.updateSampleTemplate(channelId, sampleTemplate);
+    if (!channelName) {
+      return Responses.failResponse(res, req.locale?.NO_CHANNEL_FOUND || 'Channel not found', 404);
+    }
+    return Responses.successResponse(res, `sampleTemplate updated for ${channelName}`, 200);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllChannelsFromChannelPartner,
   getAllChannels,
@@ -128,4 +143,5 @@ export default {
   getAllUserChannels,
   updateUserChannelsStatus,
   removeUserChannels,
+  updateChannelSampleTemplate,
 };

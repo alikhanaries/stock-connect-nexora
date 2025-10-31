@@ -70,6 +70,26 @@ const getAllChannelsFromChannelPartner = async () => {
   }
 };
 
+const updateSampleTemplate = async (channelId, sampleTemplate) => {
+  try {
+    const numericChannelId = Number(channelId);
+    if (Number.isNaN(numericChannelId)) {
+      throw new Error('Invalid channelId');
+    }
+
+    const updated = await Channel.findOneAndUpdate(
+      { channelId: numericChannelId },
+      { $set: { sampleTemplate } },
+      { new: true }
+    ).lean();
+
+    return updated?.channelName || null;
+  } catch (err) {
+    console.error('Error in updateSampleTemplate:', err);
+    throw new Error(err.message);
+  }
+};
+
 /** FUNC - GET ALL CHANNEL LIST FROM DATABASE */
 const getAllChannels = async (query, sellerId) => {
   try {
@@ -232,6 +252,7 @@ export const getAllUserChannels = async (sellerId, query) => {
             createdAt: '$channelIds.createdAt',
             ordersCount: { $ifNull: [{ $arrayElemAt: ['$ordersInfo.count', 0] }, 0] },
             productsCount: { $ifNull: [{ $arrayElemAt: ['$productsInfo.count', 0] }, 0] },
+            sampleTemplate: '$channelDetails.sampleTemplate',
           },
         },
       },
@@ -306,4 +327,5 @@ export default {
   getAllUserChannels,
   updateUserChannelsStatus,
   removeUserChannels,
+  updateSampleTemplate,
 };
