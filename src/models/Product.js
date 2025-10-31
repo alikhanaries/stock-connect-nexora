@@ -39,7 +39,6 @@ const ProductSchema = new mongoose.Schema(
     shippingTime: { type: String },
     url: { type: String, trim: true },
     isFrozen: { type: Boolean, default: false },
-    categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
     categoryTrail: { type: String },
     categoryTrailAmazon: { type: String, default: null },
     categoryTrailNoon: { type: String, default: null },
@@ -63,9 +62,7 @@ ProductSchema.index({ productSkuCode: 1 }, { unique: true });
 ProductSchema.index({ sellerId: 1, productSkuCode: 1 });
 ProductSchema.index({ sellerId: 1, ean: 1 });
 ProductSchema.index({ sellerId: 1, brand: 1 });
-ProductSchema.index({ sellerId: 1, categories: 1 });
 ProductSchema.index({ sellerId: 1, marketPlace: 1 });
-ProductSchema.index({ sellerId: 1, brand: 1, categories: 1 });
 ProductSchema.index({
   sellerId: 1,
   name: 'text',
