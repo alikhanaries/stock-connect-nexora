@@ -3,7 +3,6 @@ import { getPagination } from '#helpers/PaginationHandler.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Order from '#models/Orders.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
-import '#models/Category.js';
 import Product from '#models/Product.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import csv from 'csv-parser';
@@ -36,49 +35,93 @@ const fetchProducts = async (query, sellerId) => {
 
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
-
-  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
-
+  const skip = (currentPage - 1) * limit;
   const appliedFilters = {};
+  const matchStage = {
+    sellerId: new mongoose.Types.ObjectId(sellerId),
+    status: { $ne: 'removed' },
+  };
 
-  // Status filter
+  // filter
   if (status) {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
-      filter.status = statusValue;
+      matchStage.status = statusValue;
       appliedFilters.status = statusValue;
     }
   }
+
   if (productSkuCode) {
-    filter.productSkuCode = productSkuCode;
+    matchStage.productSkuCode = productSkuCode;
     appliedFilters.productSkuCode = productSkuCode;
   }
 
-  // Price filter
   if (minPrice || maxPrice) {
-    filter.price = {};
-    if (minPrice) ((filter.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
-    if (maxPrice) ((filter.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
+    matchStage.price = {};
+    if (minPrice) ((matchStage.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
+    if (maxPrice) ((matchStage.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
   }
 
-  // Search filter
-  if (search) {
-    const regex = new RegExp(search, 'i');
-    filter.$or = [{ name: regex }, { productSkuCode: regex }];
+  // search
+  if (search?.trim()) {
+    const regex = new RegExp(search.trim(), 'i');
+    matchStage.$or = [{ name: regex }, { productSkuCode: regex }];
   }
-  // Sorting
+
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
-  // Fetch total and products in parallel
-  const [total, products] = await Promise.all([
-    Product.countDocuments(filter),
-    Product.find(filter)
-      .sort(sort)
-      .skip((currentPage - 1) * limit)
-      .limit(limit)
-      .select('_id name status productSkuCode price msrp images currentStockCount createdAt categories sellerId')
-      .populate('categories', '_id name slug')
-      .lean(),
-  ]);
+
+  const pipeline = [
+    { $match: matchStage },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productSkuCode',
+        foreignField: 'parentProductSkuCode',
+        as: 'asParent',
+      },
+    },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productSkuCode',
+        foreignField: 'grandParentProductSkuCode',
+        as: 'asGrandParent',
+      },
+    },
+    {
+      $addFields: {
+        isConnected: {
+          $or: [{ $gt: [{ $size: '$asParent' }, 0] }, { $gt: [{ $size: '$asGrandParent' }, 0] }],
+        },
+      },
+    },
+    { $match: { isConnected: false } },
+    {
+      $project: {
+        _id: 1,
+        name: 1,
+        status: 1,
+        productSkuCode: 1,
+        price: 1,
+        msrp: 1,
+        images: 1,
+        currentStockCount: 1,
+        createdAt: 1,
+        sellerId: 1,
+      },
+    },
+    { $sort: sort },
+    {
+      $facet: {
+        total: [{ $count: 'count' }],
+        data: [{ $skip: skip }, { $limit: limit }],
+      },
+    },
+  ];
+
+  const result = await Product.aggregate(pipeline);
+  const total = result[0]?.total[0]?.count || 0;
+  const products = result[0]?.data || [];
 
   return {
     products,
