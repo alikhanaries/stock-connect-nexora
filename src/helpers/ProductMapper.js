@@ -16,7 +16,13 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
-
+    {
+      Key: 'categoryTrailTrendyol',
+      Value: product.categoryTrailTrendyol || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
     {
       Key: 'titleAr',
       Value: product.titleAr || null,
