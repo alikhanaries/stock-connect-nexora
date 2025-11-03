@@ -33,6 +33,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
   // Collect all image URLs
   const allImageUrls = [
     r.url,
+    r.imageUrl,
     ...(r.images ? r.images.split(',').map((img) => img.trim()) : []),
     r.extraimageurl1,
     r.extraimageurl2,
@@ -50,15 +51,18 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     )
   );
   // Map back results
-  const [mainUrl, ...rest] = uploadedUrls;
+  const [mainUrl, imageUrl, ...rest] = uploadedUrls;
   const [extra1, extra2, extra3] = rest.slice(-3);
   const uploadedImages = rest.slice(0, rest.length - 3).filter(Boolean);
 
   return {
+    grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,
-    name: r.name || 'Unnamed Product',
+    name: r.productname || 'Unnamed Product',
     description: r.description || null,
+    nameAr: r.productnamear || '',
+    descriptionAr: r.descriptionar,
     brand: r.brand || null,
     ean: r.ean || null, // should be unique
     price,
@@ -70,6 +74,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : 0,
     shippingTime: r.shippingtime || null,
     url: mainUrl || null,
+    imageUrl: imageUrl || null,
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
     attributes: r.attributes,
@@ -87,7 +92,5 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     volumetricWeightCm: r.volumetricweightcm,
     hsCodeAE: r.hscodeae,
     hsCodeSA: r.hscodesa,
-    titleAr: r.titlear || '',
-    longDescriptionAr: r.longdescriptionar,
   };
 };

@@ -19,7 +19,7 @@ export const mapProductToChannelEngine = (product) => {
 
     {
       Key: 'titleAr',
-      Value: product.titleAr || null,
+      Value: product.nameAr || null,
       Type: 'TEXT',
       IsPublic: true,
       LanguageIsoCode: 'ar',
@@ -47,7 +47,7 @@ export const mapProductToChannelEngine = (product) => {
     },
     {
       Key: 'longDescriptionAr',
-      Value: product.longDescriptionAr || null,
+      Value: product.descriptionAr || null,
       Type: 'TEXT',
       IsPublic: true,
       LanguageIsoCode: 'en',
@@ -55,8 +55,8 @@ export const mapProductToChannelEngine = (product) => {
   ];
   const attributesString = product.attributes || '';
   return {
-    ParentMerchantProductNo: '',
-    ParentMerchantProductNo2: '',
+    ParentMerchantProductNo: product.parentProductSkuCode || null,
+    ParentMerchantProductNo2: product.grandParentProductSkuCode || null,
     ExtraData: [
       { Key: 'Attributes', Value: attributesString, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
       ...customAttributes,
@@ -67,6 +67,7 @@ export const mapProductToChannelEngine = (product) => {
     Size: product.size || '',
     Color: product.color || '',
     Ean: product.ean,
+    Stock: product.currentStockCount || 0,
     ManufacturerProductNumber: product.productSkuCode,
     MerchantProductNo: product.productSkuCode,
     Price: product.price,
@@ -78,7 +79,7 @@ export const mapProductToChannelEngine = (product) => {
     ShippingCost: product.shippingCost,
     ShippingTime: product.shippingTime,
     Url: product.url,
-    ImageUrl: product.images?.[0] || '',
+    ImageUrl: product.imageUrl || '',
     CategoryTrail: product.categoryTrail,
     IsFrozen: false,
     ExtraImageUrl1: product.extraImageUrl1 || '',
