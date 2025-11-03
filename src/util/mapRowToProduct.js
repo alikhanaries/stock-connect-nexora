@@ -56,6 +56,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
 
   return {
     parentProductSkuCode: r.parentproductskucode || null,
+    grandParentProductSkuCode: r.grandparentproductskucode || null,
     productSkuCode: r.productskucode,
     name: r.name || 'Unnamed Product',
     description: r.description || null,

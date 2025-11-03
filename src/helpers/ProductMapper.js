@@ -55,8 +55,8 @@ export const mapProductToChannelEngine = (product) => {
   ];
   const attributesString = product.attributes || '';
   return {
-    ParentMerchantProductNo: '',
-    ParentMerchantProductNo2: '',
+    ParentMerchantProductNo: product.parentProductSkuCode || null,
+    ParentMerchantProductNo2: product.grandParentProductSkuCode || null,
     ExtraData: [
       { Key: 'Attributes', Value: attributesString, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
       ...customAttributes,
