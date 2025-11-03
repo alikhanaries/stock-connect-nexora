@@ -321,20 +321,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               invalidRowsCount++;
               return;
             }
-            const existingProduct = await Product.findOne({
-              productSkuCode: product.productSkuCode,
-            }).lean();
-
-            if (existingProduct) {
-              const errorMsg = `Duplicate SKU found at row ${rowIndex}: ${product.productSkuCode}`;
-              errorDetails.push({
-                rowNumber: rowIndex,
-                errorData: [errorMsg],
-              });
-
-              invalidRowsCount++;
-              return;
-            }
             product['sellerId'] = sellerId;
 
             if (product?.categoryTrail) {
