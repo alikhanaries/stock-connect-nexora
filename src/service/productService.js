@@ -291,12 +291,14 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   await new Promise((resolve, reject) => {
     let rowIndex = 1;
+
     stream
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
         const rowPromise = (async () => {
           try {
+            // skip empty rows
             const isEmpty = Object.values(row).every((val) => val == null || String(val).trim() === '');
             if (isEmpty) {
               errorDetails.push({
@@ -306,6 +308,8 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               invalidRowsCount++;
               return;
             }
+
+            // map row
             const product = await mapRowToProduct(row, rowIndex, locale, sellerId);
             if (product.errorData) {
               errorDetails.push(product);
@@ -316,10 +320,14 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
             if (product?.categoryTrail) {
               categoryTrails.add(product.categoryTrail);
             }
+
             batch.push(product);
+
+            // flush batch if full
             if (batch.length >= batchSize) {
               const toProcess = [...batch];
               batch = [];
+
               const ops = toProcess.map((p) => ({
                 updateOne: {
                   filter: { sellerId, productSkuCode: p.productSkuCode },
@@ -342,6 +350,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       })
       .on('end', async () => {
         try {
+          // wait for all rows to finish
           await Promise.all(rowPromises);
           if (batch.length) {
             const ops = batch.map((p) => ({
@@ -360,10 +369,13 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
                 upsert: true,
               },
             }));
+
             const res = await Product.bulkWrite(ops, { ordered: false });
             insertedCount += res.upsertedCount || 0;
             updatedCount += res.modifiedCount || 0;
           }
+
+          // cleanup uploaded file
           if (deleteAfter && filePath) {
             try {
               fs.unlinkSync(filePath);
@@ -371,6 +383,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               console.warn('File cleanup failed:', err.message);
             }
           }
+
           resolve();
         } catch (err) {
           reject(err);
@@ -379,6 +392,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       .on('error', reject);
   });
 
+  // insert category trails
   if (categoryTrails.size > 0) {
     await insertCategoryTrail([...categoryTrails], sellerId);
   }
