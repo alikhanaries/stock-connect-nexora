@@ -789,7 +789,16 @@ export const getSingleShipmentService = async (id) => {
   if (!shipment || shipment.length === 0) {
     throw new Error('Shipment not found');
   }
+
   const formattedShipmentData = transformShipmentResponse(shipment[0]);
+
+  // Fetch tracking info only if we have an AWB number
+  let trackingData = null;
+  if (formattedShipmentData?.airWaybillNo) {
+    trackingData = await trackAymakanShipment(formattedShipmentData.airWaybillNo);
+    formattedShipmentData.trackingInfo = formatShipmentTrackingInfo(trackingData?.trackingInfo);
+  }
+
   return formattedShipmentData;
 };
 
@@ -856,7 +865,7 @@ export const formatShipmentTrackingInfo = (data) => {
   if (!Array.isArray(data) || data.length === 0) return [];
 
   return data.map((item) => {
-    const formatted = formatDateTime(item?.createdAt);
+    const formatted = formatDateTime(item?.createdAt) || formatDateTime(item?.created_at);
 
     return {
       status: item?.description || '',
