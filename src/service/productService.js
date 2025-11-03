@@ -203,7 +203,7 @@ export const updateProductStatus = async (ids, status, sellerId) => {
   return result.modifiedCount || 0;
 };
 
-// 🔹 Retry helper with exponential backoff
+// Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
   try {
     return await fn();
@@ -215,7 +215,7 @@ const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
   }
 };
 
-// 🔹 Push a single batch to CE
+// Push a single batch to CE
 const pushBatch = async (batch, index) => {
   return withRetry(async () => {
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
@@ -229,33 +229,78 @@ const pushBatch = async (batch, index) => {
   });
 };
 
-// 🔹 Validate products
+//  Validate products
 const validateProducts = async (channelId, sellerId) => {
+  // Get all SKU codes linked to the channel
   const channelProducts = await UserChannelProducts.find(
-    { sellerId: sellerId, channelId },
+    { sellerId, channelId },
     { 'skuList.skuCode': 1, _id: 0 }
   ).lean();
+
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
   if (!skuCodes.length) return { total: 0, validProducts: [], failed: 0, validatedProducts: [] };
-  const products = await Product.find({
-    sellerId: sellerId,
+
+  // Get products for those SKUs (child products)
+  const childProducts = await Product.find({
+    sellerId,
     productSkuCode: { $in: skuCodes },
     status: 'active',
   }).lean();
+
+  // Collect parent SKUs from child products
+  const parentSkuCodes = new Set();
+  for (const p of childProducts) {
+    if (p.parentProductSkuCode) parentSkuCodes.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) parentSkuCodes.add(p.grandParentProductSkuCode);
+  }
+
+  // Fetch parent products
+  const parentProducts = await Product.find({
+    sellerId,
+    productSkuCode: { $in: Array.from(parentSkuCodes) },
+    status: 'active',
+  }).lean();
+
+  // Check if those parents have any grandparent
+  const grandParentSkuCodes = new Set();
+  for (const p of parentProducts) {
+    if (p.grandParentProductSkuCode) grandParentSkuCodes.add(p.grandParentProductSkuCode);
+  }
+
+  // Fetch grandparent products (if any)
+  let grandParentProducts = [];
+  if (grandParentSkuCodes.size > 0) {
+    grandParentProducts = await Product.find({
+      sellerId,
+      productSkuCode: { $in: Array.from(grandParentSkuCodes) },
+      status: 'active',
+    }).lean();
+  }
+
+  // Combine all (child + parent + grandparent) — remove duplicates
+  const allProductsMap = new Map();
+  [...childProducts, ...parentProducts, ...grandParentProducts].forEach((p) => {
+    allProductsMap.set(p.productSkuCode, p);
+  });
+  const allProducts = Array.from(allProductsMap.values());
+
+  // Validate each product’s category trail
   const trailCache = new Map();
   const validatedProducts = await Promise.all(
-    products.map(async (product) => {
+    allProducts.map(async (product) => {
       if (!trailCache.has(product.categoryTrail)) {
         trailCache.set(
           product.categoryTrail,
           await getMarketPlaceCategoryTrailsService(product.categoryTrail, sellerId)
         );
       }
+
       const trails = trailCache.get(product.categoryTrail);
       const errors = [];
       if (!trails?.marketPlaceTrailData?.length) {
         errors.push(trails?.platformCategoryName || 'Missing category trail');
       }
+
       return {
         ...product,
         categoryTrailAmazon:
@@ -268,6 +313,8 @@ const validateProducts = async (channelId, sellerId) => {
       };
     })
   );
+
+  // Bulk update category trails
   const bulkOps = validatedProducts
     .filter((p) => p.categoryTrailAmazon || p.categoryTrailNoon)
     .map((p) => ({
@@ -287,7 +334,13 @@ const validateProducts = async (channelId, sellerId) => {
   }
   const validProducts = validatedProducts.filter((p) => p.Errors.length === 0);
   const failed = validatedProducts.length - validProducts.length;
-  return { total: validatedProducts.length, validProducts, failed, validatedProducts };
+
+  return {
+    total: validatedProducts.length,
+    validProducts,
+    failed,
+    validatedProducts,
+  };
 };
 
 //  Async push products to CE
