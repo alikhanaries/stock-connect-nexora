@@ -550,7 +550,7 @@ const cancelFullOrder = async (orderId, reason = 'NA') => {
 
     const shipments = await Shipment.find({
       orderId,
-      status: { $nin: ['CANCELED', 'DELIVERED'] },
+      status: { $nin: ['CANCELED', 'PICKED', 'DELIVERED'] },
     }).lean();
 
     if (shipments.length) {
@@ -607,7 +607,9 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
 
     // Collect shipped (DELIVERED) product IDs
     const shippedProducts = new Set(
-      order.orderSkuList?.skuList?.filter((sku) => ['DELIVERED'].includes(sku.status)).map((sku) => sku.id.toString())
+      order.orderSkuList?.skuList
+        ?.filter((sku) => ['DELIVERED', 'PICKED'].includes(sku.status))
+        .map((sku) => sku.id.toString())
     );
 
     // Block cancel if any requested SKU is shipped

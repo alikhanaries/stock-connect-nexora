@@ -4,6 +4,7 @@ export const successResponse = (res, message = 'Success', statusCode = 200, data
     error: false,
     success: true,
     message: message,
+    statusCode,
     data,
   });
 };
@@ -13,6 +14,7 @@ export const failResponse = (res, message = 'Request failed', statusCode = 400, 
     error: false,
     success: false,
     message: message,
+    statusCode,
     data,
   });
 };
@@ -23,6 +25,7 @@ export const errorResponse = (res, errorDesc, statusCode = 500) => {
     error: true,
     success: false,
     message: errorDesc,
+    statusCode,
     data: null,
   });
 };
