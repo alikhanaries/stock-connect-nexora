@@ -296,6 +296,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
+
         const rowPromise = (async () => {
           try {
             // skip empty rows
@@ -317,6 +318,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               return;
             }
             product['sellerId'] = sellerId;
+
             if (product?.categoryTrail) {
               categoryTrails.add(product.categoryTrail);
             }
@@ -352,6 +354,8 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         try {
           // wait for all rows to finish
           await Promise.all(rowPromises);
+
+          // final flush
           if (batch.length) {
             const ops = batch.map((p) => ({
               updateOne: {
