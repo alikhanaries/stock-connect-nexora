@@ -18,7 +18,7 @@ export const mapProductToChannelEngine = (product) => {
     },
 
     {
-      Key: 'nameAr',
+      Key: 'titleAr',
       Value: product.nameAr || null,
       Type: 'TEXT',
       IsPublic: true,
@@ -46,7 +46,7 @@ export const mapProductToChannelEngine = (product) => {
       LanguageIsoCode: 'en',
     },
     {
-      Key: 'descriptionAr',
+      Key: 'longDescriptionAr',
       Value: product.descriptionAr || null,
       Type: 'TEXT',
       IsPublic: true,
