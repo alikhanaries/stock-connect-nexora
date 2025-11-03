@@ -58,8 +58,10 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     parentProductSkuCode: r.parentproductskucode || null,
     grandParentProductSkuCode: r.grandparentproductskucode || null,
     productSkuCode: r.productskucode,
-    name: r.name || 'Unnamed Product',
+    name: r.productnameen || 'Unnamed Product',
     description: r.description || null,
+    titleAr: r.productnamear || '',
+    longDescriptionAr: r.longdescriptionar,
     brand: r.brand || null,
     ean: r.ean || null, // should be unique
     price,
@@ -88,7 +90,5 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     volumetricWeightCm: r.volumetricweightcm,
     hsCodeAE: r.hscodeae,
     hsCodeSA: r.hscodesa,
-    titleAr: r.titlear || '',
-    longDescriptionAr: r.longdescriptionar,
   };
 };
