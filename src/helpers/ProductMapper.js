@@ -78,7 +78,7 @@ export const mapProductToChannelEngine = (product) => {
     VatRateType: product.vatRateType,
     ShippingCost: product.shippingCost,
     ShippingTime: product.shippingTime,
-    Url: product.url,
+    Url: product.primaryImageUrl,
     ImageUrl: product.imageUrl || '',
     CategoryTrail: product.categoryTrail,
     IsFrozen: false,
