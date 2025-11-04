@@ -269,6 +269,9 @@ const validateProducts = async (channelId, sellerId) => {
             ?.marketplaceCategoryTrails || null,
         categoryTrailNoon:
           trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Noon V2')?.marketplaceCategoryTrails || null,
+        categoryTrailTrendyol:
+          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Trendyol.int SA')
+            ?.marketplaceCategoryTrails || null,
         Errors: errors,
         Warnings: [],
       };
@@ -277,7 +280,7 @@ const validateProducts = async (channelId, sellerId) => {
 
   // Bulk update category trails
   const bulkOps = validatedProducts
-    .filter((p) => p.categoryTrailAmazon || p.categoryTrailNoon)
+    .filter((p) => p.categoryTrailAmazon || p.categoryTrailNoon || p.categoryTrailTrendyol)
     .map((p) => ({
       updateOne: {
         filter: { _id: p._id },
@@ -285,6 +288,7 @@ const validateProducts = async (channelId, sellerId) => {
           $set: {
             categoryTrailAmazon: p.categoryTrailAmazon,
             categoryTrailNoon: p.categoryTrailNoon,
+            categoryTrailTrendyol: p.categoryTrailTrendyol,
           },
         },
       },
@@ -382,6 +386,9 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               invalidRowsCount++;
               return;
             }
+
+            product['sellerId'] = sellerId;
+
 
             // Structure validation
             const { valid, errors } = validateHierarchy(product);
