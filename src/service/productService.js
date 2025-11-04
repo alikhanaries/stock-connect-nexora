@@ -35,93 +35,48 @@ const fetchProducts = async (query, sellerId) => {
 
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
-  const skip = (currentPage - 1) * limit;
-  const appliedFilters = {};
-  const matchStage = {
-    sellerId: new mongoose.Types.ObjectId(sellerId),
-    status: { $ne: 'removed' },
-  };
 
-  // filter
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId), productType: 'simple' };
+
+  const appliedFilters = {};
+
+  // Status filter
   if (status) {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
-      matchStage.status = statusValue;
+      filter.status = statusValue;
       appliedFilters.status = statusValue;
     }
   }
-
   if (productSkuCode) {
-    matchStage.productSkuCode = productSkuCode;
+    filter.productSkuCode = productSkuCode;
     appliedFilters.productSkuCode = productSkuCode;
   }
 
+  // Price filter
   if (minPrice || maxPrice) {
-    matchStage.price = {};
-    if (minPrice) ((matchStage.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
-    if (maxPrice) ((matchStage.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
+    filter.price = {};
+    if (minPrice) ((filter.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
+    if (maxPrice) ((filter.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
   }
 
-  // search
-  if (search?.trim()) {
-    const regex = new RegExp(search.trim(), 'i');
-    matchStage.$or = [{ name: regex }, { productSkuCode: regex }];
+  // Search filter
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    filter.$or = [{ name: regex }, { productSkuCode: regex }];
   }
-
+  // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
-
-  const pipeline = [
-    { $match: matchStage },
-    {
-      $lookup: {
-        from: 'products',
-        localField: 'productSkuCode',
-        foreignField: 'parentProductSkuCode',
-        as: 'asParent',
-      },
-    },
-    {
-      $lookup: {
-        from: 'products',
-        localField: 'productSkuCode',
-        foreignField: 'grandParentProductSkuCode',
-        as: 'asGrandParent',
-      },
-    },
-    {
-      $addFields: {
-        isConnected: {
-          $or: [{ $gt: [{ $size: '$asParent' }, 0] }, { $gt: [{ $size: '$asGrandParent' }, 0] }],
-        },
-      },
-    },
-    { $match: { isConnected: false } },
-    {
-      $project: {
-        _id: 1,
-        name: 1,
-        status: 1,
-        productSkuCode: 1,
-        price: 1,
-        msrp: 1,
-        images: 1,
-        currentStockCount: 1,
-        createdAt: 1,
-        sellerId: 1,
-      },
-    },
-    { $sort: sort },
-    {
-      $facet: {
-        total: [{ $count: 'count' }],
-        data: [{ $skip: skip }, { $limit: limit }],
-      },
-    },
-  ];
-
-  const result = await Product.aggregate(pipeline);
-  const total = result[0]?.total[0]?.count || 0;
-  const products = result[0]?.data || [];
+  // Fetch total and products in parallel
+  const [total, products] = await Promise.all([
+    Product.countDocuments(filter),
+    Product.find(filter)
+      .sort(sort)
+      .skip((currentPage - 1) * limit)
+      .limit(limit)
+      .select('_id name status productSkuCode price msrp images currentStockCount createdAt sellerId')
+      .lean(),
+  ]);
 
   return {
     products,
@@ -743,25 +698,10 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
 };
 
 const getUserUnassignedProducts = async (sellerId, channelId, query) => {
-  const {
-    page = 1,
-    size = 10,
-    status,
-    productSkuCode,
-    minPrice,
-    maxPrice,
-    search,
-    sortBy = '_id',
-    sortOrder = 'asc',
-  } = query;
-
+  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
-  const skip = (currentPage - 1) * limit;
-  const appliedFilters = {};
-
-  // Get already assigned SKUs for this user/channel
-  const assigned = await UserChannelProducts.findOne(
+  const assignedSku = await UserChannelProducts.findOne(
     {
       sellerId: new mongoose.Types.ObjectId(sellerId),
       channelId: Number(channelId),
@@ -769,99 +709,48 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     },
     { 'skuList.skuCode': 1 }
   ).lean();
+  const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId), productType: 'simple' };
+  const appliedFilters = {};
 
-  const assignedSkuCodes = assigned?.skuList?.map((s) => s.skuCode) || [];
-
-  const matchStage = {
-    sellerId: new mongoose.Types.ObjectId(sellerId),
-    status: { $ne: 'removed' },
-  };
-
-  // Exclude assigned SKUs
   if (assignedSkuCodes.length > 0) {
-    matchStage.productSkuCode = { $nin: assignedSkuCodes };
+    filter.productSkuCode = { $nin: assignedSkuCodes };
   }
 
-  // filter
   if (status) {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
-      matchStage.status = statusValue;
+      filter.status = statusValue;
       appliedFilters.status = statusValue;
     }
   }
 
-  if (productSkuCode) {
-    matchStage.productSkuCode = productSkuCode;
-    appliedFilters.productSkuCode = productSkuCode;
-  }
-
   if (minPrice || maxPrice) {
-    matchStage.price = {};
-    if (minPrice) ((matchStage.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
-    if (maxPrice) ((matchStage.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
+    filter.price = {};
+    if (minPrice) {
+      filter.price.$gte = Number(minPrice);
+      appliedFilters.minPrice = filter.price.$gte;
+    }
+    if (maxPrice) {
+      filter.price.$lte = Number(maxPrice);
+      appliedFilters.maxPrice = filter.price.$lte;
+    }
   }
 
-  // Search
-  if (search?.trim()) {
-    const regex = new RegExp(search.trim(), 'i');
-    matchStage.$or = [{ name: regex }, { productSkuCode: regex }];
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    filter.$or = [{ name: regex }, { productSkuCode: regex }];
   }
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-  const pipeline = [
-    { $match: matchStage },
-    {
-      $lookup: {
-        from: 'products',
-        localField: 'productSkuCode',
-        foreignField: 'parentProductSkuCode',
-        as: 'asParent',
-      },
-    },
-    {
-      $lookup: {
-        from: 'products',
-        localField: 'productSkuCode',
-        foreignField: 'grandParentProductSkuCode',
-        as: 'asGrandParent',
-      },
-    },
-    {
-      $addFields: {
-        isConnected: {
-          $or: [{ $gt: [{ $size: '$asParent' }, 0] }, { $gt: [{ $size: '$asGrandParent' }, 0] }],
-        },
-      },
-    },
-    { $match: { isConnected: false } },
-    {
-      $project: {
-        _id: 1,
-        name: 1,
-        status: 1,
-        productSkuCode: 1,
-        price: 1,
-        msrp: 1,
-        images: 1,
-        currentStockCount: 1,
-        createdAt: 1,
-        sellerId: 1,
-      },
-    },
-    { $sort: sort },
-    {
-      $facet: {
-        total: [{ $count: 'count' }],
-        data: [{ $skip: skip }, { $limit: limit }],
-      },
-    },
-  ];
-
-  const result = await Product.aggregate(pipeline);
-  const total = result[0]?.total[0]?.count || 0;
-  const products = result[0]?.data || [];
+  const total = await Product.countDocuments(filter);
+  const products = await Product.find(filter)
+    .sort(sort)
+    .skip((currentPage - 1) * limit)
+    .limit(limit)
+    .select('_id name status productSkuCode price msrp images')
+    .lean();
 
   return {
     products,
