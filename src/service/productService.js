@@ -399,42 +399,46 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
+        const currentRow = rowIndex;
 
         const rowPromise = (async () => {
           try {
-            const isEmpty = Object.values(row).every((val) => val == null || String(val).trim() === '');
+            const isEmpty = Object.values(row).every((v) => v == null || String(v).trim() === '');
             if (isEmpty) {
-              errorDetails.push({ rowNumber: rowIndex, errorData: [locale.EMPTY_ROW] });
+              errorDetails.push({ rowNumber: currentRow, errorData: [locale.EMPTY_ROW] });
               invalidRowsCount++;
               return;
             }
 
-            const product = await mapRowToProduct(row, rowIndex, locale, sellerId);
+            const product = await mapRowToProduct(row, currentRow, locale, sellerId);
+            product.rowNumber = currentRow;
+
             if (product.errorData) {
               errorDetails.push(product);
               invalidRowsCount++;
               return;
             }
 
+            // Determine product type
             try {
               product.productType = determineProductType(product);
             } catch (err) {
-              errorDetails.push({ rowNumber: rowIndex, errorData: [err.message] });
+              errorDetails.push({ rowNumber: currentRow, errorData: [err.message] });
               invalidRowsCount++;
               return;
             }
 
-            const { valid: validStruct, errors: structErrors } = validateHierarchy(product);
-            if (!validStruct) {
-              errorDetails.push({ rowNumber: rowIndex, errorData: structErrors });
+            // Structure validation
+            const { valid, errors } = validateHierarchy(product);
+            if (!valid) {
+              errorDetails.push({ rowNumber: currentRow, errorData: errors });
               invalidRowsCount++;
               return;
             }
 
-            product.rowNumber = rowIndex;
             allProductsForHierarchy.push(product);
           } catch (err) {
-            console.error(`Row ${rowIndex} error:`, err.message);
+            console.error(`Row ${currentRow} error:`, err.message);
             invalidRowsCount++;
           }
         })();
@@ -442,22 +446,17 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         rowPromises.push(rowPromise);
       })
       .on('end', async () => {
-        try {
-          await Promise.all(rowPromises);
-          resolve();
-        } catch (err) {
-          reject(err);
-        }
+        await Promise.all(rowPromises);
+        resolve();
       })
       .on('error', reject);
   });
 
-  // ✅ Validate hierarchy existence once for all products
+  // Validate parent & grandparent existence across all rows
   const { validated, errors: hierarchyErrors } = await validateHierarchyExistenceBatch(
     allProductsForHierarchy,
     sellerId
   );
-
   if (hierarchyErrors.length > 0) {
     errorDetails.push(...hierarchyErrors);
     invalidRowsCount += hierarchyErrors.length;
@@ -466,11 +465,9 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   const validProducts = validated.filter((v) => v.valid).map((v) => v.product);
 
   for (const product of validProducts) {
-    const existingProduct = await Product.findOne({
-      sellerId,
-      productSkuCode: product.productSkuCode,
-    }).lean();
-    if (existingProduct && existingProduct.status === 'removed') {
+    const existing = await Product.findOne({ sellerId, productSkuCode: product.productSkuCode }).lean();
+
+    if (existing && existing.status === 'removed') {
       product.status = 'active';
     }
 
@@ -482,12 +479,12 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       },
     };
 
-    if (existingProduct && existingProduct._id) updatedCount++;
+    if (existing?._id) updatedCount++;
     else insertedCount++;
 
     batch.push(op);
 
-    if (product?.categoryTrail) categoryTrails.add(product.categoryTrail);
+    if (product.categoryTrail) categoryTrails.add(product.categoryTrail);
 
     if (batch.length >= batchSize) {
       const toProcess = [...batch];
@@ -498,7 +495,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   if (batch.length) await Product.bulkWrite(batch, { ordered: false });
 
-  // Cleanup
   if (deleteAfter && filePath) {
     try {
       fs.unlinkSync(filePath);
@@ -507,7 +503,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     }
   }
 
-  // Update category trail & product types
   if (categoryTrails.size > 0) {
     await insertCategoryTrail([...categoryTrails], sellerId);
   }

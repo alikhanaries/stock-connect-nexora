@@ -4,12 +4,19 @@ export function determineProductType(product) {
   const hasParent = !!product.parentProductSkuCode?.trim();
   const hasGrandParent = !!product.grandParentProductSkuCode?.trim();
 
-  if (!hasParent && !hasGrandParent) return 'configurable'; // grandparent
-  if (!hasParent && hasGrandParent) return 'configurable'; // parent
-  if (hasParent && !hasGrandParent) return 'simple'; // child
+  // Grandparent (top-level)
+  if (!hasParent && !hasGrandParent) return 'configurable';
 
+  // Parent (has grandparent reference)
+  if (!hasParent && hasGrandParent) return 'configurable';
+
+  // Child (has parent only)
+  if (hasParent && !hasGrandParent) return 'simple';
+
+  // Invalid combination (both set)
+  const rowInfo = product.rowNumber ? ` (Row ${product.rowNumber})` : '';
   throw new Error(
-    `Invalid hierarchy for SKU '${product.productSkuCode}'. A product cannot have both parent and grandparent.`
+    `Invalid hierarchy for SKU '${product.productSkuCode}'${rowInfo}. A product cannot have both parent and grandparent.`
   );
 }
 
@@ -30,55 +37,63 @@ export function validateHierarchy(product) {
 
 export async function validateHierarchyExistenceBatch(products, sellerId) {
   const errors = [];
-  const sheetSkus = new Set(products.map((p) => p.productSkuCode).filter(Boolean));
-  const refsToCheck = new Set();
-
-  for (const p of products) {
-    if (p.parentProductSkuCode && !sheetSkus.has(p.parentProductSkuCode)) refsToCheck.add(p.parentProductSkuCode);
-    if (p.grandParentProductSkuCode && !sheetSkus.has(p.grandParentProductSkuCode))
-      refsToCheck.add(p.grandParentProductSkuCode);
-  }
-
-  let dbExistingSkus = new Set();
-
-  if (refsToCheck.size > 0) {
-    const dbProducts = await Product.find(
-      { sellerId, productSkuCode: { $in: [...refsToCheck] } },
-      { productSkuCode: 1 }
-    ).lean();
-
-    dbExistingSkus = new Set(dbProducts.map((p) => p.productSkuCode));
-  }
-
   const validated = [];
 
+  // Build reference sets
+  const allSheetSkus = new Set(products.map((p) => p.productSkuCode).filter(Boolean));
+  const refSkus = new Set();
+
+  for (const p of products) {
+    if (p.parentProductSkuCode && !allSheetSkus.has(p.parentProductSkuCode)) {
+      refSkus.add(p.parentProductSkuCode);
+    }
+    if (p.grandParentProductSkuCode && !allSheetSkus.has(p.grandParentProductSkuCode)) {
+      refSkus.add(p.grandParentProductSkuCode);
+    }
+  }
+
+  // Fetch all referenced SKUs from DB in one query
+  let dbSkuSet = new Set();
+  if (refSkus.size > 0) {
+    const dbProducts = await Product.find(
+      { sellerId, productSkuCode: { $in: [...refSkus] } },
+      { productSkuCode: 1 }
+    ).lean();
+    dbSkuSet = new Set(dbProducts.map((p) => p.productSkuCode));
+  }
+
+  // Validate each product
   for (const product of products) {
     const rowErrors = [];
-    const { productSkuCode, parentProductSkuCode, grandParentProductSkuCode } = product;
-    if (parentProductSkuCode) {
-      const parentExists = sheetSkus.has(parentProductSkuCode) || dbExistingSkus.has(parentProductSkuCode);
-      if (!parentExists) {
-        rowErrors.push(
-          `Parent SKU '${parentProductSkuCode}' not found for '${productSkuCode}'. Please upload the parent first.`
-        );
-      }
+
+    if (
+      product.parentProductSkuCode &&
+      !allSheetSkus.has(product.parentProductSkuCode) &&
+      !dbSkuSet.has(product.parentProductSkuCode)
+    ) {
+      rowErrors.push(
+        `Parent SKU '${product.parentProductSkuCode}' not found for '${product.productSkuCode}' (Row ${product.rowNumber}).`
+      );
     }
-    if (grandParentProductSkuCode) {
-      const gpExists = sheetSkus.has(grandParentProductSkuCode) || dbExistingSkus.has(grandParentProductSkuCode);
-      if (!gpExists) {
-        rowErrors.push(
-          `Grandparent SKU '${grandParentProductSkuCode}' not found for '${productSkuCode}'. Please upload the grandparent first.`
-        );
-      }
+
+    if (
+      product.grandParentProductSkuCode &&
+      !allSheetSkus.has(product.grandParentProductSkuCode) &&
+      !dbSkuSet.has(product.grandParentProductSkuCode)
+    ) {
+      rowErrors.push(
+        `Grandparent SKU '${product.grandParentProductSkuCode}' not found for '${product.productSkuCode}' (Row ${product.rowNumber}).`
+      );
+    }
+
+    if (rowErrors.length > 0) {
+      errors.push({ rowNumber: product.rowNumber || '-', errorData: rowErrors });
     }
     validated.push({
       product,
       valid: rowErrors.length === 0,
       errors: rowErrors,
     });
-    if (rowErrors.length > 0) {
-      errors.push({ rowNumber: product.rowNumber || '-', errorData: rowErrors });
-    }
   }
   return { validated, errors };
 }
@@ -93,5 +108,6 @@ export async function resolveProductTypes(sellerId) {
       { $set: { productType: 'configurable' } }
     );
   }
+
   await Product.updateMany({ sellerId, productSkuCode: { $nin: configurables } }, { $set: { productType: 'simple' } });
 }
