@@ -98,5 +98,8 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     heatSensitive: r.heatsensitive?.toLowerCase() == 'Yes',
     liquidContents: r.liquidcontents?.toLowerCase() == 'Yes',
     itemForm: r.itemform || '',
+    riseStyle: r.Risestyle || '',
+    intendedUse: r.intendeduse || '',
+    productBenefit: r.productbenefit || '',
   };
 };

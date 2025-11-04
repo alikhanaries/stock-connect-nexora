@@ -123,6 +123,18 @@ const ProductSchema = new mongoose.Schema(
     heatSensitive: { type: Boolean, default: false },
     liquidContents: { type: Boolean, default: false },
     itemForm: { type: String, trim: true },
+    riseStyle: {
+      type: String,
+      trim: true,
+    },
+    intendedUse: {
+      type: String,
+      trim: true,
+    },
+    productBenefit: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );
