@@ -50,11 +50,18 @@ const ProductSchema = new mongoose.Schema(
     hsCodeSA: { type: String, required: true },
     size: { type: String },
     color: { type: String },
-    url: { type: String, trim: true },
+    primaryImageUrl: { type: String, trim: true },
     imageUrl: { type: String, trim: true },
     extraImageUrl1: { type: String },
     extraImageUrl2: { type: String },
     extraImageUrl3: { type: String },
+    productType: {
+      type: String,
+      enum: ['simple', 'configurable'],
+      required: true,
+      default: 'simple',
+      index: true,
+    },
   },
   { timestamps: true }
 );

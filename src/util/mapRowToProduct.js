@@ -32,8 +32,8 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
 
   // Collect all image URLs
   const allImageUrls = [
-    r.url,
-    r.imageUrl,
+    r.primaryimageurl,
+    r.imageurl,
     ...(r.images ? r.images.split(',').map((img) => img.trim()) : []),
     r.extraimageurl1,
     r.extraimageurl2,
@@ -73,7 +73,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     vatRateType: r.vatratetype ? r.vatratetype.toUpperCase() : 'STANDARD',
     shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : 0,
     shippingTime: r.shippingtime || null,
-    url: mainUrl || null,
+    primaryImageUrl: mainUrl || null,
     imageUrl: imageUrl || null,
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
