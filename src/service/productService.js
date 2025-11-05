@@ -80,7 +80,7 @@ const fetchProducts = async (query, sellerId) => {
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
-      .select('_id name status productSkuCode price msrp images currentStockCount createdAt sellerId')
+      .select('_id name status productSkuCode price msrp primaryImageUrl currentStockCount createdAt sellerId')
       .lean(),
   ]);
 
@@ -142,7 +142,7 @@ const getTopSellingProduct = async (limit, channelNameSearch) => {
         totalQuantitySold: 1,
         channelName: 1,
         productName: '$productDetails.name',
-        imageUrl: { $arrayElemAt: ['$productDetails.images', 0] },
+        primaryImageUrl: '$productDetails.primaryImageUrl',
       },
     },
   ]).allowDiskUse(true);
@@ -388,7 +388,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
             }
 
             product['sellerId'] = sellerId;
-
 
             // Structure validation
             const { valid, errors } = validateHierarchy(product);
@@ -681,7 +680,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
             price: '$productDetails.price',
             msrp: '$productDetails.msrp',
             status: '$productDetails.status',
-            images: '$productDetails.images',
+            primaryImageUrl: '$productDetails.primaryImageUrl',
             currentStockCount: '$productDetails.currentStockCount',
             createdAt: '$productDetails.createdAt',
           },
@@ -755,7 +754,7 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     .sort(sort)
     .skip((currentPage - 1) * limit)
     .limit(limit)
-    .select('_id name status productSkuCode price msrp images')
+    .select('_id name status productSkuCode price msrp primaryImageUrl')
     .lean();
 
   return {
