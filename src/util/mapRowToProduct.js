@@ -1,3 +1,4 @@
+import { normalizeImageUrl } from '../helpers/NormalizeImageUrl.js';
 import { uploadImageFromUrl } from '../util/uploadImage.js';
 import pLimit from 'p-limit';
 const IMAGE_CONCURRENCY = 10;
@@ -20,7 +21,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
 
   const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
     .filter(Boolean)
-    .map((url) => url.trim());
+    .map((url) => normalizeImageUrl(url.trim()));
   const uploadedUrls = await Promise.all(
     allImageUrls.map((imgUrl) =>
       limit(async () => {
