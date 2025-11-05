@@ -20,8 +20,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
 
   const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
     .filter(Boolean)
-    .map((url) => url.trim())
-    .filter((url, idx, arr) => url && arr.indexOf(url) === idx);
+    .map((url) => url.trim());
   const uploadedUrls = await Promise.all(
     allImageUrls.map((imgUrl) =>
       limit(async () => {
