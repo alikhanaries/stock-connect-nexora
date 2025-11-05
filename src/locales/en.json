@@ -155,5 +155,23 @@
   "INVALID_OR_EXPIRED_TOKEN": "Invalid or expired token",
   "PASSWORD_RESET_SUCCESS": "Password reset successful",
   "INVALID_USER_IDS_TO_DELETE": "No users in the provided list are connected to this seller.",
-  "NO_VALID_USERS_FOUND": "Please provide valid users"
+  "NO_VALID_USERS_FOUND": "Please provide valid users",
+
+  "NO_RETURNS_FOUND": "No returns found",
+  "RETURNS_FETCHED_SUCCESSFULLY": "Returns fetched successfully",
+  "FAILED_TO_SYNC_RETURNS": "Failed to sync returns",
+  "RETURNS_SYNCED_SUCCESSFULLY": "returns synced successfully",
+  "NO_NEW_RETURNS_FOUND": "No new returns found",
+  "FAILED_TO_CREATE_RETURN": "Failed to create return",
+  "RETURN_ALREADY_EXISTS": "A return with this reference already exists",
+  "RETURN_CREATED_SUCCESSFULLY": "Return created successfully",
+  "FAILED_TO_GET_RETURN_STATS": "Failed to get return stats",
+  "RETURN_STATS_FETCHED_SUCCESSFULLY": "Return stats fetched successfully",
+  "FAILED_TO_ACKNOWLEDGE_RETURN": "Failed to acknowledge return",
+  "RETURN_ACKNOWLEDGED_SUCCESSFULLY": "Return acknowledged successfully",
+  "RETURN_WITH_REFERENCE_EXISTS": "Return with this reference already exists",
+  "FAILED_TO_UPDATE_RETURN": "Failed to update return",
+  "RETURN_UPDATED_SUCCESSFULLY": "Return updated successfully",
+  "INVALID_RETURN_ID_FORMAT": "Invalid return ID format",
+  "RETURN_FETCHED_SUCCESSFULLY": "Return fetched successfully"
 }
