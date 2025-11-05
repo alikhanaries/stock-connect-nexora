@@ -1,10 +1,18 @@
-import pdfjsLib from 'pdfjs-dist/build/pdf.js';
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { createRequire } from 'module';
+import { pathToFileURL } from 'url';
 import Order from '#models/Orders.js';
+
+const require = createRequire(import.meta.url);
+
+const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
+pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
 
 export const parseInvoiceData = async (orderId) => {
   try {
-    // 1️ Fetch order
+    // 1️ Fetch order from DB
     const orderData = await Order.findOne({ _id: orderId }, { merchantOrderNo: 1 }).lean();
+
     if (!orderData) return { success: false, message: 'No order found for this order id' };
 
     const { merchantOrderNo } = orderData;
@@ -15,36 +23,37 @@ export const parseInvoiceData = async (orderId) => {
     if (!response.ok) throw new Error(`Failed to fetch invoice: ${response.statusText}`);
 
     const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-    // 3️ Parse PDF using pdfjs-dist (in-memory)
-    const pdfDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
-
+    // 3️ Extract text from all pages
     let rawText = '';
     for (let i = 1; i <= pdfDoc.numPages; i++) {
       const page = await pdfDoc.getPage(i);
       const content = await page.getTextContent();
       const strings = content.items.map((item) => item.str);
-      rawText += strings.join(' ') + ' ';
+      rawText += strings.join(' ') + '\n';
     }
 
-    // 4️ Clean text
-    let cleaned = rawText
-      .replace(/[^\w/:.\-\s]/g, ' ') // removed unnecessary escapes
+    // 4️ Clean and normalize text
+    const cleaned = rawText
+      .replace(/[^\w/:.\-\s]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .replace(/([A-Z])\s(?=[A-Z])/g, '$1') // join split capitals
-      .replace(/(\d)\s(?=\d)/g, '$1'); // join split numbers
+      .replace(/([A-Z])\s(?=[A-Z])/g, '$1')
+      .replace(/(\d)\s(?=\d)/g, '$1');
 
-    // 5️ Extract invoice number (e.g., CE-12345-678)
+    // 5️ Extract invoice number (e.g. CE-12345-678)
     const invMatch = cleaned.match(/\b[A-Z]{1,5}(?:-[A-Z0-9]+){1,3}\b/i);
     const invoiceNumber = invMatch ? invMatch[0] : null;
 
-    // 6️ Extract invoice date (MM/DD/YYYY HH:MM:SS)
-    const dateMatch = cleaned.match(/\d{2}\/\d{2}\/\d{4}\s*\d{2}:\d{2}:\d{2}/);
+    // 6️ Extract invoice date
+    const dateMatch =
+      cleaned.match(/\d{2}\/\d{2}\/\d{4}\s*\d{2}:\d{2}:\d{2}/) ||
+      cleaned.match(/\d{4}-\d{2}-\d{2}/) ||
+      cleaned.match(/\d{2}\/\d{2}\/\d{4}/);
     const invoiceDate = dateMatch ? dateMatch[0].replace(/\s+/g, ' ') : null;
 
-    // 7️ Hardcoded tax number (you can replace with actual extraction)
+    // 7️ Hardcoded tax number (placeholder)
     const taxIdentificationNumber = '1234567';
 
     return {
