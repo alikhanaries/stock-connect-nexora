@@ -17,6 +17,10 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
+    orderId: {
+      type: String,
+      index: true,
+    },
     channelOrderNo: {
       type: String,
       index: true,
@@ -47,6 +51,10 @@ const ReturnSchema = new mongoose.Schema(
         _id: false,
         productSkuCode: {
           type: String,
+        },
+        orderLineId: {
+          type: Number,
+          index: true,
         },
         quantity: {
           type: Number,
