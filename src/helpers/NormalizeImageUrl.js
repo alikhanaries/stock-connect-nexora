@@ -1,26 +1,25 @@
 export function normalizeImageUrl(url) {
   if (!url) return url;
-  const driveMatch = url.match(/https:\/\/drive\.google\.com\/file\/d\/([^/]+)\//);
-  if (driveMatch) {
-    const fileId = driveMatch[1];
+  const driveFileMatch = url.match(/https:\/\/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (driveFileMatch) {
+    const fileId = driveFileMatch[1];
     return `https://drive.google.com/uc?export=download&id=${fileId}`;
   }
-  const openMatch = url.match(/https:\/\/drive\.google\.com\/open\?id=([^&]+)/);
-  if (openMatch) {
-    return `https://drive.google.com/uc?export=download&id=${openMatch[1]}`;
+  const driveOpenMatch = url.match(/https:\/\/drive\.google\.com\/open\?id=([^&]+)/);
+  if (driveOpenMatch) {
+    return `https://drive.google.com/uc?export=download&id=${driveOpenMatch[1]}`;
   }
-  if (url.includes('dropbox.com')) {
-    let directUrl = url
-      .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
-      .replace('dropbox.com', 'dl.dropboxusercontent.com');
-    directUrl = directUrl
-      .replace('?dl=0', '')
-      .replace('?dl=1', '')
-      .replace('?raw=0', '?raw=1')
-      .replace('?raw=1', '?raw=1');
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('dropbox.com')) {
+      parsed.hostname = 'dl.dropboxusercontent.com';
+      parsed.searchParams.set('raw', '1');
+      return parsed.toString();
+    }
+  } catch {
+    // ignore invalid URLs safely — continue below
+  }
 
-    return directUrl;
-  }
   if (url.includes('1drv.ms')) {
     return url.replace('1drv.ms', 'onedrive.live.com/download');
   }
