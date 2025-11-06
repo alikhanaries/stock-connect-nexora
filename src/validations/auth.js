@@ -97,29 +97,22 @@ export const registerValidator = validate(async (req) => {
 
       active: z.boolean({ invalid_type_error: 'Active must be a boolean' }).optional().default(true),
 
-      sellerId: z
-        .string()
-        .optional()
-        .transform((val) => (val?.trim() === '' ? undefined : val))
-
-        .refine(
-          (val) => {
-            if (val === undefined) {
-              return true;
-            }
-
-            return mongoose.Types.ObjectId.isValid(val);
-          },
-          {
-            message: 'sellerId must be a valid ID format',
-          }
-        ),
+      sellerIds: z
+        .array(
+          z
+            .string()
+            .trim()
+            .refine((val) => mongoose.Types.ObjectId.isValid(val), {
+              message: 'Each sellerId must be a valid ID format',
+            })
+        )
+        .optional(),
     })
     .superRefine((data, ctx) => {
-      if (data.role !== USER_ROLES.MASTER_ADMIN && !data.sellerId) {
+      if (data.role !== USER_ROLES.MASTER_ADMIN && (!data.sellerIds || data.sellerIds.length === 0)) {
         ctx.addIssue({
-          path: ['sellerId'],
-          message: 'Seller ID is required for this role.',
+          path: ['sellerIds'],
+          message: 'At least one seller ID is required for this role.',
           code: z.ZodIssueCode.custom,
         });
       }

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { validate } from './validate.js';
 import { headerSchema } from './headerSchema.js';
+import mongoose from 'mongoose';
 
 export const getAllReturnsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
@@ -17,8 +18,8 @@ export const getAllReturnsValidator = validate(async (req) => {
     size: z
       .string()
       .optional()
-      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0 && Number(val) <= 100), {
-        message: 'size must be a positive number between 1 and 100',
+      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0), {
+        message: 'size must be a positive number',
       })
       .transform((val) => (val ? Number(val) : 10)),
 
@@ -42,6 +43,33 @@ export const getAllReturnsValidator = validate(async (req) => {
       .optional()
       .refine((val) => !val || val.trim().length > 0, {
         message: 'returnId cannot be empty',
+      }),
+
+    orderID: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.trim().length > 0, {
+        message: 'orderID cannot be empty',
+      }),
+
+    sellerId: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.trim().length > 0, {
+        message: 'sellerId cannot be empty',
+      })
+      .refine((val) => !val || val.length === 24, {
+        message: 'sellerId must be 24 characters long',
+      })
+      .refine((val) => !val || /^[0-9a-fA-F]+$/.test(val), {
+        message: 'sellerId must be a valid hex string',
+      }),
+
+    search: z
+      .string()
+      .optional()
+      .refine((val) => !val || (val.trim().length > 0 && val.trim().length >= 1), {
+        message: 'search must be at least 1 character long',
       }),
 
     dateFrom: z
@@ -187,6 +215,17 @@ export const returnValidator = validate(async (req) => {
   createReturnSchema.parse(req.body);
 });
 
+export const getReturnByIdValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+  const paramsSchema = z.object({
+    id: z
+      .string()
+      .length(24, 'return id must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'return id must be a hex string'),
+  });
+  paramsSchema.parse(req.params);
+});
+
 //Validates return data structure for saving to database
 export const validateReturnData = (returnData) => {
   try {
@@ -212,10 +251,59 @@ export const validateReturnData = (returnData) => {
     };
   }
 };
+export const validateReturnAck = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const acknowledgeReturnSchema = z.object({
+    ReturnId: z.number().int().nonnegative('ReturnId is required and must be a non-negative number'),
+    MerchantReturnNo: z.string().min(1, 'MerchantReturnNo is required and cannot be empty'),
+  });
+
+  acknowledgeReturnSchema.parse(req.body);
+});
+
+export const updateReturnLineSchema = z.object({
+  MerchantProductNo: z.string().min(1, 'MerchantProductNo is required and cannot be empty'),
+  AcceptedQuantity: z.number().int().nonnegative('AcceptedQuantity must be a non-negative number'),
+  RejectedQuantity: z.number().int().nonnegative('RejectedQuantity must be a non-negative number'),
+});
+
+export const updateReturnValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const updateReturnSchema = z.object({
+    ReturnId: z.number().int().nonnegative('ReturnId is required and must be a non-negative number'),
+    Lines: z.array(updateReturnLineSchema).min(1, 'Lines is required and must contain at least one item'),
+  });
+
+  updateReturnSchema.parse(req.body);
+});
+
+export const getReturnStatsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z.object({
+    sellerId: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.trim().length > 0, {
+        message: 'sellerId cannot be empty',
+      })
+      .refine((val) => !val || mongoose.Types.ObjectId.isValid(val), {
+        message: 'sellerId must be a valid ObjectId',
+      }),
+  });
+
+  querySchema.parse(req.query);
+});
 
 export default {
   getAllReturnsValidator,
   syncReturnsValidator,
   validateReturnData,
+  validateReturnAck,
   returnValidator,
+  updateReturnValidator,
+  getReturnByIdValidator,
+  getReturnStatsValidator,
 };

@@ -17,7 +17,15 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
+    orderId: {
+      type: String,
+      index: true,
+    },
     channelOrderNo: {
+      type: String,
+      index: true,
+    },
+    channelReturnNo: {
       type: String,
       index: true,
     },
@@ -44,7 +52,19 @@ const ReturnSchema = new mongoose.Schema(
         productSkuCode: {
           type: String,
         },
+        orderLineId: {
+          type: Number,
+          index: true,
+        },
         quantity: {
+          type: Number,
+          default: 0,
+        },
+        acceptedQuantity: {
+          type: Number,
+          default: 0,
+        },
+        rejectedQuantity: {
           type: Number,
           default: 0,
         },
@@ -53,7 +73,7 @@ const ReturnSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    collection: 'Returns',
+    collection: 'returns',
   }
 );
 

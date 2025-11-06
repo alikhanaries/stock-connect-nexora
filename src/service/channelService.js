@@ -6,6 +6,7 @@ import Channel from '../models/Channel.js';
 import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
 import UserSeller from '../models/UserSeller.js';
+import { CHANNEL_IMAGE_MAP } from '#constants/common.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -24,9 +25,14 @@ const getAllChannelsFromChannelPartner = async () => {
     }
 
     // FILTER THE LIST WHICH WE HAVE GOT FROM CHANNEL PARTNER API
-    const filteredData = data.Content.filter((record) => record?.Channels?.length);
-    const finalData = filteredData.flatMap((channelData) =>
-      channelData.Channels.map((item) => ({
+    const finalData = data.Content.flatMap((channelData) => {
+      if (!channelData?.Channels?.length) {
+        return [];
+      }
+
+      const enabledChannels = channelData.Channels.filter((item) => item.IsEnabled === true);
+
+      return enabledChannels.map((item) => ({
         languageCode: channelData.LanguageCode,
         countryCode: channelData.CountryCode,
         globalChannelId: channelData.GlobalChannelId,
@@ -36,19 +42,18 @@ const getAllChannelsFromChannelPartner = async () => {
         channelName: item.ChannelName,
         reference: item.Reference,
         isActive: true,
-        channelImageUrl:
-          channelData.GlobalChannelId === 1733
-            ? 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/amazion1'
-            : channelData.GlobalChannelId === 1892
-              ? 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/noon'
-              : null,
-      }))
-    );
+        channelImageUrl: CHANNEL_IMAGE_MAP[channelData.GlobalChannelId] || null,
+      }));
+    });
+
+    if (!finalData.length) {
+      return { success: true, message: 'No active channels found to update.' };
+    }
 
     // BULK INSERT IN DATABASE
     const bulkOps = finalData.map((doc) => ({
       updateOne: {
-        filter: { channelId: doc.channelId }, // unique identifier
+        filter: { channelId: doc.channelId },
         update: { $set: doc },
         upsert: true,
       },
@@ -62,6 +67,26 @@ const getAllChannelsFromChannelPartner = async () => {
   } catch (err) {
     console.error('Error :', err.message);
     return { success: false, message: err.message };
+  }
+};
+
+const updateSampleTemplate = async (channelId, sampleTemplate) => {
+  try {
+    const numericChannelId = Number(channelId);
+    if (Number.isNaN(numericChannelId)) {
+      throw new Error('Invalid channelId');
+    }
+
+    const updated = await Channel.findOneAndUpdate(
+      { channelId: numericChannelId },
+      { $set: { sampleTemplate } },
+      { new: true }
+    );
+
+    return updated?.channelName || null;
+  } catch (err) {
+    console.error('Error in updateSampleTemplate:', err);
+    throw new Error(err.message);
   }
 };
 
@@ -227,6 +252,7 @@ export const getAllUserChannels = async (sellerId, query) => {
             createdAt: '$channelIds.createdAt',
             ordersCount: { $ifNull: [{ $arrayElemAt: ['$ordersInfo.count', 0] }, 0] },
             productsCount: { $ifNull: [{ $arrayElemAt: ['$productsInfo.count', 0] }, 0] },
+            sampleTemplate: '$channelDetails.sampleTemplate',
           },
         },
       },
@@ -301,4 +327,5 @@ export default {
   getAllUserChannels,
   updateUserChannelsStatus,
   removeUserChannels,
+  updateSampleTemplate,
 };

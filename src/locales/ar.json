@@ -152,5 +152,25 @@
   "RESET_TOKEN_GENERATION_SUCCESS": "تم إنشاء رمز إعادة التعيين بنجاح",
   "MISSING_INPUTS": "المدخلات مفقودة",
   "INVALID_OR_EXPIRED_TOKEN": "رمز غير صالح أو منتهي الصلاحية",
-  "PASSWORD_RESET_SUCCESS": "تم إعادة تعيين كلمة المرور بنجاح"
+  "PASSWORD_RESET_SUCCESS": "تم إعادة تعيين كلمة المرور بنجاح",
+  "INVALID_USER_IDS_TO_DELETE": "لا يوجد مستخدمون مرتبطون بهذا البائع في القائمة المقدمة.",
+  "NO_VALID_USERS_FOUND": "يرجى تقديم مستخدمين صالحين.",
+
+  "NO_RETURNS_FOUND": "لم يتم العثور على مرتجعات",
+  "RETURNS_FETCHED_SUCCESSFULLY": "تم جلب المرتجعات بنجاح",
+  "FAILED_TO_SYNC_RETURNS": "فشل في مزامنة المرتجعات",
+  "RETURNS_SYNCED_SUCCESSFULLY": "مرتجعات تم مزامنتها بنجاح",
+  "NO_NEW_RETURNS_FOUND": "لم يتم العثور على مرتجعات جديدة",
+  "FAILED_TO_CREATE_RETURN": "فشل في إنشاء المرتجع",
+  "RETURN_ALREADY_EXISTS": "مرتجع بهذا المرجع موجود بالفعل",
+  "RETURN_CREATED_SUCCESSFULLY": "تم إنشاء المرتجع بنجاح",
+  "FAILED_TO_GET_RETURN_STATS": "فشل في الحصول على إحصائيات المرتجعات",
+  "RETURN_STATS_FETCHED_SUCCESSFULLY": "تم جلب إحصائيات المرتجعات بنجاح",
+  "FAILED_TO_ACKNOWLEDGE_RETURN": "فشل في تأكيد المرتجع",
+  "RETURN_ACKNOWLEDGED_SUCCESSFULLY": "تم تأكيد المرتجع بنجاح",
+  "RETURN_WITH_REFERENCE_EXISTS": "مرتجع بهذا المرجع موجود بالفعل",
+  "FAILED_TO_UPDATE_RETURN": "فشل في تحديث المرتجع",
+  "RETURN_UPDATED_SUCCESSFULLY": "تم تحديث المرتجع بنجاح",
+  "INVALID_RETURN_ID_FORMAT": "تنسيق معرف المرتجع غير صحيح",
+  "RETURN_FETCHED_SUCCESSFULLY": "تم جلب المرتجع بنجاح"
 }

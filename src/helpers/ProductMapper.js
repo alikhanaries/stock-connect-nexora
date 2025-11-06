@@ -16,10 +16,16 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
-
+    {
+      Key: 'categoryTrailTrendyol',
+      Value: product.categoryTrailTrendyol || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
     {
       Key: 'titleAr',
-      Value: product.titleAr || null,
+      Value: product.nameAr || null,
       Type: 'TEXT',
       IsPublic: true,
       LanguageIsoCode: 'ar',
@@ -45,11 +51,18 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+    {
+      Key: 'longDescriptionAr',
+      Value: product.descriptionAr || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || '';
   return {
-    ParentMerchantProductNo: '',
-    ParentMerchantProductNo2: '',
+    ParentMerchantProductNo: product.parentProductSkuCode || null,
+    ParentMerchantProductNo2: product.grandParentProductSkuCode || null,
     ExtraData: [
       { Key: 'Attributes', Value: attributesString, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
       ...customAttributes,
@@ -60,6 +73,7 @@ export const mapProductToChannelEngine = (product) => {
     Size: product.size || '',
     Color: product.color || '',
     Ean: product.ean,
+    Stock: product.currentStockCount || 0,
     ManufacturerProductNumber: product.productSkuCode,
     MerchantProductNo: product.productSkuCode,
     Price: product.price,
@@ -70,8 +84,8 @@ export const mapProductToChannelEngine = (product) => {
     VatRateType: product.vatRateType,
     ShippingCost: product.shippingCost,
     ShippingTime: product.shippingTime,
-    Url: product.url,
-    ImageUrl: product.images?.[0] || '',
+    Url: product.primaryImageUrl,
+    ImageUrl: product.imageUrl || '',
     CategoryTrail: product.categoryTrail,
     IsFrozen: false,
     ExtraImageUrl1: product.extraImageUrl1 || '',

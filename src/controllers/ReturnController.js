@@ -1,6 +1,7 @@
 import returnService from '#service/returnService.js';
 import Responses from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
+import mongoose from 'mongoose';
 
 // Gets all returns stored in the database with pagination and filtering.
 
@@ -8,17 +9,23 @@ export const getAllReturns = async (req, res) => {
   try {
     const result = await returnService.getReturnsFromDatabase(req.query);
 
-    if (result.success === false) {
-      return Responses.failResponse(res, result.message || 'Failed to fetch returns', 400);
+    if (result.success && !result.success) {
+      return Responses.failResponse(res, result.message || req.locale.NO_RETURNS_FOUND, 400);
     }
 
     const { data: returns = [], pagination = {}, appliedFilters = {} } = result;
 
-    const message = returns.length > 0 ? 'Returns fetched successfully' : 'No returns found';
+    if (!returns.length) {
+      return Responses.successResponse(res, result.message || req.locale.NO_RETURNS_FOUND, 200, {
+        content: [],
+        appliedFilters: appliedFilters || {},
+        ...pagination,
+      });
+    }
 
-    return Responses.successResponse(res, message, 200, {
+    return Responses.successResponse(res, result.message || req.locale.RETURNS_FETCHED_SUCCESSFULLY, 200, {
       content: returns,
-      appliedFilters,
+      appliedFilters: appliedFilters || {},
       ...pagination,
     });
   } catch (error) {
@@ -29,19 +36,17 @@ export const getAllReturns = async (req, res) => {
 };
 
 //  Fetches latest returns from ChannelEngine and syncs them to the database.
-
 export const syncReturns = async (req, res) => {
   try {
-    // Fetch and sync returns from ChannelEngine (automatically saves to database)
     const result = await returnService.getReturns(req.query);
 
     if (!result.success) {
-      return Responses.failResponse(res, result.message || 'Failed to sync returns', 400);
+      return Responses.failResponse(res, result.message || req.locale.FAILED_TO_SYNC_RETURNS, 400);
     }
 
     const returnsCount = result.data?.Content?.length || 0;
     const message =
-      returnsCount > 0 ? `${returnsCount} returns synced successfully from ChannelEngine` : 'No new returns found';
+      returnsCount > 0 ? `${returnsCount} ${req.locale.RETURNS_SYNCED_SUCCESSFULLY}` : req.locale.NO_NEW_RETURNS_FOUND;
 
     return Responses.successResponse(res, message, 200, result.data);
   } catch (error) {
@@ -57,17 +62,109 @@ export const createMerchantReturn = async (req, res) => {
     const result = await returnService.createReturn(req.body);
 
     if (!result.data) {
-      return Responses.failResponse(res, result.message || 'Failed to create return', result.statusCode || 500);
+      return Responses.failResponse(
+        res,
+        result.message || req.locale.FAILED_TO_CREATE_RETURN,
+        result.statusCode || 500
+      );
     }
 
     if (result.isConflict) {
-      return Responses.failResponse(res, result.message || 'A return with this reference already exists', 409);
+      return Responses.failResponse(res, result.message || req.locale.RETURN_ALREADY_EXISTS, 409);
     }
 
-    const message = 'Return created successfully in ChannelEngine';
+    const message = req.locale.RETURN_CREATED_SUCCESSFULLY;
     return Responses.successResponse(res, message, 201, result.data);
   } catch (error) {
     console.error('Controller Error: createMerchantReturn:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+// Gets return stats grouped by status.
+export const getReturnStats = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const result = await returnService.getReturnStats(sellerId);
+    if (!result || !result.stats) {
+      return Responses.failResponse(res, req.locale.FAILED_TO_GET_RETURN_STATS, 404);
+    }
+
+    const responseData = {
+      ...result.stats,
+    };
+
+    return Responses.successResponse(res, req.locale.RETURN_STATS_FETCHED_SUCCESSFULLY, 200, responseData);
+  } catch (error) {
+    console.error('Controller Error: getReturnStats:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+// Acknowledges a merchant return in ChannelEngine.
+export const acknowledgeMerchantReturn = async (req, res) => {
+  try {
+    const result = await returnService.acknowledgeReturn(req.body);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || req.locale.FAILED_TO_ACKNOWLEDGE_RETURN, 400);
+    }
+
+    return Responses.successResponse(res, req.locale.RETURN_ACKNOWLEDGED_SUCCESSFULLY, 200, result.data);
+  } catch (error) {
+    console.error('Controller Error: acknowledgeMerchantReturn:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+// Updates a return status in ChannelEngine.
+export const updateReturn = async (req, res) => {
+  try {
+    const result = await returnService.acceptOrRejectReturn(req.body);
+
+    if (result.isConflict) {
+      return Responses.failResponse(res, result.message || req.locale.RETURN_WITH_REFERENCE_EXISTS, 409);
+    }
+
+    if (!result.success) {
+      return Responses.failResponse(
+        res,
+        result.message || req.locale.FAILED_TO_UPDATE_RETURN,
+        result.statusCode || 400
+      );
+    }
+
+    return Responses.successResponse(res, req.locale.RETURN_UPDATED_SUCCESSFULLY, 200, result.data);
+  } catch (error) {
+    console.error('Controller Error: updateReturn:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+// Gets a single return by ID.
+export const getReturnById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return Responses.failResponse(res, req.locale.INVALID_RETURN_ID_FORMAT || 'Invalid return ID format', 400);
+    }
+
+    const returnData = await returnService.getReturnById(id);
+    if (!returnData) {
+      return Responses.failResponse(res, req.locale.NO_RETURNS_FOUND || 'Return not found', 404);
+    }
+
+    return Responses.successResponse(
+      res,
+      req.locale.RETURN_FETCHED_SUCCESSFULLY || 'Return fetched successfully',
+      200,
+      returnData
+    );
+  } catch (error) {
+    console.error('Controller Error: getReturnById:', error.message);
     errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
@@ -77,4 +174,8 @@ export default {
   getAllReturns,
   syncReturns,
   createMerchantReturn,
+  getReturnStats,
+  acknowledgeMerchantReturn,
+  updateReturn,
+  getReturnById,
 };
