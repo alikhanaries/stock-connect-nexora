@@ -1,6 +1,6 @@
 import { createERPAdapter } from '../../base/ERPFactory.js';
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
-import { processInBatches } from '../helpers/batchHelper.js';
+import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { formatNebimOrders } from '../helpers/formatter.js';
 import { handleNebimError } from '../util/handleError.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
