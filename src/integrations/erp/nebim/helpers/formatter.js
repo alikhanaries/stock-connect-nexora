@@ -6,7 +6,6 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
     return [];
   }
 
-  // Group by ItemCode (SKU family)
   const groupedByItemCode = raw.reduce((acc, item) => {
     if (!item?.ItemCode) return acc;
     const code = String(item.ItemCode).trim();
@@ -21,17 +20,17 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
    * TODO: Remove this limit once full import is ready for production.
    * This is just to avoid processing too many products during testing.
    */
-
   itemGroups = itemGroups.slice(0, 20);
 
   const formattedProducts = [];
 
-  // Process each SKU family in batches
   await processInBatches(itemGroups, batchSize, async (batch) => {
     for (const [itemCode, items] of batch) {
-      const first = items[0];
+      const validItems = items.filter((it) => it.ColorDesc?.trim() && it.ItemDim1Desc?.trim());
+      if (validItems.length === 0) continue;
 
-      // GRANDPARENT PRODUCT
+      const first = validItems[0];
+
       const grandParentSku = itemCode;
       const grandParentProduct = await canonicalProductMapper(
         {
@@ -68,15 +67,16 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
       );
       formattedProducts.push(grandParentProduct);
 
-      // PARENT — Group by Color
-      const groupedByColor = items.reduce((acc, item) => {
-        const color = item.ColorDesc?.trim() || 'NO_COLOR';
+      const groupedByColor = validItems.reduce((acc, item) => {
+        const color = item.ColorDesc.trim();
         if (!acc[color]) acc[color] = [];
         acc[color].push(item);
         return acc;
       }, {});
 
       for (const [colorDesc, colorItems] of Object.entries(groupedByColor)) {
+        if (!colorDesc) continue;
+
         const colorFirst = colorItems[0];
         const safeColor = colorDesc.replace(/\s+/g, '_').toUpperCase();
         const parentSku = `${itemCode}-${safeColor}`;
@@ -87,7 +87,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
             grandParentProductSkuCode: grandParentSku,
             parentProductSkuCode: null,
             productSkuCode: parentSku,
-            name: `${colorFirst.ItemName || ''} - ${colorDesc}`,
+            name: colorFirst.ItemName || '',
             nameAr: colorFirst.ItemName || '',
             description: colorFirst.ItemDesc || '',
             descriptionAr: colorFirst.ItemDesc || '',
@@ -116,9 +116,11 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
         );
         formattedProducts.push(parentProduct);
 
-        // CHILDREN — Each Size Variant
-        for (const variant of colorItems) {
-          const sizeCode = variant.ItemDim1Desc?.trim() || variant.ItemDim1Code || 'NOSIZE';
+        const colorItemsFiltered = colorItems.filter((v) => v.ItemDim1Desc?.trim());
+        if (colorItemsFiltered.length === 0) continue;
+
+        for (const variant of colorItemsFiltered) {
+          const sizeCode = variant.ItemDim1Desc.trim();
           const safeSize = sizeCode.replace(/\s+/g, '_').toUpperCase();
           const childSku = `${parentSku}-${safeSize}`;
 
@@ -128,7 +130,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
               grandParentProductSkuCode: null,
               parentProductSkuCode: parentSku,
               productSkuCode: childSku,
-              name: `${variant.ItemName || ''} - ${colorDesc} - ${sizeCode}`,
+              name: variant.ItemName || '',
               nameAr: variant.ItemName || '',
               description: variant.ItemDesc || '',
               descriptionAr: variant.ItemDesc || '',
