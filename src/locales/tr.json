@@ -153,5 +153,23 @@
   "INVALID_OR_EXPIRED_TOKEN": "Geçersiz veya süresi dolmuş token",
   "PASSWORD_RESET_SUCCESS": "Şifre başarıyla sıfırlandı",
   "INVALID_USER_IDS_TO_DELETE": "Sağlanan listedeki hiçbir kullanıcı bu satıcıya bağlı değil.",
-  "NO_VALID_USERS_FOUND": "Lütfen geçerli kullanıcılar sağlayın."
+  "NO_VALID_USERS_FOUND": "Lütfen geçerli kullanıcılar sağlayın.",
+
+  "NO_RETURNS_FOUND": "İade bulunamadı",
+  "RETURNS_FETCHED_SUCCESSFULLY": "İadeler başarıyla getirildi",
+  "FAILED_TO_SYNC_RETURNS": "İadeleri senkronize etme başarısız",
+  "RETURNS_SYNCED_SUCCESSFULLY": "iade başarıyla senkronize edildi",
+  "NO_NEW_RETURNS_FOUND": "Yeni iade bulunamadı",
+  "FAILED_TO_CREATE_RETURN": "İade oluşturma başarısız",
+  "RETURN_ALREADY_EXISTS": "Bu referansla bir iade zaten mevcut",
+  "RETURN_CREATED_SUCCESSFULLY": "İade başarıyla oluşturuldu",
+  "FAILED_TO_GET_RETURN_STATS": "İade istatistiklerini alma başarısız",
+  "RETURN_STATS_FETCHED_SUCCESSFULLY": "İade istatistikleri başarıyla getirildi",
+  "FAILED_TO_ACKNOWLEDGE_RETURN": "İadeyi onaylama başarısız",
+  "RETURN_ACKNOWLEDGED_SUCCESSFULLY": "İade başarıyla onaylandı",
+  "RETURN_WITH_REFERENCE_EXISTS": "Bu referansla bir iade zaten mevcut",
+  "FAILED_TO_UPDATE_RETURN": "İadeyi güncelleme başarısız",
+  "RETURN_UPDATED_SUCCESSFULLY": "İade başarıyla güncellendi",
+  "INVALID_RETURN_ID_FORMAT": "Geçersiz iade ID formatı",
+  "RETURN_FETCHED_SUCCESSFULLY": "İade başarıyla getirildi"
 }

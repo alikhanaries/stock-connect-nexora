@@ -1,8 +1,10 @@
 import { config } from '#config/config.js';
 import Return from '#models/Return.js';
+import Order from '#models/Orders.js';
 import mongoose from 'mongoose';
 import {
   sanitizeReturnData,
+  getOrderDataByOrderLineIds,
   isNameOrEmailSearch,
   buildReturnAggregationPipeline,
   formatReturnDetails,
@@ -48,7 +50,7 @@ export const getReturns = async (queryParams = {}) => {
 export const saveReturnToDatabase = async (returnData) => {
   try {
     // Sanitize return data using helper
-    const sanitizationResult = sanitizeReturnData(returnData);
+    const sanitizationResult = await sanitizeReturnData(returnData, Order);
     if (!sanitizationResult.success) {
       return sanitizationResult;
     }
@@ -113,7 +115,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
     addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
     addFilter('channelId', channelId, (v) => parseInt(v, 10));
     addFilter('returnId', returnId);
-    addFilter('orderInfo.orderId', orderID);
+    addFilter('orderId', orderID);
     addFilter('orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
 
     // ====== Search Filter ======
@@ -121,7 +123,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       const searchRegex = new RegExp(search, 'i');
       const searchConditions = [
         { returnId: { $regex: searchRegex } },
-        { 'orderInfo.orderId': { $regex: searchRegex } },
+        { orderId: { $regex: searchRegex } },
         { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
         { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
         { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
@@ -171,7 +173,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
     pipeline.push(
       {
         $addFields: {
-          orderID: '$orderInfo.orderId',
+          orderID: { $ifNull: ['$orderId', '$orderInfo.orderId'] },
           customer: {
             $concat: [
               { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
@@ -411,22 +413,39 @@ export const acceptOrRejectReturn = async (returnData) => {
 
 export const getReturnById = async (id) => {
   try {
-    const returnExists = await Return.findById(id).lean();
-    if (!returnExists) {
+    const returnData = await Return.findById(id).lean();
+    if (!returnData) {
       return null;
     }
 
-    const pipeline = buildReturnAggregationPipeline();
+    // Extract orderLineIds from products
+    const orderLineIds = returnData.products?.map((p) => p.orderLineId).filter(Boolean) || [];
 
-    pipeline.push({
-      $match: { _id: returnExists._id },
-    });
+    let orderInfo = null;
 
-    const [aggregatedResult] = await Return.aggregate(pipeline);
-
-    if (!aggregatedResult) {
-      return null;
+    // Get order data
+    if (orderLineIds.length > 0) {
+      orderInfo = await getOrderDataByOrderLineIds(orderLineIds, Order, {
+        orderId: 1,
+        totalInclVat: 1,
+        subTotalExclVat: 1,
+        subTotalVat: 1,
+        shippingCostsExclVat: 1,
+        shippingCostsVat: 1,
+        channelName: 1,
+        orderCustomer: 1,
+        orderShippingAddress: 1,
+        orderPaymentDetails: 1,
+        'orderSkuList.skuList': 1,
+      });
     }
+
+    // Create aggregated result format for formatReturnDetails
+    const aggregatedResult = {
+      ...returnData,
+      totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
+      orderInfo: orderInfo,
+    };
 
     return formatReturnDetails(aggregatedResult);
   } catch (error) {

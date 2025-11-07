@@ -1,66 +1,53 @@
-// mapRowToProduct.js
+import { normalizeImageUrl } from '../helpers/NormalizeImageUrl.js';
 import { uploadImageFromUrl } from '../util/uploadImage.js';
 import pLimit from 'p-limit';
-const IMAGE_CONCURRENCY = 10; // max 10 uploads at a time
+const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
 export const mapRowToProduct = async (row, index, locale, sellerId) => {
   if (!row || typeof row !== 'object') return null;
 
-  // Normalize keys (lowercase + trim)
   const r = Object.fromEntries(
     Object.entries(row).map(([key, value]) => [key.toLowerCase().trim(), value ? String(value).trim() : ''])
   );
 
-  // CHECK MANDATORY FIELD
   const price = parseFloat(r.price);
-  if (!r.productskucode || isNaN(price) || !r.categorytrail) {
-    let errorData = [];
-    if (!r.productskucode) {
-      errorData.push(locale.PRODUCT_SKUCODE_MISSING);
-    }
-    if (isNaN(price)) {
-      errorData.push(locale.PRODUCT_PRICE_MISSING);
-    }
-    if (!r.categorytrail) {
-      errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
-    }
-    return {
-      rowNumber: index,
-      errorData,
-    };
+  const errorData = [];
+  if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
+  if (isNaN(price)) errorData.push(locale.PRODUCT_PRICE_MISSING);
+  if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
+  if (errorData.length) {
+    return { rowNumber: index, errorData };
   }
 
-  // Collect all image URLs
-  const allImageUrls = [
-    r.url,
-    ...(r.images ? r.images.split(',').map((img) => img.trim()) : []),
-    r.extraimageurl1,
-    r.extraimageurl2,
-    r.extraimageurl3,
-  ].filter(Boolean);
-  // Upload all images with concurrency limit
+  const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
+    .filter(Boolean)
+    .map((url) => normalizeImageUrl(url.trim()));
   const uploadedUrls = await Promise.all(
     allImageUrls.map((imgUrl) =>
-      limit(() =>
-        uploadImageFromUrl(imgUrl, sellerId).catch((err) => {
-          console.error(`Failed to upload ${imgUrl}: ${err.message}`);
+      limit(async () => {
+        try {
+          return await uploadImageFromUrl(imgUrl, sellerId);
+        } catch (err) {
+          console.error(`Failed to upload image [${imgUrl}]: ${err.message}`);
           return null;
-        })
-      )
+        }
+      })
     )
   );
-  // Map back results
-  const [mainUrl, ...rest] = uploadedUrls;
-  const [extra1, extra2, extra3] = rest.slice(-3);
-  const uploadedImages = rest.slice(0, rest.length - 3).filter(Boolean);
+
+  const validUploadedUrls = uploadedUrls.filter(Boolean);
+  const [primaryImageUrl, imageUrl, extraImageUrl1, extraImageUrl2, extraImageUrl3] = validUploadedUrls;
 
   return {
+    grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,
-    name: r.name || 'Unnamed Product',
+    name: r.productname || 'Unnamed Product',
+    nameAr: r.productnamear || '',
     description: r.description || null,
+    descriptionAr: r.descriptionar || null,
     brand: r.brand || null,
-    ean: r.ean || null, // should be unique
+    ean: r.ean || null,
     price,
     minPrice: r.minprice ? parseFloat(r.minprice) : null,
     maxPrice: r.maxprice ? parseFloat(r.maxprice) : null,
@@ -69,25 +56,24 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     vatRateType: r.vatratetype ? r.vatratetype.toUpperCase() : 'STANDARD',
     shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : 0,
     shippingTime: r.shippingtime || null,
-    url: mainUrl || null,
+    primaryImageUrl: primaryImageUrl || null,
+    imageUrl: imageUrl || null,
+    extraImageUrl1: extraImageUrl1 || null,
+    extraImageUrl2: extraImageUrl2 || null,
+    extraImageUrl3: extraImageUrl3 || null,
+    images: validUploadedUrls,
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
-    attributes: r.attributes,
+    attributes: r.attributes || null,
     categories: [],
-    marketPlace: r.marketplace,
-    images: uploadedImages,
+    marketPlace: r.marketplace || null,
     currentStockCount: r.stock ? parseInt(r.stock, 10) || 0 : 0,
     createdAt: new Date(),
     updatedAt: new Date(),
-    extraImageUrl1: extra1,
-    extraImageUrl2: extra2,
-    extraImageUrl3: extra3,
-    size: r.size,
-    color: r.color,
-    volumetricWeightCm: r.volumetricweightcm,
-    hsCodeAE: r.hscodeae,
-    hsCodeSA: r.hscodesa,
-    titleAr: r.titlear || '',
-    longDescriptionAr: r.longdescriptionar,
+    size: r.size || null,
+    color: r.color || null,
+    volumetricWeightCm: r.volumetricweightcm ? parseFloat(r.volumetricweightcm) : null,
+    hsCodeAE: r.hscodeae || null,
+    hsCodeSA: r.hscodesa || null,
   };
 };

@@ -14,87 +14,41 @@ export const isNameOrEmailSearch = (searchTerm) => {
   return false;
 };
 
-export const formatReturnWithOrderData = async (returns, searchTerm = null, Order) => {
-  if (!returns || returns.length === 0) {
-    return [];
+// Optimized helper function to find order data by orderLineIds
+export const getOrderDataByOrderLineIds = async (orderLineIds, Order, projection = { orderId: 1 }) => {
+  try {
+    if (!orderLineIds || orderLineIds.length === 0) {
+      return null;
+    }
+
+    const order = await Order.findOne({ 'orderSkuList.skuList.id': { $in: orderLineIds } }, projection).lean();
+
+    return order;
+  } catch (error) {
+    console.error('Error finding order data by orderLineIds:', error.message);
+    return null;
   }
-
-  const merchantOrderNos = [...new Set(returns.map((returnItem) => returnItem.merchantOrderNo).filter(Boolean))];
-
-  if (merchantOrderNos.length === 0) {
-    // No merchant order numbers found, return returns with empty order data
-    return returns.map((returnItem) => {
-      const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
-
-      return {
-        _id: returnItem._id,
-        orderID: null,
-        quantity: totalQuantity,
-        totalPrice: returnItem.totalPrice || null,
-        customer: null,
-        placedOn: returnItem.placedOn,
-        email: null,
-        phoneNumber: null,
-        status: returnItem.status,
-        platform: returnItem.platform,
-      };
-    });
-  }
-
-  const orderData = await Order.aggregate([
-    {
-      $match: { merchantOrderNo: { $in: merchantOrderNos } },
-    },
-    {
-      $project: {
-        orderId: 1,
-        merchantOrderNo: 1,
-        totalInclVat: 1,
-        orderCustomer: 1,
-      },
-    },
-  ]);
-
-  const orderMap = {};
-  orderData.forEach((order) => {
-    orderMap[order.merchantOrderNo] = order;
-  });
-
-  const formattedReturns = returns.map((returnItem) => {
-    const orderInfo = orderMap[returnItem.merchantOrderNo] || {};
-
-    const customerName = orderInfo.orderCustomer
-      ? `${orderInfo.orderCustomer.firstName || ''} ${orderInfo.orderCustomer.lastName || ''}`.trim()
-      : '';
-
-    const totalQuantity = returnItem.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0;
-
-    return {
-      _id: returnItem._id,
-      orderID: orderInfo.orderId || null,
-      quantity: totalQuantity,
-      totalPrice: orderInfo.totalInclVat || null,
-      customer: customerName || null,
-      placedOn: returnItem.placedOn,
-      email: orderInfo.orderCustomer?.email || null,
-      phoneNumber: orderInfo.orderCustomer?.phone || null,
-      status: returnItem.status,
-      platform: returnItem.platform,
-    };
-  });
-
-  if (searchTerm && isNameOrEmailSearch(searchTerm)) {
-    return formattedReturns.filter((returnItem) => returnItem.customer || returnItem.email || returnItem.orderID);
-  }
-
-  return formattedReturns;
 };
 
-export const sanitizeReturnData = (returnData) => {
+export const sanitizeReturnData = async (returnData, Order = null) => {
   try {
     if (!returnData) {
       throw new Error('Return data is required');
     }
+
+    const products = Array.isArray(returnData.Lines)
+      ? returnData.Lines.map((line) => ({
+          productSkuCode: line.MerchantProductNo,
+          orderLineId: line.OrderLine?.Id || null,
+          quantity: line.Quantity || 0,
+          acceptedQuantity: line.AcceptedQuantity || 0,
+          rejectedQuantity: line.RejectedQuantity || 0,
+        }))
+      : [];
+
+    // Extract orderLineIds and find the corresponding orderId
+    const orderLineIds = products.map((p) => p.orderLineId).filter(Boolean);
+    const orderData = Order ? await getOrderDataByOrderLineIds(orderLineIds, Order) : null;
 
     const sanitizedData = {
       returnId: returnData.Id?.toString(),
@@ -103,19 +57,13 @@ export const sanitizeReturnData = (returnData) => {
       channelOrderNo: returnData.ChannelOrderNo,
       channelReturnNo: returnData.ChannelReturnNo,
       channelId: returnData.ChannelId,
+      orderId: orderData?.orderId || null,
       totalPrice: returnData.RefundInclVat || 0,
       placedOn: returnData.CreatedAt ? new Date(returnData.CreatedAt) : null,
       acknowledgeDate: returnData.AcknowledgedDate ? new Date(returnData.AcknowledgedDate) : null,
       status: returnData.Status,
       platform: returnData.ChannelName,
-      products: Array.isArray(returnData.Lines)
-        ? returnData.Lines.map((line) => ({
-            productSkuCode: line.MerchantProductNo,
-            quantity: line.Quantity || 0,
-            acceptedQuantity: line.AcceptedQuantity || 0,
-            rejectedQuantity: line.RejectedQuantity || 0,
-          }))
-        : [],
+      products: products,
     };
 
     return { success: true, data: sanitizedData };
@@ -134,8 +82,31 @@ export const buildReturnAggregationPipeline = () => {
     {
       $lookup: {
         from: 'channelengineorders',
-        localField: 'merchantOrderNo',
-        foreignField: 'merchantOrderNo',
+        let: { orderLineIds: '$products.orderLineId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $gt: [
+                  {
+                    $size: {
+                      $ifNull: [
+                        {
+                          $filter: {
+                            input: '$orderSkuList.skuList',
+                            cond: { $in: ['$$this.id', '$$orderLineIds'] },
+                          },
+                        },
+                        [],
+                      ],
+                    },
+                  },
+                  0,
+                ],
+              },
+            },
+          },
+        ],
         as: 'orderData',
       },
     },
@@ -160,6 +131,7 @@ export const buildReturnAggregationPipeline = () => {
         channelOrderNo: 1,
         channelReturnNo: 1,
         channelId: 1,
+        orderId: 1,
         placedOn: 1,
         acknowledgeDate: 1,
         platform: 1,
@@ -267,6 +239,7 @@ export const formatReturnDetails = (aggregatedResult) => {
       products:
         returnData.products?.map((product, index) => ({
           id: index + 1,
+          orderLineId: product.orderLineId,
           merchantProductNo: product.productSkuCode,
           channelProductNo: null,
           name: 'Product',
@@ -309,9 +282,10 @@ export const formatReturnDetails = (aggregatedResult) => {
   const shippingFee = proportionalShippingExclVat;
   const total = subtotal + tax + shippingFee;
 
-  // Map returned items to products format
+  // Map returned items to products format - now using orderLineId matching
   const products = returnedSkus.map((returnProduct, index) => {
-    const matchingSku = orderSkus.find((sku) => sku.merchantProductNo === returnProduct.productSkuCode);
+    // Match by orderLineId instead of merchantProductNo
+    const matchingSku = orderSkus.find((sku) => sku.id === returnProduct.orderLineId);
 
     const unitPriceExclVat = matchingSku?.unitPriceExclVat || 0;
     const unitVat = matchingSku?.unitVat || 0;
@@ -320,6 +294,7 @@ export const formatReturnDetails = (aggregatedResult) => {
 
     return {
       id: index + 1,
+      orderLineId: returnProduct.orderLineId,
       merchantProductNo: returnProduct.productSkuCode,
       channelProductNo: matchingSku?.channelProductNo || null,
       name: matchingSku?.description || 'Product',
@@ -388,8 +363,8 @@ export const formatReturnDetails = (aggregatedResult) => {
 
 export default {
   sanitizeReturnData,
+  getOrderDataByOrderLineIds,
   isNameOrEmailSearch,
-  formatReturnWithOrderData,
   buildReturnAggregationPipeline,
   addStatusManipulationStages,
   formatReturnDetails,

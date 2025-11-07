@@ -7,16 +7,17 @@ const ProductSchema = new mongoose.Schema(
       ref: 'Seller',
       required: true,
     },
-    longDescriptionAr: {
+
+    grandParentProductSkuCode: { type: String, trim: true, default: null },
+    parentProductSkuCode: { type: String, trim: true, default: null },
+    productSkuCode: { type: String, trim: true },
+    name: { type: String, required: true, trim: true },
+    nameAr: { type: String, trim: true },
+    description: { type: String },
+    descriptionAr: {
       type: String,
       trim: true,
     },
-    parentProductId: { type: String, trim: true },
-    parentProductSkuCode: { type: String, trim: true },
-    productSkuCode: { type: String, trim: true },
-    name: { type: String, required: true, trim: true },
-    titleAr: { type: String, trim: true },
-    description: { type: String },
     brand: { type: String, trim: true },
     attributes: { type: String, trim: true },
     ean: { type: String, trim: true, unique: false },
@@ -37,9 +38,7 @@ const ProductSchema = new mongoose.Schema(
     },
     shippingCost: { type: Number, default: 0 },
     shippingTime: { type: String },
-    url: { type: String, trim: true },
     isFrozen: { type: Boolean, default: false },
-    categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
     categoryTrail: { type: String },
     categoryTrailAmazon: { type: String, default: null },
     categoryTrailNoon: { type: String, default: null },
@@ -52,9 +51,18 @@ const ProductSchema = new mongoose.Schema(
     hsCodeSA: { type: String, required: true },
     size: { type: String },
     color: { type: String },
+    primaryImageUrl: { type: String, trim: true },
+    imageUrl: { type: String, trim: true },
     extraImageUrl1: { type: String },
     extraImageUrl2: { type: String },
     extraImageUrl3: { type: String },
+    productType: {
+      type: String,
+      enum: ['simple', 'configurable'],
+      required: true,
+      default: 'simple',
+      index: true,
+    },
   },
   { timestamps: true }
 );
@@ -63,11 +71,8 @@ const ProductSchema = new mongoose.Schema(
 ProductSchema.index({ productSkuCode: 1 }, { unique: true });
 ProductSchema.index({ sellerId: 1, productSkuCode: 1 });
 ProductSchema.index({ sellerId: 1, ean: 1 });
-ProductSchema.index({ sellerId: 1, parentProductSkuCode: 1 });
 ProductSchema.index({ sellerId: 1, brand: 1 });
-ProductSchema.index({ sellerId: 1, categories: 1 });
 ProductSchema.index({ sellerId: 1, marketPlace: 1 });
-ProductSchema.index({ sellerId: 1, brand: 1, categories: 1 });
 ProductSchema.index({
   sellerId: 1,
   name: 'text',
