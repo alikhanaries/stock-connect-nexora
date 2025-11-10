@@ -173,6 +173,46 @@ export const getReturnById = async (req, res) => {
   }
 };
 
+// Exports returns data as CSV file for a specific seller.
+export const exportReturns = async (req, res) => {
+  try {
+    const sellerId = req.sellerId; // From seller middleware
+    const filters = {
+      status: req.query.status,
+      platform: req.query.platform,
+      channelId: req.query.channelId,
+      search: req.query.search,
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+    };
+
+    // Remove undefined values
+    Object.keys(filters).forEach((key) => {
+      if (filters[key] === undefined || filters[key] === null || filters[key] === '') {
+        delete filters[key];
+      }
+    });
+
+    const result = await returnService.exportReturnsToCSV(sellerId, filters);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || req.locale.NO_RETURNS_FOUND, 404);
+    }
+
+    // Set headers for CSV download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    return res.status(200).send(result.data);
+  } catch (error) {
+    console.error('Controller Error: exportReturns:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllReturns,
   syncReturns,
@@ -181,4 +221,5 @@ export default {
   acknowledgeMerchantReturn,
   updateReturn,
   getReturnById,
+  exportReturns,
 };

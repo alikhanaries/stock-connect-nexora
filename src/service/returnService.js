@@ -486,6 +486,183 @@ export const getReturnById = async (id) => {
   }
 };
 
+export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
+  try {
+    const query = { ...filters, sellerId, size: 1000, page: 1, sortBy: 'createdAt', sortOrder: 'desc' };
+    const basicResult = await getReturnsFromDatabase(query);
+
+    if (!basicResult.success || !basicResult.data?.length) {
+      return { success: false, message: 'No returns found for export' };
+    }
+
+    const returnIds = basicResult.data.map((item) => new mongoose.Types.ObjectId(item._id));
+    const pipeline = buildReturnAggregationPipeline();
+
+    pipeline.push(
+      { $match: { _id: { $in: returnIds } } },
+      {
+        $addFields: {
+          customerName: {
+            $trim: {
+              input: {
+                $concat: [
+                  { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
+                  ' ',
+                  { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          returnId: 1,
+          orderId: 1,
+          platform: 1,
+          status: 1,
+          placedOn: 1,
+          createdAt: 1,
+          products: 1,
+          customerName: 1,
+          'orderInfo.orderId': 1,
+          'orderInfo.orderCustomer.email': 1,
+          'orderInfo.orderCustomer.phone': 1,
+          'orderInfo.billingAddress': 1,
+          'orderInfo.orderShippingAddress': 1,
+          'orderInfo.orderSkuList.skuList': 1,
+        },
+      }
+    );
+
+    const detailedResults = await Return.aggregate(pipeline);
+    if (!detailedResults?.length) return { success: false, message: 'No detailed return data found for export' };
+
+    const headers = [
+      'Return ID',
+      'Order ID',
+      'Platform',
+      'Status',
+      'Placed On',
+      'Returned At',
+      'Product SKU',
+      'Product Name',
+      'Product ID',
+      'Quantity',
+      'Accepted Quantity',
+      'Rejected Quantity',
+      'Unit Price',
+      'Total Price',
+      'Customer Name',
+      'Customer Email',
+      'Customer Phone',
+      'Billing Address Line 1',
+      'Billing Address Line 2',
+      'Billing City',
+      'Billing State',
+      'Billing Postal Code',
+      'Billing Country',
+      'Shipping Address Line 1',
+      'Shipping Address Line 2',
+      'Shipping City',
+      'Shipping State',
+      'Shipping Postal Code',
+      'Shipping Country',
+    ];
+    const csvRows = [headers.join(',')];
+
+    detailedResults.forEach((item) => {
+      const {
+        returnId = '',
+        orderId = '',
+        platform = '',
+        status = '',
+        placedOn,
+        createdAt,
+        products = [],
+        orderInfo = {},
+        customerName = '',
+      } = item;
+      const customer = orderInfo.orderCustomer || {};
+      const billing = orderInfo.billingAddress || {};
+      const shipping = orderInfo.orderShippingAddress || {};
+      const orderSkus = orderInfo.orderSkuList?.skuList || [];
+
+      const baseRow = [
+        returnId,
+        orderId || orderInfo.orderId || '',
+        platform,
+        status,
+        placedOn ? new Date(placedOn).toLocaleDateString() : '',
+        createdAt ? new Date(createdAt).toLocaleDateString() : '',
+      ];
+
+      const customerAddressRow = [
+        customerName.trim(),
+        customer.email || '',
+        customer.phone || '',
+        billing.line1 || '',
+        billing.line2 || '',
+        billing.city || '',
+        billing.region || '',
+        billing.zipCode || '',
+        billing.countryIso || '',
+        shipping.line1 || '',
+        shipping.line2 || '',
+        shipping.city || '',
+        shipping.region || '',
+        shipping.zipCode || '',
+        shipping.countryIso || '',
+      ];
+
+      if (!products.length) {
+        csvRows.push(
+          [...baseRow, '', '', '', '', '', '', '', '', ...customerAddressRow]
+            .map((f) =>
+              String(f).includes(',') || String(f).includes('"') ? `"${String(f).replace(/"/g, '""')}"` : String(f)
+            )
+            .join(',')
+        );
+      } else {
+        products.forEach((product) => {
+          const sku = orderSkus.find((s) => s.id === product.orderLineId);
+          const unitPrice = sku?.unitPriceInclVat || 0;
+          const quantity = product.quantity || 0;
+          const productRow = [
+            ...baseRow,
+            product.productSkuCode || sku?.merchantProductNo || '',
+            sku?.description || 'Product',
+            product.orderLineId || '',
+            quantity,
+            product.acceptedQuantity || 0,
+            product.rejectedQuantity || 0,
+            unitPrice,
+            unitPrice * quantity,
+            ...customerAddressRow,
+          ];
+          csvRows.push(
+            productRow
+              .map((f) =>
+                String(f).includes(',') || String(f).includes('"') ? `"${String(f).replace(/"/g, '""')}"` : String(f)
+              )
+              .join(',')
+          );
+        });
+      }
+    });
+
+    return {
+      success: true,
+      data: csvRows.join('\n'),
+      filename: `returns-export-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.csv`,
+      count: detailedResults.length,
+    };
+  } catch (error) {
+    console.error('Error exporting returns to CSV:', error.message);
+    return { success: false, message: 'Error generating CSV export', error: error.message };
+  }
+};
+
 export default {
   getReturns,
   getReturnsFromDatabase,
@@ -495,4 +672,5 @@ export default {
   acknowledgeReturn,
   acceptOrRejectReturn,
   getReturnById,
+  exportReturnsToCSV,
 };
