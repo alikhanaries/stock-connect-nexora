@@ -528,7 +528,6 @@ export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
           'orderInfo.orderId': 1,
           'orderInfo.orderCustomer.email': 1,
           'orderInfo.orderCustomer.phone': 1,
-          'orderInfo.billingAddress': 1,
           'orderInfo.orderShippingAddress': 1,
           'orderInfo.orderSkuList.skuList': 1,
         },
@@ -556,12 +555,6 @@ export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
       'Customer Name',
       'Customer Email',
       'Customer Phone',
-      'Billing Address Line 1',
-      'Billing Address Line 2',
-      'Billing City',
-      'Billing State',
-      'Billing Postal Code',
-      'Billing Country',
       'Shipping Address Line 1',
       'Shipping Address Line 2',
       'Shipping City',
@@ -584,7 +577,6 @@ export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
         customerName = '',
       } = item;
       const customer = orderInfo.orderCustomer || {};
-      const billing = orderInfo.billingAddress || {};
       const shipping = orderInfo.orderShippingAddress || {};
       const orderSkus = orderInfo.orderSkuList?.skuList || [];
 
@@ -601,12 +593,6 @@ export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
         customerName.trim(),
         customer.email || '',
         customer.phone || '',
-        billing.line1 || '',
-        billing.line2 || '',
-        billing.city || '',
-        billing.region || '',
-        billing.zipCode || '',
-        billing.countryIso || '',
         shipping.line1 || '',
         shipping.line2 || '',
         shipping.city || '',
