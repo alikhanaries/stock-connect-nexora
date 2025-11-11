@@ -41,6 +41,6 @@ export const uploadProductImages = async (product, sellerId) => {
     extraImageUrl1: extraImageUrl1 || '',
     extraImageUrl2: extraImageUrl2 || '',
     extraImageUrl3: extraImageUrl3 || '',
-    images: validUploadedUrls,
+    images: validUploadedUrls || [],
   };
 };
