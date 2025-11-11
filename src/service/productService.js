@@ -388,7 +388,15 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
             }
 
             product['sellerId'] = sellerId;
-
+            const isPriceRequired = product.productType === 'simple';
+            if (isPriceRequired && (!product.price || isNaN(parseFloat(product.price)))) {
+              errorDetails.push({
+                rowNumber: currentRow,
+                errorData: [locale.PRODUCT_PRICE_MISSING],
+              });
+              invalidRowsCount++;
+              return;
+            }
             // Structure validation
             const { valid, errors } = validateHierarchy(product);
             if (!valid) {
