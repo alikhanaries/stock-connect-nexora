@@ -10,10 +10,8 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     Object.entries(row).map(([key, value]) => [key.toLowerCase().trim(), value ? String(value).trim() : ''])
   );
 
-  const price = parseFloat(r.price);
   const errorData = [];
   if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
-  if (isNaN(price)) errorData.push(locale.PRODUCT_PRICE_MISSING);
   if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
   if (errorData.length) {
     return { rowNumber: index, errorData };
@@ -48,7 +46,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     descriptionAr: r.descriptionar || null,
     brand: r.brand || null,
     ean: r.ean || null,
-    price,
+    price: r.price ? parseFloat(r.price) : null,
     minPrice: r.minprice ? parseFloat(r.minprice) : null,
     maxPrice: r.maxprice ? parseFloat(r.maxprice) : null,
     msrp: r.msrp ? parseFloat(r.msrp) : null,
