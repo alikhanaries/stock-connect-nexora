@@ -176,19 +176,18 @@ export const getReturnById = async (req, res) => {
 // Exports returns data as CSV file for a specific seller.
 export const exportReturns = async (req, res) => {
   try {
-    const sellerId = req.sellerId; // From seller middleware
-    const filters = {
-      status: req.query.status,
-      platform: req.query.platform,
-      channelId: req.query.channelId,
-      search: req.query.search,
-      dateFrom: req.query.dateFrom,
-      dateTo: req.query.dateTo,
-    };
+    const sellerId = req.sellerId;
+    const { status, platform, channelId, search, dateFrom, dateTo } = req.query;
+
+    const filters = Object.fromEntries(
+      Object.entries({ status, platform, channelId, search, dateFrom, dateTo }).filter(
+        ([, v]) => v != null && v !== ''
+      )
+    );
 
     // Remove undefined values
     Object.keys(filters).forEach((key) => {
-      if (filters[key] === undefined || filters[key] === null || filters[key] === '') {
+      if (!filters[key]) {
         delete filters[key];
       }
     });

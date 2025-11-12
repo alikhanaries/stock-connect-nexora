@@ -9,6 +9,7 @@ import {
   buildReturnAggregationPipeline,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
+import { formatDateTime, escapeCsv } from '#helpers/Common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
 
@@ -565,32 +566,22 @@ export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
     const csvRows = [headers.join(',')];
 
     detailedResults.forEach((item) => {
-      const {
-        returnId = '',
-        orderId = '',
-        platform = '',
-        status = '',
-        placedOn,
-        createdAt,
-        products = [],
-        orderInfo = {},
-        customerName = '',
-      } = item;
-      const customer = orderInfo.orderCustomer || {};
-      const shipping = orderInfo.orderShippingAddress || {};
-      const orderSkus = orderInfo.orderSkuList?.skuList || [];
+      const { returnId, orderId, platform, status, placedOn, createdAt, products, orderInfo, customerName } = item;
+      const customer = orderInfo?.orderCustomer || {};
+      const shipping = orderInfo?.orderShippingAddress || {};
+      const orderSkus = orderInfo?.orderSkuList?.skuList || [];
 
       const baseRow = [
-        returnId,
-        orderId || orderInfo.orderId || '',
-        platform,
-        status,
-        placedOn ? new Date(placedOn).toLocaleDateString() : '',
-        createdAt ? new Date(createdAt).toLocaleDateString() : '',
+        returnId || '',
+        orderId || orderInfo?.orderId || '',
+        platform || '',
+        status || '',
+        formatDateTime(placedOn)?.date || '',
+        formatDateTime(createdAt)?.date || '',
       ];
 
-      const customerAddressRow = [
-        customerName.trim(),
+      const addressRow = [
+        customerName?.trim() || '',
         customer.email || '',
         customer.phone || '',
         shipping.line1 || '',
@@ -601,14 +592,8 @@ export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
         shipping.countryIso || '',
       ];
 
-      if (!products.length) {
-        csvRows.push(
-          [...baseRow, '', '', '', '', '', '', '', '', ...customerAddressRow]
-            .map((f) =>
-              String(f).includes(',') || String(f).includes('"') ? `"${String(f).replace(/"/g, '""')}"` : String(f)
-            )
-            .join(',')
-        );
+      if (!products?.length) {
+        csvRows.push(escapeCsv([...baseRow, '', '', '', 0, 0, 0, 0, 0, ...addressRow]));
       } else {
         products.forEach((product) => {
           const sku = orderSkus.find((s) => s.id === product.orderLineId);
@@ -624,15 +609,9 @@ export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
             product.rejectedQuantity || 0,
             unitPrice,
             unitPrice * quantity,
-            ...customerAddressRow,
+            ...addressRow,
           ];
-          csvRows.push(
-            productRow
-              .map((f) =>
-                String(f).includes(',') || String(f).includes('"') ? `"${String(f).replace(/"/g, '""')}"` : String(f)
-              )
-              .join(',')
-          );
+          csvRows.push(escapeCsv(productRow));
         });
       }
     });
