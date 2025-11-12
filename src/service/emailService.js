@@ -3,7 +3,7 @@ import { importProductConstant, resetPasswordConstants } from '../constants/emai
 import { productImportTemplate } from '../emailTemplates/importProductTemplate.js';
 import { resetPasswordTemplate } from '../emailTemplates/resetPasswordTemplate.js';
 
-const sendEmailMessage = async ({ to, subject, html }) => {
+const sendEmailNotification = async ({ to, subject, html }) => {
   try {
     if (!to || !subject || !html) {
       throw new Error('Missing required email fields: to, subject, or html');
@@ -45,7 +45,7 @@ const importProductMailService = async ({ to, importStatus = 'SUCCESS', errorDet
       }),
     };
 
-    const { success, messageId } = await sendEmailMessage(mailOptions);
+    const { success, messageId } = await sendEmailNotification(mailOptions);
 
     if (success) {
       console.log(`Product import email sent successfully. Message ID: ${messageId}`);
@@ -73,7 +73,7 @@ const resetPasswordService = async ({ to, userName = 'User', resetUrl }) => {
       }),
     };
 
-    const { success, messageId } = await sendEmailMessage(mailOptions);
+    const { success, messageId } = await sendEmailNotification(mailOptions);
 
     if (success) {
       console.log(`Reset password email sent successfully. Message ID: ${messageId}`);
