@@ -33,18 +33,19 @@ const sendEmailMessage = async ({ to, subject, html }) => {
 
 const importProductMailService = async ({ to, importStatus = 'SUCCESS', errorDetails = [], userName }) => {
   try {
-    const templateData = {
-      importStatus,
-      errorDetails,
-      ...importProductConstant,
-      ...mailBranding,
-      PRODUCT_IMPORT_HELLO: `Hello ${userName}`,
+    const mailOptions = {
+      to,
+      subject: `${mailBranding.tenantName} - ${importProductConstant.SUBJECT}`,
+      html: productImportTemplate({
+        importStatus,
+        errorDetails,
+        ...importProductConstant,
+        ...mailBranding,
+        PRODUCT_IMPORT_HELLO: `Hello ${userName}`,
+      }),
     };
 
-    const subject = `${mailBranding.tenantName} - ${importProductConstant.SUBJECT}`;
-    const html = productImportTemplate(templateData);
-
-    const { success, messageId } = await sendEmailMessage({ to, subject, html });
+    const { success, messageId } = await sendEmailMessage(mailOptions);
 
     if (success) {
       console.log(`Product import email sent successfully. Message ID: ${messageId}`);
@@ -61,17 +62,18 @@ const importProductMailService = async ({ to, importStatus = 'SUCCESS', errorDet
 
 const resetPasswordService = async ({ to, userName = 'User', resetUrl }) => {
   try {
-    const templateData = {
-      userName: userName || 'User',
-      resetUrl,
-      ...mailBranding,
-      ...resetPasswordConstants,
+    const mailOptions = {
+      to,
+      subject: `${mailBranding.tenantName} - ${resetPasswordConstants.RESET_PASSWORD_TITLE}`,
+      html: resetPasswordTemplate({
+        userName: userName || 'User',
+        resetUrl,
+        ...mailBranding,
+        ...resetPasswordConstants,
+      }),
     };
 
-    const subject = `${mailBranding.tenantName} - ${resetPasswordConstants.RESET_PASSWORD_TITLE}`;
-    const html = resetPasswordTemplate(templateData);
-
-    const { success, messageId } = await sendEmailMessage({ to, subject, html });
+    const { success, messageId } = await sendEmailMessage(mailOptions);
 
     if (success) {
       console.log(`Reset password email sent successfully. Message ID: ${messageId}`);
