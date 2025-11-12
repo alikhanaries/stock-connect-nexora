@@ -9,6 +9,7 @@ import {
   merchantCancelById,
   cancelFullOrder,
   cancelPartialOrder,
+  exportOrders,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -20,6 +21,7 @@ import {
   syncOrdersValidator,
   cancelFullOrderValidator,
   cancelPartialOrderValidator,
+  exportOrdersValidator,
 } from '#validations/orders.js';
 const router = express.Router();
 
@@ -354,4 +356,7 @@ router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMidd
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
 router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
+
+// Export orders as CSV
+router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, exportOrders);
 export default router;

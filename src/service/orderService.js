@@ -9,7 +9,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo, syncShipmentStatus } from '#service/shipmentService.js';
-import { formatDateTime } from '#root/src/helpers/Common.js';
+import { formatDateTime, escapeCsv } from '#helpers/Common.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
@@ -906,6 +906,115 @@ export const formatOrderTrackingInf = (data) => {
   });
 };
 
+export const exportOrdersToCSV = async (sellerId = null, filters = {}) => {
+  try {
+    const query = { ...filters, sellerId, size: 1000, page: 1, sortBy: 'orderDate', sortOrder: 'desc' };
+    const { data: basicResult } = await getAllOrders(query, sellerId);
+
+    if (!basicResult?.length) {
+      return { success: false, message: 'No orders found for export' };
+    }
+
+    const orderIds = basicResult.map((item) => item._id);
+    const detailedResults = await Order.find({ _id: { $in: orderIds } }).lean();
+
+    if (!detailedResults?.length) return { success: false, message: 'No detailed order data found for export' };
+
+    const headers = [
+      'Order ID',
+      'Platform',
+      'Status',
+      'Order Date',
+      'Customer Name',
+      'Customer Email',
+      'Customer Phone',
+      'Payment Method',
+      'Currency',
+      'Product SKU',
+      'Product Name',
+      'Product ID',
+      'Quantity',
+      'Unit Price',
+      'Total Price',
+      'Shipping Address Line 1',
+      'Shipping Address Line 2',
+      'Shipping City',
+      'Shipping State',
+      'Shipping Postal Code',
+      'Shipping Country',
+      'Billing Address Line 1',
+      'Billing Address Line 2',
+      'Billing City',
+      'Billing State',
+      'Billing Postal Code',
+      'Billing Country',
+    ];
+    const csvRows = [headers.join(',')];
+
+    detailedResults.forEach((order) => {
+      const customerName = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
+      const shipping = order.orderShippingAddress || {};
+      const billing = order.orderBillingAddress || {};
+      const skuList = order.orderSkuList?.skuList || [];
+
+      const baseRow = [
+        order.orderId || '',
+        order.channelName || '',
+        order.status || '',
+        formatDateTime(order.orderDate)?.date || '',
+        customerName || '',
+        order.orderCustomer?.email || '',
+        order.orderCustomer?.phone || '',
+        order.orderPaymentDetails?.paymentMethod || '',
+        order.orderPaymentDetails?.currencyCode || '',
+      ];
+
+      const addressRows = [
+        shipping.line1 || '',
+        shipping.line2 || '',
+        shipping.city || '',
+        shipping.region || '',
+        shipping.zipCode || '',
+        shipping.countryIso || '',
+        billing.line1 || '',
+        billing.line2 || '',
+        billing.city || '',
+        billing.region || '',
+        billing.zipCode || '',
+        billing.countryIso || '',
+      ];
+
+      if (!skuList?.length) {
+        csvRows.push(escapeCsv([...baseRow, '', '', '', 0, 0, 0, ...addressRows]));
+      } else {
+        skuList.forEach((sku) => {
+          const productRow = [
+            ...baseRow,
+            sku.merchantProductNo || '',
+            sku.description || 'Product',
+            sku.id || '',
+            sku.quantity || 0,
+            sku.unitPriceInclVat || 0,
+            (sku.unitPriceInclVat || 0) * (sku.quantity || 0),
+            ...addressRows,
+          ];
+          csvRows.push(escapeCsv(productRow));
+        });
+      }
+    });
+
+    return {
+      success: true,
+      data: csvRows.join('\n'),
+      filename: `orders-export-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.csv`,
+      count: detailedResults.length,
+    };
+  } catch (error) {
+    console.error('Error exporting orders to CSV:', error.message);
+    return { success: false, message: 'Error generating CSV export', error: error.message };
+  }
+};
+
 export default {
   getAllOrders,
   getAdminOrders,
@@ -919,4 +1028,5 @@ export default {
   backgroundAcknowledgementOrders,
   cancelFullOrder,
   cancelPartialOrder,
+  exportOrdersToCSV,
 };
