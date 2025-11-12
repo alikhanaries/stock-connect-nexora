@@ -724,7 +724,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
   ).lean();
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
   const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId), productType: 'simple' };
-  const appliedFilters = {};
 
   if (assignedSkuCodes.length > 0) {
     filter.productSkuCode = { $nin: assignedSkuCodes };
@@ -734,7 +733,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
       filter.status = statusValue;
-      appliedFilters.status = statusValue;
     }
   }
 
@@ -742,11 +740,9 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     filter.price = {};
     if (minPrice) {
       filter.price.$gte = Number(minPrice);
-      appliedFilters.minPrice = filter.price.$gte;
     }
     if (maxPrice) {
       filter.price.$lte = Number(maxPrice);
-      appliedFilters.maxPrice = filter.price.$lte;
     }
   }
 
@@ -768,7 +764,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
-    appliedFilters,
   };
 };
 
