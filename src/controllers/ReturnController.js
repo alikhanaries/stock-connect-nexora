@@ -180,9 +180,7 @@ export const exportReturns = async (req, res) => {
     const { status, platform, channelId, search, dateFrom, dateTo } = req.query;
 
     const filters = Object.fromEntries(
-      Object.entries({ status, platform, channelId, search, dateFrom, dateTo }).filter(
-        ([, v]) => v != null && v !== ''
-      )
+      Object.entries({ status, platform, channelId, search, dateFrom, dateTo }).filter(([, v]) => v != null && v !== '')
     );
 
     // Remove undefined values
