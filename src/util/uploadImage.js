@@ -19,10 +19,11 @@ export const uploadImageFromUrl = async (imageUrl, sellerId) => {
 
     // Convert to buffer
     const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
     const contentType = response.headers.get('content-type') || 'image/jpeg';
 
     // Generate a safe filename
-    const baseName = path.basename(imageUrl).split('?')[0] || 'image.jpg';
+    const baseName = path.basename(imageUrl.split('?')[0]) || 'image.jpg';
     const safeName = baseName.replace(/[^a-zA-Z0-9._-]/g, '_');
 
     // Folder by seller
@@ -33,8 +34,9 @@ export const uploadImageFromUrl = async (imageUrl, sellerId) => {
     const uploadParams = {
       Bucket: bucket,
       Key: fileKey,
-      Body: Buffer.from(arrayBuffer),
+      Body: buffer,
       ContentType: contentType,
+      ContentLength: buffer.length,
     };
 
     await s3Client.send(new PutObjectCommand(uploadParams));
