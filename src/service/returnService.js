@@ -31,16 +31,48 @@ export const getReturns = async (queryParams = {}) => {
     }
 
     const { Content = [] } = responseData;
-    if (!Content.length) return { success: true, data: responseData };
+    if (!Content.length) return { success: true, data: { Content: [], upsertedCount: 0, totalProcessed: 0 } };
 
-    // Save returns in batches to reduce memory usage
-    const batchSize = 50;
-    for (let i = 0; i < Content.length; i += batchSize) {
-      const chunk = Content.slice(i, i + batchSize);
-      await Promise.allSettled(chunk.map(saveReturnToDatabase));
+    // Save returns using bulk operations to track new vs existing
+    const bulkOps = [];
+
+    for (const returnData of Content) {
+      // Sanitize return data using helper
+      const sanitizationResult = await sanitizeReturnData(returnData, Order);
+      if (!sanitizationResult.success) {
+        console.warn('Sanitization failed for return:', returnData.Id);
+        continue;
+      }
+
+      const simplifiedReturnDocument = sanitizationResult.data;
+
+      // Add bulk upsert operation
+      bulkOps.push({
+        updateOne: {
+          filter: { returnId: simplifiedReturnDocument.returnId },
+          update: { $set: simplifiedReturnDocument },
+          upsert: true,
+        },
+      });
     }
 
-    return { success: true, data: responseData };
+    let upsertedCount = 0;
+    let modifiedCount = 0;
+    if (bulkOps.length > 0) {
+      const result = await Return.bulkWrite(bulkOps);
+      upsertedCount = result.upsertedCount || 0;
+      modifiedCount = result.modifiedCount || 0;
+    }
+
+    return {
+      success: true,
+      data: {
+        ...responseData,
+        upsertedCount,
+        modifiedCount,
+        totalProcessed: Content.length,
+      },
+    };
   } catch (error) {
     return { success: false, message: 'Error communicating with ChannelEngine.', error: error.message };
   }
