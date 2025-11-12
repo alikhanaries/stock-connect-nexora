@@ -7,6 +7,7 @@ import {
   acknowledgeMerchantReturn,
   updateReturn,
   getReturnById,
+  webhook,
 } from '#controllers/ReturnController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -36,5 +37,6 @@ router.post('/acknowledge', validateReturnAck, checkLanguage, authMiddleware, ac
 
 // Update return status (status will update to received)
 router.put('/update', updateReturnValidator, checkLanguage, authMiddleware, updateReturn);
-
+// Webhook of return
+router.post('/webhook', webhook);
 export default router;

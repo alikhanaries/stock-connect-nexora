@@ -170,6 +170,18 @@ export const getReturnById = async (req, res) => {
   }
 };
 
+// Webhook
+export const webhook = async (req, res) => {
+  try {
+    console.log('in side body');
+    console.log('body----------', req.body);
+  } catch (error) {
+    console.error('Controller Error: getReturnById:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllReturns,
   syncReturns,
