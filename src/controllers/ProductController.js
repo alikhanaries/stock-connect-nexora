@@ -119,25 +119,7 @@ export const pushProductToChannelEngine = async (req, res) => {
   const { channelId } = req.params;
   try {
     const sellerId = req.sellerId;
-    const {
-      validatedProducts = [],
-      validProducts = [],
-      failed = 0,
-      total = 0,
-    } = await productService.validateProducts(channelId, sellerId);
-
-    const uniqueCategoryErrors = [...new Set(validatedProducts.flatMap((p) => p.Errors || []))];
-    const errorData = uniqueCategoryErrors.length
-      ? { message: req.locale.INVALID_CATEGORY_TRAIL, categoryData: uniqueCategoryErrors }
-      : null;
-
-    const message =
-      failed === 0
-        ? req.locale.ALL_PRODUCTS_PUSH_SUCCESS
-        : failed === total
-          ? req.locale.ALL_PRODUCTS_PUSH_FAILED
-          : req.locale.PRODUCTS_PUSH_PARTIAL_SUCCESS;
-
+    const { validProducts = [] } = await productService.validateProducts(channelId, sellerId);
     if (validProducts?.length) {
       (async () => {
         try {
@@ -147,12 +129,7 @@ export const pushProductToChannelEngine = async (req, res) => {
         }
       })();
     }
-
-    if (failed > 0) {
-      return failResponse(res, message, 400, errorData);
-    }
-
-    return successResponse(res, message, 200, null);
+    return successResponse(res, req.locale.ALL_PRODUCTS_PUSH_SUCCESS, 200, null);
   } catch (err) {
     console.error('Controller Error:', err);
     errorLog(err);
@@ -282,15 +259,10 @@ export const getUserUnassignedProducts = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
-    const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
-      sellerId,
-      channelId,
-      req.query
-    );
+    const { products, pagination } = await productService.getUserUnassignedProducts(sellerId, channelId, req.query);
 
     const responseData = {
       content: products || [],
-      appliedFilters: appliedFilters || {},
       ...pagination,
     };
     const message = products.length ? req.locale.AVAILABLE_PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;

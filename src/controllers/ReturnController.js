@@ -44,9 +44,12 @@ export const syncReturns = async (req, res) => {
       return Responses.failResponse(res, result.message || req.locale.FAILED_TO_SYNC_RETURNS, 400);
     }
 
-    const returnsCount = result.data?.Content?.length || 0;
+    const upsertedCount = result.data?.upsertedCount || 0;
+
     const message =
-      returnsCount > 0 ? `${returnsCount} ${req.locale.RETURNS_SYNCED_SUCCESSFULLY}` : req.locale.NO_NEW_RETURNS_FOUND;
+      upsertedCount > 0
+        ? `${upsertedCount} ${req.locale.NEW_RETURNS_SYNCED_SUCCESSFULLY || 'new returns synced successfully'}`
+        : req.locale.NO_NEW_RETURNS_FOUND || 'No new returns found';
 
     return Responses.successResponse(res, message, 200, result.data);
   } catch (error) {
