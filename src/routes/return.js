@@ -7,6 +7,7 @@ import {
   acknowledgeMerchantReturn,
   updateReturn,
   getReturnById,
+  exportReturns,
 } from '#controllers/ReturnController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -17,12 +18,15 @@ import {
   updateReturnValidator,
   getReturnByIdValidator,
   getReturnStatsValidator,
+  exportReturnsValidator,
 } from '#validations/return.js';
 
 const router = express.Router();
 
 // Get returns
 router.get('/', getAllReturnsValidator, checkLanguage, authMiddleware, getAllReturns);
+// Export returns as CSV
+router.get('/export', exportReturnsValidator, checkLanguage, authMiddleware, verifySellerAccess, exportReturns);
 // Get return statistics grouped by status
 router.get('/stats', getReturnStatsValidator, checkLanguage, authMiddleware, verifySellerAccess, getReturnStats);
 // Sync returns from ChannelEngine to database
