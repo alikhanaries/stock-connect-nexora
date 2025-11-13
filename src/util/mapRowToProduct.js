@@ -104,5 +104,9 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     riseStyle: r.risestyle || '',
     intendedUse: r.intendeduse || '',
     productBenefit: r.productbenefit || '',
+    itemLength: r.itemlength || '',
+    itemWidth: r.itemwidth || '',
+    itemHeight: r.itemheight || '',
+    specialFeature: r.specialfeature || '',
   };
 };

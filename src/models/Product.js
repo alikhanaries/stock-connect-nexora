@@ -142,6 +142,22 @@ const ProductSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    itemLength: {
+      type: String,
+      trim: true,
+    },
+    itemWidth: {
+      type: String,
+      trim: true,
+    },
+    itemHeight: {
+      type: String,
+      trim: true,
+    },
+    specialFeature: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );
