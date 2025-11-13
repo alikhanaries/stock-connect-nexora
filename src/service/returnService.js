@@ -454,6 +454,51 @@ export const getReturnById = async (id) => {
   }
 };
 
+export const getReturnsForWebhook = async (queryParams = {}) => {
+  try {
+    const params = new URLSearchParams({
+      ...queryParams,
+      apikey: `${CHANNEL_ENGINE_API_KEY}`,
+    });
+
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
+    const responseData = await response.json();
+    if (!response.ok) {
+      return {
+        success: false,
+        message: `ChannelEngine API error: ${response.status}`,
+        error: responseData,
+      };
+    }
+
+    let { Content = [] } = responseData;
+    if (!Content.length) return { success: true, data: [] };
+
+    // Sort by CreatedAt descending (latest first)
+    Content = Content.sort((a, b) => new Date(b.CreatedAt || 0) - new Date(a.CreatedAt || 0));
+
+    // Take only the latest 10
+    const latest10 = Content.slice(0, 10);
+
+    console.log(`Fetched ${Content.length} returns, saving latest ${latest10.length}`);
+
+    // Save only these 10 in batches
+    const batchSize = 5;
+    for (let i = 0; i < latest10.length; i += batchSize) {
+      const chunk = latest10.slice(i, i + batchSize);
+      await Promise.allSettled(chunk.map(saveReturnToDatabase));
+    }
+
+    return { success: true, data: latest10 };
+  } catch (error) {
+    return {
+      success: false,
+      message: 'Error communicating with ChannelEngine.',
+      error: error.message,
+    };
+  }
+};
+
 export default {
   getReturns,
   getReturnsFromDatabase,
@@ -463,4 +508,5 @@ export default {
   acknowledgeReturn,
   acceptOrRejectReturn,
   getReturnById,
+  getReturnsForWebhook,
 };

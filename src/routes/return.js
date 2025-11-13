@@ -7,9 +7,9 @@ import {
   acknowledgeMerchantReturn,
   updateReturn,
   getReturnById,
-  webhook,
+  fetchReturnsWebhook,
 } from '#controllers/ReturnController.js';
-import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, verifySellerAccess, webHookAuthMiddleware } from '#middleware/index.js';
 import {
   getAllReturnsValidator,
   syncReturnsValidator,
@@ -18,6 +18,7 @@ import {
   updateReturnValidator,
   getReturnByIdValidator,
   getReturnStatsValidator,
+  returnWebHookValidator,
 } from '#validations/return.js';
 
 const router = express.Router();
@@ -38,5 +39,5 @@ router.post('/acknowledge', validateReturnAck, checkLanguage, authMiddleware, ac
 // Update return status (status will update to received)
 router.put('/update', updateReturnValidator, checkLanguage, authMiddleware, updateReturn);
 // Webhook of return
-router.post('/webhook', webhook);
+router.post('/fetchReturnsWebhook', returnWebHookValidator, webHookAuthMiddleware, fetchReturnsWebhook);
 export default router;

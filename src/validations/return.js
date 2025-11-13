@@ -296,6 +296,18 @@ export const getReturnStatsValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+export const returnWebHookValidator = validate(async (req) => {
+  const headerSchema = z.object({
+    'x-custom-auth': z
+      .string({
+        required_error: 'X-Custom-Auth header is required',
+        invalid_type_error: 'X-Custom-Auth must be a string',
+      })
+      .nonempty('X-Custom-Auth header cannot be empty'),
+  });
+
+  await headerSchema.parseAsync(req.headers);
+});
 
 export default {
   getAllReturnsValidator,
@@ -306,4 +318,5 @@ export default {
   updateReturnValidator,
   getReturnByIdValidator,
   getReturnStatsValidator,
+  returnWebHookValidator,
 };
