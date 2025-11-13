@@ -61,6 +61,13 @@ const ProductSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    productType: {
+      type: String,
+      enum: ['simple', 'configurable'],
+      required: true,
+      default: 'simple',
+      index: true,
+    },
     gender: {
       type: String,
       enum: ['Male', 'Female', 'Unisex'],
