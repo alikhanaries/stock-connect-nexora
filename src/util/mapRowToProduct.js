@@ -36,7 +36,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
   const validUploadedUrls = uploadedUrls.filter(Boolean);
   const [primaryImageUrl, imageUrl, extraImageUrl1, extraImageUrl2, extraImageUrl3] = validUploadedUrls;
 
-  return {
+  const product = {
     grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,
@@ -104,5 +104,17 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     riseStyle: r.risestyle || '',
     intendedUse: r.intendeduse || '',
     productBenefit: r.productbenefit || '',
+    itemLength: r.itemlength || '',
+    itemWidth: r.itemwidth || '',
+    itemHeight: r.itemheight || '',
+    specialFeature: r.specialfeature || '',
   };
+
+  Object.keys(product).forEach((key) => {
+    const val = product[key];
+    if (val === null || val === '' || val === undefined) {
+      delete product[key];
+    }
+  });
+  return product;
 };

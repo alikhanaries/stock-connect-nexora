@@ -261,6 +261,34 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+    {
+      Key: 'itemLength',
+      Value: product.itemLength || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'itemWidth',
+      Value: product.itemWidth || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'itemHeight',
+      Value: product.itemHeight || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'specialFeature',
+      Value: product.specialFeature || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || null;
   return {
