@@ -56,12 +56,84 @@ const ProductSchema = new mongoose.Schema(
     extraImageUrl1: { type: String },
     extraImageUrl2: { type: String },
     extraImageUrl3: { type: String },
-    productType: {
+    modelName: {
       type: String,
-      enum: ['simple', 'configurable'],
-      required: true,
-      default: 'simple',
+      trim: true,
       index: true,
+    },
+    gender: {
+      type: String,
+      enum: ['Male', 'Female', 'Unisex'],
+      default: 'Unisex',
+      trim: true,
+    },
+    ageRangeDescription: {
+      type: String,
+      trim: true,
+      enum: ['Adult', 'Kids', 'Toddler', 'Infant', 'Newborn'],
+      default: 'Adult',
+    },
+    sizeType: {
+      type: String,
+      enum: ['Age', 'Alpha', 'Numeric', 'Waist'],
+      default: 'Alpha',
+    },
+    productCareInstructions: {
+      type: String,
+      trim: true,
+    },
+    countryOfOrigin: {
+      type: String,
+      trim: true,
+    },
+    departmentName: {
+      type: String,
+      trim: true,
+    },
+    fabricType: {
+      type: String,
+      trim: true,
+    },
+    style: {
+      type: String,
+      trim: true,
+    },
+    weaveType: {
+      type: String,
+      trim: true,
+    },
+    dangerousGoodsRegulations: {
+      type: String,
+      trim: true,
+      default: 'not_applicable',
+    },
+
+    skinType: { type: String, trim: true },
+    safetyWarning: { type: String, trim: true },
+    unitCount: { type: Number },
+    unitCountType: { type: String, trim: true },
+    targetAudienceKeyword: { type: String, trim: true },
+    hairType: { type: String, trim: true },
+    ingredientsList: { type: String, trim: true },
+    searchTerms: { type: String, trim: true },
+    scent: { type: String, trim: true },
+    numberOfItems: { type: Number, default: 1 },
+    manufacturer: { type: String, trim: true },
+    lifestyle: { type: String, trim: true },
+    heatSensitive: { type: Boolean, default: false },
+    liquidContents: { type: Boolean, default: false },
+    itemForm: { type: String, trim: true },
+    riseStyle: {
+      type: String,
+      trim: true,
+    },
+    intendedUse: {
+      type: String,
+      trim: true,
+    },
+    productBenefit: {
+      type: String,
+      trim: true,
     },
   },
   { timestamps: true }
