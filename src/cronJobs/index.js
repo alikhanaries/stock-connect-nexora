@@ -8,7 +8,7 @@ const fetchReturnsCron = () => {
       console.log('Cron runs every day at 12:00 AM');
       try {
         const result = await getReturns();
-        console.log('Return data fetched:', result);
+        console.log('Return data fetched');
       } catch (err) {
         console.error('Error fetching returns:', err.message);
       }
