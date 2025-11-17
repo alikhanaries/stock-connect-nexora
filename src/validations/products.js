@@ -6,22 +6,36 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
   // Validate body
+  const idsArraySchema = z
+    .array(
+      z
+        .string()
+        .length(24, 'productId must be exactly 24 characters') // ObjectId length
+        .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format') // hex validation
+    )
+    .refine(
+      (ids) => new Set(ids).size === ids.length, // check for uniqueness
+      { message: 'Duplicate productIds are not allowed' }
+    );
+
   const bodySchema = z
     .object({
-      ids: z
-        .array(
-          z
-            .string()
-            .length(24, 'productId must be exactly 24 characters') // ObjectId length
-            .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format') // hex validation
-        )
-        .nonempty('productIds cannot be empty')
-        .refine(
-          (ids) => new Set(ids).size === ids.length, // check for uniqueness
-          { message: 'Duplicate productIds are not allowed' }
-        ),
+      ids: z.union([idsArraySchema, z.undefined()]).optional(),
+      addAll: z.boolean().optional(),
     })
-    .strict();
+    .strict()
+    .refine(
+      (data) => {
+        if (data.addAll === true) {
+          return true;
+        }
+        // Otherwise, ids must be provided and non-empty
+        return data.ids && Array.isArray(data.ids) && data.ids.length > 0;
+      },
+      {
+        message: 'Either ids array (non-empty) or addAll (true) must be provided',
+      }
+    );
 
   // Validate params
   const paramsSchema = z.object({
