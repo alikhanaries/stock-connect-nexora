@@ -29,7 +29,6 @@ export const addProductsToUserChannelValidator = validate(async (req) => {
         if (data.addAll === true) {
           return true;
         }
-        // Otherwise, ids must be provided and non-empty
         return data.ids && Array.isArray(data.ids) && data.ids.length > 0;
       },
       {
