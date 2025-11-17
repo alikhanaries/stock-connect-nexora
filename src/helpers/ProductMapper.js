@@ -1,7 +1,7 @@
 export const mapProductToChannelEngine = (product) => {
   const customAttributes = [
     { Key: 'MarketPlace', Value: product.marketPlace || null, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
-    { Key: 'Stock', Value: product.currentStockCount || null, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
+    { Key: 'Stock', Value: product.currentStockCount || 0, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
     {
       Key: 'categoryTrailAmazon',
       Value: product.categoryTrailAmazon || null,
@@ -289,6 +289,13 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+    {
+      Key: 'weaveType',
+      Value: product.weaveType || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || null;
   return {
@@ -304,10 +311,10 @@ export const mapProductToChannelEngine = (product) => {
     Size: product.size || null,
     Color: product.color || null,
     Ean: product.ean || null,
-    Stock: product.currentStockCount || null,
+    Stock: product.currentStockCount || 0,
     ManufacturerProductNumber: product.productSkuCode || null,
     MerchantProductNo: product.productSkuCode || null,
-    Price: product.price || null,
+    Price: product.price || 0,
     MinPrice: product.minPrice || null,
     MaxPrice: product.maxPrice || null,
     MSRP: product.msrp || null,
