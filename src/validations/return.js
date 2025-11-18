@@ -23,12 +23,7 @@ export const getAllReturnsValidator = validate(async (req) => {
       })
       .transform((val) => (val ? Number(val) : 10)),
 
-    status: z
-      .string()
-      .optional()
-      .refine((val) => !val || val.trim().length > 0, {
-        message: 'status cannot be empty',
-      }),
+    status: z.string().optional(),
 
     channelId: z
       .string()
