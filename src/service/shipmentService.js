@@ -255,6 +255,9 @@ export const createPartialShipmentService = async (shipmentData) => {
     const order = await Order.findById(id);
     if (!order) return { success: false, message: 'Order not found.' };
 
+    if (sellerId !== order?.sellerId.toString()) {
+      return { success: false, message: 'Wrong seller Id.' };
+    }
     const { orderSkuList, merchantOrderNo, orderId } = order;
 
     // Validate SKU list

@@ -148,7 +148,7 @@ export const getOrderById = async (id) => {
         products.reduce((acc, p) => {
           acc[p.productSkuCode] = {
             image: p.images?.[0] || null,
-            hsCode: p.hsCodeSA || null,
+            hsCode: p.hsCodeSA || p.merchantProductNo,
           };
           return acc;
         }, {})
@@ -183,7 +183,7 @@ export const getOrderById = async (id) => {
               ? product?.cancellationRequestedQuantity
               : product.quantity,
           status: product?.status === 'IN_COMBI' ? 'PARTIALLY_CANCELED' : product?.status,
-          hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
+          hsCode: productsMap[product.merchantProductNo]?.hsCode || product.merchantProductNo,
         });
         if (status === 'CANCELED') {
           return; //  Don't include cancelled items in unshipped
@@ -206,7 +206,7 @@ export const getOrderById = async (id) => {
           lineVat: product?.lineVat,
           quantity: notShippedQty,
           status: product?.status,
-          hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
+          hsCode: productsMap[product.merchantProductNo]?.hsCode || product.merchantProductNo,
         });
       }
     });
@@ -235,7 +235,7 @@ export const getOrderById = async (id) => {
             lineVat: orderSku?.lineVat,
             airWaybillNo: shipment.airWaybillNo,
             status: orderSku?.status,
-            hsCode: productsMap[shipmentSku.merchantProductNo]?.hsCode || null,
+            hsCode: productsMap[shipmentSku.merchantProductNo]?.hsCode || shipmentSku.merchantProductNo,
             trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
           };
         }) || [],
