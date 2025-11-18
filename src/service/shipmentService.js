@@ -440,8 +440,12 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
 
     // Applied filters object
     const appliedFilters = {};
+
     if (status) {
-      matchStage.status = status.toUpperCase();
+      const statusArray = status.split(',').map((s) => s.trim()); // ['pending','closed','open']
+      matchStage.status = {
+        $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+      };
       appliedFilters.status = status;
     }
     // Aggregation pipeline

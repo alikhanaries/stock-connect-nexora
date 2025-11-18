@@ -140,11 +140,36 @@ export const getReturnsFromDatabase = async (query = {}) => {
     };
 
     // Validate status if provided
-    if (status && !Object.values(RETURN_STATUS).includes(status.toUpperCase())) {
-      throw new Error(`Invalid status: ${status}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`);
+    if (status) {
+      const statusArray = status
+        .toString()
+        .split(',')
+        .map((s) => s.trim().toUpperCase());
+
+      // Check each provided status
+      const invalid = statusArray.filter((s) => !Object.values(RETURN_STATUS).includes(s));
+
+      if (invalid.length > 0) {
+        throw new Error(
+          `Invalid status: ${invalid.join(', ')}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`
+        );
+      }
     }
 
-    addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }), true);
+    // Add filter (case-insensitive)
+    addFilter(
+      'status',
+      status,
+      (v) => {
+        const arr = v.split(',').map((s) => s.trim());
+
+        return {
+          $in: arr.map((s) => new RegExp(`^${s}$`, 'i')),
+        };
+      },
+      true
+    );
+
     addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
     addFilter('channelId', channelId, (v) => parseInt(v, 10));
     addFilter('returnId', returnId);

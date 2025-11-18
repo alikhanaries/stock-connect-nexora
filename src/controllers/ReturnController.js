@@ -16,14 +16,14 @@ export const getAllReturns = async (req, res) => {
     const { data: returns = [], pagination = {}, appliedFilters = {} } = result;
 
     if (!returns.length) {
-      return Responses.successResponse(res, result.message || req.locale.NO_RETURNS_FOUND, 200, {
+      return Responses.successResponse(res, result.message || req?.locale?.NO_RETURNS_FOUND, 200, {
         content: [],
         appliedFilters: appliedFilters || {},
         ...pagination,
       });
     }
 
-    return Responses.successResponse(res, result.message || req.locale.RETURNS_FETCHED_SUCCESSFULLY, 200, {
+    return Responses.successResponse(res, result.message || req?.locale?.RETURNS_FETCHED_SUCCESSFULLY, 200, {
       content: returns,
       appliedFilters: appliedFilters || {},
       ...pagination,
