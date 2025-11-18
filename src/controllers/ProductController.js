@@ -5,6 +5,8 @@ import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
+import Product from '#models/Product.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -207,10 +209,49 @@ export const deleteMultipleProducts = async (req, res) => {
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 export const addProductsToUserChannel = async (req, res) => {
   try {
-    const { ids } = req.body;
+    const { ids, addAll } = req.body;
     const { id } = req.params;
     const sellerId = req.sellerId;
-    const result = await productService.addProductsToUserChannel(sellerId, id, ids, req.locale);
+
+    let productIds = addAll === true ? await productService.getAllProductIdsBySellerId(sellerId) : ids;
+
+    if (!productIds || productIds.length === 0) {
+      return failResponse(res, req.locale.NO_PRODUCTS_FOUND, 404);
+    }
+
+    const assignedSku = await UserChannelProducts.findOne(
+      {
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        channelId: Number(id),
+        isActive: true,
+      },
+      { 'skuList.skuCode': 1 }
+    ).lean();
+
+    const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
+
+    if (assignedSkuCodes.length > 0) {
+      const assignedProducts = await Product.find(
+        {
+          productSkuCode: { $in: assignedSkuCodes },
+          sellerId: new mongoose.Types.ObjectId(sellerId),
+        },
+        { _id: 1 }
+      ).lean();
+
+      const assignedSet = new Set(assignedProducts.map((p) => p._id.toString()));
+      productIds = productIds.filter((id) => !assignedSet.has(id));
+    }
+
+    if (productIds.length === 0) {
+      return failResponse(
+        res,
+        req.locale.ALL_PRODUCTS_ALREADY_ASSIGNED || 'All products are already assigned to this channel',
+        400
+      );
+    }
+
+    const result = await productService.addProductsToUserChannel(sellerId, id, productIds, req.locale);
     if (!result.success) {
       return failResponse(res, result?.message, 404);
     }

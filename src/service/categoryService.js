@@ -156,9 +156,17 @@ export const insertCategoryTrail = async (categoryTrailArray, sellerId) => {
           id: platformCategoryId,
         };
 
+        // Check if already exists for same seller & platformCategoryId
+        const exists = await PlatformCategory.exists({ sellerId, platformCategoryId });
+        if (exists) {
+          // Skip if already exists
+          parent = categorySlug;
+          continue;
+        }
+
         await PlatformCategory.findOneAndUpdate(
           query,
-          { $setOnInsert: query }, // only insert if not exists
+          { $setOnInsert: query }, // insert only if not found
           { new: true, upsert: true }
         );
 

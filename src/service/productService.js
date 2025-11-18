@@ -498,6 +498,25 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
     throw new Error(err.message); // force the catch block
   }
 };
+/* GET ALL PRODUCT IDS BY SELLER ID */
+const getAllProductIdsBySellerId = async (sellerId) => {
+  try {
+    const products = await Product.find(
+      {
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+        productType: 'simple',
+      },
+      { _id: 1 }
+    ).lean();
+
+    return products.map((p) => p._id.toString());
+  } catch (err) {
+    console.error('Service error in getAllProductIdsBySellerId:', err);
+    throw new Error(err.message);
+  }
+};
+
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 const addProductsToUserChannel = async (sellerId, channelId, productIds, locale) => {
   try {
@@ -885,6 +904,7 @@ export default {
   getUserChannelProducts,
   getUserUnassignedProducts,
   addProductsToUserChannel,
+  getAllProductIdsBySellerId,
   unlinkProductFromChannel,
   validateProducts,
   pushProductsAsync,
