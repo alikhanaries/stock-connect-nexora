@@ -296,6 +296,13 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+    {
+      Key: 'bulletPoint',
+      Value: product.bulletPoint || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || null;
   return {
