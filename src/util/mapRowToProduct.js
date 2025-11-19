@@ -108,6 +108,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     itemWidth: r.itemwidth || '',
     itemHeight: r.itemheight || '',
     specialFeature: r.specialfeature || '',
+    bulletPoint: r.bulletpoint || '',
   };
 
   Object.keys(product).forEach((key) => {

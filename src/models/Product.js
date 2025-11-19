@@ -158,6 +158,10 @@ const ProductSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    bulletPoint: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );
