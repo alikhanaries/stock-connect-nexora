@@ -138,6 +138,7 @@ export const saveSellerPickUpAdressDetails = async (payload) => {
       country,
       phone,
       description,
+      status: 'active',
     };
 
     // Use sellerId + address as unique key to decide update vs insert
