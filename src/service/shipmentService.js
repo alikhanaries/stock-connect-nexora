@@ -1076,7 +1076,7 @@ async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, 
   const allMatch = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === shipmentStatus);
 
   if (allMatch) {
-    const finalOrderStatus = shipmentStatus === 'NEW' ? 'IN_PROGRESS' : shipmentStatus.toUpperCase();
+    const finalOrderStatus = shipmentStatus === 'SHIPMENT_CREATED' ? 'IN_PROGRESS' : shipmentStatus.toUpperCase();
 
     await Order.findByIdAndUpdate(orderId, { $set: { status: finalOrderStatus } });
 
