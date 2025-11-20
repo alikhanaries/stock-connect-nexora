@@ -212,6 +212,7 @@ export const exportReturns = async (req, res) => {
 // Webhook
 export const fetchReturnsWebhook = async () => {
   try {
+    console.log('inside  fetchReturnsWebhook-------------------');
     const query = {
       page: 1,
       pageSize: 10,
