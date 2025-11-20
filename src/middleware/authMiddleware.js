@@ -68,7 +68,7 @@ export const webHookAuthMiddleware = async (req, res, next) => {
 
     // Extract header value (case-insensitive)
     const receivedToken = req.headers[headerName.toLowerCase()];
-
+    console.log('receivedToken', receivedToken);
     if (!receivedToken) {
       return Responses.failResponse(res, `Missing ${headerName} header`, 401);
     }
