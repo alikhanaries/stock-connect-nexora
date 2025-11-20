@@ -1,6 +1,6 @@
 import { z } from 'zod';
 // Common language list
-import { ORDER_STATUS_MAP, VALID_PERIODS } from '#constants/common.js';
+import { VALID_PERIODS } from '#constants/common.js';
 import { validate } from './validate.js';
 import { headerSchema } from './headerSchema.js';
 import mongoose from 'mongoose';
@@ -53,13 +53,7 @@ export const getAllOrdersValidator = validate(async (req) => {
         message: 'fromDate must be a valid date',
       }),
 
-    status: z
-      .string()
-      .optional()
-      .transform((val) => val?.toUpperCase())
-      .refine((val) => !val || Object.values(ORDER_STATUS_MAP).includes(val), {
-        message: `status must be one of: ${Object.values(ORDER_STATUS_MAP).join(', ')}`,
-      }),
+    status: z.string().optional(),
 
     sortOrder: z
       .string()

@@ -3,7 +3,7 @@ import { importProductConstant, resetPasswordConstants } from '../constants/emai
 import { productImportTemplate } from '../emailTemplates/importProductTemplate.js';
 import { resetPasswordTemplate } from '../emailTemplates/resetPasswordTemplate.js';
 
-const sendMail = async ({ to, subject, html }) => {
+const sendEmailNotification = async ({ to, subject, html }) => {
   try {
     if (!to || !subject || !html) {
       throw new Error('Missing required email fields: to, subject, or html');
@@ -18,38 +18,49 @@ const sendMail = async ({ to, subject, html }) => {
 
     const info = await transporter.sendMail(mailOptions);
 
-    return { success: true, messageId: info.messageId };
+    console.log('Email message sent:', info);
+
+    return {
+      success: true,
+      messageId: info?.messageId,
+      response: info?.response || 'Mail accepted by transporter',
+    };
   } catch (error) {
-    console.error('SES Email error:', error);
-    return { success: false, error };
+    console.error('Email sending failed:', error.message);
+    return { success: false, error: error.message };
   }
 };
 
 const importProductMailService = async ({ to, importStatus = 'SUCCESS', errorDetails = [], userName }) => {
   try {
-    const templateData = {
-      importStatus,
-      errorDetails,
-      ...importProductConstant,
-      ...mailBranding,
-      PRODUCT_IMPORT_HELLO: `Hello ${userName}`,
-    };
-
     const mailOptions = {
       to,
       subject: `${mailBranding.tenantName} - ${importProductConstant.SUBJECT}`,
-      html: productImportTemplate(templateData),
+      html: productImportTemplate({
+        importStatus,
+        errorDetails,
+        ...importProductConstant,
+        ...mailBranding,
+        PRODUCT_IMPORT_HELLO: `Hello ${userName}`,
+      }),
     };
 
-    const { success, messageId } = await sendMail(mailOptions);
+    const { success, messageId } = await sendEmailNotification(mailOptions);
+
+    if (success) {
+      console.log(`Product import email sent successfully. Message ID: ${messageId}`);
+    } else {
+      console.warn('Product import email failed to send.');
+    }
+
     return { success, messageId };
   } catch (error) {
-    console.error('Mail error (Product Import):', error.message);
+    console.error('sendImportProductEmail error:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-const resetPasswordService = async ({ to, userName, resetUrl }) => {
+const resetPasswordService = async ({ to, userName = 'User', resetUrl }) => {
   try {
     const mailOptions = {
       to,
@@ -62,10 +73,17 @@ const resetPasswordService = async ({ to, userName, resetUrl }) => {
       }),
     };
 
-    const { success, messageId } = await sendMail(mailOptions);
+    const { success, messageId } = await sendEmailNotification(mailOptions);
+
+    if (success) {
+      console.log(`Reset password email sent successfully. Message ID: ${messageId}`);
+    } else {
+      console.warn('Reset password email failed to send.');
+    }
+
     return { success, messageId };
   } catch (error) {
-    console.error('Mail error (Reset Password):', error.message);
+    console.error('sendResetPasswordEmail error:', error.message);
     return { success: false, error: error.message };
   }
 };

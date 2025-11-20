@@ -11,6 +11,7 @@ import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo, syncShipmentStatus } from '#service/shipmentService.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import OrderLogs from '#models/OrderLogs.js';
+import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 const formatOrder = (order) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
   const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
@@ -83,8 +84,23 @@ const getAllOrders = async (query, sellerId) => {
     }
 
     if (status) {
-      filter.status = { $regex: new RegExp(`^${status}$`, 'i') };
-      appliedFilters.status = status;
+      // Convert comma-separated string → array
+      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+
+      // Validate against enum
+      const validStatuses = Object.values(ORDER_STATUS_MAP);
+      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+
+      if (invalid.length > 0) {
+        throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
+      }
+
+      // Build Mongo filter (case-insensitive)
+      filter.status = {
+        $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+      };
+
+      appliedFilters.status = status; // or original string if you prefer
     }
 
     const [totalOrders, orders] = await Promise.all([
@@ -148,7 +164,7 @@ export const getOrderById = async (id) => {
         products.reduce((acc, p) => {
           acc[p.productSkuCode] = {
             image: p.images?.[0] || null,
-            hsCode: p.hsCodeSA || null,
+            hsCode: p.hsCodeSA || p.merchantProductNo,
           };
           return acc;
         }, {})
@@ -183,7 +199,7 @@ export const getOrderById = async (id) => {
               ? product?.cancellationRequestedQuantity
               : product.quantity,
           status: product?.status === 'IN_COMBI' ? 'PARTIALLY_CANCELED' : product?.status,
-          hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
+          hsCode: productsMap[product.merchantProductNo]?.hsCode || product.merchantProductNo,
         });
         if (status === 'CANCELED') {
           return; //  Don't include cancelled items in unshipped
@@ -206,7 +222,7 @@ export const getOrderById = async (id) => {
           lineVat: product?.lineVat,
           quantity: notShippedQty,
           status: product?.status,
-          hsCode: productsMap[product.merchantProductNo]?.hsCode || null,
+          hsCode: productsMap[product.merchantProductNo]?.hsCode || product.merchantProductNo,
         });
       }
     });
@@ -235,7 +251,7 @@ export const getOrderById = async (id) => {
             lineVat: orderSku?.lineVat,
             airWaybillNo: shipment.airWaybillNo,
             status: orderSku?.status,
-            hsCode: productsMap[shipmentSku.merchantProductNo]?.hsCode || null,
+            hsCode: productsMap[shipmentSku.merchantProductNo]?.hsCode || shipmentSku.merchantProductNo,
             trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
           };
         }) || [],
@@ -573,8 +589,18 @@ const cancelFullOrder = async (orderId, reason = 'NA') => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cancelPayload),
     });
-    if (!res.ok) throw new Error(`ChannelEngine cancel failed: ${await res.text()}`);
 
+    if (!res.ok) {
+      const json = await res.json();
+      let cleanMessage = json?.Message || json?.errorMessage || 'ChannelEngine cancellation failed';
+      const customMsg = cancelChanelEngineCustomErrorMessage(cleanMessage);
+      return {
+        success: false,
+        message: customMsg,
+        statusCode: res.status,
+        data: null,
+      };
+    }
     const updatedOrder = await Order.findByIdAndUpdate(
       orderId,
       {

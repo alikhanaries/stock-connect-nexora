@@ -9,6 +9,7 @@ import {
   buildReturnAggregationPipeline,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
+import { formatDateTime, escapeCsv } from '#helpers/Common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
 
@@ -31,16 +32,48 @@ export const getReturns = async (queryParams = {}) => {
     }
 
     const { Content = [] } = responseData;
-    if (!Content.length) return { success: true, data: responseData };
+    if (!Content.length) return { success: true, data: { Content: [], upsertedCount: 0, totalProcessed: 0 } };
 
-    // Save returns in batches to reduce memory usage
-    const batchSize = 50;
-    for (let i = 0; i < Content.length; i += batchSize) {
-      const chunk = Content.slice(i, i + batchSize);
-      await Promise.allSettled(chunk.map(saveReturnToDatabase));
+    // Save returns using bulk operations to track new vs existing
+    const bulkOps = [];
+
+    for (const returnData of Content) {
+      // Sanitize return data using helper
+      const sanitizationResult = await sanitizeReturnData(returnData, Order);
+      if (!sanitizationResult.success) {
+        console.warn('Sanitization failed for return:', returnData.Id);
+        continue;
+      }
+
+      const simplifiedReturnDocument = sanitizationResult.data;
+
+      // Add bulk upsert operation
+      bulkOps.push({
+        updateOne: {
+          filter: { returnId: simplifiedReturnDocument.returnId },
+          update: { $set: simplifiedReturnDocument },
+          upsert: true,
+        },
+      });
     }
 
-    return { success: true, data: responseData };
+    let upsertedCount = 0;
+    let modifiedCount = 0;
+    if (bulkOps.length > 0) {
+      const result = await Return.bulkWrite(bulkOps);
+      upsertedCount = result.upsertedCount || 0;
+      modifiedCount = result.modifiedCount || 0;
+    }
+
+    return {
+      success: true,
+      data: {
+        ...responseData,
+        upsertedCount,
+        modifiedCount,
+        totalProcessed: Content.length,
+      },
+    };
   } catch (error) {
     return { success: false, message: 'Error communicating with ChannelEngine.', error: error.message };
   }
@@ -107,11 +140,36 @@ export const getReturnsFromDatabase = async (query = {}) => {
     };
 
     // Validate status if provided
-    if (status && !Object.values(RETURN_STATUS).includes(status.toUpperCase())) {
-      throw new Error(`Invalid status: ${status}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`);
+    if (status) {
+      const statusArray = status
+        .toString()
+        .split(',')
+        .map((s) => s.trim().toUpperCase());
+
+      // Check each provided status
+      const invalid = statusArray.filter((s) => !Object.values(RETURN_STATUS).includes(s));
+
+      if (invalid.length > 0) {
+        throw new Error(
+          `Invalid status: ${invalid.join(', ')}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`
+        );
+      }
     }
 
-    addFilter('status', status, (v) => ({ $regex: new RegExp(`^${v}$`, 'i') }), true);
+    // Add filter (case-insensitive)
+    addFilter(
+      'status',
+      status,
+      (v) => {
+        const arr = v.split(',').map((s) => s.trim());
+
+        return {
+          $in: arr.map((s) => new RegExp(`^${s}$`, 'i')),
+        };
+      },
+      true
+    );
+
     addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
     addFilter('channelId', channelId, (v) => parseInt(v, 10));
     addFilter('returnId', returnId);
@@ -454,6 +512,146 @@ export const getReturnById = async (id) => {
   }
 };
 
+export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
+  try {
+    const query = { ...filters, sellerId, size: 1000, page: 1, sortBy: 'createdAt', sortOrder: 'desc' };
+    const basicResult = await getReturnsFromDatabase(query);
+
+    if (!basicResult.success || !basicResult.data?.length) {
+      return { success: false, message: 'No returns found for export' };
+    }
+
+    const returnIds = basicResult.data.map((item) => new mongoose.Types.ObjectId(item._id));
+    const pipeline = buildReturnAggregationPipeline();
+
+    pipeline.push(
+      { $match: { _id: { $in: returnIds } } },
+      {
+        $addFields: {
+          customerName: {
+            $trim: {
+              input: {
+                $concat: [
+                  { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
+                  ' ',
+                  { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
+                ],
+              },
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          returnId: 1,
+          orderId: 1,
+          platform: 1,
+          status: 1,
+          placedOn: 1,
+          createdAt: 1,
+          products: 1,
+          customerName: 1,
+          'orderInfo.orderId': 1,
+          'orderInfo.orderCustomer.email': 1,
+          'orderInfo.orderCustomer.phone': 1,
+          'orderInfo.orderShippingAddress': 1,
+          'orderInfo.orderSkuList.skuList': 1,
+        },
+      }
+    );
+
+    const detailedResults = await Return.aggregate(pipeline);
+    if (!detailedResults?.length) return { success: false, message: 'No detailed return data found for export' };
+
+    const headers = [
+      'Return ID',
+      'Order ID',
+      'Platform',
+      'Status',
+      'Placed On',
+      'Returned At',
+      'Product SKU',
+      'Product Name',
+      'Product ID',
+      'Quantity',
+      'Accepted Quantity',
+      'Rejected Quantity',
+      'Unit Price',
+      'Total Price',
+      'Customer Name',
+      'Customer Email',
+      'Customer Phone',
+      'Shipping Address Line 1',
+      'Shipping Address Line 2',
+      'Shipping City',
+      'Shipping State',
+      'Shipping Postal Code',
+      'Shipping Country',
+    ];
+    const csvRows = [headers.join(',')];
+
+    detailedResults.forEach((item) => {
+      const { returnId, orderId, platform, status, placedOn, createdAt, products, orderInfo, customerName } = item;
+      const customer = orderInfo?.orderCustomer || {};
+      const shipping = orderInfo?.orderShippingAddress || {};
+      const orderSkus = orderInfo?.orderSkuList?.skuList || [];
+
+      const baseRow = [
+        returnId || '',
+        orderId || orderInfo?.orderId || '',
+        platform || '',
+        status || '',
+        formatDateTime(placedOn)?.date || '',
+        formatDateTime(createdAt)?.date || '',
+      ];
+
+      const addressRow = [
+        customerName?.trim() || '',
+        customer.email || '',
+        customer.phone || '',
+        shipping.line1 || '',
+        shipping.line2 || '',
+        shipping.city || '',
+        shipping.region || '',
+        shipping.zipCode || '',
+        shipping.countryIso || '',
+      ];
+
+      if (!products?.length) {
+        csvRows.push(escapeCsv([...baseRow, '', '', '', 0, 0, 0, 0, 0, ...addressRow]));
+      } else {
+        products.forEach((product) => {
+          const sku = orderSkus.find((s) => s.id === product.orderLineId);
+          const unitPrice = sku?.unitPriceInclVat || 0;
+          const quantity = product.quantity || 0;
+          const productRow = [
+            ...baseRow,
+            product.productSkuCode || sku?.merchantProductNo || '',
+            sku?.description || 'Product',
+            product.orderLineId || '',
+            quantity,
+            product.acceptedQuantity || 0,
+            product.rejectedQuantity || 0,
+            unitPrice,
+            unitPrice * quantity,
+            ...addressRow,
+          ];
+          csvRows.push(escapeCsv(productRow));
+        });
+      }
+    });
+
+    return {
+      success: true,
+      data: csvRows.join('\n'),
+      filename: `returns-export-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.csv`,
+      count: detailedResults.length,
+    };
+  } catch (error) {
+    console.error('Error exporting returns to CSV:', error.message);
+    return { success: false, message: 'Error generating CSV export', error: error.message };
+  }
+};
 export const getReturnsForWebhook = async (queryParams = {}) => {
   try {
     const params = new URLSearchParams({
@@ -498,7 +696,6 @@ export const getReturnsForWebhook = async (queryParams = {}) => {
     };
   }
 };
-
 export default {
   getReturns,
   getReturnsFromDatabase,
@@ -509,4 +706,5 @@ export default {
   acceptOrRejectReturn,
   getReturnById,
   getReturnsForWebhook,
+  exportReturnsToCSV,
 };
