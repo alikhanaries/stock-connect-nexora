@@ -1,28 +1,47 @@
-import { parseXMLFeed } from '#root/src/integrations/common/helpers/xmlParser.js';
-import { gurmanConfig } from '../config/config.js';
+import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
+import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
+import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
+import { uploadProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
+import Product from '#root/src/models/Product.js';
+import { insertCategoryTrail } from '#root/src/service/categoryService.js';
+import { createGurmanAdapter } from '../gurmanAdapter.js';
 import { formatGurmanProduct } from '../helpers/formatter.js';
-import { fetchXml } from '../utils/fetchXml.js';
-
-const { GURMAN_XML_FEED_URL } = gurmanConfig;
+const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const getGurmanProducts = async (sellerId) => {
   try {
-    const xmlString = await fetchXml(GURMAN_XML_FEED_URL);
-    if (!xmlString) throw new Error('Empty XML feed from Gurman');
-    const parsed = await parseXMLFeed(xmlString);
-    const products = parsed.products.product || [];
-    const canonicalProducts = products.map((p) => formatGurmanProduct(p, sellerId));
+    const gurman = createGurmanAdapter();
+    const products = await gurman.fetchProducts();
+    if (products.length === 0) {
+      return { message: 'No products to sync.' };
+    }
+    const categoryTrails = new Set();
+    await processInBatches(products, MAX_BATCH_SIZE, async (batch) => {
+      const formattedProducts = await formatGurmanProduct(batch, sellerId);
+      const uploadedProducts = await Promise.all(formattedProducts.map((p) => uploadProductImages(p, sellerId)));
+      const canonicalProducts = uploadedProducts.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
 
-    /**
-     * TODO [DB WRITE - FRONTEND INTEGRATION PENDING]:
-     * Once frontend integration is complete, add code here to persist
-     * canonicalProducts to the database (e.g., Product.bulkWrite or equivalent).
-     * For now, products are prepared but not stored.
-     */
+      for (const product of canonicalProducts) {
+        if (product.categoryTrail) categoryTrails.add(product.categoryTrail);
+      }
 
-    return canonicalProducts;
+      if (canonicalProducts.length > 0) {
+        const bulkOps = canonicalProducts.map((product) => ({
+          updateOne: {
+            filter: { productSkuCode: product.productSkuCode, sellerId: product.sellerId },
+            update: { $set: product },
+            upsert: true,
+          },
+        }));
+        await Product.bulkWrite(bulkOps, { ordered: false });
+      }
+    });
+
+    if (categoryTrails.size > 0) {
+      await insertCategoryTrail([...categoryTrails], sellerId);
+    }
   } catch (error) {
-    console.error(`Failed to Get gurman products :`, error);
+    console.error(`Failed to get Gurman products:`, error);
     throw error;
   }
 };

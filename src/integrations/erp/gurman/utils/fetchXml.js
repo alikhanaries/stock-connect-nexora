@@ -1,9 +1,6 @@
-import { gurmanConfig } from '../config/config.js';
-const { GURMAN_XML_FEED_URL } = gurmanConfig;
-
-export const fetchXml = async () => {
+export const fetchXml = async (url) => {
   try {
-    const response = await fetch(GURMAN_XML_FEED_URL);
+    const response = await fetch(url);
     if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
     return await response.text();
   } catch (error) {
