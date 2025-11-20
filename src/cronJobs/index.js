@@ -3,8 +3,9 @@ import { getReturns } from '#service/returnService.js';
 
 const fetchReturnsCron = () => {
   try {
-    cron.schedule('*/7 * * * * *', async () => {
-      console.log('Cron runs every 7 seconds');
+    // Runs every day at 12:00 AM
+    cron.schedule('0 0 * * *', async () => {
+      console.log('Cron runs every day at 12:00 AM');
       try {
         await getReturns();
         console.log('Return data fetched');
@@ -15,6 +16,7 @@ const fetchReturnsCron = () => {
   } catch (error) {
     console.error('Error scheduling cron:', error.message);
   }
+
 };
 
 export default {
