@@ -6,11 +6,12 @@ export const syncGurmanProducts = (req, res) => {
     const sellerId = req.sellerId;
 
     process.nextTick(() => {
-      getGurmanProducts(sellerId).catch((err) => console.error('Gurman background sync failed:', err));
+      getGurmanProducts(sellerId).catch((err) => console.error('Gürmen Group (KIP) background sync failed:', err));
     });
-    return successResponse(res, 'Gurman product sync started in background', 202);
+
+    return successResponse(res, 'Gürmen Group (KIP) product sync started in background', 202);
   } catch (error) {
-    console.error('Failed to start Gurman sync:', error);
+    console.error('Failed to start Gürmen Group (KIP) sync:', error);
     return errorResponse(res, error.message);
   }
 };

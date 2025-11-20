@@ -13,7 +13,7 @@ export const getGurmanProducts = async (sellerId) => {
     const gurman = createGurmanAdapter();
     const products = await gurman.fetchProducts();
     if (products.length === 0) {
-      return { message: 'No products to sync.' };
+      return { message: 'No Gürmen Group (KIP) products to sync.' };
     }
     const categoryTrails = new Set();
     await processInBatches(products, MAX_BATCH_SIZE, async (batch) => {
@@ -41,7 +41,7 @@ export const getGurmanProducts = async (sellerId) => {
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
   } catch (error) {
-    console.error(`Failed to get Gurman products:`, error);
+    console.error('Failed to sync Gürmen Group (KIP) products:', error);
     throw error;
   }
 };

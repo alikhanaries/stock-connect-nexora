@@ -12,7 +12,7 @@ export const createGurmanAdapter = () => {
     ...base,
     fetchProducts: async () => {
       const xmlString = await fetchXml(GURMAN_XML_FEED_URL);
-      if (!xmlString) throw new Error('Empty XML feed from Gurman');
+      if (!xmlString) throw new Error('Empty XML feed from Gürmen Group (KIP)');
       const parsed = await parseXMLFeed(xmlString);
       const products = parsed?.products?.product || [];
       const productArray = Array.isArray(products) ? products : [products];
