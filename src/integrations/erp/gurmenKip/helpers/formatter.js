@@ -26,9 +26,9 @@ const formatBaseProduct = (product, sellerId, subproductImages = []) => {
     extraImageUrl2: uniqueImages[2] || null,
     extraImageUrl3: uniqueImages[3] || null,
     images: uniqueImages,
-    volumetricWeightCm: Number(product.desi || 0),
-    hsCodeAE: 'N/A',
-    hsCodeSA: 'N/A',
+    volumetricWeightCm: 0.3,
+    hsCodeAE: product.code,
+    hsCodeSA: product.code,
     category: product.category_path,
     updatedAt: new Date(),
   };
