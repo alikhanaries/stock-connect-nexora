@@ -64,7 +64,6 @@ seller.get(
   getAllPickupAddresses
 );
 
-seller.get('/:id', getSellerByIdValidator, checkLanguage, authMiddleware, getSellerById);
 seller.patch(
   '/:id',
   updateSellerValidator,
@@ -113,5 +112,7 @@ seller.post(
   authorize(USER_ROLES.MASTER_ADMIN),
   savePickupAddress
 );
+
+seller.get('/:id', getSellerByIdValidator, checkLanguage, authMiddleware, getSellerById);
 
 export default seller;
