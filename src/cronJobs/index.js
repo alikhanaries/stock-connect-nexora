@@ -3,9 +3,8 @@ import { getReturns } from '#service/returnService.js';
 
 const fetchReturnsCron = () => {
   try {
-    // Runs every day at 12:00 AM
-    cron.schedule('0 0 * * *', async () => {
-      console.log('Cron runs every day at 12:00 AM');
+    cron.schedule('*/7 * * * * *', async () => {
+      console.log('Cron runs every 7 seconds');
       try {
         await getReturns();
         console.log('Return data fetched');
