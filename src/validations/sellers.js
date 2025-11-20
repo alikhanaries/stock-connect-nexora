@@ -90,9 +90,6 @@ export const savePickupAddressValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 
   const bodySchema = z.object({
-    sellerId: z.string({ required_error: 'sellerId is required' }).refine((val) => /^[0-9a-fA-F]{24}$/.test(val), {
-      message: 'sellerId must be a valid MongoDB ObjectId',
-    }),
     email: z.string({ required_error: 'email is required' }).email({ message: 'Invalid email address' }),
     city: z.string().optional(),
     address: z.string().optional(),

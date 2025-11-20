@@ -57,7 +57,7 @@ seller.patch(
 // GET SELLER PICKUP ADDRESS LIST API
 
 seller.get(
-  '/getAllPickupAddresses/:id',
+  '/getAllPickupAddresses',
   getAllPickupAddressesValidator,
   checkLanguage,
   authMiddleware,
