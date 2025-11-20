@@ -1,7 +1,6 @@
 import { config } from '#config/config.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import UserChannelProducts from '#models/UserChannelProducts.js';
-import Order from '#models/Orders.js';
 import {
   determineProductType,
   resolveProductTypes,
@@ -9,16 +8,17 @@ import {
   validateHierarchyExistenceBatch,
 } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
+import Channel from '#models/Channel.js';
+import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import csv from 'csv-parser';
 import fs from 'fs';
+import mongoose from 'mongoose';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
-import mongoose from 'mongoose';
-import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
-import { getMarketPlaceCategoryTrailsService, insertCategoryTrail } from '../service/categoryService.js';
-import Channel from '#models/Channel.js';
+import { insertCategoryTrail } from '../service/categoryService.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
 
@@ -199,7 +199,7 @@ const validateProducts = async (channelId, sellerId) => {
   ).lean();
 
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
-  if (!skuCodes.length) return { total: 0, validProducts: [], failed: 0, validatedProducts: [] };
+  if (!skuCodes.length) return { validProducts: [] };
 
   // Get products for those SKUs (child products)
   const childProducts = await Product.find({
@@ -243,68 +243,10 @@ const validateProducts = async (channelId, sellerId) => {
   [...childProducts, ...parentProducts, ...grandParentProducts].forEach((p) => {
     allProductsMap.set(p.productSkuCode, p);
   });
-  const allProducts = Array.from(allProductsMap.values());
-
-  // Validate each product’s category trail
-  const trailCache = new Map();
-  const validatedProducts = await Promise.all(
-    allProducts.map(async (product) => {
-      if (!trailCache.has(product.categoryTrail)) {
-        trailCache.set(
-          product.categoryTrail,
-          await getMarketPlaceCategoryTrailsService(product.categoryTrail, sellerId)
-        );
-      }
-
-      const trails = trailCache.get(product.categoryTrail);
-      const errors = [];
-      if (!trails?.marketPlaceTrailData?.length) {
-        errors.push(trails?.platformCategoryName || 'Missing category trail');
-      }
-
-      return {
-        ...product,
-        categoryTrailAmazon:
-          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Amazon.sa (v3)')
-            ?.marketplaceCategoryTrails || null,
-        categoryTrailNoon:
-          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Noon V2')?.marketplaceCategoryTrails || null,
-        categoryTrailTrendyol:
-          trails?.marketPlaceTrailData?.find((t) => t.marketplacename === 'Trendyol.int SA')
-            ?.marketplaceCategoryTrails || null,
-        Errors: errors,
-        Warnings: [],
-      };
-    })
-  );
-
-  // Bulk update category trails
-  const bulkOps = validatedProducts
-    .filter((p) => p.categoryTrailAmazon || p.categoryTrailNoon || p.categoryTrailTrendyol)
-    .map((p) => ({
-      updateOne: {
-        filter: { _id: p._id },
-        update: {
-          $set: {
-            categoryTrailAmazon: p.categoryTrailAmazon,
-            categoryTrailNoon: p.categoryTrailNoon,
-            categoryTrailTrendyol: p.categoryTrailTrendyol,
-          },
-        },
-      },
-    }));
-
-  if (bulkOps.length) {
-    await Product.bulkWrite(bulkOps, { ordered: false });
-  }
-  const validProducts = validatedProducts.filter((p) => p.Errors.length === 0);
-  const failed = validatedProducts.length - validProducts.length;
+  const validatedProducts = Array.from(allProductsMap.values());
 
   return {
-    total: validatedProducts.length,
-    validProducts,
-    failed,
-    validatedProducts,
+    validProducts: validatedProducts,
   };
 };
 
@@ -388,7 +330,15 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
             }
 
             product['sellerId'] = sellerId;
-
+            const isPriceRequired = product.productType === 'simple';
+            if (isPriceRequired && (!product.price || isNaN(parseFloat(product.price)))) {
+              errorDetails.push({
+                rowNumber: currentRow,
+                errorData: [locale.PRODUCT_PRICE_MISSING],
+              });
+              invalidRowsCount++;
+              return;
+            }
             // Structure validation
             const { valid, errors } = validateHierarchy(product);
             if (!valid) {
@@ -548,6 +498,25 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
     throw new Error(err.message); // force the catch block
   }
 };
+/* GET ALL PRODUCT IDS BY SELLER ID */
+const getAllProductIdsBySellerId = async (sellerId) => {
+  try {
+    const products = await Product.find(
+      {
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+        productType: 'simple',
+      },
+      { _id: 1 }
+    ).lean();
+
+    return products.map((p) => p._id.toString());
+  } catch (err) {
+    console.error('Service error in getAllProductIdsBySellerId:', err);
+    throw new Error(err.message);
+  }
+};
+
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 const addProductsToUserChannel = async (sellerId, channelId, productIds, locale) => {
   try {
@@ -716,7 +685,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
   ).lean();
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
   const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId), productType: 'simple' };
-  const appliedFilters = {};
 
   if (assignedSkuCodes.length > 0) {
     filter.productSkuCode = { $nin: assignedSkuCodes };
@@ -726,7 +694,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
       filter.status = statusValue;
-      appliedFilters.status = statusValue;
     }
   }
 
@@ -734,11 +701,9 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     filter.price = {};
     if (minPrice) {
       filter.price.$gte = Number(minPrice);
-      appliedFilters.minPrice = filter.price.$gte;
     }
     if (maxPrice) {
       filter.price.$lte = Number(maxPrice);
-      appliedFilters.maxPrice = filter.price.$lte;
     }
   }
 
@@ -760,7 +725,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
-    appliedFilters,
   };
 };
 
@@ -940,6 +904,7 @@ export default {
   getUserChannelProducts,
   getUserUnassignedProducts,
   addProductsToUserChannel,
+  getAllProductIdsBySellerId,
   unlinkProductFromChannel,
   validateProducts,
   pushProductsAsync,

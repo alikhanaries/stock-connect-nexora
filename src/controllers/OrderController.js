@@ -18,7 +18,7 @@ export const getAllOrders = async (req, res) => {
       });
     }
 
-    return Responses.successResponse(res, req.locale.ORDERS_FETCHED_SUCCESSFULLY, 200, {
+    return Responses.successResponse(res, req?.locale?.ORDERS_FETCHED_SUCCESSFULLY, 200, {
       content: data,
       appliedFilters: appliedFilters || {},
       ...pagination,
@@ -170,8 +170,14 @@ export const cancelFullOrder = async (req, res) => {
     }
 
     const orderResponse = await orderService.cancelFullOrder(orderId, reason);
+
     if (!orderResponse.success) {
-      return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, null);
+      return Responses.failResponse(
+        res,
+        orderResponse?.error?.message || orderResponse?.message,
+        orderResponse?.error?.status || orderResponse?.status,
+        null
+      );
     }
 
     return Responses.successResponse(res, req?.locale?.CANCEL_ORDER || 'Order is cancelled', 200, null);

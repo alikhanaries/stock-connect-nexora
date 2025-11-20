@@ -17,8 +17,19 @@ export const formatDateTime = (isoString) => {
   return { date, time };
 };
 
+// Helper function for escaping CSV fields
+export const escapeCsv = (row) => {
+  return row
+    .map((f) => {
+      const str = String(f ?? '');
+      return str.includes(',') || str.includes('"') ? `"${str.replace(/"/g, '""')}"` : str;
+    })
+    .join(',');
+};
+
 export default {
   formatDateTime,
+  escapeCsv,
 };
 
 export const convetDateToUTC = (dateTime) => {

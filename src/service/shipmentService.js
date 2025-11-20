@@ -255,6 +255,9 @@ export const createPartialShipmentService = async (shipmentData) => {
     const order = await Order.findById(id);
     if (!order) return { success: false, message: 'Order not found.' };
 
+    if (sellerId !== order?.sellerId.toString()) {
+      return { success: false, message: 'Wrong seller Id.' };
+    }
     const { orderSkuList, merchantOrderNo, orderId } = order;
 
     // Validate SKU list
@@ -440,8 +443,12 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
 
     // Applied filters object
     const appliedFilters = {};
+
     if (status) {
-      matchStage.status = status.toUpperCase();
+      const statusArray = status.split(',').map((s) => s.trim()); // ['pending','closed','open']
+      matchStage.status = {
+        $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+      };
       appliedFilters.status = status;
     }
     // Aggregation pipeline

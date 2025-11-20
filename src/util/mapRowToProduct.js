@@ -10,10 +10,8 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     Object.entries(row).map(([key, value]) => [key.toLowerCase().trim(), value ? String(value).trim() : ''])
   );
 
-  const price = parseFloat(r.price);
   const errorData = [];
   if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
-  if (isNaN(price)) errorData.push(locale.PRODUCT_PRICE_MISSING);
   if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
   if (errorData.length) {
     return { rowNumber: index, errorData };
@@ -38,7 +36,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
   const validUploadedUrls = uploadedUrls.filter(Boolean);
   const [primaryImageUrl, imageUrl, extraImageUrl1, extraImageUrl2, extraImageUrl3] = validUploadedUrls;
 
-  return {
+  const product = {
     grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,
@@ -48,7 +46,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     descriptionAr: r.descriptionar || null,
     brand: r.brand || null,
     ean: r.ean || null,
-    price,
+    price: r.price ? parseFloat(r.price) : null,
     minPrice: r.minprice ? parseFloat(r.minprice) : null,
     maxPrice: r.maxprice ? parseFloat(r.maxprice) : null,
     msrp: r.msrp ? parseFloat(r.msrp) : null,
@@ -75,5 +73,49 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     volumetricWeightCm: r.volumetricweightcm ? parseFloat(r.volumetricweightcm) : null,
     hsCodeAE: r.hscodeae || null,
     hsCodeSA: r.hscodesa || null,
+    titleAr: r.titlear || '',
+    longDescriptionAr: r.longdescriptionar || '',
+    gender: r.gender,
+    modelName: r.modelname || '',
+    ageRangeDescription: r.agerangedescription,
+    sizeType: r.sizetype,
+    productCareInstructions: r.productcareinstructions || '',
+    countryOfOrigin: r.countryoforigin || '',
+    departmentName: r.departmentname || '',
+    fabricType: r.fabrictype || '',
+    style: r.style || '',
+    weaveType: r.weavetype || '',
+    dangerousGoodsRegulations: r.dangerousgoodsregulations || 'not_applicable',
+    skinType: r.skintype || '',
+    safetyWarning: r.safetywarning || '',
+    unitCount: r.unitcount ? parseFloat(r.unitcount) : '',
+    unitCountType: r.unitcounttype || '',
+    targetAudienceKeyword: r.targetaudiencekeyword || '',
+    hairType: r.hairtype || '',
+    ingredientsList: r.ingredientslist || '',
+    searchTerms: r.searchterms || '',
+    scent: r.scent || '',
+    numberOfItems: r.numberofitems ? parseInt(r.numberofitems, 10) || 1 : 1,
+    manufacturer: r.manufacturer || '',
+    lifestyle: r.lifestyle || '',
+    heatSensitive: r.heatsensitive?.toLowerCase() == 'Yes',
+    liquidContents: r.liquidcontents?.toLowerCase() == 'Yes',
+    itemForm: r.itemform || '',
+    riseStyle: r.risestyle || '',
+    intendedUse: r.intendeduse || '',
+    productBenefit: r.productbenefit || '',
+    itemLength: r.itemlength || '',
+    itemWidth: r.itemwidth || '',
+    itemHeight: r.itemheight || '',
+    specialFeature: r.specialfeature || '',
+    bulletPoint: r.bulletpoint || '',
   };
+
+  Object.keys(product).forEach((key) => {
+    const val = product[key];
+    if (val === null || val === '' || val === undefined) {
+      delete product[key];
+    }
+  });
+  return product;
 };
