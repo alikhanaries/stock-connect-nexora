@@ -26,6 +26,8 @@ const formatBaseProduct = (product, sellerId, subproductImages = []) => {
     extraImageUrl3: uniqueImages[3] || null,
     images: uniqueImages || null,
     category: product.category_path,
+    hsCodeAE: product.code,
+    hsCodeSA: product.code,
     updatedAt: new Date(),
   };
 };
