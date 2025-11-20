@@ -209,7 +209,31 @@ export const exportReturns = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+// Webhook
+export const fetchReturnsWebhook = async () => {
+  try {
+    console.log('inside  fetchReturnsWebhook-------------------');
+    const query = {
+      page: 1,
+      pageSize: 10,
+      sort: 'CreatedAt',
+    };
 
+    const result = await returnService.getReturnsForWebhook(query);
+
+    if (!result.success) {
+      console.error('Return sync failed:', result.message || result.error);
+    }
+
+    const returnsCount = result.data?.length || 0;
+    const message = returnsCount > 0 ? `${returnsCount} returns synched successfully` : 'No new returns found';
+
+    console.log(message);
+  } catch (error) {
+    console.error('Controller Error: fetchReturnsWebhook:', error.message);
+    errorLog(error);
+  }
+};
 export default {
   getAllReturns,
   syncReturns,
@@ -219,4 +243,5 @@ export default {
   updateReturn,
   getReturnById,
   exportReturns,
+  fetchReturnsWebhook,
 };
