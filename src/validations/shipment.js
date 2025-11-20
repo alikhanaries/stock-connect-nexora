@@ -1,33 +1,37 @@
 import { z } from 'zod';
 import { headerSchema } from './headerSchema.js';
 import { validate } from './validate.js';
+import { mongoIdField, safeNumber, notNullString, notNullBoolean } from './helper.js';
 
 export const createShipmentValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
-  const bodySchema = z.object({
-    id: z.string().nonempty({ message: 'orderId is required' }),
-    sellerId: z.string().nonempty({ message: 'sellerId is required' }),
-    pieces: z.number().optional().default(0),
-    pickUpId: z.string().nonempty({ message: 'pickUpId is required' }),
-    declaredValue: z.number({ invalid_type_error: 'declaredValue must be a number' }).optional(),
-    declaredValueCurrency: z.string().optional().default('SAR'),
-    isCod: z.boolean().optional().default(true),
-    codAmount: z.number().optional().default(0),
-    currency: z.string().optional().default('SAR'),
 
-    // New products array (mandatory)
+  const bodySchema = z.object({
+    id: mongoIdField('id', { required: true }),
+    sellerId: mongoIdField('sellerId', { required: true }),
+    pickUpId: mongoIdField('pickUpId', undefined, { required: true }),
+
+    declaredValue: safeNumber('declaredValue', 0),
+    declaredValueCurrency: notNullString('declaredValueCurrency', 'SAR'),
+    currency: notNullString('currency', 'SAR', { required: true }),
+
+    isCod: notNullBoolean('isCod', true),
+    codAmount: safeNumber('codAmount', 0),
+    pieces: safeNumber('pieces', 0, { required: true }),
+
     products: z
       .array(
         z.object({
-          merchantProductNo: z.string().nonempty({ message: 'merchantProductNo is required' }),
-          orderLineId: z.number().min(1, { message: 'orderLineId must be at least 1' }),
-          quantity: z.number().min(1, { message: 'quantity must be at least 1' }),
-          hsCode: z.string().nonempty({ message: 'hsCode is required' }),
+          merchantProductNo: notNullString('merchantProductNo', undefined, { required: true }),
+          orderLineId: safeNumber('orderLineId', 0, { required: true }),
+          quantity: safeNumber('quantity', 0, { required: true }),
+          hsCode: notNullString('hsCode', undefined, { required: true }),
         })
       )
       .nonempty({ message: 'products must contain at least one item' }),
   });
-  bodySchema.parse(req.body);
+
+  return bodySchema.parse(req.body);
 });
 
 export const getShipmentValidator = validate(async (req) => {

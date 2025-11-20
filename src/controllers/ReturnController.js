@@ -16,14 +16,14 @@ export const getAllReturns = async (req, res) => {
     const { data: returns = [], pagination = {}, appliedFilters = {} } = result;
 
     if (!returns.length) {
-      return Responses.successResponse(res, result.message || req.locale.NO_RETURNS_FOUND, 200, {
+      return Responses.successResponse(res, result.message || req?.locale?.NO_RETURNS_FOUND, 200, {
         content: [],
         appliedFilters: appliedFilters || {},
         ...pagination,
       });
     }
 
-    return Responses.successResponse(res, result.message || req.locale.RETURNS_FETCHED_SUCCESSFULLY, 200, {
+    return Responses.successResponse(res, result.message || req?.locale?.RETURNS_FETCHED_SUCCESSFULLY, 200, {
       content: returns,
       appliedFilters: appliedFilters || {},
       ...pagination,
@@ -44,9 +44,12 @@ export const syncReturns = async (req, res) => {
       return Responses.failResponse(res, result.message || req.locale.FAILED_TO_SYNC_RETURNS, 400);
     }
 
-    const returnsCount = result.data?.Content?.length || 0;
+    const upsertedCount = result.data?.upsertedCount || 0;
+
     const message =
-      returnsCount > 0 ? `${returnsCount} ${req.locale.RETURNS_SYNCED_SUCCESSFULLY}` : req.locale.NO_NEW_RETURNS_FOUND;
+      upsertedCount > 0
+        ? `${upsertedCount} ${req.locale.NEW_RETURNS_SYNCED_SUCCESSFULLY || 'new returns synced successfully'}`
+        : req.locale.NO_NEW_RETURNS_FOUND || 'No new returns found';
 
     return Responses.successResponse(res, message, 200, result.data);
   } catch (error) {
@@ -170,6 +173,43 @@ export const getReturnById = async (req, res) => {
   }
 };
 
+// Exports returns data as CSV file for a specific seller.
+export const exportReturns = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { status, platform, channelId, search, dateFrom, dateTo } = req.query;
+
+    const filters = Object.fromEntries(
+      Object.entries({ status, platform, channelId, search, dateFrom, dateTo }).filter(([, v]) => v != null && v !== '')
+    );
+
+    // Remove undefined values
+    Object.keys(filters).forEach((key) => {
+      if (!filters[key]) {
+        delete filters[key];
+      }
+    });
+
+    const result = await returnService.exportReturnsToCSV(sellerId, filters);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || req.locale.NO_RETURNS_FOUND, 404);
+    }
+
+    // Set headers for CSV download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    return res.status(200).send(result.data);
+  } catch (error) {
+    console.error('Controller Error: exportReturns:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllReturns,
   syncReturns,
@@ -178,4 +218,5 @@ export default {
   acknowledgeMerchantReturn,
   updateReturn,
   getReturnById,
+  exportReturns,
 };

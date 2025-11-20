@@ -5,6 +5,8 @@ import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { PRODUCT_STATUSES } from '#constants/common.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
+import Product from '#models/Product.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -119,25 +121,7 @@ export const pushProductToChannelEngine = async (req, res) => {
   const { channelId } = req.params;
   try {
     const sellerId = req.sellerId;
-    const {
-      validatedProducts = [],
-      validProducts = [],
-      failed = 0,
-      total = 0,
-    } = await productService.validateProducts(channelId, sellerId);
-
-    const uniqueCategoryErrors = [...new Set(validatedProducts.flatMap((p) => p.Errors || []))];
-    const errorData = uniqueCategoryErrors.length
-      ? { message: req.locale.INVALID_CATEGORY_TRAIL, categoryData: uniqueCategoryErrors }
-      : null;
-
-    const message =
-      failed === 0
-        ? req.locale.ALL_PRODUCTS_PUSH_SUCCESS
-        : failed === total
-          ? req.locale.ALL_PRODUCTS_PUSH_FAILED
-          : req.locale.PRODUCTS_PUSH_PARTIAL_SUCCESS;
-
+    const { validProducts = [] } = await productService.validateProducts(channelId, sellerId);
     if (validProducts?.length) {
       (async () => {
         try {
@@ -147,12 +131,7 @@ export const pushProductToChannelEngine = async (req, res) => {
         }
       })();
     }
-
-    if (failed > 0) {
-      return failResponse(res, message, 400, errorData);
-    }
-
-    return successResponse(res, message, 200, null);
+    return successResponse(res, req.locale.ALL_PRODUCTS_PUSH_SUCCESS, 200, null);
   } catch (err) {
     console.error('Controller Error:', err);
     errorLog(err);
@@ -230,10 +209,49 @@ export const deleteMultipleProducts = async (req, res) => {
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
 export const addProductsToUserChannel = async (req, res) => {
   try {
-    const { ids } = req.body;
+    const { ids, addAll } = req.body;
     const { id } = req.params;
     const sellerId = req.sellerId;
-    const result = await productService.addProductsToUserChannel(sellerId, id, ids, req.locale);
+
+    let productIds = addAll === true ? await productService.getAllProductIdsBySellerId(sellerId) : ids;
+
+    if (!productIds || productIds.length === 0) {
+      return failResponse(res, req.locale.NO_PRODUCTS_FOUND, 404);
+    }
+
+    const assignedSku = await UserChannelProducts.findOne(
+      {
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        channelId: Number(id),
+        isActive: true,
+      },
+      { 'skuList.skuCode': 1 }
+    ).lean();
+
+    const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
+
+    if (assignedSkuCodes.length > 0) {
+      const assignedProducts = await Product.find(
+        {
+          productSkuCode: { $in: assignedSkuCodes },
+          sellerId: new mongoose.Types.ObjectId(sellerId),
+        },
+        { _id: 1 }
+      ).lean();
+
+      const assignedSet = new Set(assignedProducts.map((p) => p._id.toString()));
+      productIds = productIds.filter((id) => !assignedSet.has(id));
+    }
+
+    if (productIds.length === 0) {
+      return failResponse(
+        res,
+        req.locale.ALL_PRODUCTS_ALREADY_ASSIGNED || 'All products are already assigned to this channel',
+        400
+      );
+    }
+
+    const result = await productService.addProductsToUserChannel(sellerId, id, productIds, req.locale);
     if (!result.success) {
       return failResponse(res, result?.message, 404);
     }
@@ -282,15 +300,10 @@ export const getUserUnassignedProducts = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
-    const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
-      sellerId,
-      channelId,
-      req.query
-    );
+    const { products, pagination } = await productService.getUserUnassignedProducts(sellerId, channelId, req.query);
 
     const responseData = {
       content: products || [],
-      appliedFilters: appliedFilters || {},
       ...pagination,
     };
     const message = products.length ? req.locale.AVAILABLE_PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;

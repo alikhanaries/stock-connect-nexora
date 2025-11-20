@@ -23,12 +23,7 @@ export const getAllReturnsValidator = validate(async (req) => {
       })
       .transform((val) => (val ? Number(val) : 10)),
 
-    status: z
-      .string()
-      .optional()
-      .refine((val) => !val || val.trim().length > 0, {
-        message: 'status cannot be empty',
-      }),
+    status: z.string().optional(),
 
     channelId: z
       .string()
@@ -297,6 +292,68 @@ export const getReturnStatsValidator = validate(async (req) => {
   querySchema.parse(req.query);
 });
 
+export const exportReturnsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z.object({
+    status: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.trim().length > 0, {
+        message: 'status cannot be empty',
+      }),
+
+    platform: z
+      .string()
+      .optional()
+      .refine((val) => !val || val.trim().length > 0, {
+        message: 'platform cannot be empty',
+      }),
+
+    channelId: z
+      .string()
+      .optional()
+      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0), {
+        message: 'channelId must be a positive number',
+      })
+      .transform((val) => (val ? Number(val) : undefined)),
+
+    search: z
+      .string()
+      .optional()
+      .refine((val) => !val || (val.trim().length > 0 && val.trim().length >= 1), {
+        message: 'search must be at least 1 character long',
+      }),
+
+    dateFrom: z
+      .string()
+      .optional()
+      .refine((val) => !val || !isNaN(Date.parse(val)), {
+        message: 'dateFrom must be a valid date',
+      }),
+
+    dateTo: z
+      .string()
+      .optional()
+      .refine((val) => !val || !isNaN(Date.parse(val)), {
+        message: 'dateTo must be a valid date',
+      }),
+  });
+
+  const validatedQuery = querySchema.parse(req.query);
+
+  // Validate date range if both dateFrom and dateTo are provided
+  if (validatedQuery.dateFrom && validatedQuery.dateTo) {
+    const fromDate = new Date(validatedQuery.dateFrom);
+    const toDate = new Date(validatedQuery.dateTo);
+    if (fromDate > toDate) {
+      throw new Error('dateFrom must be before dateTo');
+    }
+  }
+
+  return validatedQuery;
+});
+
 export default {
   getAllReturnsValidator,
   syncReturnsValidator,
@@ -306,4 +363,5 @@ export default {
   updateReturnValidator,
   getReturnByIdValidator,
   getReturnStatsValidator,
+  exportReturnsValidator,
 };
