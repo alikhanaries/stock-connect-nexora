@@ -162,6 +162,30 @@ const ProductSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    apparelSizeBodyType: {
+      type: String,
+      trim: true,
+      default: 'Regular',
+    },
+    specialSize: {
+      type: String,
+      trim: true,
+      default: 'Standard',
+    },
+    material: {
+      type: String,
+      trim: true,
+    },
+    closureType: {
+      type: String,
+      trim: true,
+      default: 'Pull On',
+    },
+    fitType: {
+      type: String,
+      trim: true,
+      default: 'Regular', // or 'Slim', 'Relaxed'
+    },
   },
   { timestamps: true }
 );
