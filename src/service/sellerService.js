@@ -115,33 +115,27 @@ export const getSellerById = async (id) => {
 };
 export const saveSellerPickUpAdressDetails = async (payload) => {
   try {
-    const { sellerId, city, address, postcode, country, phone, description, email } = payload;
+    const { city, address, postcode, country, phone, description, email } = payload;
 
     // Check mandatory fields
-    if (!sellerId || !city || !address || !postcode || !country || !phone || !email) {
+    if ( !city || !address || !postcode || !country || !phone || !email) {
       throw new Error('Missing required fields');
     }
 
-    // Fetch seller info
-    const seller = await Seller.findById(sellerId);
-    if (!seller) {
-      throw new Error('Seller not found');
-    }
     // Prepare pickup address data
     const pickupData = {
-      sellerId: seller._id,
-      name: seller.name,
-      email: email,
+      email,
       city,
       address,
       postcode,
       country,
       phone,
       description,
+      status: 'active',
     };
 
     // Use sellerId + address as unique key to decide update vs insert
-    const filter = { sellerId: seller._id, address: address };
+    const filter = { address: address };
 
     const savedAddress = await PickupAddress.findOneAndUpdate(
       filter,
@@ -155,8 +149,8 @@ export const saveSellerPickUpAdressDetails = async (payload) => {
   }
 };
 
-export const getAllPickupAddresses = async (sellerId) => {
-  return await PickupAddress.find({ sellerId, status: 'active' }).sort({ createdAt: -1 });
+export const getAllPickupAddresses = async () => {
+  return await PickupAddress.find({ status: 'active' }).sort({ createdAt: -1 });
 };
 
 // Update a pickup address
