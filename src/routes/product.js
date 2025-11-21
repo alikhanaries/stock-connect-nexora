@@ -11,6 +11,7 @@ import {
   getUserChannelProducts,
   addProductsToUserChannel,
   unlinkProductFromChannel,
+  exportProducts,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -18,6 +19,7 @@ import {
   importProductsFromCsvFileValidator,
   importProductsFromGoogleSheetValidator,
   unlinkProductFromChannelValidator,
+  exportProductsValidator,
 } from '#validations/products.js';
 import express from 'express';
 import {
@@ -136,4 +138,15 @@ productsRouter.get(
   verifySellerAccess,
   getUserUnassignedProducts
 );
+
+/* EXPORT PRODUCTS TO CSV */
+productsRouter.get(
+  '/export',
+  exportProductsValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  exportProducts
+);
+
 export default productsRouter;

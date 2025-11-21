@@ -8,6 +8,14 @@ import {
   validateHierarchyExistenceBatch,
 } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
+import {
+  formatDateTime,
+  escapeCsv,
+  generateCSVFilename,
+  createCSVExportResponse,
+  handleExportError,
+  validateExportData,
+} from '#helpers/Common.js';
 import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
@@ -910,6 +918,247 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
+export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
+  try {
+    const {
+      status,
+      search,
+      minPrice,
+      maxPrice,
+      productSkuCode,
+      size = 10000,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = filters;
+
+    const filter = {
+      status: { $ne: 'removed' },
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      productType: 'simple',
+    };
+
+    if (status) {
+      const statusValue = status.toString().trim().toLowerCase();
+      if (PRODUCT_STATUSES.includes(statusValue)) {
+        filter.status = statusValue;
+      }
+    }
+
+    if (productSkuCode) {
+      filter.productSkuCode = { $regex: new RegExp(productSkuCode, 'i') };
+    }
+
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+    }
+
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      filter.$or = [{ name: regex }, { productSkuCode: regex }];
+    }
+
+    // Sorting
+    const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+    const [products, totalCount] = await Promise.all([
+      Product.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
+      Product.countDocuments(filter),
+    ]);
+
+    const validation = validateExportData(products, 'products');
+    if (!validation.success) {
+      return validation;
+    }
+
+    const headers = [
+      'ID',
+      'Seller ID',
+      'Grand Parent Product SKU Code',
+      'Parent Product SKU Code',
+      'Product SKU Code',
+      'Name',
+      'Name (Arabic)',
+      'Description',
+      'Description (Arabic)',
+      'Brand',
+      'Attributes',
+      'EAN',
+      'Price',
+      'Min Price',
+      'Max Price',
+      'MSRP',
+      'Purchase Price',
+      'VAT Rate Type',
+      'Status',
+      'Shipping Cost',
+      'Shipping Time',
+      'Is Frozen',
+      'Category Trail',
+      'Category Trail Amazon',
+      'Category Trail Noon',
+      'Category Trail Trendyol',
+      'Market Place',
+      'Images',
+      'Current Stock Count',
+      'Volumetric Weight (CM)',
+      'HS Code AE',
+      'HS Code SA',
+      'Size',
+      'Color',
+      'Primary Image URL',
+      'Image URL',
+      'Extra Image URL 1',
+      'Extra Image URL 2',
+      'Extra Image URL 3',
+      'Model Name',
+      'Product Type',
+      'Gender',
+      'Age Range Description',
+      'Size Type',
+      'Product Care Instructions',
+      'Country of Origin',
+      'Department Name',
+      'Fabric Type',
+      'Style',
+      'Weave Type',
+      'Dangerous Goods Regulations',
+      'Skin Type',
+      'Safety Warning',
+      'Unit Count',
+      'Unit Count Type',
+      'Target Audience Keyword',
+      'Hair Type',
+      'Ingredients List',
+      'Search Terms',
+      'Scent',
+      'Number of Items',
+      'Manufacturer',
+      'Lifestyle',
+      'Heat Sensitive',
+      'Liquid Contents',
+      'Item Form',
+      'Rise Style',
+      'Intended Use',
+      'Product Benefit',
+      'Item Length',
+      'Item Width',
+      'Item Height',
+      'Special Feature',
+      'Bullet Point',
+      'Created At',
+      'Updated At',
+    ];
+
+    // Process products in parallel chunks for better performance
+    const CHUNK_SIZE = 1000; // Process 1000 products at a time
+    const chunks = [];
+    for (let i = 0; i < products.length; i += CHUNK_SIZE) {
+      chunks.push(products.slice(i, i + CHUNK_SIZE));
+    }
+
+    // Process each chunk in parallel
+    const processChunk = async (chunk) => {
+      return chunk.map((product) => {
+        const row = [
+          product._id?.toString() || 'N/A',
+          product.sellerId?.toString() || 'N/A',
+          product.grandParentProductSkuCode || 'N/A',
+          product.parentProductSkuCode || 'N/A',
+          product.productSkuCode || 'N/A',
+          product.name || 'N/A',
+          product.nameAr || 'N/A',
+          product.description || 'N/A',
+          product.descriptionAr || 'N/A',
+          product.brand || 'N/A',
+          product.attributes || 'N/A',
+          product.ean ? `="${product.ean}"` : 'N/A',
+          product.price || 0,
+          product.minPrice || 'N/A',
+          product.maxPrice || 'N/A',
+          product.msrp || 'N/A',
+          product.purchasePrice || 'N/A',
+          product.vatRateType || 'N/A',
+          product.status || 'N/A',
+          product.shippingCost || 0,
+          product.shippingTime || 'N/A',
+          product.isFrozen ? 'Yes' : 'No',
+          product.categoryTrail || 'N/A',
+          product.categoryTrailAmazon || 'N/A',
+          product.categoryTrailNoon || 'N/A',
+          product.categoryTrailTrendyol || 'N/A',
+          product.marketPlace || 'N/A',
+          Array.isArray(product.images) ? product.images.join('|') : product.images || 'N/A',
+          product.currentStockCount || 0,
+          product.volumetricWeightCm || 'N/A',
+          product.hsCodeAE || 'N/A',
+          product.hsCodeSA || 'N/A',
+          product.size || 'N/A',
+          product.color || 'N/A',
+          product.primaryImageUrl || 'N/A',
+          product.imageUrl || 'N/A',
+          product.extraImageUrl1 || 'N/A',
+          product.extraImageUrl2 || 'N/A',
+          product.extraImageUrl3 || 'N/A',
+          product.modelName || 'N/A',
+          product.productType || 'N/A',
+          product.gender || 'N/A',
+          product.ageRangeDescription || 'N/A',
+          product.sizeType || 'N/A',
+          product.productCareInstructions || 'N/A',
+          product.countryOfOrigin || 'N/A',
+          product.departmentName || 'N/A',
+          product.fabricType || 'N/A',
+          product.style || 'N/A',
+          product.weaveType || 'N/A',
+          product.dangerousGoodsRegulations || 'N/A',
+          product.skinType || 'N/A',
+          product.safetyWarning || 'N/A',
+          product.unitCount || 'N/A',
+          product.unitCountType || 'N/A',
+          product.targetAudienceKeyword || 'N/A',
+          product.hairType || 'N/A',
+          product.ingredientsList || 'N/A',
+          product.searchTerms || 'N/A',
+          product.scent || 'N/A',
+          product.numberOfItems || 'N/A',
+          product.manufacturer || 'N/A',
+          product.lifestyle || 'N/A',
+          product.heatSensitive ? 'Yes' : 'No',
+          product.liquidContents ? 'Yes' : 'No',
+          product.itemForm || 'N/A',
+          product.riseStyle || 'N/A',
+          product.intendedUse || 'N/A',
+          product.productBenefit || 'N/A',
+          product.itemLength || 'N/A',
+          product.itemWidth || 'N/A',
+          product.itemHeight || 'N/A',
+          product.specialFeature || 'N/A',
+          product.bulletPoint || 'N/A',
+          formatDateTime(product.createdAt)?.date || 'N/A',
+          formatDateTime(product.updatedAt)?.date || 'N/A',
+        ];
+
+        return escapeCsv(row);
+      });
+    };
+
+    const processedChunks = await Promise.all(chunks.map(processChunk));
+
+    // Flatten the results and create CSV
+    const csvRows = [headers.join(','), ...processedChunks.flat()];
+    const filename = generateCSVFilename('products');
+
+    return {
+      ...createCSVExportResponse(csvRows, filename, products.length),
+      totalCount,
+    };
+  } catch (error) {
+    return handleExportError(error, 'products');
+  }
+};
+
 export default {
   fetchProducts,
   importProductsFromCsvFile,
@@ -925,4 +1174,5 @@ export default {
   unlinkProductFromChannel,
   validateProducts,
   pushProductsAsync,
+  exportProductsToCSV,
 };
