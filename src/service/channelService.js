@@ -104,7 +104,7 @@ const getAllChannels = async (query, sellerId) => {
       mongoQuery.channelName = { $regex: search, $options: 'i' };
     }
 
-    // 🔹 Find channels already linked to this user
+    //  Find channels already linked to this user
     const userChannels = await UserChannels.find({ sellerId }, { 'channelIds.id': 1 }).lean();
     if (userChannels?.length) {
       const excludedChannelIds = userChannels.flatMap((uc) => uc.channelIds.map((c) => c.id));
@@ -190,9 +190,14 @@ export const getAllUserChannels = async (sellerId, query) => {
       sellerId: new ObjectId(sellerId),
       ...(status ? { 'channelIds.status': status } : { 'channelIds.status': { $in: ['active', 'inactive'] } }),
     };
+
     const pipeline = [
-      { $match: baseMatch },
+      // Unwind first so match works on each channelIds entry
       { $unwind: '$channelIds' },
+
+      // Now apply the baseMatch (status filtering happens correctly)
+      { $match: baseMatch },
+
       {
         $lookup: {
           from: 'channels',
@@ -202,7 +207,19 @@ export const getAllUserChannels = async (sellerId, query) => {
         },
       },
       { $unwind: '$channelDetails' },
-      ...(search ? [{ $match: { 'channelDetails.channelName': { $regex: search, $options: 'i' } } }] : []),
+
+      ...(search
+        ? [
+            {
+              $match: {
+                'channelDetails.channelName': {
+                  $regex: search,
+                  $options: 'i',
+                },
+              },
+            },
+          ]
+        : []),
       // Orders count
       {
         $lookup: {
@@ -250,8 +267,12 @@ export const getAllUserChannels = async (sellerId, query) => {
             channelImageUrl: '$channelDetails.channelImageUrl',
             status: '$channelIds.status',
             createdAt: '$channelIds.createdAt',
-            ordersCount: { $ifNull: [{ $arrayElemAt: ['$ordersInfo.count', 0] }, 0] },
-            productsCount: { $ifNull: [{ $arrayElemAt: ['$productsInfo.count', 0] }, 0] },
+            ordersCount: {
+              $ifNull: [{ $arrayElemAt: ['$ordersInfo.count', 0] }, 0],
+            },
+            productsCount: {
+              $ifNull: [{ $arrayElemAt: ['$productsInfo.count', 0] }, 0],
+            },
             sampleTemplate: '$channelDetails.sampleTemplate',
           },
         },
