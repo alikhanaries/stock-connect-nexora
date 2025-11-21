@@ -184,7 +184,13 @@ const ProductSchema = new mongoose.Schema(
     fitType: {
       type: String,
       trim: true,
-      default: 'Regular', // or 'Slim', 'Relaxed'
+      default: 'Regular',
+    },
+    bottomsHeightType: {
+      type: String,
+      trim: true,
+      default: 'Regular',
+      enum: ['Regular', 'Short', 'Tall', 'Extra Tall', 'Petite', 'Big & Tall'],
     },
   },
   { timestamps: true }
