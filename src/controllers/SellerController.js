@@ -134,10 +134,9 @@ export const getAllSeller = async (req, res) => {
 
 export const getAllPickupAddresses = async (req, res) => {
   try {
-    const sellerId = req.params.id;
 
     // Directly query PickupAddress collection
-    const pickupAddresses = await sellerService.getAllPickupAddresses(sellerId);
+    const pickupAddresses = await sellerService.getAllPickupAddresses();
     const message =
       pickupAddresses && pickupAddresses.length > 0
         ? 'Pickup addresses fetched successfully'
