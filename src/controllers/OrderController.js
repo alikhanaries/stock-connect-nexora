@@ -256,11 +256,15 @@ export const exportOrders = async (req, res) => {
     const sellerId = req.sellerId;
     const { status, platform, search, fromDate, toDate } = req.query;
 
-    const filters = Object.fromEntries(
-      Object.entries({ status, platform, search, fromDate, toDate }).filter(([, v]) => v != null && v !== '')
-    );
+    // Build filters only with non-empty values
+    const filters = {};
+    if (status) filters.status = status;
+    if (platform) filters.platform = platform;
+    if (search) filters.search = search;
+    if (fromDate) filters.fromDate = fromDate;
+    if (toDate) filters.toDate = toDate;
 
-    // Remove undefined values
+    // Remove any remaining undefined/empty values
     Object.keys(filters).forEach((key) => {
       if (!filters[key]) {
         delete filters[key];
@@ -273,13 +277,16 @@ export const exportOrders = async (req, res) => {
       return Responses.failResponse(res, result.message || req.locale.NO_ORDERS_FOUND, 404);
     }
 
-    // Set headers for CSV download
-    res.setHeader('Content-Type', 'text/csv');
+    // Set headers for CSV download with UTF-8 encoding
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
 
-    return res.status(200).send(result.data);
+    // Add UTF-8 BOM for proper encoding
+    const csvWithBOM = '\uFEFF' + result.data;
+
+    return res.status(200).send(csvWithBOM);
   } catch (error) {
     console.error('Controller Error: exportOrders:', error.message);
     errorLog(error);

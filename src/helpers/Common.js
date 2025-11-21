@@ -25,11 +25,87 @@ export const formatCustomerName = (customer) => {
   const lastName = customer.lastName ? String(customer.lastName).trim() : '';
 
   return `${firstName} ${lastName}`.trim() || '';
+// Helper function for escaping CSV fields
+export const escapeCsv = (row) => {
+  return row
+    .map((f) => {
+      const str = String(f ?? '');
+      // Need to wrap in quotes if contains comma, quotes, or newlines
+      return str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')
+        ? `"${str.replace(/"/g, '""')}"`
+        : str;
+    })
+    .join(',');
+};
+
+// Helper function to format customer name from firstName and lastName
+export const formatCustomerName = (customer) => {
+  if (!customer || typeof customer !== 'object') return '';
+
+  const firstName = customer.firstName ? String(customer.firstName).trim() : '';
+  const lastName = customer.lastName ? String(customer.lastName).trim() : '';
+
+  return `${firstName} ${lastName}`.trim() || '';
+};
+
+// Helper function to create CSV export filename with timestamp
+export const generateCSVFilename = (prefix = 'data') => {
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+  return `${prefix}-export-${timestamp}.csv`;
+};
+
+// Helper function to validate export data and return standardized response
+export const validateExportData = (data, entityName = 'items') => {
+  if (!data || !Array.isArray(data) || !data.length) {
+    return { success: false, message: `No ${entityName} found for export` };
+  }
+  return { success: true, data };
+};
+
+// Helper function to create CSV export response structure
+export const createCSVExportResponse = (csvRows = [], filename = 'export.csv', count = 0) => {
+  return {
+    success: true,
+    data: csvRows.join('\n'),
+    filename,
+    count,
+  };
+};
+
+// Helper function to handle export errors
+export const handleExportError = (error, entityName) => {
+  console.error(`Error exporting ${entityName} to CSV:`, error.message);
+  return {
+    success: false,
+    message: `Error generating CSV export for ${entityName}`,
+    error: error.message,
+  };
+};
+
+// Helper function to format address fields for CSV
+export const formatAddressForCSV = (address) => {
+  if (!address) return ['', '', '', '', '', '', ''];
+  return [
+    address.line1 || '',
+    address.line2 || '',
+    address.line3 || '',
+    address.city || '',
+    address.region || '',
+    address.zipCode || '',
+    address.countryIso || '',
+  ];
 };
 
 export default {
   formatDateTime,
   formatCustomerName,
+  escapeCsv,
+  formatCustomerName,
+  generateCSVFilename,
+  validateExportData,
+  createCSVExportResponse,
+  handleExportError,
+  formatAddressForCSV,
 };
 
 export const convetDateToUTC = (dateTime) => {

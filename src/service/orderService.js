@@ -9,10 +9,21 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo, syncShipmentStatus } from '#service/shipmentService.js';
-import { formatDateTime, escapeCsv } from '#helpers/Common.js';
+import {
+  formatDateTime,
+  escapeCsv,
+  generateCSVFilename,
+  createCSVExportResponse,
+  handleExportError,
+  validateExportData,
+  formatCustomerName,
+  formatAddressForCSV,
+} from '#helpers/Common.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
+
+const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
 const formatOrder = (order, channelImage) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
@@ -908,110 +919,277 @@ export const formatOrderTrackingInf = (data) => {
 
 export const exportOrdersToCSV = async (sellerId = null, filters = {}) => {
   try {
-    const query = { ...filters, sellerId, size: 1000, page: 1, sortBy: 'orderDate', sortOrder: 'desc' };
-    const { data: basicResult } = await getAllOrders(query, sellerId);
+    const {
+      status,
+      platform,
+      search,
+      fromDate,
+      toDate,
+      size = 10000, // Export a large number by default
+      sortBy = 'orderDate',
+      sortOrder = 'desc',
+    } = filters;
 
-    if (!basicResult?.length) {
-      return { success: false, message: 'No orders found for export' };
+    const filter = { sellerId: sellerId };
+
+    // Apply filters similar to getAllOrders
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      filter.$or = [
+        { orderId: regex },
+        { merchantOrderNo: regex },
+        { 'orderCustomer.firstName': regex },
+        { 'orderCustomer.lastName': regex },
+        { 'orderCustomer.email': regex },
+      ];
     }
 
-    const orderIds = basicResult.map((item) => item._id);
-    const detailedResults = await Order.find({ _id: { $in: orderIds } }).lean();
+    if (platform) {
+      filter.channelName = { $regex: new RegExp(platform, 'i') };
+    }
 
-    if (!detailedResults?.length) return { success: false, message: 'No detailed order data found for export' };
+    if (fromDate || toDate) {
+      filter.orderDate = {};
+      if (fromDate) filter.orderDate.$gte = new Date(fromDate);
+      if (toDate) filter.orderDate.$lte = new Date(toDate);
+    }
 
+    if (status) {
+      const statusList = status.split(',').map((s) => s.trim());
+      const validStatuses = statusList.filter((s) => Object.keys(ORDER_STATUS_MAP).includes(s.toUpperCase()));
+      if (validStatuses.length > 0) {
+        filter.status = { $in: validStatuses };
+      }
+    }
+
+    // Sorting
+    const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+    // Fetch orders and count in parallel for better performance
+    const [orders, totalCount] = await Promise.all([
+      Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
+      Order.countDocuments(filter),
+    ]);
+
+    // Validate export data
+    const validation = validateExportData(orders, 'orders');
+    if (!validation.success) {
+      return validation;
+    }
+
+    // Define CSV headers with multi-product support
     const headers = [
+      'ID',
       'Order ID',
-      'Platform',
+      'Seller ID',
+      'Channel ID',
+      'Global Channel ID',
       'Status',
+      'Global Channel Name',
+      'Channel Name',
       'Order Date',
-      'Customer Name',
+      'Merchant Comment',
+      'Merchant Order No',
+      'Is Business Order',
+      'Sub Total Incl VAT',
+      'Sub Total VAT',
+      'Shipping Costs Incl VAT',
+      'Shipping Costs VAT',
+      'Total Incl VAT',
+      'Total VAT',
+      'Original Sub Total Incl VAT',
+      'Original Sub Total VAT',
+      'Original Shipping Costs Incl VAT',
+      'Original Shipping Costs VAT',
+      'Original Total Incl VAT',
+      'Original Total VAT',
+      'Sub Total Excl VAT',
+      'Total Excl VAT',
+      'Shipping Costs Excl VAT',
+      'Original Sub Total Excl VAT',
+      'Original Shipping Costs Excl VAT',
+      'Original Total Excl VAT',
+      'Original Sub Total Fee',
+      'Sub Total Fee',
+      'Original Order Fee',
+      'Order Fee',
+      'Original Total Fee',
+      'Total Fee',
+      'Customer First Name',
+      'Customer Last Name',
       'Customer Email',
       'Customer Phone',
-      'Payment Method',
-      'Currency',
-      'Product SKU',
-      'Product Name',
-      'Product ID',
-      'Quantity',
-      'Unit Price',
-      'Total Price',
+      'Customer Company Name',
+      'Customer VAT Number',
       'Shipping Address Line 1',
       'Shipping Address Line 2',
-      'Shipping City',
-      'Shipping State',
-      'Shipping Postal Code',
-      'Shipping Country',
+      'Shipping Address Line 3',
+      'Shipping Address City',
+      'Shipping Address Region',
+      'Shipping Address Zip Code',
+      'Shipping Address Country ISO',
       'Billing Address Line 1',
       'Billing Address Line 2',
-      'Billing City',
-      'Billing State',
-      'Billing Postal Code',
-      'Billing Country',
+      'Billing Address Line 3',
+      'Billing Address City',
+      'Billing Address Region',
+      'Billing Address Zip Code',
+      'Billing Address Country ISO',
+      'Payment Method',
+      'Currency Code',
+      'Products Count',
+      'Total Products Quantity',
+      'Product SKU',
+      'Product Line ID',
+      'Product Description',
+      'Product Quantity',
+      'Product Unit Price Incl VAT',
+      'Product Line Total Incl VAT',
+      'Product Status',
+      'Created At',
+      'Updated At',
     ];
+
     const csvRows = [headers.join(',')];
 
-    detailedResults.forEach((order) => {
-      const customerName = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
-      const shipping = order.orderShippingAddress || {};
-      const billing = order.orderBillingAddress || {};
-      const skuList = order.orderSkuList?.skuList || [];
+    // Process orders in parallel chunks for better performance
+    const chunks = [];
+    for (let i = 0; i < orders.length; i += EXPORT_CHUNK_SIZE) {
+      chunks.push(orders.slice(i, i + EXPORT_CHUNK_SIZE));
+    }
 
-      const baseRow = [
-        order.orderId || '',
-        order.channelName || '',
-        order.status || '',
-        formatDateTime(order.orderDate)?.date || '',
-        customerName || '',
-        order.orderCustomer?.email || '',
-        order.orderCustomer?.phone || '',
-        order.orderPaymentDetails?.paymentMethod || '',
-        order.orderPaymentDetails?.currencyCode || '',
-      ];
+    // Process each chunk in parallel
+    const processChunk = async (chunk) => {
+      return chunk.map((order) => {
+        const shippingAddress = formatAddressForCSV(order.orderShippingAddress);
+        const billingAddress = formatAddressForCSV(order.orderBillingAddress);
+        const skuList = order.orderSkuList?.skuList || [];
 
-      const addressRows = [
-        shipping.line1 || '',
-        shipping.line2 || '',
-        shipping.city || '',
-        shipping.region || '',
-        shipping.zipCode || '',
-        shipping.countryIso || '',
-        billing.line1 || '',
-        billing.line2 || '',
-        billing.city || '',
-        billing.region || '',
-        billing.zipCode || '',
-        billing.countryIso || '',
-      ];
+        // Calculate product stats
+        const productCount = skuList.length;
+        const totalQuantity = skuList.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
 
-      if (!skuList?.length) {
-        csvRows.push(escapeCsv([...baseRow, '', '', '', 0, 0, 0, ...addressRows]));
-      } else {
-        skuList.forEach((sku) => {
-          const productRow = [
-            ...baseRow,
-            sku.merchantProductNo || '',
-            sku.description || 'Product',
-            sku.id || '',
-            sku.quantity || 0,
-            sku.unitPriceInclVat || 0,
-            (sku.unitPriceInclVat || 0) * (sku.quantity || 0),
-            ...addressRows,
-          ];
-          csvRows.push(escapeCsv(productRow));
-        });
-      }
-    });
+        // Base order data (same for all product rows)
+        const baseRow = [
+          order._id?.toString() || 'N/A',
+          order.orderId || 'N/A',
+          order.sellerId?.toString() || 'N/A',
+          order.channelId || 'N/A',
+          order.globalChannelId || 'N/A',
+          order.status || 'N/A',
+          order.globalChannelName || 'N/A',
+          order.channelName || 'N/A',
+          formatDateTime(order.orderDate)?.date || 'N/A',
+          order.merchantComment || 'N/A',
+          order.merchantOrderNo || 'N/A',
+          order.isBusinessOrder ? 'Yes' : 'No',
+          order.subTotalInclVat || 0,
+          order.subTotalVat || 0,
+          order.shippingCostsInclVat || 0,
+          order.shippingCostsVat || 0,
+          order.totalInclVat || 0,
+          order.totalVat || 0,
+          order.originalSubTotalInclVat || 0,
+          order.originalSubTotalVat || 0,
+          order.originalShippingCostsInclVat || 0,
+          order.originalShippingCostsVat || 0,
+          order.originalTotalInclVat || 0,
+          order.originalTotalVat || 0,
+          order.subTotalExclVat || 0,
+          order.totalExclVat || 0,
+          order.shippingCostsExclVat || 0,
+          order.originalSubTotalExclVat || 0,
+          order.originalShippingCostsExclVat || 0,
+          order.originalTotalExclVat || 0,
+          order.originalSubTotalFee || 0,
+          order.subTotalFee || 0,
+          order.originalOrderFee || 0,
+          order.orderFee || 0,
+          order.originalTotalFee || 0,
+          order.totalFee || 0,
+          order.orderCustomer?.firstName || 'N/A',
+          order.orderCustomer?.lastName || 'N/A',
+          order.orderCustomer?.email || 'N/A',
+          order.orderCustomer?.phone || 'N/A',
+          order.orderCustomer?.companyName || 'N/A',
+          order.orderPaymentDetails?.vatNo || 'N/A',
+          ...shippingAddress,
+          ...billingAddress,
+          order.orderPaymentDetails?.paymentMethod || 'N/A',
+          order.orderPaymentDetails?.currencyCode || 'N/A',
+          productCount,
+          totalQuantity,
+        ];
+
+        // Handle multi-product data similar to shipments
+        let productSKUs = 'N/A';
+        let productLineIds = 'N/A';
+        let productDescriptions = 'N/A';
+        let productQuantities = 'N/A';
+        let productUnitPrices = 'N/A';
+        let productLineTotals = 'N/A';
+        let productStatuses = 'N/A';
+
+        if (skuList && skuList.length > 0) {
+          if (skuList.length === 1) {
+            // Single product - show actual data
+            const product = skuList[0];
+            productSKUs = product.merchantProductNo || 'N/A';
+            productLineIds = product.id || 'N/A';
+            productDescriptions = product.description || 'N/A';
+            productQuantities = product.quantity || 0;
+            productUnitPrices = product.unitPriceInclVat || 0;
+            productLineTotals = product.lineTotalInclVat || 0;
+            productStatuses = product.status || 'N/A';
+          } else {
+            // Multiple products - show header + details
+            const skus = skuList.map((p) => p.merchantProductNo || 'N/A');
+            const lineIds = skuList.map((p) => p.id || 'N/A');
+            const descriptions = skuList.map((p) => p.description || 'N/A');
+            const quantities = skuList.map((p) => p.quantity || 0);
+            const unitPrices = skuList.map((p) => p.unitPriceInclVat || 0);
+            const lineTotals = skuList.map((p) => p.lineTotalInclVat || 0);
+            const statuses = skuList.map((p) => p.status || 'N/A');
+
+            productSKUs = 'MULTI-PRODUCTS\n' + skus.join('\n');
+            productLineIds = 'MULTI-PRODUCTS\n' + lineIds.join('\n');
+            productDescriptions = 'MULTI-PRODUCTS\n' + descriptions.join('\n');
+            productQuantities = 'MULTI-PRODUCTS\n' + quantities.join('\n');
+            productUnitPrices = 'MULTI-PRODUCTS\n' + unitPrices.join('\n');
+            productLineTotals = 'MULTI-PRODUCTS\n' + lineTotals.join('\n');
+            productStatuses = 'MULTI-PRODUCTS\n' + statuses.join('\n');
+          }
+        }
+
+        const singleRow = [
+          ...baseRow,
+          productSKUs,
+          productLineIds,
+          productDescriptions,
+          productQuantities,
+          productUnitPrices,
+          productLineTotals,
+          productStatuses,
+          formatDateTime(order.createdAt)?.date || 'N/A',
+          formatDateTime(order.updatedAt)?.date || 'N/A',
+        ];
+
+        return escapeCsv(singleRow);
+      });
+    };
+
+    // Process all chunks in parallel
+    const processedChunks = await Promise.all(chunks.map(processChunk));
+
+    csvRows.push(...processedChunks.flat());
+    const filename = generateCSVFilename('orders');
 
     return {
-      success: true,
-      data: csvRows.join('\n'),
-      filename: `orders-export-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.csv`,
-      count: detailedResults.length,
+      ...createCSVExportResponse(csvRows, filename, orders.length),
+      totalCount,
     };
   } catch (error) {
-    console.error('Error exporting orders to CSV:', error.message);
-    return { success: false, message: 'Error generating CSV export', error: error.message };
+    return handleExportError(error, 'orders');
   }
 };
 
