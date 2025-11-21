@@ -32,7 +32,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SI
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
-const CHUNK_SIZE = parseInt(process.env.CHUNK_SIZE || '1000', 10);
+const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 const MAX_RETRIES = 3;
 
 const fetchProducts = async (query, sellerId) => {
@@ -1056,8 +1056,8 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
 
     // Process products in parallel chunks for better performance
     const chunks = [];
-    for (let i = 0; i < products.length; i += CHUNK_SIZE) {
-      chunks.push(products.slice(i, i + CHUNK_SIZE));
+    for (let i = 0; i < products.length; i += EXPORT_CHUNK_SIZE) {
+      chunks.push(products.slice(i, i + EXPORT_CHUNK_SIZE));
     }
 
     // Process each chunk in parallel
