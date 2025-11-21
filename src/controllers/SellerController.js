@@ -166,13 +166,25 @@ export const savePickupAddress = async (req, res) => {
 export const getAyMakanCities = async (req, res) => {
   try {
     const result = await getAymakanShipmentCities();
+    const cities = result?.data?.cities || [];
 
     if (!result.data.cities) {
       // This can happen if service returns false for invalid inputs
       return response.errorResponse(res, 'No city found', 400, null);
     }
 
-    return response.successResponse(res, 'Cities found', 200, result.data.cities);
+    const uniqueCities = Array.from(
+      new Map(
+        cities
+          .filter((c) => typeof c.city_en === 'string' && c.city_en.trim())
+          .map((c) => [c.city_en.trim().toLowerCase(), c])
+      ).values()
+    );
+
+    if (uniqueCities.length === 0) {
+      return response.errorResponse(res, 'No valid city_en found', 404, []);
+    }
+    return response.successResponse(res, 'Cities found', 200, uniqueCities);
   } catch (error) {
     console.error('Create Shipment Controller Error:', error.message, error.stack);
     return response.errorResponse(res, error?.message || 'Internal error', 400);
