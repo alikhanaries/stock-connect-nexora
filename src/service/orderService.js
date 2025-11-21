@@ -16,7 +16,6 @@ import {
   createCSVExportResponse,
   handleExportError,
   validateExportData,
-  formatCustomerName,
   formatAddressForCSV,
 } from '#helpers/Common.js';
 import OrderLogs from '#models/OrderLogs.js';
