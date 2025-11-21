@@ -344,13 +344,17 @@ export const exportProducts = async (req, res) => {
     const sellerId = req.sellerId;
     const { status, search, minPrice, maxPrice, productSkuCode, sortBy, sortOrder } = req.query;
 
-    const filters = Object.fromEntries(
-      Object.entries({ status, search, minPrice, maxPrice, productSkuCode, sortBy, sortOrder }).filter(
-        ([, v]) => v != null && v !== ''
-      )
-    );
+    // Build filters only with non-empty values
+    const filters = {};
+    if (status) filters.status = status;
+    if (search) filters.search = search;
+    if (minPrice) filters.minPrice = minPrice;
+    if (maxPrice) filters.maxPrice = maxPrice;
+    if (productSkuCode) filters.productSkuCode = productSkuCode;
+    if (sortBy) filters.sortBy = sortBy;
+    if (sortOrder) filters.sortOrder = sortOrder;
 
-    // Remove undefined values
+    // Remove any remaining undefined/empty values
     Object.keys(filters).forEach((key) => {
       if (!filters[key]) {
         delete filters[key];
