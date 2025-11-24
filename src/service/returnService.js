@@ -9,7 +9,15 @@ import {
   buildReturnAggregationPipeline,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
-import { formatDateTime, escapeCsv } from '#helpers/Common.js';
+import {
+  escapeCsv,
+  generateCSVFilename,
+  createCSVExportResponse,
+  handleExportError,
+  validateExportData,
+  generateDynamicHeaders,
+  generateDynamicRowData,
+} from '#helpers/export.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
 
@@ -517,139 +525,40 @@ export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
     const query = { ...filters, sellerId, size: 1000, page: 1, sortBy: 'createdAt', sortOrder: 'desc' };
     const basicResult = await getReturnsFromDatabase(query);
 
-    if (!basicResult.success || !basicResult.data?.length) {
-      return { success: false, message: 'No returns found for export' };
+    // Use the standardized validation
+    const validation = validateExportData(basicResult.data, 'returns');
+    if (!validation.success) {
+      return validation;
     }
 
     const returnIds = basicResult.data.map((item) => new mongoose.Types.ObjectId(item._id));
     const pipeline = buildReturnAggregationPipeline();
 
-    pipeline.push(
-      { $match: { _id: { $in: returnIds } } },
-      {
-        $addFields: {
-          customerName: {
-            $trim: {
-              input: {
-                $concat: [
-                  { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
-                  ' ',
-                  { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
-                ],
-              },
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          returnId: 1,
-          orderId: 1,
-          platform: 1,
-          status: 1,
-          placedOn: 1,
-          createdAt: 1,
-          products: 1,
-          customerName: 1,
-          'orderInfo.orderId': 1,
-          'orderInfo.orderCustomer.email': 1,
-          'orderInfo.orderCustomer.phone': 1,
-          'orderInfo.orderShippingAddress': 1,
-          'orderInfo.orderSkuList.skuList': 1,
-        },
-      }
-    );
+    pipeline.push({ $match: { _id: { $in: returnIds } } });
 
     const detailedResults = await Return.aggregate(pipeline);
-    if (!detailedResults?.length) return { success: false, message: 'No detailed return data found for export' };
 
-    const headers = [
-      'Return ID',
-      'Order ID',
-      'Platform',
-      'Status',
-      'Placed On',
-      'Returned At',
-      'Product SKU',
-      'Product Name',
-      'Product ID',
-      'Quantity',
-      'Accepted Quantity',
-      'Rejected Quantity',
-      'Unit Price',
-      'Total Price',
-      'Customer Name',
-      'Customer Email',
-      'Customer Phone',
-      'Shipping Address Line 1',
-      'Shipping Address Line 2',
-      'Shipping City',
-      'Shipping State',
-      'Shipping Postal Code',
-      'Shipping Country',
-    ];
+    // Validate detailed results
+    const detailedValidation = validateExportData(detailedResults, 'detailed return data');
+    if (!detailedValidation.success) {
+      return detailedValidation;
+    }
+
+    // Generate dynamic headers from Return schema
+    const headers = generateDynamicHeaders(Return);
     const csvRows = [headers.join(',')];
 
+    // Generate CSV rows with dynamic data
     detailedResults.forEach((item) => {
-      const { returnId, orderId, platform, status, placedOn, createdAt, products, orderInfo, customerName } = item;
-      const customer = orderInfo?.orderCustomer || {};
-      const shipping = orderInfo?.orderShippingAddress || {};
-      const orderSkus = orderInfo?.orderSkuList?.skuList || [];
-
-      const baseRow = [
-        returnId || '',
-        orderId || orderInfo?.orderId || '',
-        platform || '',
-        status || '',
-        formatDateTime(placedOn)?.date || '',
-        formatDateTime(createdAt)?.date || '',
-      ];
-
-      const addressRow = [
-        customerName?.trim() || '',
-        customer.email || '',
-        customer.phone || '',
-        shipping.line1 || '',
-        shipping.line2 || '',
-        shipping.city || '',
-        shipping.region || '',
-        shipping.zipCode || '',
-        shipping.countryIso || '',
-      ];
-
-      if (!products?.length) {
-        csvRows.push(escapeCsv([...baseRow, '', '', '', 0, 0, 0, 0, 0, ...addressRow]));
-      } else {
-        products.forEach((product) => {
-          const sku = orderSkus.find((s) => s.id === product.orderLineId);
-          const unitPrice = sku?.unitPriceInclVat || 0;
-          const quantity = product.quantity || 0;
-          const productRow = [
-            ...baseRow,
-            product.productSkuCode || sku?.merchantProductNo || '',
-            sku?.description || 'Product',
-            product.orderLineId || '',
-            quantity,
-            product.acceptedQuantity || 0,
-            product.rejectedQuantity || 0,
-            unitPrice,
-            unitPrice * quantity,
-            ...addressRow,
-          ];
-          csvRows.push(escapeCsv(productRow));
-        });
-      }
+      const row = generateDynamicRowData(item, Return);
+      csvRows.push(escapeCsv(row));
     });
 
-    return {
-      success: true,
-      data: csvRows.join('\n'),
-      filename: `returns-export-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.csv`,
-      count: detailedResults.length,
-    };
+    // Use standardized response creation
+    const filename = generateCSVFilename('returns');
+    return createCSVExportResponse(csvRows, filename, detailedResults.length);
   } catch (error) {
-    console.error('Error exporting returns to CSV:', error.message);
-    return { success: false, message: 'Error generating CSV export', error: error.message };
+    return handleExportError(error, 'returns');
   }
 };
 export const getReturnsForWebhook = async (queryParams = {}) => {

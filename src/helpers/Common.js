@@ -17,19 +17,19 @@ export const formatDateTime = (isoString) => {
   return { date, time };
 };
 
-// Helper function for escaping CSV fields
-export const escapeCsv = (row) => {
-  return row
-    .map((f) => {
-      const str = String(f ?? '');
-      return str.includes(',') || str.includes('"') ? `"${str.replace(/"/g, '""')}"` : str;
-    })
-    .join(',');
+// Helper function to format customer name from firstName and lastName
+export const formatCustomerName = (customer) => {
+  if (!customer || typeof customer !== 'object') return '';
+
+  const firstName = customer.firstName ? String(customer.firstName).trim() : '';
+  const lastName = customer.lastName ? String(customer.lastName).trim() : '';
+
+  return `${firstName} ${lastName}`.trim() || '';
 };
 
 export default {
   formatDateTime,
-  escapeCsv,
+  formatCustomerName,
 };
 
 export const convetDateToUTC = (dateTime) => {
