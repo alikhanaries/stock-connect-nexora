@@ -27,8 +27,8 @@ export const getAllOrdersValidator = validate(async (req) => {
     size: z
       .string()
       .optional()
-      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0 && Number(val) <= 100), {
-        message: 'size must be a positive number between 1 and 100',
+      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0 && Number(val) <= 200), {
+        message: 'size must be a positive number between 1 and 200',
       })
       .transform((val) => (val ? Number(val) : 10)),
 
