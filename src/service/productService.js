@@ -69,11 +69,12 @@ const fetchProducts = async (query, sellerId) => {
   }
 
   // Product type filter
-  const resolvedProductType = productType ? String(productType).toLowerCase() : 'simple';
-  appliedFilters.productType = resolvedProductType;
-
   if (productType) {
+    const resolvedProductType = String(productType).toLowerCase();
     filter.productType = resolvedProductType;
+    appliedFilters.productType = resolvedProductType;
+  } else {
+    filter.productType = 'simple';
   }
 
   //stock count filter
