@@ -67,10 +67,13 @@ const fetchProducts = async (query, sellerId) => {
     if (minPrice) ((filter.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
     if (maxPrice) ((filter.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
   }
-  //product type filter
+
+  // Product type filter
+  const resolvedProductType = productType ? String(productType).toLowerCase() : 'simple';
+  appliedFilters.productType = resolvedProductType;
+
   if (productType) {
-    filter.productType = productType;
-    appliedFilters.productType = productType;
+    filter.productType = resolvedProductType;
   }
 
   //stock count filter
