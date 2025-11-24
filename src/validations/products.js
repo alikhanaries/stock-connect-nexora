@@ -397,6 +397,13 @@ export const getUserChannelProductsValidator = validate(async (req) => {
           message: "status must be either 'active' or 'inactive'",
         }),
 
+      currentStockCount: z
+        .number()
+        .regex(/^\d+(\.\d+)?$/, 'currentStockCount must be a number')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'currentStockCount cannot be negative' })
+        .optional(),
+
       minPrice: z
         .string()
         .regex(/^\d+(\.\d+)?$/, 'minPrice must be a number string')
