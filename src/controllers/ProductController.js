@@ -338,6 +338,52 @@ export const unlinkProductFromChannel = async (req, res) => {
   }
 };
 
+// Exports products data as CSV file for a specific seller.
+export const exportProducts = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { status, search, minPrice, maxPrice, productSkuCode, sortBy, sortOrder } = req.query;
+
+    // Build filters only with non-empty values
+    const filters = {};
+    if (status) filters.status = status;
+    if (search) filters.search = search;
+    if (minPrice) filters.minPrice = minPrice;
+    if (maxPrice) filters.maxPrice = maxPrice;
+    if (productSkuCode) filters.productSkuCode = productSkuCode;
+    if (sortBy) filters.sortBy = sortBy;
+    if (sortOrder) filters.sortOrder = sortOrder;
+
+    // Remove any remaining undefined/empty values
+    Object.keys(filters).forEach((key) => {
+      if (!filters[key]) {
+        delete filters[key];
+      }
+    });
+
+    const result = await productService.exportProductsToCSV(sellerId, filters);
+
+    if (!result.success) {
+      return failResponse(res, result.message || req.locale.NO_PRODUCTS_FOUND, 404);
+    }
+
+    // Set headers for CSV download with UTF-8 encoding
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    // Add UTF-8 BOM for proper encoding
+    const csvWithBOM = '\uFEFF' + result.data;
+
+    return res.status(200).send(csvWithBOM);
+  } catch (error) {
+    console.error('Controller Error: exportProducts:', error.message);
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getProducts,
   getTopSellingProduct,
@@ -351,4 +397,5 @@ export default {
   getUserUnassignedProducts,
   addProductsToUserChannel,
   unlinkProductFromChannel,
+  exportProducts,
 };

@@ -8,6 +8,15 @@ import {
   validateHierarchyExistenceBatch,
 } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
+import {
+  escapeCsv,
+  generateCSVFilename,
+  createCSVExportResponse,
+  handleExportError,
+  validateExportData,
+  generateDynamicHeaders,
+  generateDynamicRowData,
+} from '#helpers/export.js';
 import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
@@ -24,6 +33,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SI
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
+const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 const MAX_RETRIES = 3;
 
 const fetchProducts = async (query, sellerId) => {
@@ -910,6 +920,92 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
+export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
+  try {
+    const {
+      status,
+      search,
+      minPrice,
+      maxPrice,
+      productSkuCode,
+      size = 100000,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = filters;
+
+    // Build filters only with non-empty values
+    const filter = {
+      status: { $ne: 'removed' },
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+    };
+
+    // Apply filters directly if they exist
+    if (status) {
+      const statusValue = status.toString().trim().toLowerCase();
+      if (PRODUCT_STATUSES.includes(statusValue)) {
+        filter.status = statusValue;
+      }
+    }
+
+    if (productSkuCode) {
+      filter.productSkuCode = { $regex: new RegExp(productSkuCode, 'i') };
+    }
+
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+    }
+
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      filter.$or = [{ name: regex }, { productSkuCode: regex }];
+    }
+
+    // Sorting
+    const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+    const [products, totalCount] = await Promise.all([
+      Product.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
+      Product.countDocuments(filter),
+    ]);
+
+    const validation = validateExportData(products, 'products');
+    if (!validation.success) {
+      return validation;
+    }
+
+    const headers = generateDynamicHeaders(Product);
+
+    // Process products in parallel chunks for better performance
+    const chunks = [];
+    for (let i = 0; i < products.length; i += EXPORT_CHUNK_SIZE) {
+      chunks.push(products.slice(i, i + EXPORT_CHUNK_SIZE));
+    }
+
+    // Process each chunk in parallel using dynamic row generation
+    const processChunk = async (chunk) => {
+      return chunk.map((product) => {
+        const row = generateDynamicRowData(product, Product);
+        return escapeCsv(row);
+      });
+    };
+
+    const processedChunks = await Promise.all(chunks.map(processChunk));
+
+    // Flatten the results and create CSV
+    const csvRows = [headers.join(','), ...processedChunks.flat()];
+    const filename = generateCSVFilename('products');
+
+    return {
+      ...createCSVExportResponse(csvRows, filename, products.length),
+      totalCount,
+    };
+  } catch (error) {
+    return handleExportError(error, 'products');
+  }
+};
+
 export default {
   fetchProducts,
   importProductsFromCsvFile,
@@ -925,4 +1021,5 @@ export default {
   unlinkProductFromChannel,
   validateProducts,
   pushProductsAsync,
+  exportProductsToCSV,
 };

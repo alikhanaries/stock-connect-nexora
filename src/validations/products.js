@@ -535,3 +535,67 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+
+// /* EXPORT PRODUCTS VALIDATOR */
+export const exportProductsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z
+    .object({
+      status: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['active', 'inactive'].includes(val), {
+          message: "status must be either 'active' or 'inactive'",
+        })
+        .optional(),
+
+      minPrice: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'minPrice must be a valid number')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'minPrice cannot be negative' })
+        .optional(),
+
+      maxPrice: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'maxPrice must be a valid number')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
+        .optional(),
+
+      search: z.string().optional(),
+
+      productSkuCode: z.string().optional(),
+
+      sortBy: z.string().optional(),
+
+      sortOrder: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['asc', 'desc'].includes(val), {
+          message: "sortOrder must be either 'asc' or 'desc'",
+        })
+        .optional(),
+
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough()
+    .refine(
+      (data) => {
+        if (data.minPrice && data.maxPrice) {
+          return parseFloat(data.minPrice) <= parseFloat(data.maxPrice);
+        }
+        return true;
+      },
+      {
+        message: 'minPrice must be less than or equal to maxPrice',
+      }
+    );
+
+  querySchema.parse(req.query);
+});
