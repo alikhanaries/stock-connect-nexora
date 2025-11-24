@@ -526,7 +526,7 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
       sellerId: sellerId,
       status: { $ne: 'removed' },
     };
-    const result = await Product.updateMany(filter, { status: { $ne: 'removed' } });
+    const result = await Product.updateMany(filter, { $set: { status: 'removed' } });
 
     if (result.modifiedCount === 0) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
