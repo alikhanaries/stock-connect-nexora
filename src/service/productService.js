@@ -632,13 +632,14 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
   const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : '_id';
 
-  pipeline.push({
+  const sortStage = {
     $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
-  });
+  };
 
   pipeline.push({
     $facet: {
       paginatedResults: [
+        sortStage, // <-- SORT MOVED HERE ✔
         { $skip: (currentPage - 1) * limit },
         { $limit: limit },
         {
@@ -659,7 +660,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
     },
   });
 
-  const result = await UserChannelProducts.aggregate(pipeline);
+  const result = await UserChannelProducts.aggregate(pipeline, { allowDiskUse: true });
   const total = result[0]?.totalCount[0]?.count || 0;
   const products = result[0]?.paginatedResults || [];
 
