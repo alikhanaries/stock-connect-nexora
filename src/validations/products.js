@@ -90,6 +90,14 @@ export const getProductsValidator = validate(async (req) => {
         })
         .optional(),
 
+      productType: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['simple', 'configurable'].includes(val), {
+          message: "Product Type must be either 'simple' or 'configurable'",
+        })
+        .optional(),
+
       minPrice: z
         .string()
         .regex(/^\d+$/, 'minPrice must be a number string')

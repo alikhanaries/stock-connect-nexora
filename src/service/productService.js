@@ -37,6 +37,8 @@ const fetchProducts = async (query, sellerId) => {
     search,
     sortBy = 'createdAt',
     sortOrder = 'asc',
+    productType,
+    currentStockCount,
   } = query;
 
   const currentPage = Math.max(1, Number(page));
@@ -64,6 +66,17 @@ const fetchProducts = async (query, sellerId) => {
     filter.price = {};
     if (minPrice) ((filter.price.$gte = Number(minPrice)), (appliedFilters.minPrice = Number(minPrice)));
     if (maxPrice) ((filter.price.$lte = Number(maxPrice)), (appliedFilters.maxPrice = Number(maxPrice)));
+  }
+  //product type filter
+  if (productType) {
+    filter.productType = productType;
+    appliedFilters.productType = productType;
+  }
+
+  //stock count filter
+  if (currentStockCount) {
+    filter.currentStockCount = Number(currentStockCount);
+    appliedFilters.currentStockCount = Number(currentStockCount);
   }
 
   // Search filter
@@ -151,7 +164,6 @@ const getTopSellingProduct = async (limit, channelNameSearch) => {
 
 export const updateProductStatus = async (ids, status, sellerId) => {
   if (!ids?.length) return 0;
-
   const filter = {
     _id: { $in: ids },
     sellerId: sellerId,
