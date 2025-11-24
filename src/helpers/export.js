@@ -3,7 +3,7 @@ import { formatDateTime } from './Common.js';
 export const escapeCsv = (row) => {
   return row
     .map((field) => {
-      if (field === null || field === undefined) return '';
+      if (field === null || field === undefined || field === '') return 'N/A';
       const str = String(field);
       if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
         return `"${str.replace(/"/g, '""')}"`;
@@ -94,7 +94,7 @@ export const generateDynamicRowData = (doc, model, excludeFields = []) => {
   const allExclusions = [...defaultExclusions, ...excludeFields];
 
   // Add _id first
-  row.push(doc._id?.toString() || '');
+  row.push(doc._id?.toString() || 'N/A');
 
   Object.keys(paths).forEach((path) => {
     // Skip excluded fields and nested array paths
@@ -108,10 +108,10 @@ export const generateDynamicRowData = (doc, model, excludeFields = []) => {
 
   // Add timestamps at the end if they exist
   if (paths.createdAt) {
-    row.push(formatDateTime(doc.createdAt)?.date || '');
+    row.push(formatDateTime(doc.createdAt)?.date || 'N/A');
   }
   if (paths.updatedAt) {
-    row.push(formatDateTime(doc.updatedAt)?.date || '');
+    row.push(formatDateTime(doc.updatedAt)?.date || 'N/A');
   }
 
   return row;
@@ -119,12 +119,12 @@ export const generateDynamicRowData = (doc, model, excludeFields = []) => {
 
 export const formatValueForCSV = (value, fieldName = '') => {
   if (value === null || value === undefined) {
-    return '';
+    return 'N/A';
   }
 
   // Handle arrays (like images)
   if (Array.isArray(value)) {
-    return value.length > 0 ? value.join('|') : '';
+    return value.length > 0 ? value.join('|') : 'N/A';
   }
 
   // Handle booleans
@@ -150,6 +150,10 @@ export const formatValueForCSV = (value, fieldName = '') => {
 
   if (typeof value === 'string') {
     const trimmed = value.trim();
+    
+    if (trimmed === '') {
+      return 'N/A';
+    }
 
     if (
       fieldName === 'ean' ||
@@ -172,22 +176,22 @@ export const formatValueForCSV = (value, fieldName = '') => {
     return value.toString();
   }
 
-  return value?.toString() || '';
+  return value?.toString() || 'N/A';
 };
 
 export const formatAddressForCSV = (address) => {
   if (!address) {
-    return ['', '', '', '', '', '', ''];
+    return ['N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A'];
   }
 
   return [
-    address.line1 || '',
-    address.line2 || '',
-    address.line3 || '',
-    address.city || '',
-    address.region || '',
-    address.zipCode || '',
-    address.countryIso || '',
+    address.line1 || 'N/A',
+    address.line2 || 'N/A',
+    address.line3 || 'N/A',
+    address.city || 'N/A',
+    address.region || 'N/A',
+    address.zipCode || 'N/A',
+    address.countryIso || 'N/A',
   ];
 };
 
