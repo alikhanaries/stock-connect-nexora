@@ -30,7 +30,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
 
     // ---  Helper to safely build delivery/collection info ---
     const buildPartyPayload = (data = {}, prefix) => ({
-      [`${prefix}_name`]: data?.name || '',
+      [`${prefix}_name`]: data?.name || data?.email || '',
       [`${prefix}_email`]: data?.email || '',
       [`${prefix}_city`]: data?.city || '',
       [`${prefix}_address`]: data?.address || '',
@@ -210,7 +210,7 @@ export const updateShipmentDeliveryStateChannelEngine = async (status, deliveryD
 
 export const getPickUpAddress = async (pickUpId) => {
   try {
-    const collectionData = await PickupAddress.findById(pickUpId);
+    const collectionData = await PickupAddress.findById(pickUpId).select('-__v');
 
     return collectionData || false;
   } catch (error) {
@@ -819,10 +819,10 @@ const transformShipmentResponse = (response) => {
     city: data.deliveryDetails?.city,
     region: data.deliveryDetails?.country,
     zipCode: data.deliveryDetails?.postcode,
-    name: data.deliveryDetails.name,
-    email: data.deliveryDetails.email,
-    country: data.deliveryDetails.country,
-    phoneNumber: data.deliveryDetails.phone,
+    name: data.deliveryDetails?.name || data.deliveryDetails?.email || 'NA',
+    email: data.deliveryDetails?.email,
+    country: data.deliveryDetails?.country,
+    phoneNumber: data.deliveryDetails?.phone,
   };
   // Pickup Address
   const pickUpDetails = {
@@ -830,10 +830,10 @@ const transformShipmentResponse = (response) => {
     city: data.pickupDetails?.city,
     region: data.pickupDetails?.country,
     zipCode: data.pickupDetails?.postcode,
-    name: data.pickupDetails.name,
-    email: data.pickupDetails.email,
-    country: data.pickupDetails.country,
-    phoneNumber: data.pickupDetails.phone,
+    name: data.pickupDetails?.name || data.pickupDetails?.email || 'NA',
+    email: data.pickupDetails?.email,
+    country: data.pickupDetails?.country,
+    phoneNumber: data.pickupDetails?.phone,
   };
 
   // Payment Info

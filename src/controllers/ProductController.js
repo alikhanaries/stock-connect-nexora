@@ -269,7 +269,7 @@ export const getUserChannelProducts = async (req, res) => {
     const sellerId = req.sellerId;
     const { channelId } = req.params;
     if (!channelId) {
-      return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
+      return errorResponse(res, req?.locale?.CHANNEL_ID_REQUIRED, 400);
     }
     const { channel, products, pagination, appliedFilters } = await productService.getUserChannelProducts(
       sellerId,
@@ -283,13 +283,13 @@ export const getUserChannelProducts = async (req, res) => {
       ...pagination,
     };
     const message = products?.length
-      ? req.locale.USER_CHANNEL_PRODUCTS_FETCHED_SUCCESSFULLY
-      : req.locale.NO_USER_CHANNEL_PRODUCTS_FOUND;
-    return successResponse(res, message, 200, responseData);
+      ? req?.locale?.USER_CHANNEL_PRODUCTS_FETCHED_SUCCESSFULLY
+      : req?.locale?.NO_USER_CHANNEL_PRODUCTS_FOUND;
+    return successResponse(res, message || 'User channel products fetched successfully', 200, responseData);
   } catch (error) {
     console.error('Error fetching user channel products:', error);
     errorLog(error);
-    return errorResponse(res, error, 500);
+    return errorResponse(res, error?.message || 'Internal server error', 500);
   }
 };
 
