@@ -98,6 +98,8 @@ export const getProductsValidator = validate(async (req) => {
         })
         .optional(),
 
+      currentStockCount: z.number().positive({ message: 'currentStockCount cannot be negative' }).optional(),
+
       minPrice: z
         .string()
         .regex(/^\d+$/, 'minPrice must be a number string')
@@ -396,8 +398,6 @@ export const getUserChannelProductsValidator = validate(async (req) => {
         .refine((val) => !val || ['active', 'inactive'].includes(val), {
           message: "status must be either 'active' or 'inactive'",
         }),
-
-      currentStockCount: z.number().positive({ message: 'currentStockCount cannot be negative' }).optional(),
 
       minPrice: z
         .string()
