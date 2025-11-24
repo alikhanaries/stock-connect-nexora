@@ -501,6 +501,23 @@ const deleteProduct = async (id, locale, sellerId) => {
   }
 };
 
+const getProductById = async (id, locale) => {
+  try {
+    const result = await Product.findOne({
+      _id: new mongoose.Types.ObjectId(id),
+      status: { $ne: 'removed' },
+    });
+
+    if (!result) {
+      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
+    }
+
+    return { success: true, data: result };
+  } catch (err) {
+    throw new Error(err.message);
+  }
+};
+
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 const deleteMultipleProducts = async (ids, locale, sellerId) => {
   try {
@@ -509,7 +526,7 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
       sellerId: sellerId,
       status: { $ne: 'removed' },
     };
-    const result = await Product.updateMany(filter, { $set: { status: 'removed' } });
+    const result = await Product.updateMany(filter, { status: { $ne: 'removed' } });
 
     if (result.modifiedCount === 0) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
@@ -1022,4 +1039,5 @@ export default {
   validateProducts,
   pushProductsAsync,
   exportProductsToCSV,
+  getProductById,
 };

@@ -2,6 +2,7 @@ import {
   deleteMultipleProducts,
   deleteProduct,
   getProducts,
+  getProductById,
   getTopSellingProduct,
   getUserUnassignedProducts,
   importProductsFromCsvFile,
@@ -29,6 +30,7 @@ import {
   getUserChannelProductsValidator,
   pushProductsToChannelEngineValidator,
   deleteProductValidator,
+  getProductByIdValidator,
   getTopSellingProductValidator,
   updateProductStatusValidator,
 } from '#validations/products.js';
@@ -46,6 +48,15 @@ productsRouter.delete(
   authMiddleware,
   verifySellerAccess,
   deleteProduct
+);
+
+productsRouter.get(
+  '/getProduct/:id',
+  getProductByIdValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getProductById
 );
 
 productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
