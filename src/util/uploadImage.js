@@ -11,7 +11,7 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const contentType = response.headers.get('content-type') || 'image/jpeg';
-    await s3Client.send(
+    const result = await s3Client.send(
       new PutObjectCommand({
         Bucket: 'product',
         Key: fileKey,
@@ -19,6 +19,7 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
         ContentType: contentType,
       })
     );
+    console.log(result, 's3 result');
   } catch (error) {
     console.error(`[ERROR] upload failed for: ${imageUrl}`);
     console.error(error.message);
