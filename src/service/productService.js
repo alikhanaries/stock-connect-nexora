@@ -501,7 +501,7 @@ const deleteProduct = async (id, locale, sellerId) => {
   }
 };
 
-const getProductById = async (id, locale, sellerId) => {
+const getProductById = async (id, locale) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return { success: false, message: 'Invalid product ID' };
   }

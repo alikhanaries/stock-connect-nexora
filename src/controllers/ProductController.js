@@ -193,7 +193,6 @@ export const deleteProduct = async (req, res) => {
 export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
-    const sellerId = req.sellerId;
     const locale = req.locale;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -205,7 +204,7 @@ export const getProductById = async (req, res) => {
       });
     }
 
-    const result = await productService.getProductById(id, locale, sellerId);
+    const result = await productService.getProductById(id, locale);
 
     if (!result.success) {
       return failResponse(
