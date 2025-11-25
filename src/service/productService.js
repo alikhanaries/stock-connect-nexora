@@ -502,24 +502,22 @@ const deleteProduct = async (id, locale, sellerId) => {
 };
 
 const getProductById = async (id, locale, sellerId) => {
-  try {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return { success: false, message: 'Invalid product ID' };
-    }
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return { success: false, message: 'Invalid product ID' };
+  }
 
+  try {
+    // Fetch main product with all fields
     const product = await Product.findOne({
-      _id: new mongoose.Types.ObjectId(id),
+      _id: id,
       status: { $ne: 'removed' },
     }).lean();
 
-    if (!product) {
-      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
-    }
+    if (!product) return { success: false, message: locale?.PRODUCT_NOT_FOUND };
 
-    const sku = product.productSkuCode;
-    const parentSku = product.parentProductSkuCode;
-    const grandParentSku = product.grandParentProductSkuCode;
+    const { productSkuCode: sku, parentProductSkuCode: parentSku, grandParentProductSkuCode: grandParentSku } = product;
 
+    // Fetch related products with all fields
     const relatedProducts = await Product.find({
       status: { $ne: 'removed' },
       $or: [
@@ -529,74 +527,59 @@ const getProductById = async (id, locale, sellerId) => {
         { grandParentProductSkuCode: grandParentSku },
         { grandParentProductSkuCode: sku }
       ],
+    }).lean();
+
+    // Build SKU map
+    const map = {};
+    relatedProducts.forEach(p => map[p.productSkuCode] = { ...p, children: [] });
+
+    // Build tree in one pass
+    const roots = [];
+    relatedProducts.forEach(p => {
+      const sku = p.productSkuCode;
+      const parentSku = p.parentProductSkuCode;
+      const grandParentSku = p.grandParentProductSkuCode;
+
+      if (parentSku && map[parentSku]) {
+        map[parentSku].children.push(map[sku]);
+      } else if (grandParentSku && map[grandParentSku]) {
+        map[grandParentSku].children.push(map[sku]);
+      } else {
+        roots.push(map[sku]);
+      }
     });
 
-    const buildTree = (products) => {
-      const map = {};
-      const roots = [];
-
-      products.forEach(p => {
-        map[p.productSkuCode] = { ...p.toObject(), children: [] };
-      });
-
-      products.forEach(p => {
-        const sku = p.productSkuCode;
-        const parentSku = p.parentProductSkuCode;
-        const grandParentSku = p.grandParentProductSkuCode;
-
-        if (parentSku && map[parentSku]) {
-          map[parentSku].children.push(map[sku]);
-        } else if (grandParentSku && map[grandParentSku]) {
-          map[grandParentSku].children.push(map[sku]);
-        } else {
-          roots.push(map[sku]);
-        }
-      });
-
-      return roots;
-    };
-
-    const formatNode = (node) => ({
-      id: node._id,
-      name: node.name,
-      sku: node.productSkuCode || node.sku,
-      price: node.price,
-      type: getNodeType(node),
-      barcode: node.ean,
-      children: node.children ? node.children.map(formatNode) : []
-    });
-
-    const getNodeType = (node) => {
-      if (node.parentProductSkuCode) return 'child';
-      if (node.grandParentProductSkuCode) return 'parent';
-      return 'grandparent';
-    };
-
-    const findNode = (nodes, findId) => {
-      for (const n of nodes) {
-        if (String(n._id) === String(findId)) return n;
-        const deeper = findNode(n.children || [], findId);
-        if (deeper) return deeper;
+    // Iterative DFS to find the node
+    const findNode = (stack, id) => {
+      while (stack.length) {
+        const node = stack.pop();
+        if (String(node._id) === String(id)) return node;
+        if (node.children) stack.push(...node.children);
       }
       return null;
     };
 
-    const tree = buildTree(relatedProducts);
-    const foundNode = findNode(tree, id);
+    const foundNode = findNode([...roots], id);
+    if (!foundNode) return { success: false, message: locale?.PRODUCT_NOT_FOUND };
 
-    if (!foundNode) {
-      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
-    }
+    // Keep formatting function same
+    const formatNode = node => ({
+      id: node._id,
+      name: node.name,
+      sku: node.productSkuCode || node.sku,
+      price: node.price,
+      type: node.parentProductSkuCode ? 'child' : node.grandParentProductSkuCode ? 'parent' : 'grandparent',
+      barcode: node.ean,
+      children: node.children ? node.children.map(formatNode) : []
+    });
 
     return {
       success: true,
       message: locale?.PRODUCT_FETCH_SUCCESS,
-      data: 
-        {
-          ...product,
-          variations: [formatNode(foundNode)]
-        }
-      
+      data: {
+        ...product,
+        variations: [formatNode(foundNode)]
+      }
     };
   } catch (err) {
     throw new Error(err.message);
