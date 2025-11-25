@@ -81,9 +81,13 @@ const fetchProducts = async (query, sellerId) => {
 
   // Product type filter
   if (productType) {
-    const resolvedProductType = String(productType).toLowerCase();
-    filter.productType = resolvedProductType;
-    appliedFilters.productType = resolvedProductType;
+    const productTypes = String(productType)
+      .toLowerCase()
+      .split(',')
+      .map(t => t.trim().replace(/'/g, ''));
+
+    filter.productType = { $in: productTypes };
+    appliedFilters.productType = productTypes;
   } else {
     filter.productType = 'simple';
   }

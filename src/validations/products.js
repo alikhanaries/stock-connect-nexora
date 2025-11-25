@@ -93,9 +93,17 @@ export const getProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .refine((val) => ['simple', 'configurable'].includes(val), {
-          message: "Product Type must be either 'simple' or 'configurable'",
-        })
+        .transform(val =>
+          val
+            .split(',')
+            .map(v => v.trim().replace(/'/g, ''))
+        )
+        .refine(
+          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
+          {
+            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+          }
+        )
         .optional(),
 
       minStockCount: z
