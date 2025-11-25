@@ -244,20 +244,6 @@ export const exportOrdersValidator = validate(async (req) => {
     platform: z.string().optional(),
 
     search: z.string().optional(),
-
-    fromDate: z
-      .string()
-      .optional()
-      .refine((val) => !val || !isNaN(Date.parse(val)), {
-        message: 'fromDate must be a valid date string',
-      }),
-
-    toDate: z
-      .string()
-      .optional()
-      .refine((val) => !val || !isNaN(Date.parse(val)), {
-        message: 'toDate must be a valid date string',
-      }),
   });
 
   querySchema.parse(req.query);

@@ -1,7 +1,11 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
-import orderhelper from '#helpers/Order.js';
+import orderhelper, {
+  flattenAggregatedOrder,
+  getAggregatedOrderHeaders,
+  getOrganizedOrderRowData,
+} from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
@@ -9,15 +13,15 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo, syncShipmentStatus } from '#service/shipmentService.js';
+import { formatDateTime } from '#helpers/Common.js';
 import {
-  formatDateTime,
   escapeCsv,
   generateCSVFilename,
   createCSVExportResponse,
   handleExportError,
   validateExportData,
-  formatAddressForCSV,
-} from '#helpers/Common.js';
+  generateDynamicHeaders,
+} from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
@@ -918,39 +922,26 @@ export const formatOrderTrackingInf = (data) => {
 
 export const exportOrdersToCSV = async (sellerId = null, filters = {}) => {
   try {
-    const {
-      status,
-      platform,
-      search,
-      fromDate,
-      toDate,
-      size = 10000, // Export a large number by default
-      sortBy = 'orderDate',
-      sortOrder = 'desc',
-    } = filters;
+    const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
     const filter = { sellerId: sellerId };
 
-    // Apply filters similar to getAllOrders
     if (search) {
-      const regex = new RegExp(search, 'i');
+      const regex = { $regex: search, $options: 'i' };
+
       filter.$or = [
         { orderId: regex },
-        { merchantOrderNo: regex },
+        { 'orderSkuList.skuList.description': regex },
+        { 'orderCustomer.email': regex },
         { 'orderCustomer.firstName': regex },
         { 'orderCustomer.lastName': regex },
-        { 'orderCustomer.email': regex },
+        { 'orderCustomer.phone': regex },
+        { merchantOrderNo: regex },
       ];
     }
 
     if (platform) {
-      filter.channelName = { $regex: new RegExp(platform, 'i') };
-    }
-
-    if (fromDate || toDate) {
-      filter.orderDate = {};
-      if (fromDate) filter.orderDate.$gte = new Date(fromDate);
-      if (toDate) filter.orderDate.$lte = new Date(toDate);
+      filter.channelName = { $regex: platform, $options: 'i' };
     }
 
     if (status) {
@@ -961,10 +952,8 @@ export const exportOrdersToCSV = async (sellerId = null, filters = {}) => {
       }
     }
 
-    // Sorting
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    // Fetch orders and count in parallel for better performance
     const [orders, totalCount] = await Promise.all([
       Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
       Order.countDocuments(filter),
@@ -976,211 +965,69 @@ export const exportOrdersToCSV = async (sellerId = null, filters = {}) => {
       return validation;
     }
 
-    // Define CSV headers with multi-product support
-    const headers = [
-      'ID',
-      'Order ID',
-      'Seller ID',
-      'Channel ID',
-      'Global Channel ID',
-      'Status',
-      'Global Channel Name',
-      'Channel Name',
-      'Order Date',
-      'Merchant Comment',
-      'Merchant Order No',
-      'Is Business Order',
-      'Sub Total Incl VAT',
-      'Sub Total VAT',
-      'Shipping Costs Incl VAT',
-      'Shipping Costs VAT',
-      'Total Incl VAT',
-      'Total VAT',
-      'Original Sub Total Incl VAT',
-      'Original Sub Total VAT',
-      'Original Shipping Costs Incl VAT',
-      'Original Shipping Costs VAT',
-      'Original Total Incl VAT',
-      'Original Total VAT',
-      'Sub Total Excl VAT',
-      'Total Excl VAT',
-      'Shipping Costs Excl VAT',
-      'Original Sub Total Excl VAT',
-      'Original Shipping Costs Excl VAT',
-      'Original Total Excl VAT',
-      'Original Sub Total Fee',
-      'Sub Total Fee',
-      'Original Order Fee',
-      'Order Fee',
-      'Original Total Fee',
-      'Total Fee',
-      'Customer First Name',
-      'Customer Last Name',
-      'Customer Email',
-      'Customer Phone',
-      'Customer Company Name',
-      'Customer VAT Number',
-      'Shipping Address Line 1',
-      'Shipping Address Line 2',
-      'Shipping Address Line 3',
-      'Shipping Address City',
-      'Shipping Address Region',
-      'Shipping Address Zip Code',
-      'Shipping Address Country ISO',
-      'Billing Address Line 1',
-      'Billing Address Line 2',
-      'Billing Address Line 3',
-      'Billing Address City',
-      'Billing Address Region',
-      'Billing Address Zip Code',
-      'Billing Address Country ISO',
-      'Payment Method',
-      'Currency Code',
-      'Products Count',
-      'Total Products Quantity',
-      'Product SKU',
-      'Product Line ID',
-      'Product Description',
-      'Product Quantity',
-      'Product Unit Price Incl VAT',
-      'Product Line Total Incl VAT',
-      'Product Status',
-      'Created At',
-      'Updated At',
+    const dynamicHeaders = generateDynamicHeaders(Order, [
+      'orderSkuList',
+      'orderCustomer',
+      'orderPaymentDetails',
+      'orderShippingAddress',
+      'orderBillingAddress',
+    ]);
+
+    // Get a sample order to determine aggregated headers structure
+    const sampleOrder = orders[0];
+    const { customerHeaders, paymentHeaders, shippingHeaders, billingHeaders, skuHeaders } =
+      getAggregatedOrderHeaders(sampleOrder);
+
+    // Filter out any orderSkuList duplicates and orderId fields from dynamic headers
+    const filteredDynamicHeaders = dynamicHeaders.filter(
+      (header) =>
+        !header.startsWith('orderSkuList') &&
+        !header.includes('orderId') &&
+        !header.includes('createdAt') &&
+        !header.includes('updatedAt')
+    );
+
+    // Combine all headers in the desired order
+    const combinedHeaders = [
+      ...filteredDynamicHeaders,
+      ...skuHeaders,
+      ...shippingHeaders,
+      ...billingHeaders,
+      ...customerHeaders,
+      ...paymentHeaders,
+      'createdAt',
+      'updatedAt',
     ];
 
-    const csvRows = [headers.join(',')];
+    // Remove any duplicate headers
+    const organizedHeaders = [...new Set(combinedHeaders)];
 
-    // Process orders in parallel chunks for better performance
+    // Create CSV with organized headers
+    const csvRows = [organizedHeaders.join(',')];
+
+    // Process orders in chunks for better performance
     const chunks = [];
     for (let i = 0; i < orders.length; i += EXPORT_CHUNK_SIZE) {
       chunks.push(orders.slice(i, i + EXPORT_CHUNK_SIZE));
     }
 
-    // Process each chunk in parallel
+    // Process each chunk
     const processChunk = async (chunk) => {
       return chunk.map((order) => {
-        const shippingAddress = formatAddressForCSV(order.orderShippingAddress);
-        const billingAddress = formatAddressForCSV(order.orderBillingAddress);
-        const skuList = order.orderSkuList?.skuList || [];
+        // Flatten the aggregated order data
+        const flattenedOrder = flattenAggregatedOrder(order);
 
-        // Calculate product stats
-        const productCount = skuList.length;
-        const totalQuantity = skuList.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
+        // Get organized row data
+        const rowData = getOrganizedOrderRowData(flattenedOrder, organizedHeaders);
 
-        // Base order data (same for all product rows)
-        const baseRow = [
-          order._id?.toString() || 'N/A',
-          order.orderId || 'N/A',
-          order.sellerId?.toString() || 'N/A',
-          order.channelId || 'N/A',
-          order.globalChannelId || 'N/A',
-          order.status || 'N/A',
-          order.globalChannelName || 'N/A',
-          order.channelName || 'N/A',
-          formatDateTime(order.orderDate)?.date || 'N/A',
-          order.merchantComment || 'N/A',
-          order.merchantOrderNo || 'N/A',
-          order.isBusinessOrder ? 'Yes' : 'No',
-          order.subTotalInclVat || 0,
-          order.subTotalVat || 0,
-          order.shippingCostsInclVat || 0,
-          order.shippingCostsVat || 0,
-          order.totalInclVat || 0,
-          order.totalVat || 0,
-          order.originalSubTotalInclVat || 0,
-          order.originalSubTotalVat || 0,
-          order.originalShippingCostsInclVat || 0,
-          order.originalShippingCostsVat || 0,
-          order.originalTotalInclVat || 0,
-          order.originalTotalVat || 0,
-          order.subTotalExclVat || 0,
-          order.totalExclVat || 0,
-          order.shippingCostsExclVat || 0,
-          order.originalSubTotalExclVat || 0,
-          order.originalShippingCostsExclVat || 0,
-          order.originalTotalExclVat || 0,
-          order.originalSubTotalFee || 0,
-          order.subTotalFee || 0,
-          order.originalOrderFee || 0,
-          order.orderFee || 0,
-          order.originalTotalFee || 0,
-          order.totalFee || 0,
-          order.orderCustomer?.firstName || 'N/A',
-          order.orderCustomer?.lastName || 'N/A',
-          order.orderCustomer?.email || 'N/A',
-          order.orderCustomer?.phone || 'N/A',
-          order.orderCustomer?.companyName || 'N/A',
-          order.orderPaymentDetails?.vatNo || 'N/A',
-          ...shippingAddress,
-          ...billingAddress,
-          order.orderPaymentDetails?.paymentMethod || 'N/A',
-          order.orderPaymentDetails?.currencyCode || 'N/A',
-          productCount,
-          totalQuantity,
-        ];
-
-        // Handle multi-product data similar to shipments
-        let productSKUs = 'N/A';
-        let productLineIds = 'N/A';
-        let productDescriptions = 'N/A';
-        let productQuantities = 'N/A';
-        let productUnitPrices = 'N/A';
-        let productLineTotals = 'N/A';
-        let productStatuses = 'N/A';
-
-        if (skuList && skuList.length > 0) {
-          if (skuList.length === 1) {
-            // Single product - show actual data
-            const product = skuList[0];
-            productSKUs = product.merchantProductNo || 'N/A';
-            productLineIds = product.id || 'N/A';
-            productDescriptions = product.description || 'N/A';
-            productQuantities = product.quantity || 0;
-            productUnitPrices = product.unitPriceInclVat || 0;
-            productLineTotals = product.lineTotalInclVat || 0;
-            productStatuses = product.status || 'N/A';
-          } else {
-            // Multiple products - show header + details
-            const skus = skuList.map((p) => p.merchantProductNo || 'N/A');
-            const lineIds = skuList.map((p) => p.id || 'N/A');
-            const descriptions = skuList.map((p) => p.description || 'N/A');
-            const quantities = skuList.map((p) => p.quantity || 0);
-            const unitPrices = skuList.map((p) => p.unitPriceInclVat || 0);
-            const lineTotals = skuList.map((p) => p.lineTotalInclVat || 0);
-            const statuses = skuList.map((p) => p.status || 'N/A');
-
-            productSKUs = 'MULTI-PRODUCTS\n' + skus.join('\n');
-            productLineIds = 'MULTI-PRODUCTS\n' + lineIds.join('\n');
-            productDescriptions = 'MULTI-PRODUCTS\n' + descriptions.join('\n');
-            productQuantities = 'MULTI-PRODUCTS\n' + quantities.join('\n');
-            productUnitPrices = 'MULTI-PRODUCTS\n' + unitPrices.join('\n');
-            productLineTotals = 'MULTI-PRODUCTS\n' + lineTotals.join('\n');
-            productStatuses = 'MULTI-PRODUCTS\n' + statuses.join('\n');
-          }
-        }
-
-        const singleRow = [
-          ...baseRow,
-          productSKUs,
-          productLineIds,
-          productDescriptions,
-          productQuantities,
-          productUnitPrices,
-          productLineTotals,
-          productStatuses,
-          formatDateTime(order.createdAt)?.date || 'N/A',
-          formatDateTime(order.updatedAt)?.date || 'N/A',
-        ];
-
-        return escapeCsv(singleRow);
+        return escapeCsv(rowData);
       });
     };
 
     // Process all chunks in parallel
     const processedChunks = await Promise.all(chunks.map(processChunk));
-
     csvRows.push(...processedChunks.flat());
+
     const filename = generateCSVFilename('orders');
 
     return {

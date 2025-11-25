@@ -1,4 +1,6 @@
 import Order from '#models/Orders.js';
+import { formatValueForCSV } from './export.js';
+import { formatDateTime } from './Common.js';
 import Product from '../models/Product.js';
 const sanitizeOrdersData = async (orders) => {
   const orderIds = [];
@@ -237,4 +239,208 @@ const getPeriodDate = (lowercasedPeriod) => {
   return { currentPeriodStart, previousPeriodStart, previousPeriodEnd };
 };
 
-export default { sanitizeOrdersData, getPeriodDate };
+// Helper function to flatten aggregated order data
+export const flattenAggregatedOrder = (order) => {
+  const flattened = { ...order };
+
+  // Flatten orderCustomer
+  if (order.orderCustomer) {
+    Object.keys(order.orderCustomer).forEach((key) => {
+      if (key !== '_id' && key !== '__v' && key !== 'orderId') {
+        flattened[`orderCustomer_${key}`] = order.orderCustomer[key];
+      }
+    });
+  }
+
+  // Flatten orderPaymentDetails
+  if (order.orderPaymentDetails) {
+    Object.keys(order.orderPaymentDetails).forEach((key) => {
+      if (key !== '_id' && key !== '__v' && key !== 'orderId') {
+        flattened[`orderPaymentDetails_${key}`] = order.orderPaymentDetails[key];
+      }
+    });
+  }
+
+  // Flatten orderShippingAddress
+  if (order.orderShippingAddress) {
+    Object.keys(order.orderShippingAddress).forEach((key) => {
+      if (key !== '_id' && key !== '__v') {
+        flattened[`orderShippingAddress_${key}`] = order.orderShippingAddress[key];
+      }
+    });
+  }
+
+  // Flatten orderBillingAddress
+  if (order.orderBillingAddress) {
+    Object.keys(order.orderBillingAddress).forEach((key) => {
+      if (key !== '_id' && key !== '__v') {
+        flattened[`orderBillingAddress_${key}`] = order.orderBillingAddress[key];
+      }
+    });
+  }
+
+  // Handle orderSkuList and skuList array
+  if (order.orderSkuList) {
+    // Skip orderSkuList.orderId as it duplicates the main orderId
+
+    if (Array.isArray(order.orderSkuList.skuList)) {
+      flattened['orderSkuList_skuList_count'] = order.orderSkuList.skuList.length;
+
+      // Flatten key fields from skuList
+      flattened['skuList_id_list'] = order.orderSkuList.skuList.map((sku) => sku.id || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_merchantProductNo_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.merchantProductNo || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_description_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.description || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_quantity_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.quantity || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_status_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.status || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_unitPriceInclVat_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.unitPriceInclVat || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_lineTotalInclVat_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.lineTotalInclVat || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_gtin_list'] = order.orderSkuList.skuList.map((sku) => sku.gtin || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_channelProductNo_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.channelProductNo || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_airWaybillNo_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.airWaybillNo || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_condition_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.condition || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_vatRate_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.vatRate || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_unitVat_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.unitVat || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_lineVat_list'] =
+        order.orderSkuList.skuList.map((sku) => sku.lineVat || 'N/A').join(' | ') || 'N/A';
+      flattened['skuList_expectedDeliveryDate_list'] =
+        order.orderSkuList.skuList
+          .map((sku) => {
+            if (sku.expectedDeliveryDate) {
+              const formatted = formatDateTime(sku.expectedDeliveryDate);
+              return formatted ? `"${formatted.date} ${formatted.time}"` : sku.expectedDeliveryDate;
+            }
+            return 'N/A';
+          })
+          .join(' | ') || 'N/A';
+      flattened['skuList_expectedShipmentDate_list'] =
+        order.orderSkuList.skuList
+          .map((sku) => {
+            if (sku.expectedShipmentDate) {
+              const formatted = formatDateTime(sku.expectedShipmentDate);
+              return formatted ? `"${formatted.date} ${formatted.time}"` : sku.expectedShipmentDate;
+            }
+            return 'N/A';
+          })
+          .join(' | ') || 'N/A';
+    } else {
+      flattened['orderSkuList_skuList_count'] = 0;
+      flattened['skuList_id_list'] = 'N/A';
+      flattened['skuList_merchantProductNo_list'] = 'N/A';
+      flattened['skuList_description_list'] = 'N/A';
+      flattened['skuList_quantity_list'] = 'N/A';
+      flattened['skuList_status_list'] = 'N/A';
+      flattened['skuList_unitPriceInclVat_list'] = 'N/A';
+      flattened['skuList_lineTotalInclVat_list'] = 'N/A';
+      flattened['skuList_gtin_list'] = 'N/A';
+      flattened['skuList_channelProductNo_list'] = 'N/A';
+      flattened['skuList_airWaybillNo_list'] = 'N/A';
+      flattened['skuList_condition_list'] = 'N/A';
+      flattened['skuList_vatRate_list'] = 'N/A';
+      flattened['skuList_unitVat_list'] = 'N/A';
+      flattened['skuList_lineVat_list'] = 'N/A';
+      flattened['skuList_expectedDeliveryDate_list'] = 'N/A';
+      flattened['skuList_expectedShipmentDate_list'] = 'N/A';
+    }
+  }
+
+  return flattened;
+};
+
+// Helper function to get headers for aggregated fields in specific order
+export const getAggregatedOrderHeaders = (sampleOrder) => {
+  // Order customer headers
+  const customerHeaders = [];
+  if (sampleOrder.orderCustomer) {
+    Object.keys(sampleOrder.orderCustomer).forEach((key) => {
+      if (key !== '_id' && key !== '__v' && key !== 'orderId') {
+        customerHeaders.push(`orderCustomer_${key}`);
+      }
+    });
+  }
+
+  // Order payment details headers
+  const paymentHeaders = [];
+  if (sampleOrder.orderPaymentDetails) {
+    Object.keys(sampleOrder.orderPaymentDetails).forEach((key) => {
+      if (key !== '_id' && key !== '__v' && key !== 'orderId') {
+        paymentHeaders.push(`orderPaymentDetails_${key}`);
+      }
+    });
+  }
+
+  // Shipping address headers
+  const shippingHeaders = [];
+  if (sampleOrder.orderShippingAddress) {
+    Object.keys(sampleOrder.orderShippingAddress).forEach((key) => {
+      if (key !== '_id' && key !== '__v') {
+        shippingHeaders.push(`orderShippingAddress_${key}`);
+      }
+    });
+  }
+
+  // Billing address headers
+  const billingHeaders = [];
+  if (sampleOrder.orderBillingAddress) {
+    Object.keys(sampleOrder.orderBillingAddress).forEach((key) => {
+      if (key !== '_id' && key !== '__v') {
+        billingHeaders.push(`orderBillingAddress_${key}`);
+      }
+    });
+  }
+
+  // SKU list headers
+  const skuHeaders = [
+    'orderSkuList_skuList_count',
+    'skuList_id_list',
+    'skuList_merchantProductNo_list',
+    'skuList_description_list',
+    'skuList_quantity_list',
+    'skuList_status_list',
+    'skuList_unitPriceInclVat_list',
+    'skuList_lineTotalInclVat_list',
+    'skuList_gtin_list',
+    'skuList_channelProductNo_list',
+    'skuList_airWaybillNo_list',
+    'skuList_condition_list',
+    'skuList_vatRate_list',
+    'skuList_unitVat_list',
+    'skuList_lineVat_list',
+    'skuList_expectedDeliveryDate_list',
+    'skuList_expectedShipmentDate_list',
+  ];
+
+  return {
+    customerHeaders,
+    paymentHeaders,
+    shippingHeaders,
+    billingHeaders,
+    skuHeaders,
+  };
+};
+
+// Helper function to get row data for organized headers
+export const getOrganizedOrderRowData = (flattenedOrder, organizedHeaders) => {
+  return organizedHeaders.map((header) => {
+    const value = flattenedOrder[header];
+    return formatValueForCSV(value, header);
+  });
+};
+
+export default {
+  sanitizeOrdersData,
+  getPeriodDate,
+  flattenAggregatedOrder,
+  getAggregatedOrderHeaders,
+  getOrganizedOrderRowData,
+};

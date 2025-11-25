@@ -254,15 +254,13 @@ export const cancelPartialOrder = async (req, res) => {
 export const exportOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { status, platform, search, fromDate, toDate } = req.query;
+    const { status, platform, search } = req.query;
 
     // Build filters only with non-empty values
     const filters = {};
     if (status) filters.status = status;
     if (platform) filters.platform = platform;
     if (search) filters.search = search;
-    if (fromDate) filters.fromDate = fromDate;
-    if (toDate) filters.toDate = toDate;
 
     // Remove any remaining undefined/empty values
     Object.keys(filters).forEach((key) => {
