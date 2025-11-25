@@ -216,61 +216,17 @@ export const getProductById = async (req, res) => {
       });
     }
 
-    const getNodeType = (node) => {
-      if (node.parentProductSkuCode) return 'child';
-      if (node.grandParentProductSkuCode) return 'parent';
-      return 'grandparent';
-    };
-
-    const formatNode = (node) => ({
-      id: node._id,
-      name: node.name,
-      sku: node.productSkuCode || node.sku,
-      price: node.price,
-      type: getNodeType(node),
-      barcode: node.ean,
-      children: node.children ? node.children.map(formatNode) : []
-    });
-
-    const formattedData = Array.isArray(result.data)
-      ? result.data.map(formatNode)
-      : [];
-
-    const findNode = (nodes, id) => {
-      for (const n of nodes) {
-        if (String(n.id) === String(id)) return n;
-        const deeper = findNode(n.children || [], id);
-        if (deeper) return deeper;
-      }
-      return null;
-    };
-
-    const requestedNode = findNode(formattedData, id);
-
-    if (!requestedNode) {
-      return res.status(404).json({
-        error: true,
-        success: false,
-        message: locale?.PRODUCT_NOT_FOUND,
-        data: []
-      });
-    }
-
     return res.status(200).json({
       error: false,
       success: true,
       message: 'Product fetched successfully',
-      data: requestedNode
+      data: result.data
     });
 
-  } catch (err) {
-    console.error('Error fetching product:', err);
-    return res.status(500).json({
-      error: true,
-      success: false,
-      message: 'Internal Server Error',
-      data: []
-    });
+  } catch (error) {
+    console.error('Error:', error);
+    errorLog(error);
+    return errorResponse(res, error);
   }
 };
 

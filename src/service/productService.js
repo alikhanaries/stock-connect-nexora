@@ -510,7 +510,7 @@ const getProductById = async (id, locale, sellerId) => {
     const product = await Product.findOne({
       _id: new mongoose.Types.ObjectId(id),
       status: { $ne: 'removed' },
-    });
+    }).lean();
 
     if (!product) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
@@ -531,7 +531,7 @@ const getProductById = async (id, locale, sellerId) => {
       ],
     });
 
-    function buildTree(products) {
+    const buildTree = (products) => {
       const map = {};
       const roots = [];
 
@@ -554,13 +554,43 @@ const getProductById = async (id, locale, sellerId) => {
       });
 
       return roots;
-    }
+    };
+
+    const formatNode = (node) => ({
+      id: node._id,
+      name: node.name,
+      sku: node.productSkuCode || node.sku,
+      price: node.price,
+      type: getNodeType(node),
+      barcode: node.ean,
+      children: node.children ? node.children.map(formatNode) : []
+    });
+
+    const getNodeType = (node) => {
+      if (node.parentProductSkuCode) return 'child';
+      if (node.grandParentProductSkuCode) return 'parent';
+      return 'grandparent';
+    };
+
+    const findNode = (nodes, findId) => {
+      for (const n of nodes) {
+        if (String(n._id) === String(findId)) return n;
+        const deeper = findNode(n.children || [], findId);
+        if (deeper) return deeper;
+      }
+      return null;
+    };
 
     const tree = buildTree(relatedProducts);
+    const foundNode = findNode(tree, id);
+
+    if (!foundNode) {
+      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
+    }
 
     return {
       success: true,
-      data: tree.length ? tree : []
+      data: formatNode(foundNode)
     };
   } catch (err) {
     throw new Error(err.message);
