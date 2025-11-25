@@ -9,18 +9,26 @@ import {
 } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import Channel from '#models/Channel.js';
+import Seller from '#models/Seller.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
+import { uploadProducts } from '#service/channel/ocpService.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
-  config;
+const {
+  CHANNEL_ENGINE_BASE_URL,
+  CHANNEL_ENGINE_API_KEY,
+  CHANNEL_ENGINE_BATCH_SIZE,
+  CHANNEL_ENGINE_MAX_CONCURRENT,
+  OCP_URL,
+  OCP_API_KEY,
+} = config;
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
@@ -190,6 +198,28 @@ const pushBatch = async (batch, index) => {
   });
 };
 
+export const pushBatchToOCP = async (batch, index, sellerId) => {
+  const seller = await Seller.findById(sellerId).exec();
+  if (!seller) {
+    throw new Error(`Seller with ID ${sellerId} not found`);
+  }
+  return withRetry(async () => {
+    const response = await fetch(`${OCP_URL}/api/v1/edge/import-products`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-ocp-tenant-slug': seller.slug,
+        'x-api-key': OCP_API_KEY,
+      },
+      body: JSON.stringify(batch),
+    });
+
+    if (!response.ok) throw new Error(`OCP API error (Batch ${index + 1}): ${response.status}`);
+
+    return response.json();
+  });
+};
+
 //  Validate products
 const validateProducts = async (channelId, sellerId) => {
   // Get all SKU codes linked to the channel
@@ -251,7 +281,13 @@ const validateProducts = async (channelId, sellerId) => {
 };
 
 //  Async push products to CE
-const pushProductsAsync = async (products) => {
+const pushProductsAsync = async (products, channelId, sellerId) => {
+  const channel = await Channel.findOne({ channelId });
+
+  if (!channel) {
+    throw new Error(`Channel with ID ${channelId} not found`);
+  }
+
   const limit = pLimit(MAX_CONCURRENT);
   const batches = [];
 
@@ -263,7 +299,13 @@ const pushProductsAsync = async (products) => {
     batches.map((batch, idx) =>
       limit(async () => {
         try {
-          return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+          //return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+
+          if (channel.channelName === 'OCP') {
+            return await pushBatchToOCP(uploadProducts(batch), idx, sellerId);
+          } else {
+            return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+          }
         } catch (err) {
           console.error(`Batch ${idx} CE Push failed:`, err.message);
           return {

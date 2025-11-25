@@ -17,5 +17,8 @@
   },
   "files.associations": {
     "*.svg": "html"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "vscode.typescript-language-features"
   }
 }

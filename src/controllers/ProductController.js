@@ -125,7 +125,7 @@ export const pushProductToChannelEngine = async (req, res) => {
     if (validProducts?.length) {
       (async () => {
         try {
-          await productService.pushProductsAsync(validProducts);
+          await productService.pushProductsAsync(validProducts, channelId, sellerId);
         } catch (err) {
           console.error('Async push failed:', err);
         }
