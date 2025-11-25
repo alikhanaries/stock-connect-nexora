@@ -275,7 +275,7 @@ export const updateProductStatusValidator = validate(async (req) => {
         })
         .toLowerCase()
         .refine((val) => ['active', 'inactive'].includes(val), {
-          message: "status must be either 'active1' or 'inactive'",
+          message: "status must be either 'active' or 'inactive'",
         }),
     })
     .passthrough();
@@ -404,7 +404,7 @@ export const getUserChannelProductsValidator = validate(async (req) => {
         .optional()
         .transform((val) => (val ? val.toLowerCase() : val))
         .refine((val) => !val || ['active', 'inactive'].includes(val), {
-          message: "status must be either 'active2' or 'inactive'",
+          message: "status must be either 'active' or 'inactive'",
         }),
 
       minPrice: z
@@ -505,7 +505,7 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
         .optional()
         .transform((val) => (val ? val.toLowerCase() : val))
         .refine((val) => !val || ['active', 'inactive'].includes(val), {
-          message: "status must be either 'active3' or 'inactive'",
+          message: "status must be either 'active' or 'inactive'",
         }),
 
       minPrice: z
