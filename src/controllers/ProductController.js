@@ -208,12 +208,11 @@ export const getProductById = async (req, res) => {
     const result = await productService.getProductById(id, locale, sellerId);
 
     if (!result.success) {
-      return res.status(400).json({
-        error: true,
-        success: false,
-        message: result.message || locale?.PRODUCT_FETCH_FAILED,
-        data: []
-      });
+      return failResponse(
+        res,
+        result?.message || locale?.PRODUCT_FETCH_FAILED,
+        400
+      );
     }
 
     return res.status(200).json({

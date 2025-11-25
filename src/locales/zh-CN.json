@@ -70,6 +70,8 @@
   "PRODUCT_DELETE_SUCCESS": "产品成功删除",
   "PRODUCT_IMPORT_ERROR": "上传出错",
   "PRODUCT_NOT_FOUND": "未找到产品",
+  "PRODUCT_FETCH_SUCCESS": "产品获取成功",
+  "PRODUCT_FETCH_FAILED": "产品获取失败",
   "PRODUCT_MARKED_DELETED": "产品已成功标记为删除",
   "FAILED_FETCHING_SHEET": "获取表格失败",
   "GOOGLE_SHEET_URL_REQUIRED": "需要 Google Sheet URL",

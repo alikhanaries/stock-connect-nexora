@@ -590,6 +590,7 @@ const getProductById = async (id, locale, sellerId) => {
 
     return {
       success: true,
+      message: locale?.PRODUCT_FETCH_SUCCESS,
       data: formatNode(foundNode)
     };
   } catch (err) {
