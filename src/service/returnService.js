@@ -280,6 +280,15 @@ export const getReturnsFromDatabase = async (query = {}) => {
       actualSortBy = 'orderID'; // This field is created in $addFields above
     }
 
+    if (sortBy === 'returnId') {
+      pipeline.push({
+        $addFields: {
+          returnIdNumeric: { $toInt: '$returnId' },
+        },
+      });
+      actualSortBy = 'returnIdNumeric';
+    }
+
     pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
     const [results, countResult] = await Promise.all([Return.aggregate(pipeline), Return.aggregate(countPipeline)]);
@@ -297,6 +306,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       phoneNumber: r.phoneNumber || null,
       status: r.status,
       platform: r.platform,
+      returnId: r.returnId,
     }));
 
     return {

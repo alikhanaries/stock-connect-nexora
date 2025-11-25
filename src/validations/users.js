@@ -31,7 +31,7 @@ export const getAllUsersValidator = validate(async (req) => {
       .string()
       .optional()
       .transform((val) => (val ? parseInt(val, 10) : 10))
-      .refine((val) => val > 0 && val <= 100, { message: 'limit must be between 1 and 100' }),
+      .refine((val) => val > 0 && val <= 200, { message: 'limit must be between 1 and 200' }),
 
     search: z.string().optional(),
 
