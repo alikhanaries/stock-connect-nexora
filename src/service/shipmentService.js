@@ -431,11 +431,12 @@ export const createPartialShipmentService = async (shipmentData) => {
   }
 };
 
-export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, status, search }) => {
+export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, status, search, sortOrder = 'desc' }) => {
   try {
     const currentPage = parseInt(page);
     const perPage = parseInt(size);
     const skip = (currentPage - 1) * perPage;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
     const matchStage = {
       sellerId: new mongoose.Types.ObjectId(sellerId),
@@ -496,7 +497,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
           },
         },
       },
-      { $sort: { createdAt: -1 } }, // latest first
+      { $sort: { createdAt: sortDirection } },
       { $skip: skip }, // skip for pagination
       { $limit: perPage } // limit for pagination
     );
