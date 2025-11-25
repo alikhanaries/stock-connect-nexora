@@ -1,7 +1,7 @@
 export const uploadProducts = (products) => {
   return products.map((p) => ({
-    parentProductSKU: p.parentMerchantProductNo || null,
-    productSKU: p.merchantProductNo,
+    parentProductSKU: p.parentProductSkuCode || null,
+    productSKU: p.productSkuCode,
     name: p.name,
     description: p.description,
     brand: p.brand,
