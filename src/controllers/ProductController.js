@@ -197,19 +197,80 @@ export const getProductById = async (req, res) => {
     const locale = req.locale;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return failResponse(res, 'Invalid product ID', 400);
+      return res.status(400).json({
+        error: true,
+        success: false,
+        message: 'Invalid product ID',
+        data: []
+      });
     }
 
     const result = await productService.getProductById(id, locale, sellerId);
 
     if (!result.success) {
-      return failResponse(res, result.message || locale?.PRODUCT_FETCH_FAILED, 400);
+      return res.status(400).json({
+        error: true,
+        success: false,
+        message: result.message || locale?.PRODUCT_FETCH_FAILED,
+        data: []
+      });
     }
 
-    return successResponse(res, result.data, 200);
-  } catch (error) {
-    errorLog(error);
-    return errorResponse(res, error);
+    const getNodeType = (node) => {
+      if (node.parentProductSkuCode) return 'child';
+      if (node.grandParentProductSkuCode) return 'parent';
+      return 'grandparent';
+    };
+
+    const formatNode = (node) => ({
+      id: node._id,
+      name: node.name,
+      sku: node.productSkuCode || node.sku,
+      price: node.price,
+      type: getNodeType(node),
+      barcode: node.ean,
+      children: node.children ? node.children.map(formatNode) : []
+    });
+
+    const formattedData = Array.isArray(result.data)
+      ? result.data.map(formatNode)
+      : [];
+
+    const findNode = (nodes, id) => {
+      for (const n of nodes) {
+        if (String(n.id) === String(id)) return n;
+        const deeper = findNode(n.children || [], id);
+        if (deeper) return deeper;
+      }
+      return null;
+    };
+
+    const requestedNode = findNode(formattedData, id);
+
+    if (!requestedNode) {
+      return res.status(404).json({
+        error: true,
+        success: false,
+        message: locale?.PRODUCT_NOT_FOUND,
+        data: []
+      });
+    }
+
+    return res.status(200).json({
+      error: false,
+      success: true,
+      message: 'Product fetched successfully',
+      data: requestedNode
+    });
+
+  } catch (err) {
+    console.error('Error fetching product:', err);
+    return res.status(500).json({
+      error: true,
+      success: false,
+      message: 'Internal Server Error',
+      data: []
+    });
   }
 };
 

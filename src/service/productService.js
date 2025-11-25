@@ -501,18 +501,67 @@ const deleteProduct = async (id, locale, sellerId) => {
   }
 };
 
-const getProductById = async (id, locale) => {
+const getProductById = async (id, locale, sellerId) => {
   try {
-    const result = await Product.findOne({
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return { success: false, message: 'Invalid product ID' };
+    }
+
+    const product = await Product.findOne({
       _id: new mongoose.Types.ObjectId(id),
       status: { $ne: 'removed' },
     });
 
-    if (!result) {
+    if (!product) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
 
-    return { success: true, data: result };
+    const sku = product.productSkuCode;
+    const parentSku = product.parentProductSkuCode;
+    const grandParentSku = product.grandParentProductSkuCode;
+
+    const relatedProducts = await Product.find({
+      status: { $ne: 'removed' },
+      $or: [
+        { productSkuCode: sku },
+        { parentProductSkuCode: sku },
+        { parentProductSkuCode: parentSku },
+        { grandParentProductSkuCode: grandParentSku },
+        { grandParentProductSkuCode: sku }
+      ],
+    });
+
+    function buildTree(products) {
+      const map = {};
+      const roots = [];
+
+      products.forEach(p => {
+        map[p.productSkuCode] = { ...p.toObject(), children: [] };
+      });
+
+      products.forEach(p => {
+        const sku = p.productSkuCode;
+        const parentSku = p.parentProductSkuCode;
+        const grandParentSku = p.grandParentProductSkuCode;
+
+        if (parentSku && map[parentSku]) {
+          map[parentSku].children.push(map[sku]);
+        } else if (grandParentSku && map[grandParentSku]) {
+          map[grandParentSku].children.push(map[sku]);
+        } else {
+          roots.push(map[sku]);
+        }
+      });
+
+      return roots;
+    }
+
+    const tree = buildTree(relatedProducts);
+
+    return {
+      success: true,
+      data: tree.length ? tree : []
+    };
   } catch (err) {
     throw new Error(err.message);
   }
