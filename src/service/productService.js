@@ -591,7 +591,12 @@ const getProductById = async (id, locale, sellerId) => {
     return {
       success: true,
       message: locale?.PRODUCT_FETCH_SUCCESS,
-      data: formatNode(foundNode)
+      data: 
+        {
+          ...product,
+          variations: [formatNode(foundNode)]
+        }
+      
     };
   } catch (err) {
     throw new Error(err.message);
