@@ -1,5 +1,7 @@
 import { normalizeImageUrl } from '../helpers/NormalizeImageUrl.js';
 import { uploadImageFromUrl } from '../util/uploadImage.js';
+import { generateS3Key } from '../util/generateS3Key.js';
+import { getPublicImageUrl } from '../util/getPublicImageUrl.js';
 import pLimit from 'p-limit';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
@@ -19,23 +21,25 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
 
   const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
     .filter(Boolean)
-    .map((url) => normalizeImageUrl(url.trim()));
-  const uploadedUrls = await Promise.all(
-    allImageUrls.map((imgUrl) =>
-      limit(async () => {
-        try {
-          return await uploadImageFromUrl(imgUrl, sellerId);
-        } catch (err) {
-          console.error(`Failed to upload image [${imgUrl}]: ${err.message}`);
-          return null;
-        }
-      })
-    )
-  );
+    .map((url) => normalizeImageUrl(url));
 
-  const validUploadedUrls = uploadedUrls.filter(Boolean);
-  const [primaryImageUrl, imageUrl, extraImageUrl1, extraImageUrl2, extraImageUrl3] = validUploadedUrls;
+  // Generate S3 keys
+  const generatedKeys = allImageUrls.map((img) => generateS3Key(img, sellerId, r.productskucode));
 
+  // Async upload (fire & forget)
+  generatedKeys.forEach((key, i) => {
+    limit(() => uploadImageFromUrl(allImageUrls[i], key)).catch((err) => {
+      console.error(`Image upload failed async (${allImageUrls[i]}): ${err.message}`);
+    });
+  });
+
+  const [primaryKey, imageKey, extraKey1, extraKey2, extraKey3] = generatedKeys;
+
+  const primaryImageUrl = getPublicImageUrl(primaryKey);
+  const imageUrl = getPublicImageUrl(imageKey);
+  const extraImageUrl1 = getPublicImageUrl(extraKey1);
+  const extraImageUrl2 = getPublicImageUrl(extraKey2);
+  const extraImageUrl3 = getPublicImageUrl(extraKey3);
   const product = {
     grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
@@ -59,7 +63,6 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     extraImageUrl1: extraImageUrl1 || null,
     extraImageUrl2: extraImageUrl2 || null,
     extraImageUrl3: extraImageUrl3 || null,
-    images: validUploadedUrls,
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
     attributes: r.attributes || null,
@@ -98,8 +101,8 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     numberOfItems: r.numberofitems ? parseInt(r.numberofitems, 10) || 1 : 1,
     manufacturer: r.manufacturer || '',
     lifestyle: r.lifestyle || '',
-    heatSensitive: r.heatsensitive?.toLowerCase() == 'Yes',
-    liquidContents: r.liquidcontents?.toLowerCase() == 'Yes',
+    heatSensitive: r.heatsensitive?.toLowerCase() === 'yes',
+    liquidContents: r.liquidcontents?.toLowerCase() === 'yes',
     itemForm: r.itemform || '',
     riseStyle: r.risestyle || '',
     intendedUse: r.intendeduse || '',
