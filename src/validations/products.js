@@ -93,9 +93,17 @@ export const getProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .refine((val) => ['simple', 'configurable'].includes(val), {
-          message: "Product Type must be either 'simple' or 'configurable'",
-        })
+        .transform(val =>
+          val
+            .split(',')
+            .map(v => v.trim().replace(/'/g, ''))
+        )
+        .refine(
+          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
+          {
+            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+          }
+        )
         .optional(),
 
       currentStockCount: z.number().positive({ message: 'currentStockCount cannot be negative' }).optional(),
@@ -267,7 +275,7 @@ export const updateProductStatusValidator = validate(async (req) => {
         })
         .toLowerCase()
         .refine((val) => ['active', 'inactive'].includes(val), {
-          message: "status must be either 'active' or 'inactive'",
+          message: "status must be either 'active1' or 'inactive'",
         }),
     })
     .passthrough();
@@ -396,7 +404,7 @@ export const getUserChannelProductsValidator = validate(async (req) => {
         .optional()
         .transform((val) => (val ? val.toLowerCase() : val))
         .refine((val) => !val || ['active', 'inactive'].includes(val), {
-          message: "status must be either 'active' or 'inactive'",
+          message: "status must be either 'active2' or 'inactive'",
         }),
 
       minPrice: z
@@ -497,7 +505,7 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
         .optional()
         .transform((val) => (val ? val.toLowerCase() : val))
         .refine((val) => !val || ['active', 'inactive'].includes(val), {
-          message: "status must be either 'active' or 'inactive'",
+          message: "status must be either 'active3' or 'inactive'",
         }),
 
       minPrice: z
