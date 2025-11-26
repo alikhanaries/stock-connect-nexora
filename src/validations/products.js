@@ -93,12 +93,32 @@ export const getProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .refine((val) => ['simple', 'configurable'].includes(val), {
-          message: "Product Type must be either 'simple' or 'configurable'",
-        })
+        .transform(val =>
+          val
+            .split(',')
+            .map(v => v.trim().replace(/'/g, ''))
+        )
+        .refine(
+          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
+          {
+            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+          }
+        )
         .optional(),
 
-      currentStockCount: z.number().positive({ message: 'currentStockCount cannot be negative' }).optional(),
+      minStockCount: z
+        .string()
+        .regex(/^\d+$/, 'minStockCount must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'minStockCount cannot be negative' })
+        .optional(),
+
+      maxStockCount: z
+        .string()
+        .regex(/^\d+$/, 'maxStockCount must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'maxStockCount cannot be negative' })
+        .optional(),
 
       minPrice: z
         .string()

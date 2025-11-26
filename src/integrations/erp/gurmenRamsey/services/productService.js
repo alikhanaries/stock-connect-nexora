@@ -1,16 +1,15 @@
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
-import { uploadProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
-import { createRamseyAdapter } from '../ramseyAdapter.js';
 import { formatRamseyProduct } from '../helpers/formatter.js';
+import { createGurmanRamseyAdapter } from '../ramseyAdapter.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const getRamseyProducts = async (sellerId) => {
   try {
-    const ramsey = createRamseyAdapter();
+    const ramsey = createGurmanRamseyAdapter();
     const products = await ramsey.fetchProducts();
     if (!products || products.length === 0) {
       return { message: 'No Ramsey (Gürmen Group) products to sync.' };
@@ -19,17 +18,7 @@ export const getRamseyProducts = async (sellerId) => {
     await processInBatches(products, MAX_BATCH_SIZE, async (batch, batchIndex) => {
       try {
         const formattedProducts = await formatRamseyProduct(batch, sellerId);
-        const uploadedProducts = await Promise.all(
-          formattedProducts.map(async (p) => {
-            try {
-              return await uploadProductImages(p, sellerId);
-            } catch (imgErr) {
-              console.error(`Image upload failed for product SKU ${p?.productSkuCode || 'UNKNOWN'}:`, imgErr);
-              return null;
-            }
-          })
-        );
-        const canonicalProducts = uploadedProducts
+        const canonicalProducts = formattedProducts
           .filter(Boolean)
           .map((p) => canonicalProductMapper(p, sellerId))
           .filter(Boolean);

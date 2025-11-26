@@ -1,16 +1,15 @@
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
-import { uploadProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
-import { createGurmanAdapter } from '../gurmanAdapter.js';
+import { createGurmanKipAdapter } from '../gurmanAdapter.js';
 import { formatGurmanProduct } from '../helpers/formatter.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const getGurmanProducts = async (sellerId) => {
   try {
-    const gurman = createGurmanAdapter();
+    const gurman = createGurmanKipAdapter();
     const products = await gurman.fetchProducts();
     if (products.length === 0) {
       return { message: 'No Gürmen Group (KIP) products to sync.' };
@@ -18,8 +17,7 @@ export const getGurmanProducts = async (sellerId) => {
     const categoryTrails = new Set();
     await processInBatches(products, MAX_BATCH_SIZE, async (batch) => {
       const formattedProducts = await formatGurmanProduct(batch, sellerId);
-      const uploadedProducts = await Promise.all(formattedProducts.map((p) => uploadProductImages(p, sellerId)));
-      const canonicalProducts = uploadedProducts.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
+      const canonicalProducts = formattedProducts.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
 
       for (const product of canonicalProducts) {
         if (product.categoryTrail) categoryTrails.add(product.categoryTrail);
