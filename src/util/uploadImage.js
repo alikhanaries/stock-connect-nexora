@@ -14,14 +14,13 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
     }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
 
     const result = await s3Client.send(
       new PutObjectCommand({
         Bucket: 'product',
         Key: fileKey,
         Body: buffer,
-        ContentType: contentType,
+        ContentType: 'image/jpeg',
       })
     );
     console.log(result, 's3 result');
