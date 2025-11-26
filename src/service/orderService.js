@@ -919,8 +919,16 @@ export const formatOrderTrackingInf = (data) => {
   });
 };
 
-export const exportOrdersToCSV = async (sellerId = null, filters = {}) => {
+export const exportOrdersToCSV = async (sellerId, filters = {}) => {
   try {
+    // Validate sellerId is provided
+    if (!sellerId) {
+      return {
+        success: false,
+        message: 'Seller ID is required for export',
+      };
+    }
+
     const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
     const filter = { sellerId: sellerId };
