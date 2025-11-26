@@ -48,7 +48,8 @@ const fetchProducts = async (query, sellerId) => {
     sortBy = 'createdAt',
     sortOrder = 'asc',
     productType,
-    currentStockCount,
+    minStockCount,
+    maxStockCount,
   } = query;
 
   const currentPage = Math.max(1, Number(page));
@@ -80,17 +81,24 @@ const fetchProducts = async (query, sellerId) => {
 
   // Product type filter
   if (productType) {
-    const resolvedProductType = String(productType).toLowerCase();
-    filter.productType = resolvedProductType;
-    appliedFilters.productType = resolvedProductType;
+    const productTypes = String(productType)
+      .toLowerCase()
+      .split(',')
+      .map(t => t.trim().replace(/'/g, ''));
+
+    filter.productType = { $in: productTypes };
+    appliedFilters.productType = productTypes;
   } else {
     filter.productType = 'simple';
   }
 
   //stock count filter
-  if (currentStockCount) {
-    filter.currentStockCount = Number(currentStockCount);
-    appliedFilters.currentStockCount = Number(currentStockCount);
+  if (minStockCount || maxStockCount) {
+    filter.currentStockCount = {};
+    if (minStockCount)
+      ((filter.currentStockCount.$gte = Number(minStockCount)), (appliedFilters.minStockCount = Number(minStockCount)));
+    if (maxStockCount)
+      ((filter.currentStockCount.$lte = Number(maxStockCount)), (appliedFilters.maxStockCount = Number(maxStockCount)));
   }
 
   // Search filter
