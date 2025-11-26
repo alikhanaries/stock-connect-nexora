@@ -4,6 +4,7 @@ import { corsOptions } from './config/cors.js';
 import apiRoutes from './routes/api.js';
 import nebimApiRoutes from './integrations/erp/nebim/routes/api.js';
 import kipApiRoutes from './integrations/erp/gurmenKip/routes/api.js';
+import entegraRoutes from './integrations/erp/entegra/routes/api.js';
 
 import cronJob from './cronJobs/index.js';
 const app = express();
@@ -19,6 +20,7 @@ app.get('/', (req, res) => {
 app.use('/api', apiRoutes);
 app.use('/api/erp/nebim', nebimApiRoutes);
 app.use('/api/erp/kip', kipApiRoutes);
+app.use('/api/erp/entegra', entegraRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
