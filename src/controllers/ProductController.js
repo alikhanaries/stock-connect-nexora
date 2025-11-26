@@ -196,30 +196,16 @@ export const getProductById = async (req, res) => {
     const locale = req.locale;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        error: true,
-        success: false,
-        message: locale?.INVALID_PRODUCT_ID,
-        data: []
-      });
+      return failResponse(res, locale?.INVALID_PRODUCT_ID, 400);
     }
 
     const result = await productService.getProductById(id, locale);
 
     if (!result.success) {
-      return failResponse(
-        res,
-        result?.message || locale?.PRODUCT_FETCH_FAILED,
-        400
-      );
+       return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED , 400);
     }
 
-    return res.status(200).json({
-      error: false,
-      success: true,
-      message: locale?.PRODUCT_FETCH_SUCCESS,
-      data: result.data
-    });
+    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200 , result.data);
 
   } catch (error) {
     console.error('Error:', error);
