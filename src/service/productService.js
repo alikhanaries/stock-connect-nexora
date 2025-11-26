@@ -510,8 +510,6 @@ const deleteProduct = async (id, locale, sellerId) => {
 };
 
 const getProductById = async (id, locale) => {
-  if (!mongoose.Types.ObjectId.isValid(id))
-    return { success: false, message: 'Invalid product ID' };
 
   const product = await Product.findOne({ _id: id, status: { $ne: 'removed' } }).lean();
   if (!product) return { success: false, message: locale?.PRODUCT_NOT_FOUND };
