@@ -239,120 +239,172 @@ const getPeriodDate = (lowercasedPeriod) => {
   return { currentPeriodStart, previousPeriodStart, previousPeriodEnd };
 };
 
-// Helper function to flatten aggregated order data
-export const flattenAggregatedOrder = (order) => {
+// Auto-flatten aggregated order
+export const flattenAggregatedOrder = (order = {}) => {
+  // clone shallow to preserve top-level fields initially
   const flattened = { ...order };
 
-  // Flatten orderCustomer
-  if (order.orderCustomer) {
-    Object.keys(order.orderCustomer).forEach((key) => {
-      if (key !== '_id' && key !== '__v' && key !== 'orderId') {
-        flattened[`orderCustomer_${key}`] = order.orderCustomer[key];
+  // DON'T add 'orderId' here; we want top-level preserved
+  const excludeKeys = ['_id', '__v'];
+
+  const safeGet = (o, k) => (o && typeof o === 'object' && k in o ? o[k] : undefined);
+
+  // helper: try to format date/time using existing helper if present
+  const tryFormatDate = (v) => {
+    try {
+      if (!v) return null;
+      const isDateObj = v instanceof Date;
+      if (isDateObj) {
+        if (typeof formatDateTime === 'function') {
+          const formatted = formatDateTime(v);
+          return formatted ? `${formatted.date} ${formatted.time}` : v.toISOString().slice(0, 19).replace('T', ' ');
+        }
+        return v.toISOString().slice(0, 19).replace('T', ' ');
       }
-    });
-  }
-
-  // Flatten orderPaymentDetails
-  if (order.orderPaymentDetails) {
-    Object.keys(order.orderPaymentDetails).forEach((key) => {
-      if (key !== '_id' && key !== '__v' && key !== 'orderId') {
-        flattened[`orderPaymentDetails_${key}`] = order.orderPaymentDetails[key];
+      if (typeof v === 'string' && !isNaN(Date.parse(v))) {
+        const d = new Date(v);
+        if (typeof formatDateTime === 'function') {
+          const formatted = formatDateTime(d);
+          return formatted ? `${formatted.date} ${formatted.time}` : d.toISOString().slice(0, 19).replace('T', ' ');
+        }
+        return d.toISOString().slice(0, 19).replace('T', ' ');
       }
-    });
-  }
-
-  // Flatten orderShippingAddress
-  if (order.orderShippingAddress) {
-    Object.keys(order.orderShippingAddress).forEach((key) => {
-      if (key !== '_id' && key !== '__v') {
-        flattened[`orderShippingAddress_${key}`] = order.orderShippingAddress[key];
-      }
-    });
-  }
-
-  // Flatten orderBillingAddress
-  if (order.orderBillingAddress) {
-    Object.keys(order.orderBillingAddress).forEach((key) => {
-      if (key !== '_id' && key !== '__v') {
-        flattened[`orderBillingAddress_${key}`] = order.orderBillingAddress[key];
-      }
-    });
-  }
-
-  // Handle orderSkuList and skuList array
-  if (order.orderSkuList) {
-    // Skip orderSkuList.orderId as it duplicates the main orderId
-
-    if (Array.isArray(order.orderSkuList.skuList)) {
-      flattened['orderSkuList_skuList_count'] = order.orderSkuList.skuList.length;
-
-      // Flatten key fields from skuList
-      flattened['skuList_id_list'] = order.orderSkuList.skuList.map((sku) => sku.id || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_merchantProductNo_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.merchantProductNo || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_description_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.description || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_quantity_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.quantity || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_status_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.status || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_unitPriceInclVat_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.unitPriceInclVat || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_lineTotalInclVat_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.lineTotalInclVat || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_gtin_list'] = order.orderSkuList.skuList.map((sku) => sku.gtin || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_channelProductNo_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.channelProductNo || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_airWaybillNo_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.airWaybillNo || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_condition_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.condition || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_vatRate_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.vatRate || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_unitVat_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.unitVat || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_lineVat_list'] =
-        order.orderSkuList.skuList.map((sku) => sku.lineVat || 'N/A').join(' | ') || 'N/A';
-      flattened['skuList_expectedDeliveryDate_list'] =
-        order.orderSkuList.skuList
-          .map((sku) => {
-            if (sku.expectedDeliveryDate) {
-              const formatted = formatDateTime(sku.expectedDeliveryDate);
-              return formatted ? `"${formatted.date} ${formatted.time}"` : sku.expectedDeliveryDate;
-            }
-            return 'N/A';
-          })
-          .join(' | ') || 'N/A';
-      flattened['skuList_expectedShipmentDate_list'] =
-        order.orderSkuList.skuList
-          .map((sku) => {
-            if (sku.expectedShipmentDate) {
-              const formatted = formatDateTime(sku.expectedShipmentDate);
-              return formatted ? `"${formatted.date} ${formatted.time}"` : sku.expectedShipmentDate;
-            }
-            return 'N/A';
-          })
-          .join(' | ') || 'N/A';
-    } else {
-      flattened['orderSkuList_skuList_count'] = 0;
-      flattened['skuList_id_list'] = 'N/A';
-      flattened['skuList_merchantProductNo_list'] = 'N/A';
-      flattened['skuList_description_list'] = 'N/A';
-      flattened['skuList_quantity_list'] = 'N/A';
-      flattened['skuList_status_list'] = 'N/A';
-      flattened['skuList_unitPriceInclVat_list'] = 'N/A';
-      flattened['skuList_lineTotalInclVat_list'] = 'N/A';
-      flattened['skuList_gtin_list'] = 'N/A';
-      flattened['skuList_channelProductNo_list'] = 'N/A';
-      flattened['skuList_airWaybillNo_list'] = 'N/A';
-      flattened['skuList_condition_list'] = 'N/A';
-      flattened['skuList_vatRate_list'] = 'N/A';
-      flattened['skuList_unitVat_list'] = 'N/A';
-      flattened['skuList_lineVat_list'] = 'N/A';
-      flattened['skuList_expectedDeliveryDate_list'] = 'N/A';
-      flattened['skuList_expectedShipmentDate_list'] = 'N/A';
+    } catch {
+      /* ignore */
     }
+    return null;
+  };
+
+  // Generic flattener for nested objects, with ability to skip specific nested keys
+  const flattenObject = (parentKey, obj, skipFields = []) => {
+    if (!obj || typeof obj !== 'object') return;
+    Object.keys(obj).forEach((k) => {
+      if (excludeKeys.includes(k) || skipFields.includes(k)) return;
+      const val = obj[k];
+      if (val && typeof val === 'object' && !(val instanceof Date)) {
+        const entries = Object.entries(val)
+          .filter(([kk, vv]) => kk !== '_id' && kk !== '__v' && vv != null)
+          .map(([kk, vv]) => `${kk}:${vv}`);
+        flattened[`${parentKey}_${k}`] = entries.length ? entries.join(';') : 'N/A';
+      } else {
+        flattened[`${parentKey}_${k}`] = val != null ? val : 'N/A';
+      }
+    });
+  };
+
+  // Flatten nested objects; skip nested orderId only inside these nested objects
+  flattenObject('orderCustomer', safeGet(order, 'orderCustomer'), ['orderId']);
+  flattenObject('orderPaymentDetails', safeGet(order, 'orderPaymentDetails'), ['orderId']);
+  flattenObject('orderShippingAddress', safeGet(order, 'orderShippingAddress'));
+  flattenObject('orderBillingAddress', safeGet(order, 'orderBillingAddress'));
+
+  // SKU handling
+  const skuList =
+    safeGet(order, 'orderSkuList') && Array.isArray(order.orderSkuList.skuList) ? order.orderSkuList.skuList : [];
+
+  if (!Array.isArray(skuList) || skuList.length === 0) {
+    flattened['orderSkuList_skuList_count'] = 0;
+    // ensure commonly expected sku columns exist so headers align
+    [
+      'id',
+      'merchantProductNo',
+      'description',
+      'quantity',
+      'status',
+      'unitPriceInclVat',
+      'lineTotalInclVat',
+      'gtin',
+      'channelProductNo',
+      'airWaybillNo',
+      'condition',
+      'vatRate',
+      'unitVat',
+      'lineVat',
+      'expectedDeliveryDate',
+      'expectedShipmentDate',
+    ].forEach((k) => {
+      flattened[`skuList_${k}_list`] = 'N/A';
+    });
+  } else {
+    flattened['orderSkuList_skuList_count'] = skuList.length;
+
+    // union of sku keys
+    const allSkuKeys = new Set();
+    skuList.forEach((sku) => {
+      if (sku && typeof sku === 'object') Object.keys(sku).forEach((k) => allSkuKeys.add(k));
+    });
+
+    allSkuKeys.forEach((key) => {
+      const values = skuList.map((sku) => {
+        if (!sku || sku[key] === undefined || sku[key] === null || sku[key] === '') return 'N/A';
+        const raw = sku[key];
+
+        // date-like fields
+        if (typeof key === 'string' && (key.toLowerCase().includes('date') || key.toLowerCase().includes('at'))) {
+          const fd = tryFormatDate(raw);
+          if (fd) return fd;
+        }
+
+        if (typeof raw === 'object' && !(raw instanceof Date)) {
+          return (
+            Object.entries(raw)
+              .filter(([kk, vv]) => kk !== '_id' && kk !== '__v' && vv != null)
+              .map(([kk, vv]) => `${kk}:${vv}`)
+              .join(';') || 'N/A'
+          );
+        }
+        return String(raw);
+      });
+
+      flattened[`skuList_${key}_list`] = values.length ? values.join(' | ') : 'N/A';
+    });
+
+    // ensure expected columns exist if some SKUs lacked them
+    [
+      'id',
+      'merchantProductNo',
+      'description',
+      'quantity',
+      'status',
+      'unitPriceInclVat',
+      'lineTotalInclVat',
+      'gtin',
+      'channelProductNo',
+      'airWaybillNo',
+      'condition',
+      'vatRate',
+      'unitVat',
+      'lineVat',
+      'expectedDeliveryDate',
+      'expectedShipmentDate',
+    ].forEach((k) => {
+      const col = `skuList_${k}_list`;
+      if (!(col in flattened)) flattened[col] = 'N/A';
+    });
   }
+
+  // keep createdAt/updatedAt if present
+  if (order.createdAt) flattened.createdAt = order.createdAt;
+  if (order.updatedAt) flattened.updatedAt = order.updatedAt;
+
+  // Ensure both 'orderId' and 'id' are present for header compatibility
+  const resolveOrderId = () => {
+    // prefer explicit top-level fields
+    if (safeGet(order, 'orderId')) return safeGet(order, 'orderId');
+    if (safeGet(order, 'id')) return safeGet(order, 'id');
+    if (order._id) return String(order._id);
+    if (safeGet(order, 'orderNumber')) return safeGet(order, 'orderNumber');
+    // check common nested places
+    if (order.orderCustomer) {
+      if (safeGet(order.orderCustomer, 'orderId')) return safeGet(order.orderCustomer, 'orderId');
+      if (safeGet(order.orderCustomer, 'id')) return safeGet(order.orderCustomer, 'id');
+    }
+    return 'N/A';
+  };
+
+  const resolvedId = resolveOrderId();
+  flattened.orderId = flattened.orderId || resolvedId;
+  flattened.id = flattened.id || resolvedId;
 
   return flattened;
 };

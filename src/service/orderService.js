@@ -18,7 +18,6 @@ import {
   escapeCsv,
   generateCSVFilename,
   createCSVExportResponse,
-  handleExportError,
   validateExportData,
   generateDynamicHeaders,
 } from '#helpers/export.js';
@@ -978,11 +977,10 @@ export const exportOrdersToCSV = async (sellerId = null, filters = {}) => {
     const { customerHeaders, paymentHeaders, shippingHeaders, billingHeaders, skuHeaders } =
       getAggregatedOrderHeaders(sampleOrder);
 
-    // Filter out any orderSkuList duplicates and orderId fields from dynamic headers
     const filteredDynamicHeaders = dynamicHeaders.filter(
       (header) =>
         !header.startsWith('orderSkuList') &&
-        !header.includes('orderId') &&
+        !(header.includes('orderId') && header.includes('_')) && // <-- allow top-level 'orderId'
         !header.includes('createdAt') &&
         !header.includes('updatedAt')
     );
@@ -1035,7 +1033,8 @@ export const exportOrdersToCSV = async (sellerId = null, filters = {}) => {
       totalCount,
     };
   } catch (error) {
-    return handleExportError(error, 'orders');
+    console.error('Error exporting orders:', error.message);
+    throw error;
   }
 };
 
