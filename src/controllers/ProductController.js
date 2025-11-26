@@ -199,7 +199,7 @@ export const getProductById = async (req, res) => {
       return res.status(400).json({
         error: true,
         success: false,
-        message: 'Invalid product ID',
+        message: locale?.INVALID_PRODUCT_ID,
         data: []
       });
     }
@@ -217,7 +217,7 @@ export const getProductById = async (req, res) => {
     return res.status(200).json({
       error: false,
       success: true,
-      message: 'Product fetched successfully',
+      message: locale?.PRODUCT_FETCH_SUCCESS,
       data: result.data
     });
 
