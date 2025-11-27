@@ -1,5 +1,6 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '../config/s3.js';
+import sharp from 'sharp';
 
 export const uploadImageFromUrl = async (imageUrl, fileKey) => {
   try {
@@ -15,11 +16,13 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
+    const imageToJpgUsingBuffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
+
     const result = await s3Client.send(
       new PutObjectCommand({
         Bucket: 'product',
         Key: fileKey,
-        Body: buffer,
+        Body: imageToJpgUsingBuffer,
         ContentType: 'image/jpeg',
       })
     );
