@@ -71,6 +71,8 @@
   "PRODUCT_DELETE_SUCCESS": "Product deleted successfully",
   "PRODUCT_IMPORT_ERROR": "Error in upload",
   "PRODUCT_NOT_FOUND": "Product not found",
+  "PRODUCT_FETCH_SUCCESS" : "Product fetched successfully",
+  "PRODUCT_FETCH_FAILED": "Product fetch failed",
   "PRODUCT_MARKED_DELETED": "products marked as deleted successfully",
   "FAILED_FETCHING_SHEET": "Failed to fetch sheet",
   "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL required",

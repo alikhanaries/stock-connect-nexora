@@ -189,6 +189,31 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
+// GET PRODUCT BY ID
+export const getProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const locale = req.locale;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return failResponse(res, locale?.INVALID_PRODUCT_ID, 400);
+    }
+
+    const result = await productService.getProductById(id, locale);
+
+    if (!result.success) {
+       return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED , 400);
+    }
+
+    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200 , result.data);
+
+  } catch (error) {
+    console.error('Error:', error);
+    errorLog(error);
+    return errorResponse(res, error);
+  }
+};
+
 /* DELETE MULTIPLE PRODUCTS BY ID*/
 export const deleteMultipleProducts = async (req, res) => {
   try {
@@ -392,6 +417,7 @@ export default {
   pushProductToChannelEngine,
   updateProductStatus,
   deleteProduct,
+  getProductById,
   deleteMultipleProducts,
   getUserChannelProducts,
   getUserUnassignedProducts,
