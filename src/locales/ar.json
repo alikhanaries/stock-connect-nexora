@@ -70,6 +70,8 @@
   "PRODUCT_DELETE_SUCCESS": "تم حذف المنتج بنجاح",
   "PRODUCT_IMPORT_ERROR": "حدث خطأ أثناء التحميل",
   "PRODUCT_NOT_FOUND": "المنتج غير موجود",
+  "PRODUCT_FETCH_SUCCESS": "تم جلب المنتج بنجاح",
+  "PRODUCT_FETCH_FAILED": "فشل في جلب المنتج",
   "PRODUCT_MARKED_DELETED": "تم تعليم المنتجات كمحذوفة بنجاح",
   "FAILED_FETCHING_SHEET": "فشل في جلب الملف",
   "GOOGLE_SHEET_URL_REQUIRED": "رابط Google Sheet مطلوب",

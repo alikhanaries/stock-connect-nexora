@@ -70,6 +70,8 @@
   "PRODUCT_DELETE_SUCCESS": "Ürün başarıyla silindi",
   "PRODUCT_IMPORT_ERROR": "Yükleme sırasında hata oluştu",
   "PRODUCT_NOT_FOUND": "Ürün bulunamadı",
+  "PRODUCT_FETCH_SUCCESS": "Ürün başarıyla getirildi",
+  "PRODUCT_FETCH_FAILED": "Ürün getirme başarısız oldu",
   "PRODUCT_MARKED_DELETED": "Ürünler başarıyla silindi olarak işaretlendi",
   "FAILED_FETCHING_SHEET": "Dosya alınamadı",
   "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL gerekli",

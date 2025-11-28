@@ -354,6 +354,34 @@ export const deleteProductValidator = validate(async (req) => {
   paramsSchema.parse(req.params);
 });
 
+// GET PRODUCT BY ID VALIDATOR
+export const getProductByIdValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    id: z
+      .string({
+        required_error: 'id is required',
+        invalid_type_error: 'id must be a string',
+      })
+      .length(24, 'id must be exactly 24 characters')
+      .regex(/^[0-9a-fA-F]{24}$/, 'id must be a valid hex string'),
+  });
+
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
+  paramsSchema.parse(req.params);
+});
+
 // /* PUSH PRODUCTS TO CHANNELENGINE VALIDATOR */
 export const pushProductsToChannelEngineValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
