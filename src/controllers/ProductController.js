@@ -325,10 +325,11 @@ export const getUserUnassignedProducts = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
-    const { products, pagination } = await productService.getUserUnassignedProducts(sellerId, channelId, req.query);
+    const { products, pagination,appliedFilters } = await productService.getUserUnassignedProducts(sellerId, channelId, req.query);
 
     const responseData = {
       content: products || [],
+      appliedFilters: appliedFilters || {},
       ...pagination,
     };
     const message = products.length ? req.locale.AVAILABLE_PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
