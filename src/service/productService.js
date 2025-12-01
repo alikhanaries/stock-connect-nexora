@@ -14,8 +14,6 @@ import {
   createCSVExportResponse,
   handleExportError,
   validateExportData,
-  generateDynamicHeaders,
-  generateDynamicRowData,
 } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
 import Seller from '#models/Seller.js';
@@ -92,7 +90,7 @@ const fetchProducts = async (query, sellerId) => {
     const productTypes = String(productType)
       .toLowerCase()
       .split(',')
-      .map(t => t.trim().replace(/'/g, ''));
+      .map((t) => t.trim().replace(/'/g, ''));
 
     filter.productType = { $in: productTypes };
     appliedFilters.productType = productTypes;
@@ -1025,7 +1023,44 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
       return validation;
     }
 
-    const headers = generateDynamicHeaders(Product);
+    // Custom headers
+    const headers = [
+      'grandParentProductSkuCode',
+      'parentProductSkuCode',
+      'productSkuCode',
+      'ageRangeDescription',
+      'brand',
+      'categoryTrail',
+      'color',
+      'stock',
+      'description',
+      'descriptionAr',
+      'ean',
+      'extraImageUrl1',
+      'extraImageUrl2',
+      'extraImageUrl3',
+      'gender',
+      'hsCodeSA',
+      'hsCodeAE',
+      'imageUrl',
+      'extraImageUrl1',
+      'extraImageUrl2',
+      'extraImageUrl3',
+      'maxPrice',
+      'minPrice',
+      'msrp',
+      'ProductName',
+      'ProductNameAr',
+      'price',
+      'primaryImageUrl',
+      'purchasePrice',
+      'shippingCost',
+      'shippingTime',
+      'size',
+      'sizeType',
+      'vatRateType',
+      'volumetricWeightCm',
+    ];
 
     // Process products in parallel chunks for better performance
     const chunks = [];
@@ -1033,10 +1068,46 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
       chunks.push(products.slice(i, i + EXPORT_CHUNK_SIZE));
     }
 
-    // Process each chunk in parallel using dynamic row generation
+    // Process each chunk with custom row formatting
     const processChunk = async (chunk) => {
       return chunk.map((product) => {
-        const row = generateDynamicRowData(product, Product);
+        const row = [
+          product.grandParentProductSkuCode || '',
+          product.parentProductSkuCode || '',
+          product.productSkuCode || '',
+          product.ageRangeDescription || '',
+          product.brand || '',
+          product.categoryTrail || '',
+          product.color || '',
+          product.currentStockCount || 0,
+          product.description || '',
+          product.descriptionAr || '',
+          product.ean || '',
+          product.extraImageUrl1 || '',
+          product.extraImageUrl2 || '',
+          product.extraImageUrl3 || '',
+          product.gender || '',
+          product.hsCodeSA || '',
+          product.hsCodeAE || '',
+          product.imageUrl || '',
+          product.extraImageUrl1 || '',
+          product.extraImageUrl2 || '',
+          product.extraImageUrl3 || '',
+          product.maxPrice || 0,
+          product.minPrice || 0,
+          product.msrp || 0,
+          product.name || '',
+          product.nameAr || '',
+          product.price || 0,
+          product.primaryImageUrl || '',
+          product.purchasePrice || 0,
+          product.shippingCost || 0,
+          product.shippingTime || '',
+          product.size || '',
+          product.sizeType || '',
+          product.vatRateType || '',
+          product.volumetricWeightCm || 0,
+        ];
         return escapeCsv(row);
       });
     };
