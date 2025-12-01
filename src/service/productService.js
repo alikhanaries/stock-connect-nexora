@@ -552,58 +552,59 @@ const deleteProduct = async (id, locale, sellerId) => {
 };
 
 const getProductById = async (id, locale) => {
+  const product = await Product.findOne(
+    { _id: id, status: { $ne: 'removed' } }
+  ).select("-__v").lean();
 
-  const product = await Product.findOne({ _id: id, status: { $ne: 'removed' } }).lean();
   if (!product) return { success: false, message: locale?.PRODUCT_NOT_FOUND };
 
-  // Fetch all related products
-  const relatedProducts = await Product.find({
-    status: { $ne: 'removed' },
-    $or: [
-      { productSkuCode: product.productSkuCode },
-      { productSkuCode: product.parentProductSkuCode },
-      { productSkuCode: product.grandParentProductSkuCode },
-      { parentProductSkuCode: product.productSkuCode },
-      { parentProductSkuCode: product.parentProductSkuCode },
-      { parentProductSkuCode: product.grandParentProductSkuCode },
-      { grandParentProductSkuCode: product.productSkuCode },
-      { grandParentProductSkuCode: product.parentProductSkuCode },
-      { grandParentProductSkuCode: product.grandParentProductSkuCode }
-    ]
+  const rootSku =
+    product.grandParentProductSkuCode ||
+    product.parentProductSkuCode ||
+    product.productSkuCode;
 
-  }).lean();
-
-  const map = {};
-  relatedProducts.forEach(p => map[p.productSkuCode] = { ...p, children: [] });
-
-  // Connect children to parent/grandparent
-  Object.values(map).forEach(p => {
-    const parent = p.parentProductSkuCode ? map[p.parentProductSkuCode] : null;
-    const grandParent = p.grandParentProductSkuCode ? map[p.grandParentProductSkuCode] : null;
-    if (parent) parent.children.push(map[p.productSkuCode]);
-    else if (grandParent) grandParent.children.push(map[p.productSkuCode]);
-  });
-
-  // Find grandparent root starting from the current product
-  let current = map[product.productSkuCode];
-  if (!current) return { success: false, message: locale?.PRODUCT_NOT_FOUND };
-
-  while (current.parentProductSkuCode || current.grandParentProductSkuCode) {
-    if (current.parentProductSkuCode && map[current.parentProductSkuCode]) {
-      current = map[current.parentProductSkuCode];
-    } else if (current.grandParentProductSkuCode && map[current.grandParentProductSkuCode]) {
-      current = map[current.grandParentProductSkuCode];
-    } else {
-      break;
+  const relatedProducts = await Product.find(
+    {
+      status: { $ne: 'removed' },
+      $or: [
+        { productSkuCode: rootSku },
+        { parentProductSkuCode: rootSku },
+        { grandParentProductSkuCode: rootSku },
+        { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[]\]/g, '\$&')}` } }
+      ]
     }
+  ).select("-__v").lean();
+
+  if (!relatedProducts.length) {
+    return { success: false, message: locale?.PRODUCT_NOT_FOUND };
   }
 
-  // If grandParentProductSkuCode is missing, fetch from parent
-  if (!product.grandParentProductSkuCode && product.parentProductSkuCode) {
-    const parent = await Product.findOne({ productSkuCode: product.parentProductSkuCode, status: { $ne: 'removed' } }).lean();
-    if (parent?.grandParentProductSkuCode) {
-      product.grandParentProductSkuCode = parent.grandParentProductSkuCode;
+  const map = {};
+  relatedProducts.forEach(p => {
+    map[p.productSkuCode] = { ...p, children: [] };
+  });
+
+  Object.values(map).forEach(node => {
+    if (node.parentProductSkuCode && map[node.parentProductSkuCode]) {
+      map[node.parentProductSkuCode].children.push(node);
+    } else if (
+      node.grandParentProductSkuCode &&
+      map[node.grandParentProductSkuCode]
+    ) {
+      map[node.grandParentProductSkuCode].children.push(node);
     }
+  });
+
+  let root = map[rootSku];
+  let safety = 0;
+  while (safety < 10) {
+    safety++;
+    const parent = map[root.parentProductSkuCode];
+    const grand = map[root.grandParentProductSkuCode];
+
+    if (parent) root = parent;
+    else if (grand) root = grand;
+    else break;
   }
 
   const formatNode = node => ({
@@ -611,7 +612,11 @@ const getProductById = async (id, locale) => {
     name: node.name,
     sku: node.productSkuCode,
     price: node.price,
-    type: node.parentProductSkuCode ? 'child' : node.grandParentProductSkuCode ? 'parent' : 'grandparent',
+    type: node.parentProductSkuCode
+      ? 'child'
+      : node.grandParentProductSkuCode
+        ? 'parent'
+        : 'grandparent',
     barcode: node.ean,
     children: node.children.map(formatNode)
   });
@@ -621,7 +626,7 @@ const getProductById = async (id, locale) => {
     message: locale?.PRODUCT_FETCH_SUCCESS,
     data: {
       ...product,
-      variations: [formatNode(current)]
+      variations: [formatNode(root)]
     }
   };
 };
@@ -721,7 +726,7 @@ const addProductsToUserChannel = async (sellerId, channelId, productIds, locale)
 };
 
 export const getUserChannelProducts = async (sellerId, channelId, query) => {
-  const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice } = query;
+  const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice, productType } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const appliedFilters = {};
@@ -759,6 +764,18 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
       appliedFilters.status = statusValue;
     }
   }
+
+  if (productType) {
+    const productTypes = String(productType)
+      .toLowerCase()
+      .split(',')
+      .map(t => t.trim().replace(/'/g, ''));
+    matchProductStage['productDetails.productType'] = { $in: productTypes };
+    appliedFilters.productType = productTypes;
+  } else {
+    matchProductStage['productDetails.productType'] = 'simple';
+  }
+
 
   if (minPrice || maxPrice) {
     matchProductStage['productDetails.price'] = {};
@@ -824,9 +841,10 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
 };
 
 const getUserUnassignedProducts = async (sellerId, channelId, query) => {
-  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
+  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc', productType } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
+  const appliedFilters = {};
   const assignedSku = await UserChannelProducts.findOne(
     {
       sellerId: new mongoose.Types.ObjectId(sellerId),
@@ -836,7 +854,7 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     { 'skuList.skuCode': 1 }
   ).lean();
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
-  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId), productType: 'simple' };
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
 
   if (assignedSkuCodes.length > 0) {
     filter.productSkuCode = { $nin: assignedSkuCodes };
@@ -846,22 +864,39 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
       filter.status = statusValue;
+      appliedFilters.status = statusValue;
     }
   }
+
+  if (productType) {
+    const productTypes = String(productType)
+      .toLowerCase()
+      .split(',')
+      .map(t => t.trim().replace(/'/g, ''));
+
+    filter.productType = { $in: productTypes };
+    appliedFilters.productType = productTypes;
+  } else {
+    filter.productType = 'simple';
+  }
+
 
   if (minPrice || maxPrice) {
     filter.price = {};
     if (minPrice) {
       filter.price.$gte = Number(minPrice);
+      appliedFilters.minPrice = Number(minPrice);
     }
     if (maxPrice) {
       filter.price.$lte = Number(maxPrice);
+      appliedFilters.maxPrice = Number(maxPrice);
     }
   }
 
   if (search) {
     const regex = new RegExp(search, 'i');
     filter.$or = [{ name: regex }, { productSkuCode: regex }];
+    appliedFilters.search = search;
   }
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
@@ -876,7 +911,9 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
 
   return {
     products,
+    total,
     pagination: getPagination(total, currentPage, limit),
+    appliedFilters,
   };
 };
 
