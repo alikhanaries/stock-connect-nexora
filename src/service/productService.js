@@ -1,5 +1,5 @@
 import { config } from '#config/config.js';
-import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import {
   determineProductType,
@@ -1023,45 +1023,6 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
       return validation;
     }
 
-    // Custom headers
-    const headers = [
-      'grandParentProductSkuCode',
-      'parentProductSkuCode',
-      'productSkuCode',
-      'ageRangeDescription',
-      'brand',
-      'categoryTrail',
-      'color',
-      'stock',
-      'description',
-      'DescriptionAr',
-      'ean',
-      'extraImageUrl1',
-      'extraImageUrl2',
-      'extraImageUrl3',
-      'gender',
-      'hsCodeSA',
-      'hsCodeAE',
-      'imageUrl',
-      'ExtraImageUrl1',
-      'ExtraImageUrl2',
-      'ExtraImageUrl3',
-      'maxPrice',
-      'minPrice',
-      'msrp',
-      'ProductName',
-      'ProductNameAr',
-      'price',
-      'primaryImageUrl',
-      'purchasePrice',
-      'shippingCost',
-      'shippingTime',
-      'size',
-      'sizeType',
-      'vatRateType',
-      'volumetricWeightCm',
-    ];
-
     // Process products in parallel chunks for better performance
     const chunks = [];
     for (let i = 0; i < products.length; i += EXPORT_CHUNK_SIZE) {
@@ -1115,7 +1076,7 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
     const processedChunks = await Promise.all(chunks.map(processChunk));
 
     // Flatten the results and create CSV
-    const csvRows = [headers.join(','), ...processedChunks.flat()];
+    const csvRows = [PRODUCT_EXPORT_HEADERS.join(','), ...processedChunks.flat()];
     const filename = generateCSVFilename('products');
 
     return {
