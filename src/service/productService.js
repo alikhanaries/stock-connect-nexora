@@ -1,5 +1,5 @@
 import { config } from '#config/config.js';
-import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import {
   determineProductType,
@@ -14,8 +14,6 @@ import {
   createCSVExportResponse,
   handleExportError,
   validateExportData,
-  generateDynamicHeaders,
-  generateDynamicRowData,
 } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
 import Seller from '#models/Seller.js';
@@ -92,7 +90,7 @@ const fetchProducts = async (query, sellerId) => {
     const productTypes = String(productType)
       .toLowerCase()
       .split(',')
-      .map(t => t.trim().replace(/'/g, ''));
+      .map((t) => t.trim().replace(/'/g, ''));
 
     filter.productType = { $in: productTypes };
     appliedFilters.productType = productTypes;
@@ -1137,18 +1135,52 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
       return validation;
     }
 
-    const headers = generateDynamicHeaders(Product);
-
     // Process products in parallel chunks for better performance
     const chunks = [];
     for (let i = 0; i < products.length; i += EXPORT_CHUNK_SIZE) {
       chunks.push(products.slice(i, i + EXPORT_CHUNK_SIZE));
     }
 
-    // Process each chunk in parallel using dynamic row generation
+    // Process each chunk with custom row formatting
     const processChunk = async (chunk) => {
       return chunk.map((product) => {
-        const row = generateDynamicRowData(product, Product);
+        const row = [
+          product.grandParentProductSkuCode || '',
+          product.parentProductSkuCode || '',
+          product.productSkuCode || '',
+          product.ageRangeDescription || '',
+          product.brand || '',
+          product.categoryTrail || '',
+          product.color || '',
+          product.currentStockCount || 0,
+          product.description || '',
+          product.descriptionAr || '',
+          product.ean || '',
+          product.extraImageUrl1 || '',
+          product.extraImageUrl2 || '',
+          product.extraImageUrl3 || '',
+          product.gender || '',
+          product.hsCodeSA || '',
+          product.hsCodeAE || '',
+          product.imageUrl || '',
+          product.extraImageUrl1 || '',
+          product.extraImageUrl2 || '',
+          product.extraImageUrl3 || '',
+          product.maxPrice || 0,
+          product.minPrice || 0,
+          product.msrp || 0,
+          product.name || '',
+          product.nameAr || '',
+          product.price || 0,
+          product.primaryImageUrl || '',
+          product.purchasePrice || 0,
+          product.shippingCost || 0,
+          product.shippingTime || '',
+          product.size || '',
+          product.sizeType || '',
+          product.vatRateType || '',
+          product.volumetricWeightCm || 0,
+        ];
         return escapeCsv(row);
       });
     };
@@ -1156,7 +1188,7 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
     const processedChunks = await Promise.all(chunks.map(processChunk));
 
     // Flatten the results and create CSV
-    const csvRows = [headers.join(','), ...processedChunks.flat()];
+    const csvRows = [PRODUCT_EXPORT_HEADERS.join(','), ...processedChunks.flat()];
     const filename = generateCSVFilename('products');
 
     return {
