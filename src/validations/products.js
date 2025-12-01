@@ -447,6 +447,22 @@ export const getUserChannelProductsValidator = validate(async (req) => {
           message: "status must be either 'active' or 'inactive'",
         }),
 
+      productType: z
+        .string()
+        .toLowerCase()
+        .transform(val =>
+          val
+            .split(',')
+            .map(v => v.trim().replace(/'/g, ''))
+        )
+        .refine(
+          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
+          {
+            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+          }
+        )
+        .optional(),
+
       minPrice: z
         .string()
         .regex(/^\d+(\.\d+)?$/, 'minPrice must be a number string')
@@ -547,6 +563,22 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
         .refine((val) => !val || ['active', 'inactive'].includes(val), {
           message: "status must be either 'active' or 'inactive'",
         }),
+
+      productType: z
+        .string()
+        .toLowerCase()
+        .transform(val =>
+          val
+            .split(',')
+            .map(v => v.trim().replace(/'/g, ''))
+        )
+        .refine(
+          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
+          {
+            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+          }
+        )
+        .optional(),
 
       minPrice: z
         .string()

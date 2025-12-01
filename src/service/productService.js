@@ -721,7 +721,7 @@ const addProductsToUserChannel = async (sellerId, channelId, productIds, locale)
 };
 
 export const getUserChannelProducts = async (sellerId, channelId, query) => {
-  const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice } = query;
+  const { page = 1, size = 10, search, sortBy = '_id', sortOrder = 'asc', status, minPrice, maxPrice, productType } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
   const appliedFilters = {};
@@ -759,6 +759,18 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
       appliedFilters.status = statusValue;
     }
   }
+
+  if (productType) {
+    const productTypes = String(productType)
+      .toLowerCase()
+      .split(',')
+      .map(t => t.trim().replace(/'/g, ''));
+    matchProductStage['productDetails.productType'] = { $in: productTypes };
+    appliedFilters.productType = productTypes;
+  } else {
+    matchProductStage['productDetails.productType'] = 'simple';
+  }
+
 
   if (minPrice || maxPrice) {
     matchProductStage['productDetails.price'] = {};
@@ -824,9 +836,10 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
 };
 
 const getUserUnassignedProducts = async (sellerId, channelId, query) => {
-  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc' } = query;
+  const { page = 1, size = 10, status, minPrice, maxPrice, search, sortBy = '_id', sortOrder = 'asc', productType } = query;
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
+  const appliedFilters = {};
   const assignedSku = await UserChannelProducts.findOne(
     {
       sellerId: new mongoose.Types.ObjectId(sellerId),
@@ -836,7 +849,7 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     { 'skuList.skuCode': 1 }
   ).lean();
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
-  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId), productType: 'simple' };
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
 
   if (assignedSkuCodes.length > 0) {
     filter.productSkuCode = { $nin: assignedSkuCodes };
@@ -846,22 +859,39 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     const statusValue = status.toString().trim().toLowerCase();
     if (PRODUCT_STATUSES.includes(statusValue)) {
       filter.status = statusValue;
+      appliedFilters.status = statusValue;
     }
   }
+
+  if (productType) {
+    const productTypes = String(productType)
+      .toLowerCase()
+      .split(',')
+      .map(t => t.trim().replace(/'/g, ''));
+
+    filter.productType = { $in: productTypes };
+    appliedFilters.productType = productTypes;
+  } else {
+    filter.productType = 'simple';
+  }
+
 
   if (minPrice || maxPrice) {
     filter.price = {};
     if (minPrice) {
       filter.price.$gte = Number(minPrice);
+      appliedFilters.minPrice = Number(minPrice);
     }
     if (maxPrice) {
       filter.price.$lte = Number(maxPrice);
+      appliedFilters.maxPrice = Number(maxPrice);
     }
   }
 
   if (search) {
     const regex = new RegExp(search, 'i');
     filter.$or = [{ name: regex }, { productSkuCode: regex }];
+    appliedFilters.search = search;
   }
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
@@ -876,7 +906,9 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
 
   return {
     products,
+    total,
     pagination: getPagination(total, currentPage, limit),
+    appliedFilters,
   };
 };
 
