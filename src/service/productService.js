@@ -512,11 +512,11 @@ const deleteProduct = async (id, locale, sellerId) => {
 const getProductById = async (id, locale) => {
   const product = await Product.findOne(
     { _id: id, status: { $ne: 'removed' } }
-  ).lean();
+  ).select("-__v").lean();
 
   if (!product) return { success: false, message: locale?.PRODUCT_NOT_FOUND };
 
-  let rootSku =
+  const rootSku =
     product.grandParentProductSkuCode ||
     product.parentProductSkuCode ||
     product.productSkuCode;
@@ -528,10 +528,10 @@ const getProductById = async (id, locale) => {
         { productSkuCode: rootSku },
         { parentProductSkuCode: rootSku },
         { grandParentProductSkuCode: rootSku },
-        { productSkuCode: { $regex: `^${rootSku.split('-')[0]}` } }
+        { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[]\]/g, '\$&')}` } }
       ]
     }
-  ).lean();
+  ).select("-__v").lean();
 
   if (!relatedProducts.length) {
     return { success: false, message: locale?.PRODUCT_NOT_FOUND };
@@ -554,12 +554,14 @@ const getProductById = async (id, locale) => {
   });
 
   let root = map[rootSku];
-  while (true) {
-    const p = root.parentProductSkuCode;
-    const g = root.grandParentProductSkuCode;
+  let safety = 0;
+  while (safety < 10) {
+    safety++;
+    const parent = map[root.parentProductSkuCode];
+    const grand = map[root.grandParentProductSkuCode];
 
-    if (p && map[p]) root = map[p];
-    else if (g && map[g]) root = map[g];
+    if (parent) root = parent;
+    else if (grand) root = grand;
     else break;
   }
 
@@ -571,8 +573,8 @@ const getProductById = async (id, locale) => {
     type: node.parentProductSkuCode
       ? 'child'
       : node.grandParentProductSkuCode
-      ? 'parent'
-      : 'grandparent',
+        ? 'parent'
+        : 'grandparent',
     barcode: node.ean,
     children: node.children.map(formatNode)
   });
