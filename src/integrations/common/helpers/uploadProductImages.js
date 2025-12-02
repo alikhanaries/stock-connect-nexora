@@ -2,9 +2,9 @@ import { normalizeImageUrl } from '#root/src/helpers/NormalizeImageUrl.js';
 import { uploadImageFromUrl } from '#root/src/util/uploadImage.js';
 import { generateS3Key } from '#root/src/util/generateS3Key.js';
 import { getPublicImageUrl } from '#root/src/util/getPublicImageUrl.js';
+import { erpCommonConfig } from '../config/config.js';
+const { IMAGE_CONCURRENCY } = erpCommonConfig;
 import pLimit from 'p-limit';
-
-const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
 
 export async function processProductImages(product, sellerId) {
