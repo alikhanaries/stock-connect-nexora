@@ -1,5 +1,5 @@
 import Order from '#models/Orders.js';
-const sanitizeOrdersData = async (orders, sellerId) => {
+const sanitizeOrdersData = async (orders) => {
   return Promise.all(
     orders.map(async (data) => {
       // Fetch existing order to preserve airWaybillNo
@@ -59,6 +59,7 @@ const sanitizeOrdersData = async (orders, sellerId) => {
       const updatePayload = {
         orderId: data.Id,
         channelId: data.ChannelId,
+        sellerId: data?.Lines?.[0]?.ExtraData?.find((a) => a.Key === 'sellerId')?.Value || null,
         channelName: data.ChannelName,
         globalChannelName: data.GlobalChannelName,
         globalChannelId: data.GlobalChannelId,
@@ -150,9 +151,6 @@ const sanitizeOrdersData = async (orders, sellerId) => {
       }
       const updateOperation = {
         $set: updatePayload,
-        $setOnInsert: {
-          sellerId: sellerId,
-        },
       };
 
       return {
