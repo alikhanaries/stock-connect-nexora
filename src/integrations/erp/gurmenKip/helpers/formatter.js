@@ -1,3 +1,4 @@
+import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
@@ -13,9 +14,19 @@ const extractSubproductImages = (subproducts) => {
   });
 };
 
-const formatBaseProduct = (product, sellerId, subproductImages) => {
+const formatBaseProduct = async (product, sellerId, subproductImages) => {
   const imgItems = toArray(product.img_item).map((i) => i?.trim());
-  const images = cleanImages(product.image_url, imgItems, subproductImages);
+  const rawImages = cleanImages(product.image_url, imgItems, subproductImages);
+  const processed = await processProductImages(
+    {
+      primaryImageUrl: rawImages[0],
+      imageUrl: rawImages[0],
+      extraImageUrl1: rawImages[1],
+      extraImageUrl2: rawImages[2],
+      extraImageUrl3: rawImages[3],
+    },
+    sellerId
+  );
 
   return {
     sellerId,
@@ -25,12 +36,12 @@ const formatBaseProduct = (product, sellerId, subproductImages) => {
     categoryTrail: product.category_path,
     vatRateType: 'STANDARD',
     status: product.active === '1' ? 'active' : 'inactive',
-    primaryImageUrl: images[0] || null,
-    imageUrl: images[0] || null,
-    extraImageUrl1: images[1] || null,
-    extraImageUrl2: images[2] || null,
-    extraImageUrl3: images[3] || null,
-    images,
+    primaryImageUrl: processed.primaryImageUrl,
+    imageUrl: processed.imageUrl,
+    extraImageUrl1: processed.extraImageUrl1,
+    extraImageUrl2: processed.extraImageUrl2,
+    extraImageUrl3: processed.extraImageUrl3,
+    images: processed.images,
     volumetricWeightCm: 0.3,
     hsCodeAE: product.code,
     hsCodeSA: product.code,
@@ -42,13 +53,13 @@ export const formatGurmanProduct = async (raw = [], sellerId) => {
   if (!Array.isArray(raw) || !raw.length) return [];
 
   const formatted = [];
-
+  const categoryTrails = new Set();
   for (const product of raw) {
+    if (product.category_path) categoryTrails.add(product.category_path);
     const subproducts = toArray(product?.subproducts?.subproduct);
     const subproductImages = extractSubproductImages(subproducts);
-    const base = {
-      ...formatBaseProduct(product, sellerId, subproductImages),
-    };
+    const base = await formatBaseProduct(product, sellerId, subproductImages);
+    if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
     const grandParentSku = product.ws_code || product.code;
 
     formatted.push({
@@ -65,7 +76,6 @@ export const formatGurmanProduct = async (raw = [], sellerId) => {
     });
 
     if (!subproducts.length) continue;
-
     const groupedByColor = subproducts.reduce((acc, sub) => {
       const color = (sub.color || sub.color_drop || product.color_new || '').trim() || 'Default';
       (acc[color] ||= []).push(sub);
@@ -92,22 +102,35 @@ export const formatGurmanProduct = async (raw = [], sellerId) => {
         const size = (variant.size || '').trim() || 'NOSIZE';
         const safeSize = size.replace(/\s+/g, '_').toUpperCase();
         const childSku = `${parentSku}-${safeSize}`;
+
         const stock = Number(variant.stock || 0);
         if (stock <= 0) continue;
+
         const variantImgs = cleanImages(variant.image_url, toArray(variant.img_item));
         const mergedChildImages = cleanImages(base.images, variantImgs);
+        const processedChild = await processProductImages(
+          {
+            primaryImageUrl: mergedChildImages[0],
+            imageUrl: mergedChildImages[0],
+            extraImageUrl1: mergedChildImages[1],
+            extraImageUrl2: mergedChildImages[2],
+            extraImageUrl3: mergedChildImages[3],
+          },
+          sellerId
+        );
+
         formatted.push({
           ...base,
           productSkuCode: childSku,
           parentProductSkuCode: parentSku,
           grandParentProductSkuCode: null,
           productType: 'simple',
-          primaryImageUrl: mergedChildImages[0] || null,
-          imageUrl: mergedChildImages[0] || null,
-          extraImageUrl1: mergedChildImages[1] || null,
-          extraImageUrl2: mergedChildImages[2] || null,
-          extraImageUrl3: mergedChildImages[3] || null,
-          images: mergedChildImages,
+          primaryImageUrl: processedChild.primaryImageUrl,
+          imageUrl: processedChild.imageUrl,
+          extraImageUrl1: processedChild.extraImageUrl1,
+          extraImageUrl2: processedChild.extraImageUrl2,
+          extraImageUrl3: processedChild.extraImageUrl3,
+          images: processedChild.images,
           price: parseFloat(variant.price_special || product.price_special_vat_included),
           minPrice: null,
           maxPrice: null,
@@ -116,12 +139,15 @@ export const formatGurmanProduct = async (raw = [], sellerId) => {
           color,
           size,
           ean: variant.barcode || '',
-          currentStockCount: Number(variant.stock || 0),
+          currentStockCount: stock,
           status: variant.active === '1' ? 'active' : 'inactive',
         });
       }
     }
   }
 
-  return formatted;
+  return {
+    products: formatted,
+    categoryTrails: [...categoryTrails],
+  };
 };

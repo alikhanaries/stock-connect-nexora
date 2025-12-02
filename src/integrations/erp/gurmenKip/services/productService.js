@@ -5,39 +5,45 @@ import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { createGurmanKipAdapter } from '../gurmanAdapter.js';
 import { formatGurmanProduct } from '../helpers/formatter.js';
-const { MAX_BATCH_SIZE } = erpCommonConfig;
+const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
 export const getGurmanProducts = async (sellerId) => {
   try {
     const gurman = createGurmanKipAdapter();
-    const products = await gurman.fetchProducts();
-    if (products.length === 0) {
+    const fetched = await gurman.fetchProducts();
+
+    if (!fetched.length) {
       return { message: 'No Gürmen Group (KIP) products to sync.' };
     }
-    const categoryTrails = new Set();
-    await processInBatches(products, MAX_BATCH_SIZE, async (batch) => {
-      const formattedProducts = await formatGurmanProduct(batch, sellerId);
-      const canonicalProducts = formattedProducts.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
+    await processInBatches(
+      fetched,
+      MAX_BATCH_SIZE,
+      async (batch) => {
+        const { products, categoryTrails } = await formatGurmanProduct(batch, sellerId);
+        const canonical = products.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
+        if (canonical.length) {
+          const bulkOps = canonical.map((product) => ({
+            updateOne: {
+              filter: {
+                productSkuCode: product.productSkuCode,
+                sellerId: product.sellerId,
+              },
+              update: { $set: product },
+              upsert: true,
+            },
+          }));
 
-      for (const product of canonicalProducts) {
-        if (product.categoryTrail) categoryTrails.add(product.categoryTrail);
-      }
-
-      if (canonicalProducts.length > 0) {
-        const bulkOps = canonicalProducts.map((product) => ({
-          updateOne: {
-            filter: { productSkuCode: product.productSkuCode, sellerId: product.sellerId },
-            update: { $set: product },
-            upsert: true,
-          },
-        }));
-        await Product.bulkWrite(bulkOps, { ordered: false });
-      }
-    });
-
-    if (categoryTrails.size > 0) {
-      await insertCategoryTrail([...categoryTrails], sellerId);
-    }
+          await Product.bulkWrite(bulkOps, { ordered: false });
+        }
+        if (categoryTrails && categoryTrails.size > 0) {
+          insertCategoryTrail([...categoryTrails], sellerId).catch((err) =>
+            console.error('Category insert (batch) failed:', err)
+          );
+        }
+        return canonical;
+      },
+      BATCH_CONCURRENCY
+    );
   } catch (error) {
     console.error('Failed to sync Gürmen Group (KIP) products:', error);
     throw error;

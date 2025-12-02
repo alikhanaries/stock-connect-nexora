@@ -1,14 +1,16 @@
 import { normalizeImageUrl } from '#root/src/helpers/NormalizeImageUrl.js';
 import { uploadImageFromUrl } from '#root/src/util/uploadImage.js';
+import { generateS3Key } from '#root/src/util/generateS3Key.js';
+import { getPublicImageUrl } from '#root/src/util/getPublicImageUrl.js';
 import pLimit from 'p-limit';
-import { erpCommonConfig } from '../config/config.js';
 
-const { IMAGE_CONCURRENCY } = erpCommonConfig;
+const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
 
-export const uploadProductImages = async (product, sellerId) => {
+export async function processProductImages(product, sellerId) {
   if (!product) return product;
-  const allImageUrls = [
+
+  const rawImages = [
     product.primaryImageUrl,
     product.imageUrl,
     product.extraImageUrl1,
@@ -16,31 +18,39 @@ export const uploadProductImages = async (product, sellerId) => {
     product.extraImageUrl3,
   ]
     .filter(Boolean)
-    .map((url) => normalizeImageUrl(url.trim()));
+    .map((url) => normalizeImageUrl(url));
 
-  if (allImageUrls.length === 0) return { ...product, images: [] };
+  if (!rawImages.length) {
+    return {
+      ...product,
+      primaryImageUrl: null,
+      imageUrl: null,
+      extraImageUrl1: null,
+      extraImageUrl2: null,
+      extraImageUrl3: null,
+      images: [],
+    };
+  }
 
-  const uploadedUrls = await Promise.all(
-    allImageUrls.map((imgUrl) =>
-      limit(async () => {
-        try {
-          return await uploadImageFromUrl(imgUrl, sellerId);
-        } catch (err) {
-          console.error(`Failed to upload image [${imgUrl}]: ${err.message}`);
-          return null;
-        }
-      })
-    )
-  );
-  const validUploadedUrls = uploadedUrls.filter(Boolean);
-  const [primaryImageUrl, imageUrl, extraImageUrl1, extraImageUrl2, extraImageUrl3] = validUploadedUrls;
+  const s3Keys = rawImages.map((img) => generateS3Key(img, sellerId));
+
+  s3Keys.forEach((key, i) => {
+    limit(() => uploadImageFromUrl(rawImages[i], key)).catch((err) =>
+      console.error(`Async upload failed (${rawImages[i]}): ${err.message}`)
+    );
+  });
+
+  const cdnUrls = s3Keys.map((key) => getPublicImageUrl(key));
+
+  const [primaryImageUrl, imageUrl, extraImageUrl1, extraImageUrl2, extraImageUrl3] = cdnUrls;
+
   return {
     ...product,
-    primaryImageUrl: primaryImageUrl || '',
-    imageUrl: imageUrl || '',
-    extraImageUrl1: extraImageUrl1 || '',
-    extraImageUrl2: extraImageUrl2 || '',
-    extraImageUrl3: extraImageUrl3 || '',
-    images: validUploadedUrls || [],
+    primaryImageUrl: primaryImageUrl || null,
+    imageUrl: imageUrl || null,
+    extraImageUrl1: extraImageUrl1 || null,
+    extraImageUrl2: extraImageUrl2 || null,
+    extraImageUrl3: extraImageUrl3 || null,
+    images: cdnUrls,
   };
-};
+}
