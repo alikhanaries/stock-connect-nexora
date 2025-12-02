@@ -5,28 +5,23 @@ import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { formatRamseyProduct } from '../helpers/formatter.js';
 import { createGurmanRamseyAdapter } from '../ramseyAdapter.js';
-const { MAX_BATCH_SIZE } = erpCommonConfig;
+const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
 export const getRamseyProducts = async (sellerId) => {
   try {
     const ramsey = createGurmanRamseyAdapter();
-    const products = await ramsey.fetchProducts();
-    if (!products || products.length === 0) {
+    const fetched = await ramsey.fetchProducts();
+    if (!fetched || fetched.length === 0) {
       return { message: 'No Ramsey (Gürmen Group) products to sync.' };
     }
-    const categoryTrails = new Set();
-    await processInBatches(products, MAX_BATCH_SIZE, async (batch, batchIndex) => {
-      try {
-        const formattedProducts = await formatRamseyProduct(batch, sellerId);
-        const canonicalProducts = formattedProducts
-          .filter(Boolean)
-          .map((p) => canonicalProductMapper(p, sellerId))
-          .filter(Boolean);
-        for (const product of canonicalProducts) {
-          if (product.categoryTrail) categoryTrails.add(product.categoryTrail);
-        }
-        if (canonicalProducts.length > 0) {
-          const bulkOps = canonicalProducts.map((product) => ({
+    await processInBatches(
+      fetched,
+      MAX_BATCH_SIZE,
+      async (batch) => {
+        const { products, categoryTrails } = await formatRamseyProduct(batch, sellerId);
+        const canonical = products.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
+        if (canonical.length) {
+          const bulkOps = canonical.map((product) => ({
             updateOne: {
               filter: {
                 productSkuCode: product.productSkuCode,
@@ -36,15 +31,18 @@ export const getRamseyProducts = async (sellerId) => {
               upsert: true,
             },
           }));
+
           await Product.bulkWrite(bulkOps, { ordered: false });
         }
-      } catch (innerError) {
-        console.error(`Ramsey (Gürmen Group) batch processing failed (batch index ${batchIndex}):`, innerError);
-      }
-    });
-    if (categoryTrails.size > 0) {
-      await insertCategoryTrail([...categoryTrails], sellerId);
-    }
+        if (categoryTrails && categoryTrails.size > 0) {
+          insertCategoryTrail([...categoryTrails], sellerId).catch((err) =>
+            console.error('Category insert (batch) failed:', err)
+          );
+        }
+        return canonical;
+      },
+      BATCH_CONCURRENCY
+    );
   } catch (error) {
     console.error('Failed to sync Ramsey products (Gürmen Group):', error);
     throw error;
