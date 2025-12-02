@@ -1,4 +1,4 @@
-export const processInBatches = async (items, batchSize, callback, concurrency = 3) => {
+export const processInBatches = async (items, batchSize, callback, concurrency = 6) => {
   const results = [];
   const batches = [];
   for (let i = 0; i < items.length; i += batchSize) {
