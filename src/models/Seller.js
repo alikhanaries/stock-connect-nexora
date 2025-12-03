@@ -4,6 +4,12 @@ const { Schema } = mongoose;
 
 const sellerSchema = new Schema(
   {
+    ocpSlugId: {
+      type: String,
+      unique: true,
+      trim: true,
+      index: true,
+    },
     name: {
       type: String,
       required: [true, 'Seller name is required.'],

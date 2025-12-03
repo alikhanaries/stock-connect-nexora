@@ -5,14 +5,14 @@ import UserSeller from '#models/UserSeller.js';
 import PickupAddress from '#models/PickUpAddress.js';
 
 const createSeller = async (sellerData) => {
-  const { name } = sellerData;
+  const { name, ocpSlugId } = sellerData;
 
   const existingSeller = await Seller.findOne({ name });
   if (existingSeller) {
     return { isExist: true, data: null };
   }
 
-  const seller = new Seller({ name });
+  const seller = new Seller({ name, ocpSlugId });
   await seller.save();
   return {
     isExist: false,
@@ -85,10 +85,11 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
   }
 };
 
-const updateSeller = async (id, name, statusValue) => {
+const updateSeller = async (id, name, statusValue, ocpSlugId) => {
   const updateData = {};
   if (name) updateData.name = name;
   if (statusValue) updateData.status = statusValue;
+  if (ocpSlugId) updateData.ocpSlugId = ocpSlugId;
 
   if (Object.keys(updateData).length === 0) return null;
   const updatedSeller = await Seller.findOneAndUpdate({ _id: id, isDeleted: false }, updateData, { new: true }).lean();
@@ -118,7 +119,7 @@ export const saveSellerPickUpAdressDetails = async (payload) => {
     const { city, address, postcode, country, phone, description, email } = payload;
 
     // Check mandatory fields
-    if ( !city || !address || !postcode || !country || !phone || !email) {
+    if (!city || !address || !postcode || !country || !phone || !email) {
       throw new Error('Missing required fields');
     }
 
