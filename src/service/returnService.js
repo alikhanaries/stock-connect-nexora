@@ -1,6 +1,9 @@
 import { config } from '#config/config.js';
-import Return from '#models/Return.js';
-import Order from '#models/Orders.js';
+import Order from '../models/Orders.js';
+import Return from '../models/Return.js';
+import Shipment from '../models/Shipment/Shipment.js';
+import PickupAddress from '../models/PickUpAddress.js';
+import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 import mongoose from 'mongoose';
 import {
   sanitizeReturnData,
@@ -13,14 +16,12 @@ import {
   escapeCsv,
   generateCSVFilename,
   createCSVExportResponse,
-  handleExportError,
   validateExportData,
   generateDynamicHeaders,
   generateDynamicRowData,
 } from '#helpers/export.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
-
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 //Fetches returns from ChannelEngine and saves them to the database.
@@ -530,47 +531,248 @@ export const getReturnById = async (id) => {
   }
 };
 
-export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
+export const exportReturnsToCSV = async (sellerId, filters = {}) => {
   try {
-    const query = { ...filters, sellerId, size: 1000, page: 1, sortBy: 'createdAt', sortOrder: 'desc' };
-    const basicResult = await getReturnsFromDatabase(query);
-
-    // Use the standardized validation
-    const validation = validateExportData(basicResult.data, 'returns');
-    if (!validation.success) {
-      return validation;
+    if (!sellerId) {
+      return { success: false, message: 'Seller ID is required for export' };
     }
 
-    const returnIds = basicResult.data.map((item) => new mongoose.Types.ObjectId(item._id));
-    const pipeline = buildReturnAggregationPipeline();
+    const {
+      status,
+      platform,
+      search,
+      size = 100000,
+      sortBy = 'CreatedAt',
+      sortOrder = 'desc',
+      dateFrom,
+      dateTo,
+      page = 1,
+    } = filters;
 
+    const queryObj = { sellerId, status, platform, search, dateFrom, dateTo, sortBy, sortOrder, size, page };
+
+    const basicResult = await (typeof getReturnsFromDatabase === 'function'
+      ? getReturnsFromDatabase(queryObj)
+      : Promise.resolve({ data: [] }));
+    const validation = validateExportData(basicResult.data, 'returns');
+    if (!validation.success) return validation;
+
+    const returnIds = basicResult.data
+      .map((r) => {
+        try {
+          return new mongoose.Types.ObjectId(r._id);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    const pickupModelFields = Array.isArray(generateDynamicHeaders(PickupAddress))
+      ? generateDynamicHeaders(PickupAddress).filter((h) => h !== '_id')
+      : [];
+    const deliveryModelFields = Array.isArray(generateDynamicHeaders(DeliveryAddress))
+      ? generateDynamicHeaders(DeliveryAddress).filter((h) => h !== '_id')
+      : [];
+
+    // When no return IDs found → show message
+    if (!returnIds.length) {
+      return {
+        success: false,
+        message: 'No return records found to export.',
+        data: [],
+      };
+    }
+
+    const pipeline = typeof buildReturnAggregationPipeline === 'function' ? buildReturnAggregationPipeline() : [];
     pipeline.push({ $match: { _id: { $in: returnIds } } });
 
-    const detailedResults = await Return.aggregate(pipeline);
-
-    // Validate detailed results
-    const detailedValidation = validateExportData(detailedResults, 'detailed return data');
-    if (!detailedValidation.success) {
-      return detailedValidation;
-    }
-
-    // Generate dynamic headers from Return schema
-    const headers = generateDynamicHeaders(Return);
-    const csvRows = [headers.join(',')];
-
-    // Generate CSV rows with dynamic data
-    detailedResults.forEach((item) => {
-      const row = generateDynamicRowData(item, Return);
-      csvRows.push(escapeCsv(row));
+    pipeline.push({
+      $lookup: {
+        from: Shipment.collection?.collectionName || 'shipments',
+        let: { orderIdFromOrderInfo: '$orderInfo._id', orderIdFromReturn: '$orderId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $ne: ['$status', 'CANCELED'] },
+                  {
+                    $or: [
+                      { $eq: ['$orderId', '$$orderIdFromOrderInfo'] },
+                      { $eq: ['$orderId', { $toString: '$$orderIdFromOrderInfo' }] },
+                      { $eq: ['$orderId', '$$orderIdFromReturn'] },
+                      { $eq: ['$_id', '$$orderIdFromReturn'] },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
+        as: 'shipments',
+      },
     });
 
-    // Use standardized response creation
-    const filename = generateCSVFilename('returns');
-    return createCSVExportResponse(csvRows, filename, detailedResults.length);
-  } catch (error) {
-    return handleExportError(error, 'returns');
+    pipeline.push({ $addFields: { shipment: { $arrayElemAt: ['$shipments', 0] } } });
+
+    pipeline.push({
+      $addFields: {
+        shipment: {
+          $cond: [
+            { $ifNull: ['$shipment', false] },
+            { pickUpId: '$shipment.pickUpId', deliveryId: '$shipment.deliveryId' },
+            null,
+          ],
+        },
+      },
+    });
+
+    const pickupCollectionName = PickupAddress?.collection?.collectionName || 'pickupaddresses';
+    const deliveryCollectionName = DeliveryAddress?.collection?.collectionName || 'deliveryaddresses';
+
+    // lookup pickup
+    pipeline.push({
+      $lookup: {
+        from: pickupCollectionName,
+        let: { pickupId: '$shipment.pickUpId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $ne: ['$$pickupId', null] },
+                  {
+                    $or: [{ $eq: ['$_id', '$$pickupId'] }, { $eq: [{ $toString: '$_id' }, '$$pickupId'] }],
+                  },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
+        as: 'pickupAddress',
+      },
+    });
+
+    // lookup delivery
+    pipeline.push({
+      $lookup: {
+        from: deliveryCollectionName,
+        let: { deliveryId: '$shipment.deliveryId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $ne: ['$$deliveryId', null] },
+                  {
+                    $or: [{ $eq: ['$_id', '$$deliveryId'] }, { $eq: [{ $toString: '$_id' }, '$$deliveryId'] }],
+                  },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
+        as: 'deliveryAddress',
+      },
+    });
+
+    pipeline.push({
+      $addFields: {
+        'shipment.pickupAddress': { $arrayElemAt: ['$pickupAddress', 0] },
+        'shipment.deliveryAddress': { $arrayElemAt: ['$deliveryAddress', 0] },
+      },
+    });
+
+    pipeline.push({ $project: { shipments: 0, pickupAddress: 0, deliveryAddress: 0 } });
+
+    const aggregated = await Return.aggregate(pipeline).allowDiskUse(true);
+
+    const detailedValidation = validateExportData(aggregated, 'detailed return data');
+    if (!detailedValidation.success) return detailedValidation;
+
+    const returnHeaders = generateDynamicHeaders(Return);
+    const shipmentSingleHeader = ['pickUpId', 'deliveryId'];
+    const pickupPrefixedHeaders = pickupModelFields.map((h) => `pickup_${h}`);
+    const deliveryPrefixedHeaders = deliveryModelFields.map((h) => `delivery_${h}`);
+    const csvHeaders = [
+      ...returnHeaders,
+      ...shipmentSingleHeader,
+      ...pickupPrefixedHeaders,
+      ...deliveryPrefixedHeaders,
+    ];
+
+    const simpleFormat = (v) => {
+      if (v === undefined || v === null) return '';
+      if (v instanceof Date) return v.toISOString();
+      if (typeof v === 'object') {
+        try {
+          return JSON.stringify(v);
+        } catch {
+          return String(v);
+        }
+      }
+      return String(v);
+    };
+
+    const mapModelFields = (doc, fields) => {
+      if (!doc) return fields.map(() => '');
+      return fields.map((f) => {
+        const parts = String(f).split('.');
+        let cur = doc;
+        for (const p of parts) {
+          if (cur == null) {
+            cur = null;
+            break;
+          }
+          cur = cur[p];
+        }
+        return simpleFormat(cur);
+      });
+    };
+
+    const csvRows = [csvHeaders.join(',')];
+
+    for (const doc of aggregated) {
+      const baseRow = generateDynamicRowData(doc, Return);
+
+      const pickUpIdValue = doc?.shipment?.pickUpId ? String(doc.shipment.pickUpId) : '';
+      const deliveryIdValue = doc?.shipment?.deliveryId ? String(doc.shipment.deliveryId) : '';
+      const shipmentRow = [simpleFormat(pickUpIdValue), simpleFormat(deliveryIdValue)];
+
+      const pickupDoc = doc?.shipment?.pickupAddress ?? null;
+      const deliveryDoc = doc?.shipment?.deliveryAddress ?? null;
+
+      const pickupRow = mapModelFields(pickupDoc, pickupModelFields);
+      const deliveryRow = mapModelFields(deliveryDoc, deliveryModelFields);
+
+      const fullRowArray = [...baseRow, ...shipmentRow, ...pickupRow, ...deliveryRow];
+
+      const csvLine =
+        typeof escapeCsv === 'function'
+          ? escapeCsv(fullRowArray)
+          : fullRowArray
+              .map((v) => {
+                const s = simpleFormat(v);
+                if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+                return s;
+              })
+              .join(',');
+
+      csvRows.push(csvLine);
+    }
+
+    const filename =
+      typeof generateCSVFilename === 'function' ? generateCSVFilename('returns') : `returns-${Date.now()}.csv`;
+    return createCSVExportResponse(csvRows, filename, aggregated.length);
+  } catch (err) {
+    console.error('Error exporting returns :', err?.message, err?.stack);
+    throw err;
   }
 };
+
 export const getReturnsForWebhook = async (queryParams = {}) => {
   try {
     const params = new URLSearchParams({
