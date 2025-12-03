@@ -37,23 +37,26 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
 
   // Public URLs
   const publicUrls = generatedKeys.map(getPublicImageUrl);
-
+  const cleanNumber = (v) => {
+    if (!v) return null;
+    return parseFloat(String(v).replace(/,/g, ''));
+  };
   // Build product (ALL fields preserved)
   const product = {
     grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,
-    name: r.productname || 'Unnamed Product',
+    name: r.productname || '',
     nameAr: r.productnamear || '',
     description: r.description || null,
     descriptionAr: r.descriptionar || null,
     brand: r.brand || null,
     ean: r.ean || null,
-    price: r.price && parseFloat(r.price),
-    minPrice: r.minprice && parseFloat(r.minprice),
-    maxPrice: r.maxprice && parseFloat(r.maxprice),
-    msrp: r.msrp && parseFloat(r.msrp),
-    purchasePrice: r.purchaseprice && parseFloat(r.purchaseprice),
+    price: cleanNumber(r.price),
+    minPrice: cleanNumber(r.minprice),
+    maxPrice: cleanNumber(r.maxprice),
+    msrp: cleanNumber(r.msrp),
+    purchasePrice: cleanNumber(r.purchaseprice),
     vatRateType: r.vatratetype?.toUpperCase() || 'STANDARD',
     shippingCost: parseFloat(r.shippingcost) || 0,
     shippingTime: r.shippingtime || null,
