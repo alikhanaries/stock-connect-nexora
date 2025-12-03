@@ -64,6 +64,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     extraImageUrl2: extraImageUrl2 || null,
     extraImageUrl3: extraImageUrl3 || null,
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
+    images: [primaryImageUrl, imageUrl, extraImageUrl1, extraImageUrl2, extraImageUrl3].filter(Boolean),
     categoryTrail: r.categorytrail || '',
     attributes: r.attributes || null,
     categories: [],

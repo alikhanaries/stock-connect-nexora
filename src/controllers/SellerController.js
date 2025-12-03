@@ -21,7 +21,7 @@ export const updateSeller = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { name, status } = req.body;
+    const { name, status, ocpSlugId } = req.body;
 
     const statusValue = status?.toString().toLowerCase();
     if (!statusValue || !PRODUCT_STATUSES.includes(statusValue)) {
@@ -32,7 +32,7 @@ export const updateSeller = async (req, res) => {
       );
     }
 
-    const updatedSeller = await sellerService.updateSeller(id, name, statusValue);
+    const updatedSeller = await sellerService.updateSeller(id, name, statusValue, ocpSlugId);
     if (!updatedSeller) {
       return response.failResponse(res, req.locale.SELLER_NOT_FOUND, 404);
     }
@@ -134,7 +134,6 @@ export const getAllSeller = async (req, res) => {
 
 export const getAllPickupAddresses = async (req, res) => {
   try {
-
     // Directly query PickupAddress collection
     const pickupAddresses = await sellerService.getAllPickupAddresses();
     const message =
