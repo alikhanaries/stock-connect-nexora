@@ -335,8 +335,15 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
 
           if (channel.channelName === 'OCP') {
             // Filter simple products for OCP
-            const products = batch.filter((p) => p.productType === 'simple');
-            return await pushBatchToOCP(uploadProducts(products), idx, sellerId);
+            const simpleProducts = batch
+              .filter(({ productType }) => productType === 'simple')
+              .map((product) =>
+                product.categoryTrail === 'Apparel > Dresses > Dresses'
+                  ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
+                  : product
+              );
+
+            return await pushBatchToOCP(uploadProducts(simpleProducts), idx, sellerId);
           } else {
             return await pushBatch(batch.map(mapProductToChannelEngine), idx);
           }
