@@ -1,6 +1,5 @@
 import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
-// import nebimErpOrderService from '#root/src/integrations/erp/nebim/service/orderService.js';
 import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS } from '#constants/common.js';
@@ -77,9 +76,6 @@ export const getSyncedOrders = async (req, res) => {
     if (data.length === 0) {
       return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
     }
-
-    // Push orders to Nebim ERP
-    // nebimErpOrderService.fetchAndPushOrderInToNebim(data, sellerId);
 
     const dataSavedInDb = await orderService.processOrders(data);
 
