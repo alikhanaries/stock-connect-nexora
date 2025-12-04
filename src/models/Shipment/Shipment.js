@@ -11,6 +11,7 @@ const shipmentSchema = new mongoose.Schema(
       enum: [
         'SHIPMENT_CREATED',
         'PICKED',
+        'SHIPPED',
         'OUT_FOR_DELIVERY',
         'RETURNED',
         'RETURN REQUESTED',
