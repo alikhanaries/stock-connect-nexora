@@ -113,7 +113,9 @@ const fetchProducts = async (query, sellerId) => {
     filter.$or = [{ name: regex }, { productSkuCode: regex }];
   }
   // Sorting
-  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1,
+    _id: 1
+   };
   // Fetch total and products in parallel
   const [total, products] = await Promise.all([
     Product.countDocuments(filter),
