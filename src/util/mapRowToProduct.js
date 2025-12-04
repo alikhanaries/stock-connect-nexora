@@ -3,6 +3,7 @@ import { uploadImageFromUrl } from '../util/uploadImage.js';
 import { generateS3Key } from '../util/generateS3Key.js';
 import { getPublicImageUrl } from '../util/getPublicImageUrl.js';
 import pLimit from 'p-limit';
+import { cleanNumber } from './cleanNumber.js';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
 export const mapRowToProduct = async (row, index, locale, sellerId) => {
@@ -50,11 +51,11 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     descriptionAr: r.descriptionar || null,
     brand: r.brand || null,
     ean: r.ean || null,
-    price: r.price ? parseFloat(r.price) : null,
-    minPrice: r.minprice ? parseFloat(r.minprice) : null,
-    maxPrice: r.maxprice ? parseFloat(r.maxprice) : null,
-    msrp: r.msrp ? parseFloat(r.msrp) : null,
-    purchasePrice: r.purchaseprice ? parseFloat(r.purchaseprice) : null,
+    price: cleanNumber(r.price),
+    minPrice: cleanNumber(r.minprice),
+    maxPrice: cleanNumber(r.maxprice),
+    msrp: cleanNumber(r.msrp),
+    purchasePrice: cleanNumber(r.purchaseprice),
     vatRateType: r.vatratetype ? r.vatratetype.toUpperCase() : 'STANDARD',
     shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : 0,
     shippingTime: r.shippingtime || null,
