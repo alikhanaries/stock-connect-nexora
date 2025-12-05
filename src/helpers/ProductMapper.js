@@ -345,6 +345,13 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+    {
+      Key: 'sellerId',
+      Value: product.sellerId || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || null;
   return {
