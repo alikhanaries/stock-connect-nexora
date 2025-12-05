@@ -117,7 +117,9 @@ const fetchProducts = async (query, sellerId) => {
     filter.$or = [{ name: regex }, { productSkuCode: regex }];
   }
   // Sorting
-  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1,
+    _id: 1
+   };
   // Fetch total and products in parallel
   const [total, products] = await Promise.all([
     Product.countDocuments(filter),
@@ -590,7 +592,7 @@ const getProductById = async (id, locale) => {
       { productSkuCode: rootSku },
       { parentProductSkuCode: rootSku },
       { grandParentProductSkuCode: rootSku },
-      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } }
+      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } },
     ],
   })
     .select('-__v')

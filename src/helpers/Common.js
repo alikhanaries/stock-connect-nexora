@@ -39,3 +39,17 @@ export const convetDateToUTC = (dateTime) => {
   const utcString = date.toISOString().replace('Z', '+00:00');
   return utcString;
 };
+
+/**
+ * Converts a comma-formatted number string into a float.
+ * Useful for normalizing price values from CSV/Excel/ERP imports.
+ *
+ * Examples:
+ *   cleanNumber("1,234.56") → 1234.56
+ *   cleanNumber("10,000")   → 10000
+ */
+export const cleanNumber = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+
+  return parseFloat(String(value).replace(/,/g, '').trim());
+};
