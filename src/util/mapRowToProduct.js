@@ -37,10 +37,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
 
   // Public URLs
   const publicUrls = generatedKeys.map(getPublicImageUrl);
-  const cleanNumber = (v) => {
-    if (!v) return null;
-    return parseFloat(String(v).replace(/,/g, ''));
-  };
+
   // Build product (ALL fields preserved)
   const product = {
     grandParentProductSkuCode: r.grandparentproductskucode || null,
@@ -52,11 +49,11 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     descriptionAr: r.descriptionar || null,
     brand: r.brand || null,
     ean: r.ean || null,
-    price: cleanNumber(r.price),
-    minPrice: cleanNumber(r.minprice),
-    maxPrice: cleanNumber(r.maxprice),
-    msrp: cleanNumber(r.msrp),
-    purchasePrice: cleanNumber(r.purchaseprice),
+    price: r.price ? parseFloat(r.price) : null,
+    minPrice: r.minprice ? parseFloat(r.minprice) : null,
+    maxPrice: r.maxprice ? parseFloat(r.maxprice) : null,
+    msrp: r.msrp ? parseFloat(r.msrp) : null,
+    purchasePrice: r.purchaseprice ? parseFloat(r.purchaseprice) : null,
     vatRateType: r.vatratetype?.toUpperCase() || 'STANDARD',
     shippingCost: parseFloat(r.shippingcost) || 0,
     shippingTime: r.shippingtime || null,
@@ -67,7 +64,6 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
     extraImageUrl3: publicUrls[4] || null,
     images: publicUrls.filter(Boolean),
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
-    images: [primaryImageUrl, imageUrl, extraImageUrl1, extraImageUrl2, extraImageUrl3].filter(Boolean),
     categoryTrail: r.categorytrail || '',
     attributes: r.attributes || null,
     categories: [],
