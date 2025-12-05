@@ -41,6 +41,10 @@ const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 const MAX_RETRIES = 3;
+const ROW_CONCURRENCY = 50;
+const DB_WRITE_CONCURRENCY = 4;
+const limit = pLimit(ROW_CONCURRENCY);
+const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 
 const fetchProducts = async (query, sellerId) => {
   const {
@@ -113,9 +117,7 @@ const fetchProducts = async (query, sellerId) => {
     filter.$or = [{ name: regex }, { productSkuCode: regex }];
   }
   // Sorting
-  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1,
-    _id: 1
-   };
+  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1, _id: 1 };
   // Fetch total and products in parallel
   const [total, products] = await Promise.all([
     Product.countDocuments(filter),
@@ -369,140 +371,153 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
 
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
-  let batch = [];
-  let insertedCount = 0;
-  let updatedCount = 0;
-  let invalidRowsCount = 0;
   const errorDetails = [];
-  const categoryTrails = new Set();
-  const allProductsForHierarchy = [];
-  const rowPromises = [];
+  const categoryTrailsSet = new Set();
+  let invalidRowsCount = 0;
+
+  const rowTasks = [];
+  const parsedProducts = [];
+  let rowIndex = 1;
 
   await new Promise((resolve, reject) => {
-    let rowIndex = 1;
-
     stream
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
-        const currentRow = rowIndex;
+        const current = rowIndex;
 
-        const rowPromise = (async () => {
-          try {
-            const isEmpty = Object.values(row).every((v) => v == null || String(v).trim() === '');
-            if (isEmpty) {
-              errorDetails.push({ rowNumber: currentRow, errorData: [locale.EMPTY_ROW] });
-              invalidRowsCount++;
-              return;
-            }
-
-            const product = await mapRowToProduct(row, currentRow, locale, sellerId);
-            product.rowNumber = currentRow;
-
-            if (product.errorData) {
-              errorDetails.push(product);
-              invalidRowsCount++;
-              return;
-            }
-
-            // Determine product type
+        rowTasks.push(
+          limit(async () => {
             try {
-              product.productType = determineProductType(product);
+              // Skip empty rows
+              const isEmpty = Object.values(row).every((v) => !v || String(v).trim() === '');
+              if (isEmpty) {
+                errorDetails.push({ rowNumber: current, errorData: [locale.EMPTY_ROW] });
+                invalidRowsCount++;
+                return;
+              }
+
+              // Map to product
+              const product = await mapRowToProduct(row, current, locale, sellerId);
+              if (product.errorData) {
+                errorDetails.push(product);
+                invalidRowsCount++;
+                return;
+              }
+
+              // Determine type
+              try {
+                product.productType = determineProductType(product);
+              } catch (e) {
+                errorDetails.push({ rowNumber: current, errorData: [e.message] });
+                invalidRowsCount++;
+                return;
+              }
+
+              // Price validation
+              if (product.productType === 'simple' && (!product.price || isNaN(product.price))) {
+                errorDetails.push({
+                  rowNumber: current,
+                  errorData: [locale.PRODUCT_PRICE_MISSING],
+                });
+                invalidRowsCount++;
+                return;
+              }
+              // Structure validation
+              const { valid, errors } = validateHierarchy(product);
+              if (!valid) {
+                errorDetails.push({ rowNumber: current, errorData: errors });
+                invalidRowsCount++;
+                return;
+              }
+
+              parsedProducts.push(product);
             } catch (err) {
-              errorDetails.push({ rowNumber: currentRow, errorData: [err.message] });
+              console.error('Row error:', err.message);
               invalidRowsCount++;
-              return;
             }
-
-            product['sellerId'] = sellerId;
-            const isPriceRequired = product.productType === 'simple';
-            if (isPriceRequired && (!product.price || isNaN(parseFloat(product.price)))) {
-              errorDetails.push({
-                rowNumber: currentRow,
-                errorData: [locale.PRODUCT_PRICE_MISSING],
-              });
-              invalidRowsCount++;
-              return;
-            }
-            // Structure validation
-            const { valid, errors } = validateHierarchy(product);
-            if (!valid) {
-              errorDetails.push({ rowNumber: currentRow, errorData: errors });
-              invalidRowsCount++;
-              return;
-            }
-
-            allProductsForHierarchy.push(product);
-          } catch (err) {
-            console.error(`Row ${currentRow} error:`, err.message);
-            invalidRowsCount++;
-          }
-        })();
-
-        rowPromises.push(rowPromise);
+          })
+        );
       })
-      .on('end', async () => {
-        await Promise.all(rowPromises);
-        resolve();
-      })
+      .on('end', resolve)
       .on('error', reject);
   });
 
-  // Validate parent & grandparent existence across all rows
-  const { validated, errors: hierarchyErrors } = await validateHierarchyExistenceBatch(
-    allProductsForHierarchy,
-    sellerId
-  );
-  if (hierarchyErrors.length > 0) {
+  // Wait for all row parsing tasks
+  await Promise.all(rowTasks);
+
+  // Validate parent/grandparent relationships
+  const { validated, errors: hierarchyErrors } = await validateHierarchyExistenceBatch(parsedProducts, sellerId);
+
+  if (hierarchyErrors.length) {
     errorDetails.push(...hierarchyErrors);
     invalidRowsCount += hierarchyErrors.length;
   }
 
   const validProducts = validated.filter((v) => v.valid).map((v) => v.product);
 
-  for (const product of validProducts) {
-    const existing = await Product.findOne({ sellerId, productSkuCode: product.productSkuCode }).lean();
+  // Fetch all existing products in ONE database query
+  const productSkuCodes = validProducts.map((p) => p.productSkuCode);
 
-    if (existing && existing.status === 'removed') {
+  const existingProducts = await Product.find(
+    { sellerId, productSkuCode: { $in: productSkuCodes } },
+    { productSkuCode: 1, status: 1 }
+  ).lean();
+
+  const existingMap = new Map();
+  for (const p of existingProducts) {
+    existingMap.set(p.productSkuCode, p);
+  }
+
+  // Counters
+  let insertedCount = 0;
+  let updatedCount = 0;
+
+  // Prepare bulk write operations
+  const bulkOps = validProducts.map((product) => {
+    const existing = existingMap.get(product.productSkuCode);
+
+    if (existing?.status === 'removed') {
       product.status = 'active';
     }
 
-    const op = {
+    if (existing?._id) updatedCount++;
+    else insertedCount++;
+
+    if (product.categoryTrail) categoryTrailsSet.add(product.categoryTrail);
+
+    return {
       updateOne: {
         filter: { sellerId, productSkuCode: product.productSkuCode },
         update: { $set: product },
         upsert: true,
       },
     };
+  });
 
-    if (existing?._id) updatedCount++;
-    else insertedCount++;
-
-    batch.push(op);
-
-    if (product.categoryTrail) categoryTrails.add(product.categoryTrail);
-
-    if (batch.length >= batchSize) {
-      const toProcess = [...batch];
-      batch = [];
-      await Product.bulkWrite(toProcess, { ordered: false });
-    }
+  // Bulk writes in parallel batches
+  const bulkTasks = [];
+  for (let i = 0; i < bulkOps.length; i += batchSize) {
+    const slice = bulkOps.slice(i, i + batchSize);
+    bulkTasks.push(writeLimit(() => Product.bulkWrite(slice, { ordered: false })));
   }
+  await Promise.all(bulkTasks);
 
-  if (batch.length) await Product.bulkWrite(batch, { ordered: false });
-
+  // Delete file async (non-blocking)
   if (deleteAfter && filePath) {
-    try {
-      fs.unlinkSync(filePath);
-    } catch (err) {
-      console.warn('File cleanup failed:', err.message);
-    }
+    fs.unlink(filePath, (err) => {
+      if (err) console.warn('File cleanup failed:', err.message);
+    });
   }
 
-  if (categoryTrails.size > 0) {
-    await insertCategoryTrail([...categoryTrails], sellerId);
+  //  Update categories – fire & forget (NO WAIT)
+  if (categoryTrailsSet.size) {
+    insertCategoryTrail([...categoryTrailsSet], sellerId).catch((e) =>
+      console.warn('CategoryTrail update error:', e.message)
+    );
   }
 
+  // Resolve product types (non-critical)
   await resolveProductTypes(sellerId);
 
   return {
