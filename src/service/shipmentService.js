@@ -1152,7 +1152,6 @@ export const createManualShipmentService = async (shipmentData) => {
     if (!orderId) missingFields.push('orderId');
     if (!sellerId) missingFields.push('sellerId');
     if (!userId) missingFields.push('userId');
-    if (!pickUpId) missingFields.push('pickUpId');
     if (!airWaybillNo) missingFields.push('airWaybillNo');
     if (!merchantShipmentNo) missingFields.push('merchantShipmentNo');
     if (!method) missingFields.push('method');
@@ -1166,12 +1165,6 @@ export const createManualShipmentService = async (shipmentData) => {
     const order = await Order.findById(orderId).lean();
     if (!order) {
       throw new Error(`Order with ID ${orderId} not found`);
-    }
-
-    //Validate pickup address
-    const pickupAddress = await PickupAddress.findById(pickUpId).lean();
-    if (!pickupAddress) {
-      throw new Error(`Pickup address with ID ${pickUpId} not found`);
     }
 
     //Get user details for shipment merchant details
@@ -1188,6 +1181,27 @@ export const createManualShipmentService = async (shipmentData) => {
       });
     }
 
+    // Fetch existing shipments to calculate already shipped quantities
+    const productLineIds = products.map((p) => p.orderLineId?.toString());
+    const existingShipments = await Shipment.find({
+      orderId: orderId,
+      status: { $nin: ['CANCELED', 'RETURNED'] },
+      'products.orderLineId': { $in: productLineIds },
+    }).lean();
+
+    // Build shipped quantity map
+    const shippedQtyMap = {};
+    for (const shipment of existingShipments || []) {
+      for (const product of shipment.products || []) {
+        const orderLineId = String(product.orderLineId);
+        const quantity = product.quantity || 0;
+
+        if (productLineIds.includes(orderLineId)) {
+          shippedQtyMap[orderLineId] = (shippedQtyMap[orderLineId] || 0) + quantity;
+        }
+      }
+    }
+
     const validatedProducts = [];
     for (const product of products) {
       const orderSku = orderSkuMap.get(product.merchantProductNo.toLowerCase());
@@ -1198,6 +1212,29 @@ export const createManualShipmentService = async (shipmentData) => {
       // Check if quantity is valid
       if (product.quantity <= 0) {
         throw new Error(`Invalid quantity for product ${product.merchantProductNo}`);
+      }
+
+      // Calculate available quantity (ordered - cancelled)
+      const orderedQuantity = orderSku.quantity || 0;
+      const cancelledQuantity = orderSku.cancellationRequestedQuantity || 0;
+      const availableQuantity = orderedQuantity - cancelledQuantity;
+
+      // Get already shipped quantity for this product
+      const orderLineId = String(product.orderLineId);
+      const alreadyShippedQty = shippedQtyMap[orderLineId] || 0;
+      const remainingQuantity = availableQuantity - alreadyShippedQty;
+
+      // Validate requested quantity doesn't exceed remaining quantity
+      if (remainingQuantity <= 0) {
+        throw new Error(
+          `Cannot ship ${product.merchantProductNo}. All ${availableQuantity} available units have already been shipped`
+        );
+      }
+
+      if (product.quantity > remainingQuantity) {
+        throw new Error(
+          `Cannot ship ${product.quantity} units of ${product.merchantProductNo}. Only ${remainingQuantity} units remaining (${orderedQuantity} ordered, ${cancelledQuantity} cancelled, ${alreadyShippedQty} already shipped)`
+        );
       }
 
       validatedProducts.push({
@@ -1242,7 +1279,7 @@ export const createManualShipmentService = async (shipmentData) => {
       sellerId,
       userId,
       deliveryId,
-      pickUpId,
+      ...(pickUpId && { pickUpId }),
       airWaybillNo,
       merchantShipmentNo,
       merchantOrderNo: order.merchantOrderNo || order.orderId,
