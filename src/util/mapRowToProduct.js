@@ -38,13 +38,12 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
 
   // Public URLs
   const publicUrls = generatedKeys.map(getPublicImageUrl);
-
   // Build product (ALL fields preserved)
   const product = {
     grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,
-    name: r.productname || 'Unnamed Product',
+    name: r.productname || '',
     nameAr: r.productnamear || '',
     description: r.description || null,
     descriptionAr: r.descriptionar || null,
