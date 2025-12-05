@@ -3,7 +3,7 @@ import { uploadImageFromUrl } from '../util/uploadImage.js';
 import { generateS3Key } from '../util/generateS3Key.js';
 import { getPublicImageUrl } from '../util/getPublicImageUrl.js';
 import pLimit from 'p-limit';
-import { cleanNumber } from './cleanNumber.js';
+import { cleanNumber } from '../helpers/Common.js';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
 export const mapRowToProduct = async (row, index, locale, sellerId) => {
