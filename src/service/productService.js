@@ -244,7 +244,7 @@ export const pushBatchToOCP = async (batch, index, sellerId) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-ocp-tenant-slug': seller.slug,
+        'x-ocp-tenant-slug': seller.ocpSlugId,
         'x-api-key': OCP_API_KEY,
       },
       body: JSON.stringify(batch),
@@ -338,7 +338,16 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
           //return await pushBatch(batch.map(mapProductToChannelEngine), idx);
 
           if (channel.channelName === 'OCP') {
-            return await pushBatchToOCP(uploadProducts(batch), idx, sellerId);
+            // Filter simple products for OCP
+            const simpleProducts = batch
+              .filter(({ productType }) => productType === 'simple')
+              .map((product) =>
+                product.categoryTrail === 'Apparel > Dresses > Dresses'
+                  ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
+                  : product
+              );
+
+            return await pushBatchToOCP(uploadProducts(simpleProducts), idx, sellerId);
           } else {
             return await pushBatch(batch.map(mapProductToChannelEngine), idx);
           }
@@ -581,7 +590,7 @@ const getProductById = async (id, locale) => {
       { productSkuCode: rootSku },
       { parentProductSkuCode: rootSku },
       { grandParentProductSkuCode: rootSku },
-      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } },
+      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } }
     ],
   })
     .select('-__v')
