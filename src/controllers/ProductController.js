@@ -202,11 +202,10 @@ export const getProductById = async (req, res) => {
     const result = await productService.getProductById(id, locale);
 
     if (!result.success) {
-       return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED , 400);
+      return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED, 400);
     }
 
-    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200 , result.data);
-
+    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200, result.data);
   } catch (error) {
     console.error('Error:', error);
     errorLog(error);
@@ -325,7 +324,11 @@ export const getUserUnassignedProducts = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
-    const { products, pagination,appliedFilters } = await productService.getUserUnassignedProducts(sellerId, channelId, req.query);
+    const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
+      sellerId,
+      channelId,
+      req.query
+    );
 
     const responseData = {
       content: products || [],
@@ -410,6 +413,31 @@ export const exportProducts = async (req, res) => {
   }
 };
 
+export const searchProducts = async (req, res) => {
+  try {
+    const sellerId = req.params.sellerId;
+    const groups = req.body.groups;
+
+    const { products, pagination } = await productService.searchProuctsByFilter(groups, req.body, sellerId);
+
+    const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
+
+    return res.json({
+      success: true,
+      page: pagination.page,
+      limit: pagination.size,
+      total: pagination.totalItems,
+      count: products.length,
+      message: message,
+      data: products,
+    });
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    errorLog(error);
+    return errorResponse(res, error, 500);
+  }
+};
+
 export default {
   getProducts,
   getTopSellingProduct,
@@ -425,4 +453,5 @@ export default {
   addProductsToUserChannel,
   unlinkProductFromChannel,
   exportProducts,
+  searchProducts,
 };
