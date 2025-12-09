@@ -251,8 +251,27 @@ export const getAllUserChannels = async (sellerId, query) => {
                 },
               },
             },
-            { $match: { isActive: true } },
-            { $project: { count: { $size: { $ifNull: ['$skuList', []] } } } },
+            { $unwind: '$skuList' },
+            // Check if this SKU actually exists in products
+            {
+              $lookup: {
+                from: 'products',
+                let: { sku: '$skuList.skuCode' },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [{ $eq: ['$productSkuCode', '$$sku'] }, { $ne: ['$status', 'removed'] }],
+                      },
+                    },
+                  },
+                  { $project: { _id: 1 } },
+                ],
+                as: 'matchedProduct',
+              },
+            },
+            { $match: { matchedProduct: { $ne: [] } } },
+            { $count: 'count' },
           ],
           as: 'productsInfo',
         },
