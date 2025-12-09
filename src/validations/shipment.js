@@ -95,3 +95,33 @@ export const cancelShipmentValidator = validate(async (req) => {
 
   bodySchema.parse(req.body);
 });
+
+export const createManualShipmentValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const bodySchema = z.object({
+    orderId: mongoIdField('orderId', { required: true }),
+    sellerId: mongoIdField('sellerId', { required: true }),
+
+    airWaybillNo: notNullString('airWaybillNo', undefined, { required: true }),
+    merchantShipmentNo: notNullString('merchantShipmentNo', undefined, { required: true }),
+    method: notNullString('method', undefined, { required: true }),
+
+    // Optional fields
+    trackTraceUrl: notNullString('trackTraceUrl', ''),
+    shippedFromCountryCode: notNullString('shippedFromCountryCode', 'SA'),
+
+    // Product lines to ship
+    products: z
+      .array(
+        z.object({
+          merchantProductNo: notNullString('merchantProductNo', undefined, { required: true }),
+          orderLineId: safeNumber('orderLineId', 0, { required: true }),
+          quantity: safeNumber('quantity', 0, { required: true }),
+        })
+      )
+      .nonempty({ message: 'products must contain at least one item' }),
+  });
+
+  return bodySchema.parse(req.body);
+});

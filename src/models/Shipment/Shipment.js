@@ -11,6 +11,7 @@ const shipmentSchema = new mongoose.Schema(
       enum: [
         'SHIPMENT_CREATED',
         'PICKED',
+        'SHIPPED',
         'OUT_FOR_DELIVERY',
         'RETURNED',
         'RETURN REQUESTED',
@@ -30,7 +31,7 @@ const shipmentSchema = new mongoose.Schema(
 
     // Delivery & collection references
     deliveryId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryAdress', required: true },
-    pickUpId: { type: mongoose.Schema.Types.ObjectId, ref: 'PickupAddress', required: true },
+    pickUpId: { type: mongoose.Schema.Types.ObjectId, ref: 'PickupAddress' },
 
     // ChannelEngine / Shipment info
     merchantShipmentNo: { type: String, index: true },
