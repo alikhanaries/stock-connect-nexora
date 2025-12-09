@@ -883,7 +883,7 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     { 'skuList.skuCode': 1 }
   ).lean();
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
-  const filter = { status: { $ne: ['removed', 'inactive'] }, sellerId: new mongoose.Types.ObjectId(sellerId) };
+  const filter = { status: { $nin: ['removed', 'inactive'] }, sellerId: new mongoose.Types.ObjectId(sellerId) };
 
   if (assignedSkuCodes.length > 0) {
     filter.productSkuCode = { $nin: assignedSkuCodes };
