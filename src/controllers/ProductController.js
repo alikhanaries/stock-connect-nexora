@@ -420,17 +420,12 @@ export const searchProducts = async (req, res) => {
 
     const { products, pagination } = await productService.searchProuctsByFilter(groups, req.body, sellerId);
 
+    const responseData = {
+      content: products || [],
+      ...pagination,
+    };
     const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
-
-    return res.json({
-      success: true,
-      page: pagination.page,
-      limit: pagination.size,
-      total: pagination.totalItems,
-      count: products.length,
-      message: message,
-      data: products,
-    });
+    return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error fetching products:', error);
     errorLog(error);
