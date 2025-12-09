@@ -588,7 +588,7 @@ const getProductById = async (id, locale) => {
       { productSkuCode: rootSku },
       { parentProductSkuCode: rootSku },
       { grandParentProductSkuCode: rootSku },
-      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } },
+      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[]\]/g, '//$&')}` } },
     ],
   })
     .select('-__v')
