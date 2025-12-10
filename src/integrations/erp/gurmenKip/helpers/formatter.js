@@ -14,13 +14,13 @@ const extractSubproductImages = (subproducts) => {
   });
 };
 
-const formatBaseProduct = async (product, sellerId, subproductImages, imageReplace) => {
+const formatBaseProduct = async (product, sellerId, subproductImages, isImageUpdate) => {
   const imgItems = toArray(product.img_item).map((i) => i?.trim());
   const rawImages = cleanImages(product.image_url, imgItems, subproductImages);
 
   let processed = {};
 
-  if (imageReplace === true) {
+  if (isImageUpdate === true) {
     const cdnImages = await processProductImages(rawImages, sellerId);
 
     if (cdnImages.length > 0) {
@@ -46,7 +46,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, imageRepla
     categoryTrail: product.category_path,
     vatRateType: 'STANDARD',
     status: product.active === '1' ? 'active' : 'inactive',
-    ...processed, // only included when imageReplace = true
+    ...processed, // only included when isImageUpdate = true
     volumetricWeightCm: 0.3,
     hsCodeAE: product.code,
     hsCodeSA: product.code,
@@ -54,7 +54,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, imageRepla
   };
 };
 
-export const formatGurmanProduct = async (raw = [], sellerId, imageReplace = false) => {
+export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = false) => {
   if (!Array.isArray(raw) || !raw.length) return [];
 
   const formatted = [];
@@ -63,7 +63,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, imageReplace = fal
     if (product.category_path) categoryTrails.add(product.category_path);
     const subproducts = toArray(product?.subproducts?.subproduct);
     const subproductImages = extractSubproductImages(subproducts);
-    const base = await formatBaseProduct(product, sellerId, subproductImages, imageReplace);
+    const base = await formatBaseProduct(product, sellerId, subproductImages, isImageUpdate);
     if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
     const grandParentSku = product.ws_code || product.code;
 
@@ -113,8 +113,8 @@ export const formatGurmanProduct = async (raw = [], sellerId, imageReplace = fal
 
         let processedChild = {};
 
-        if (imageReplace === true) {
-          // Process only when imageReplace = true
+        if (isImageUpdate === true) {
+          // Process only when isImageUpdate = true
           const variantImgs = cleanImages(variant.image_url, toArray(variant.img_item));
           const mergedChildImages = cleanImages(...(base.images || []), ...variantImgs);
 

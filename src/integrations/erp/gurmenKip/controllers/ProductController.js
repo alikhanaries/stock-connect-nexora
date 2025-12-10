@@ -4,9 +4,9 @@ import { getGurmanProducts } from '../services/productService.js';
 export const syncGurmanProducts = (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const imageReplace = req.query.imageReplace === 'true';
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     process.nextTick(() => {
-      getGurmanProducts(sellerId, imageReplace).catch((err) =>
+      getGurmanProducts(sellerId, isImageUpdate).catch((err) =>
         console.error('Gürmen Group (KIP) background sync failed:', err)
       );
     });
