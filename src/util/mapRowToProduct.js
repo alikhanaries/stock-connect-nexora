@@ -40,6 +40,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
   const publicUrls = generatedKeys.map(getPublicImageUrl);
   // Build product (ALL fields preserved)
   const product = {
+    rowNumber: index,
     grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,

@@ -1,27 +1,6 @@
 import Product from '#models/Product.js';
 
 /**
- * Determines whether a product is 'configurable' or 'simple'.
- * Logic is based purely on its parent / grandparent relationships.
- */
-export function determineProductType(product) {
-  const parent = product.parentProductSkuCode;
-  const grand = product.grandParentProductSkuCode;
-
-  // No parent or grandparent → top-level product → configurable
-  if (!parent && !grand) return 'configurable';
-
-  // Has grandparent but no parent → still a parent of others → configurable
-  if (!parent && grand) return 'configurable';
-
-  // Has a parent but no grandparent → leaf node → simple product
-  if (parent && !grand) return 'simple';
-
-  // Invalid: a child cannot have both a parent and grandparent
-  throw new Error(`Invalid hierarchy for SKU '${product.productSkuCode}' (Row ${product.rowNumber}).`);
-}
-
-/**
  * Performs basic structure checks:
  * - no self-references
  * - no identical parent & grandparent
@@ -29,9 +8,7 @@ export function determineProductType(product) {
  */
 export function validateHierarchy(product) {
   const errors = [];
-  const sku = product.productSkuCode;
-  const parent = product.parentProductSkuCode;
-  const grand = product.grandParentProductSkuCode;
+  const { productSkuCode: sku, parentProductSkuCode: parent, grandParentProductSkuCode: grand } = product;
 
   // Protect against self-parenting
   if (sku && (sku === parent || sku === grand)) {
@@ -59,45 +36,46 @@ export function validateHierarchy(product) {
  */
 export async function validateHierarchyExistenceBatch(products, sellerId) {
   const errors = [];
-  const validated = new Array(products.length);
+  const validated = [];
 
-  // All SKUs in current sheet for quick lookup
-  const sheetSkuSet = new Set(products.map((p) => p.productSkuCode));
-
-  // Collect all referenced parent/grandparent SKUs not in sheet
+  const sheetSKUs = new Set(products.map((p) => p.productSkuCode));
   const missingRefs = new Set();
-  for (const p of products) {
-    if (p.parentProductSkuCode && !sheetSkuSet.has(p.parentProductSkuCode)) missingRefs.add(p.parentProductSkuCode);
 
-    if (p.grandParentProductSkuCode && !sheetSkuSet.has(p.grandParentProductSkuCode))
+  // Collect all referenced parents/grandparents
+  for (const p of products) {
+    if (p.parentProductSkuCode && !sheetSKUs.has(p.parentProductSkuCode)) {
+      missingRefs.add(p.parentProductSkuCode);
+    }
+    if (p.grandParentProductSkuCode && !sheetSKUs.has(p.grandParentProductSkuCode)) {
       missingRefs.add(p.grandParentProductSkuCode);
+    }
   }
 
-  // Fetch missing references from the database
-  let dbSkuSet = new Set();
+  // Fetch those references from DB
+  let dbSKUs = new Set();
   if (missingRefs.size > 0) {
     const dbProducts = await Product.find(
       { sellerId, productSkuCode: { $in: [...missingRefs] } },
       { productSkuCode: 1 }
     ).lean();
-    dbSkuSet = new Set(dbProducts.map((p) => p.productSkuCode));
+
+    dbSKUs = new Set(dbProducts.map((p) => p.productSkuCode));
   }
 
-  // Validate each row against sheet + DB SKU sets
-  let vIndex = 0;
+  // Validate existence row by row
   for (const p of products) {
     const rowErrors = [];
 
     // Parent must exist somewhere
-    if (p.parentProductSkuCode && !sheetSkuSet.has(p.parentProductSkuCode) && !dbSkuSet.has(p.parentProductSkuCode)) {
+    if (p.parentProductSkuCode && !sheetSKUs.has(p.parentProductSkuCode) && !dbSKUs.has(p.parentProductSkuCode)) {
       rowErrors.push(`Parent SKU '${p.parentProductSkuCode}' not found for '${p.productSkuCode}'.`);
     }
 
     // Grandparent must exist somewhere
     if (
       p.grandParentProductSkuCode &&
-      !sheetSkuSet.has(p.grandParentProductSkuCode) &&
-      !dbSkuSet.has(p.grandParentProductSkuCode)
+      !sheetSKUs.has(p.grandParentProductSkuCode) &&
+      !dbSKUs.has(p.grandParentProductSkuCode)
     ) {
       rowErrors.push(`Grandparent SKU '${p.grandParentProductSkuCode}' not found for '${p.productSkuCode}'.`);
     }
@@ -105,7 +83,7 @@ export async function validateHierarchyExistenceBatch(products, sellerId) {
     const valid = rowErrors.length === 0;
     if (!valid) errors.push({ rowNumber: p.rowNumber, errorData: rowErrors });
 
-    validated[vIndex++] = { product: p, valid, errors: rowErrors };
+    validated.push({ product: p, valid, errors: rowErrors });
   }
 
   return { validated, errors };
@@ -118,26 +96,23 @@ export async function validateHierarchyExistenceBatch(products, sellerId) {
  * - Done via a single aggregation + 2 updates for maximum performance
  */
 export async function resolveProductTypes(sellerId) {
-  const refs = await Product.aggregate([
+  const results = await Product.aggregate([
     { $match: { sellerId } },
     {
       $group: {
         _id: null,
-        parentRefs: { $addToSet: '$parentProductSkuCode' },
-        grandRefs: { $addToSet: '$grandParentProductSkuCode' },
+        parents: { $addToSet: '$parentProductSkuCode' },
+        grands: { $addToSet: '$grandParentProductSkuCode' },
       },
     },
-    // Merge parent + grandparent references
-    { $project: { refs: { $setUnion: ['$parentRefs', '$grandRefs'] } } },
+    { $project: { refs: { $setUnion: ['$parents', '$grands'] } } },
   ]);
 
-  const refList = refs[0]?.refs?.filter(Boolean) || [];
+  const refs = results[0]?.refs?.filter(Boolean) || [];
 
-  if (refList.length > 0) {
-    // All referenced SKUs are configurable
-    await Product.updateMany({ sellerId, productSkuCode: { $in: refList } }, { $set: { productType: 'configurable' } });
+  // Configurable = Appears in refs
+  await Product.updateMany({ sellerId, productSkuCode: { $in: refs } }, { $set: { productType: 'configurable' } });
 
-    // Everything else is simple
-    await Product.updateMany({ sellerId, productSkuCode: { $nin: refList } }, { $set: { productType: 'simple' } });
-  }
+  // Simple = Not referenced anywhere
+  await Product.updateMany({ sellerId, productSkuCode: { $nin: refs } }, { $set: { productType: 'simple' } });
 }

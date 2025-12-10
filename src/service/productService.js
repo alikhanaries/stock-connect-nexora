@@ -1,27 +1,22 @@
 import { config } from '#config/config.js';
-import { ORDER_STATUS_MATCH, PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_EXPORT_HEADERS, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import {
-  determineProductType,
-  resolveProductTypes,
-  validateHierarchy,
-  validateHierarchyExistenceBatch,
-} from '#helpers/ProductHierarchy.js';
+import { resolveProductTypes, validateHierarchy, validateHierarchyExistenceBatch } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import {
+  createCSVExportResponse,
   escapeCsv,
   generateCSVFilename,
-  createCSVExportResponse,
   handleExportError,
   validateExportData,
 } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
-import Seller from '#models/Seller.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
+import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
-import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import { uploadProducts } from '#service/channel/ocpService.js';
+import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -370,26 +365,26 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
+  const parsedProducts = [];
   const categoryTrailsSet = new Set();
   let invalidRowsCount = 0;
+  let rowIndex = 1;
 
   const rowTasks = [];
-  const parsedProducts = [];
-  let rowIndex = 1;
 
   await new Promise((resolve, reject) => {
     stream
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
-        const current = rowIndex;
+        const currentRow = rowIndex;
 
         rowTasks.push(
           limit(async () => {
             try {
+              const current = currentRow;
               // Skip empty rows
-              const isEmpty = Object.values(row).every((v) => !v || String(v).trim() === '');
-              if (isEmpty) {
+              if (Object.values(row).every((v) => !v || String(v).trim() === '')) {
                 errorDetails.push({ rowNumber: current, errorData: [locale.EMPTY_ROW] });
                 invalidRowsCount++;
                 return;
@@ -404,24 +399,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               }
 
               // Determine type
-              try {
-                product.productType = determineProductType(product);
-              } catch (e) {
-                errorDetails.push({ rowNumber: current, errorData: [e.message] });
-                invalidRowsCount++;
-                return;
-              }
-
-              // Price validation
-              if (product.productType === 'simple' && (!product.price || isNaN(product.price))) {
-                errorDetails.push({
-                  rowNumber: current,
-                  errorData: [locale.PRODUCT_PRICE_MISSING],
-                });
-                invalidRowsCount++;
-                return;
-              }
-              // Structure validation
               const { valid, errors } = validateHierarchy(product);
               if (!valid) {
                 errorDetails.push({ rowNumber: current, errorData: errors });
@@ -462,11 +439,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     { productSkuCode: 1, status: 1 }
   ).lean();
 
-  const existingMap = new Map();
-  for (const p of existingProducts) {
-    existingMap.set(p.productSkuCode, p);
-  }
-
+  const existingMap = new Map(existingProducts.map((p) => [p.productSkuCode, p]));
   // Counters
   let insertedCount = 0;
   let updatedCount = 0;
@@ -479,7 +452,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       product.status = 'active';
     }
 
-    if (existing?._id) updatedCount++;
+    if (existing) updatedCount++;
     else insertedCount++;
 
     if (product.categoryTrail) categoryTrailsSet.add(product.categoryTrail);
@@ -496,8 +469,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   // Bulk writes in parallel batches
   const bulkTasks = [];
   for (let i = 0; i < bulkOps.length; i += batchSize) {
-    const slice = bulkOps.slice(i, i + batchSize);
-    bulkTasks.push(writeLimit(() => Product.bulkWrite(slice, { ordered: false })));
+    bulkTasks.push(writeLimit(() => Product.bulkWrite(bulkOps.slice(i, i + batchSize), { ordered: false })));
   }
   await Promise.all(bulkTasks);
 
