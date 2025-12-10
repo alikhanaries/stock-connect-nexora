@@ -200,6 +200,7 @@ export const getOrderById = async (id) => {
               : product.quantity,
           status: product?.status === 'IN_COMBI' ? 'PARTIALLY_CANCELED' : product?.status,
           hsCode: productsMap[product.merchantProductNo]?.hsCode || product.merchantProductNo,
+          cancellationRequestedQuantity: product?.cancellationRequestedQuantity || 0,
         });
         if (status === 'CANCELED') {
           return; //  Don't include cancelled items in unshipped
@@ -223,6 +224,7 @@ export const getOrderById = async (id) => {
           quantity: notShippedQty,
           status: product?.status,
           hsCode: productsMap[product.merchantProductNo]?.hsCode || product.merchantProductNo,
+          cancellationRequestedQuantity: product?.cancellationRequestedQuantity || 0,
         });
       }
     });
