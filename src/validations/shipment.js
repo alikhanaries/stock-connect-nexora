@@ -109,10 +109,7 @@ export const createManualShipmentValidator = validate(async (req) => {
     method: notNullString('method', undefined, { required: true }),
 
     // Optional fields
-    trackTraceUrl: notNullString('trackTraceUrl', '').optional(),
     shippedFromCountryCode: notNullString('shippedFromCountryCode', 'SA'),
-    shipmentId: notNullString('shipmentId', '').optional(),
-    description: notNullString('description', '').optional(),
 
     // Product lines to ship
     products: z
