@@ -1116,6 +1116,7 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
       minPrice,
       maxPrice,
       productSkuCode,
+      productType,
       size = 100000,
       sortBy = 'createdAt',
       sortOrder = 'desc',
@@ -1143,6 +1144,14 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
       filter.price = {};
       if (minPrice) filter.price.$gte = parseFloat(minPrice);
       if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+    }
+
+    if (productType) {
+      const productTypes = String(productType)
+        .toLowerCase()
+        .split(',')
+        .map((t) => t.trim().replace(/'/g, ''));
+      filter.productType = { $in: productTypes };
     }
 
     if (search) {

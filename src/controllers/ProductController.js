@@ -372,7 +372,7 @@ export const unlinkProductFromChannel = async (req, res) => {
 export const exportProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { status, search, minPrice, maxPrice, productSkuCode, sortBy, sortOrder } = req.query;
+    const { status, search, minPrice, maxPrice, productSkuCode, productType, sortBy, sortOrder } = req.query;
 
     // Build filters only with non-empty values
     const filters = {};
@@ -381,6 +381,7 @@ export const exportProducts = async (req, res) => {
     if (minPrice) filters.minPrice = minPrice;
     if (maxPrice) filters.maxPrice = maxPrice;
     if (productSkuCode) filters.productSkuCode = productSkuCode;
+    if (productType) filters.productType = productType;
     if (sortBy) filters.sortBy = sortBy;
     if (sortOrder) filters.sortOrder = sortOrder;
 
