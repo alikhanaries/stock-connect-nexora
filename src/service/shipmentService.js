@@ -1160,6 +1160,7 @@ export const createManualShipmentService = async (shipmentData) => {
     if (!orderId) missingFields.push('orderId');
     if (!sellerId) missingFields.push('sellerId');
     if (!userId) missingFields.push('userId');
+    if (!pickUpId) missingFields.push('pickUpId');
     if (!airWaybillNo) missingFields.push('airWaybillNo');
     if (!merchantShipmentNo) missingFields.push('merchantShipmentNo');
     if (!method) missingFields.push('method');
@@ -1253,6 +1254,12 @@ export const createManualShipmentService = async (shipmentData) => {
       });
     }
 
+    //Validate and get pickup address
+    const pickupData = await getPickUpAddress(pickUpId);
+    if (!pickupData) {
+      throw new Error('Invalid pickup address ID');
+    }
+
     //Save or get existing delivery address from order
     let deliveryId;
     const existingDelivery = await DeliveryAddress.findOne({
@@ -1287,7 +1294,7 @@ export const createManualShipmentService = async (shipmentData) => {
       sellerId,
       userId,
       deliveryId,
-      ...(pickUpId && { pickUpId }),
+      pickUpId: pickupData._id,
       airWaybillNo,
       merchantShipmentNo,
       merchantOrderNo: order.merchantOrderNo || order.orderId,
