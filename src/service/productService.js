@@ -65,7 +65,7 @@ const fetchProducts = async (query, sellerId) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId), productType: 'simple' };
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
 
   const appliedFilters = {};
 
@@ -98,8 +98,6 @@ const fetchProducts = async (query, sellerId) => {
 
     filter.productType = { $in: productTypes };
     appliedFilters.productType = productTypes;
-  } else {
-    filter.productType = 'simple';
   }
 
   //stock count filter
@@ -590,7 +588,7 @@ const getProductById = async (id, locale) => {
       { productSkuCode: rootSku },
       { parentProductSkuCode: rootSku },
       { grandParentProductSkuCode: rootSku },
-      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } },
+      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[]\]/g, '//$&')}` } },
     ],
   })
     .select('-__v')
@@ -796,8 +794,6 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
       .map((t) => t.trim().replace(/'/g, ''));
     matchProductStage['productDetails.productType'] = { $in: productTypes };
     appliedFilters.productType = productTypes;
-  } else {
-    matchProductStage['productDetails.productType'] = 'simple';
   }
 
   if (minPrice || maxPrice) {
@@ -887,7 +883,7 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     { 'skuList.skuCode': 1 }
   ).lean();
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
-  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
+  const filter = { status: { $nin: ['removed', 'inactive'] }, sellerId: new mongoose.Types.ObjectId(sellerId) };
 
   if (assignedSkuCodes.length > 0) {
     filter.productSkuCode = { $nin: assignedSkuCodes };
@@ -909,8 +905,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
 
     filter.productType = { $in: productTypes };
     appliedFilters.productType = productTypes;
-  } else {
-    filter.productType = 'simple';
   }
 
   if (minPrice || maxPrice) {
