@@ -49,6 +49,7 @@ export const getTopSellingProduct = async (req, res) => {
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     const { url } = req.body;
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
@@ -61,7 +62,7 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
     // Process file in background (async, no await here)
     productService
-      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId)
+      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId, isImageUpdate)
       .then((result) => {
         console.log('CSV processing completed:', result);
         // Send email notification after processing
@@ -91,10 +92,10 @@ export const importProductsFromCsvFile = async (req, res) => {
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
     // Call service
     const sellerId = req.sellerId;
-
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     // Process file in background (async, no await here)
     productService
-      .importProductsFromCsvFile(req.file.path, req.locale, sellerId)
+      .importProductsFromCsvFile(req.file.path, req.locale, sellerId, isImageUpdate)
       .then((result) => {
         console.log('CSV processing completed:', result.errorDetails);
         // Send email notification after processing
@@ -202,11 +203,10 @@ export const getProductById = async (req, res) => {
     const result = await productService.getProductById(id, locale);
 
     if (!result.success) {
-       return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED , 400);
+      return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED, 400);
     }
 
-    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200 , result.data);
-
+    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200, result.data);
   } catch (error) {
     console.error('Error:', error);
     errorLog(error);
@@ -325,7 +325,11 @@ export const getUserUnassignedProducts = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
-    const { products, pagination,appliedFilters } = await productService.getUserUnassignedProducts(sellerId, channelId, req.query);
+    const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
+      sellerId,
+      channelId,
+      req.query
+    );
 
     const responseData = {
       content: products || [],
