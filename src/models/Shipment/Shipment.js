@@ -41,6 +41,8 @@ const shipmentSchema = new mongoose.Schema(
     shippedFromStockLocationId: { type: Number, default: 0 },
     method: { type: String, index: true },
     isMerchantCreator: { type: Boolean, default: true },
+    shipmentId: { type: String },
+    description: { type: String },
 
     // products array
     products: [LineSchema],
@@ -49,6 +51,7 @@ const shipmentSchema = new mongoose.Schema(
     extraData: {
       aymakan: { type: mongoose.Schema.Types.Mixed },
       channelEngine: { type: mongoose.Schema.Types.Mixed },
+      manual: { type: mongoose.Schema.Types.Mixed },
     },
     shipmentMerchantDetails: {
       name: { type: String, index: true },
