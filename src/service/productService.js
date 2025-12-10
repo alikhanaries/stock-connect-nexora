@@ -1117,6 +1117,8 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
       maxPrice,
       productSkuCode,
       productType,
+      minStockCount,
+      maxStockCount,
       size = 100000,
       sortBy = 'createdAt',
       sortOrder = 'desc',
@@ -1152,6 +1154,12 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
         .split(',')
         .map((t) => t.trim().replace(/'/g, ''));
       filter.productType = { $in: productTypes };
+    }
+
+    if (minStockCount || maxStockCount) {
+      filter.currentStockCount = {};
+      if (minStockCount) filter.currentStockCount.$gte = parseFloat(minStockCount);
+      if (maxStockCount) filter.currentStockCount.$lte = parseFloat(maxStockCount);
     }
 
     if (search) {
