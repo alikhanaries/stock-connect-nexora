@@ -65,7 +65,7 @@ const fetchProducts = async (query, sellerId) => {
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId), productType: 'simple' };
+  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
 
   const appliedFilters = {};
 
@@ -98,8 +98,6 @@ const fetchProducts = async (query, sellerId) => {
 
     filter.productType = { $in: productTypes };
     appliedFilters.productType = productTypes;
-  } else {
-    filter.productType = 'simple';
   }
 
   //stock count filter
@@ -369,7 +367,7 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
   );
 };
 
-export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
+export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
   const categoryTrailsSet = new Set();
@@ -398,7 +396,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               }
 
               // Map to product
-              const product = await mapRowToProduct(row, current, locale, sellerId);
+              const product = await mapRowToProduct(row, current, locale, sellerId, isImageUpdate);
               if (product.errorData) {
                 errorDetails.push(product);
                 invalidRowsCount++;
@@ -532,12 +530,12 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
 /* Google Sheet Import */
 
-export const importProductsFromGoogleSheet = async (url, locale, sellerId) => {
+export const importProductsFromGoogleSheet = async (url, locale, sellerId, isImageUpdate) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processImportStream(stream, { locale, sellerId });
+    return await processImportStream(stream, { locale, sellerId, isImageUpdate });
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
     throw new Error(err.message); // force the catch block
@@ -546,10 +544,10 @@ export const importProductsFromGoogleSheet = async (url, locale, sellerId) => {
 
 /* CSV File Import */
 
-export const importProductsFromCsvFile = async (filePath, locale, sellerId) => {
+export const importProductsFromCsvFile = async (filePath, locale, sellerId, isImageUpdate) => {
   try {
     const stream = fs.createReadStream(filePath);
-    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId });
+    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId, isImageUpdate });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block
@@ -590,7 +588,7 @@ const getProductById = async (id, locale) => {
       { productSkuCode: rootSku },
       { parentProductSkuCode: rootSku },
       { grandParentProductSkuCode: rootSku },
-      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` } },
+      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[]\]/g, '//$&')}` } },
     ],
   })
     .select('-__v')
@@ -796,8 +794,6 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
       .map((t) => t.trim().replace(/'/g, ''));
     matchProductStage['productDetails.productType'] = { $in: productTypes };
     appliedFilters.productType = productTypes;
-  } else {
-    matchProductStage['productDetails.productType'] = 'simple';
   }
 
   if (minPrice || maxPrice) {
@@ -887,7 +883,7 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     { 'skuList.skuCode': 1 }
   ).lean();
   const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
-  const filter = { status: { $ne: 'removed' }, sellerId: new mongoose.Types.ObjectId(sellerId) };
+  const filter = { status: { $nin: ['removed', 'inactive'] }, sellerId: new mongoose.Types.ObjectId(sellerId) };
 
   if (assignedSkuCodes.length > 0) {
     filter.productSkuCode = { $nin: assignedSkuCodes };
@@ -909,8 +905,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
 
     filter.productType = { $in: productTypes };
     appliedFilters.productType = productTypes;
-  } else {
-    filter.productType = 'simple';
   }
 
   if (minPrice || maxPrice) {
@@ -1234,6 +1228,136 @@ export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
   }
 };
 
+function normalizeArray(value) {
+  if (Array.isArray(value)) {
+    return value.filter((v) => v !== undefined && v !== null && v !== '').map((v) => String(v).trim());
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0);
+  }
+
+  if (value === undefined || value === null) return [];
+
+  return [String(value).trim()];
+}
+
+function buildCondition(field, operator, value) {
+  const num = Number(value);
+  if (value === undefined || value === null) return null;
+
+  switch (operator) {
+    // Arithmetic
+    case 'equal_to':
+      return { [field]: num };
+    case 'not_equal_to':
+      return { [field]: { $ne: num } };
+    case 'less_than':
+      return { [field]: { $lt: num } };
+    case 'not_less_than':
+      return { [field]: { $gte: num } };
+    case 'greater_than':
+      return { [field]: { $gt: num } };
+    case 'not_greater_than':
+      return { [field]: { $lte: num } };
+
+    // Text
+    case 'empty':
+      return { [field]: '' };
+    case 'not_empty':
+      return { [field]: { $exists: true, $ne: '' } };
+    case 'contains':
+      return { [field]: { $regex: value, $options: 'i' } };
+    case 'does_not_contain':
+      return { [field]: { $not: { $regex: value, $options: 'i' } } };
+
+    // List
+    case 'in_list':
+      return { [field]: { $in: normalizeArray(value) } };
+    case 'not_in_list':
+      return { [field]: { $nin: normalizeArray(value) } };
+
+    // Equals
+    case 'equals':
+      return { [field]: value };
+    case 'not_equals':
+      return { [field]: { $ne: value } };
+
+    // Multi-match
+    case 'contains_any': {
+      const list = normalizeArray(value);
+      return list.length ? { $or: list.map((v) => ({ [field]: { $regex: v, $options: 'i' } })) } : null;
+    }
+    case 'does_not_contains_any': {
+      const list = normalizeArray(value);
+      return list.length ? { $and: list.map((v) => ({ [field]: { $not: { $regex: v, $options: 'i' } } })) } : null;
+    }
+
+    default:
+      return null;
+  }
+}
+
+export const searchProuctsByFilter = async (groups, query, sellerId) => {
+  const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+
+  const currentPage = Math.max(1, Number(page));
+  const limit = Math.max(1, Number(size));
+
+  const orQueries = [];
+
+  for (const group of groups) {
+    if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
+
+    const andQueries = [];
+
+    for (const cond of group.conditions) {
+      const built = buildCondition(cond.field, cond.operator, cond.value);
+      if (built && Object.keys(built).length) {
+        andQueries.push(built);
+      }
+    }
+
+    if (andQueries.length === 1) {
+      orQueries.push(andQueries[0]);
+    } else if (andQueries.length > 1) {
+      orQueries.push({ $and: andQueries });
+    }
+  }
+
+  let finalFilter = {};
+
+  if (orQueries.length === 1) finalFilter = orQueries[0];
+  else if (orQueries.length > 1) finalFilter = { $or: orQueries };
+
+  finalFilter = {
+    ...finalFilter,
+    sellerId: new mongoose.Types.ObjectId(sellerId),
+    status: { $ne: 'removed' },
+  };
+
+  const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+  const [total, products] = await Promise.all([
+    Product.countDocuments(finalFilter),
+
+    Product.find(finalFilter)
+      .sort(sort)
+      .skip((currentPage - 1) * limit)
+      .limit(limit)
+      .select('_id name status productSkuCode price msrp primaryImageUrl currentStockCount createdAt sellerId')
+      .lean(),
+  ]);
+
+  return {
+    products,
+    pagination: getPagination(total, currentPage, limit),
+  };
+};
+
 export default {
   fetchProducts,
   importProductsFromCsvFile,
@@ -1251,4 +1375,5 @@ export default {
   pushProductsAsync,
   exportProductsToCSV,
   getProductById,
+  searchProuctsByFilter,
 };
