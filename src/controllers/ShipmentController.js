@@ -4,6 +4,7 @@ import {
   ayMakanWebHookService,
   getSingleShipmentService,
   cancelShipmentService,
+  createManualShipmentService,
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
@@ -123,5 +124,35 @@ export const cancelShipment = async (req, res) => {
     errorLog(error);
 
     return errorResponse(res, error?.message || 'Shipment could not be cancelled', 500);
+  }
+};
+
+export const createManualShipment = async (req, res) => {
+  try {
+    const shipmentData = req.body;
+    const userId = req.user._id;
+    shipmentData['userId'] = userId;
+
+    // Validate request body
+    if (!shipmentData || Object.keys(shipmentData).length === 0) {
+      return errorResponse(res, 'Shipment data is required', 400);
+    }
+
+    const result = await createManualShipmentService(shipmentData);
+
+    if (!result.success) {
+      return failResponse(res, result?.message || 'Manual shipment could not be created', 400);
+    }
+
+    return successResponse(res, result?.message || 'Manual shipment created successfully', 201, {
+      shipmentId: result?.shipmentId,
+      airWaybillNo: result?.airWaybillNo,
+      merchantShipmentNo: result?.merchantShipmentNo,
+    });
+  } catch (error) {
+    console.error('Create Manual Shipment Controller Error:', error.message, error.stack);
+    errorLog(error);
+
+    return errorResponse(res, error?.message || 'Manual shipment could not be created', 400);
   }
 };

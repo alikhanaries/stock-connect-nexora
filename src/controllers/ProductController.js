@@ -49,6 +49,7 @@ export const getTopSellingProduct = async (req, res) => {
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     const { url } = req.body;
     if (!req.body.url) {
       return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
@@ -61,7 +62,7 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
     // Process file in background (async, no await here)
     productService
-      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId)
+      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId, isImageUpdate)
       .then((result) => {
         console.log('CSV processing completed:', result);
         // Send email notification after processing
@@ -91,10 +92,10 @@ export const importProductsFromCsvFile = async (req, res) => {
     successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
     // Call service
     const sellerId = req.sellerId;
-
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     // Process file in background (async, no await here)
     productService
-      .importProductsFromCsvFile(req.file.path, req.locale, sellerId)
+      .importProductsFromCsvFile(req.file.path, req.locale, sellerId, isImageUpdate)
       .then((result) => {
         console.log('CSV processing completed:', result.errorDetails);
         // Send email notification after processing
@@ -416,6 +417,26 @@ export const exportProducts = async (req, res) => {
   }
 };
 
+export const searchProducts = async (req, res) => {
+  try {
+    const sellerId = req.params.sellerId;
+    const groups = req.body.groups;
+
+    const { products, pagination } = await productService.searchProuctsByFilter(groups, req.body, sellerId);
+
+    const responseData = {
+      content: products || [],
+      ...pagination,
+    };
+    const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    errorLog(error);
+    return errorResponse(res, error, 500);
+  }
+};
+
 export default {
   getProducts,
   getTopSellingProduct,
@@ -431,4 +452,5 @@ export default {
   addProductsToUserChannel,
   unlinkProductFromChannel,
   exportProducts,
+  searchProducts,
 };
