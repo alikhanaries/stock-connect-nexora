@@ -367,7 +367,7 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
   );
 };
 
-export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
+export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
   const categoryTrailsSet = new Set();
@@ -396,7 +396,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
               }
 
               // Map to product
-              const product = await mapRowToProduct(row, current, locale, sellerId);
+              const product = await mapRowToProduct(row, current, locale, sellerId, isImageUpdate);
               if (product.errorData) {
                 errorDetails.push(product);
                 invalidRowsCount++;
@@ -530,12 +530,12 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
 /* Google Sheet Import */
 
-export const importProductsFromGoogleSheet = async (url, locale, sellerId) => {
+export const importProductsFromGoogleSheet = async (url, locale, sellerId, isImageUpdate) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processImportStream(stream, { locale, sellerId });
+    return await processImportStream(stream, { locale, sellerId, isImageUpdate });
   } catch (err) {
     console.error('Error in importProductsFromGoogleSheet:', err);
     throw new Error(err.message); // force the catch block
@@ -544,10 +544,10 @@ export const importProductsFromGoogleSheet = async (url, locale, sellerId) => {
 
 /* CSV File Import */
 
-export const importProductsFromCsvFile = async (filePath, locale, sellerId) => {
+export const importProductsFromCsvFile = async (filePath, locale, sellerId, isImageUpdate) => {
   try {
     const stream = fs.createReadStream(filePath);
-    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId });
+    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId, isImageUpdate });
   } catch (err) {
     console.error('Error in importProductsFromCsvFile:', err);
     throw new Error(err.message); // force the catch block

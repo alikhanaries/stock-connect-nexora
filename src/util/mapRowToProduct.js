@@ -6,7 +6,7 @@ import pLimit from 'p-limit';
 import { cleanNumber } from '../helpers/Common.js';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
-export const mapRowToProduct = async (row, index, locale, sellerId) => {
+export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdate = false) => {
   if (!row || typeof row !== 'object') return null;
 
   // Normalize keys
@@ -21,23 +21,25 @@ export const mapRowToProduct = async (row, index, locale, sellerId) => {
   if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
   if (errorData.length) return { rowNumber: index, errorData };
 
-  // Collect image URLs
-  const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
-    .filter(Boolean)
-    .map(normalizeImageUrl);
+  let publicUrls = [];
 
-  // Generate S3 keys
-  const generatedKeys = allImageUrls.map((img) => generateS3Key(img, sellerId, r.productskucode));
+  //  IMAGE HANDLING ONLY WHEN isImageUpdate === TRUE
+  if (isImageUpdate === true) {
+    const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
+      .filter(Boolean)
+      .map(normalizeImageUrl);
 
-  // Upload images async
-  generatedKeys.forEach((key, i) => {
-    limit(() => uploadImageFromUrl(allImageUrls[i], key)).catch((err) =>
-      console.error(`Image upload failed (${allImageUrls[i]}): ${err.message}`)
-    );
-  });
+    const generatedKeys = allImageUrls.map((img) => generateS3Key(img, sellerId, r.productskucode));
 
-  // Public URLs
-  const publicUrls = generatedKeys.map(getPublicImageUrl);
+    generatedKeys.forEach((key, i) => {
+      limit(() => uploadImageFromUrl(allImageUrls[i], key)).catch((err) =>
+        console.error(`Image upload failed (${allImageUrls[i]}): ${err.message}`)
+      );
+    });
+
+    publicUrls = generatedKeys.map(getPublicImageUrl);
+  }
+
   // Build product (ALL fields preserved)
   const product = {
     grandParentProductSkuCode: r.grandparentproductskucode || null,
