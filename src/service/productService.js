@@ -307,7 +307,101 @@ const validateProducts = async (channelId, sellerId) => {
   });
   const validatedProducts = Array.from(allProductsMap.values());
 
+  // Required fields
+  const REQUIRED_FIELDS = [
+    'productSkuCode',
+    'nameAr',
+    'name',
+    'description',
+    'descriptionAr',
+    'brand',
+    'ean',
+    'price',
+    'vatRateType',
+    'shippingCost',
+    'categoryTrail',
+    'primaryImageUrl',
+    'currentStockCount',
+    'volumetricWeightCm',
+    'hsCodeAE',
+    'hsCodeSA',
+    'size',
+    'color',
+  ];
+  const missingErrors = [];
+
+  validatedProducts.forEach((item) => {
+    const mandatoryErrors = [];
+    const businessErrors = [];
+
+    // Mandatory field check
+    const missing = REQUIRED_FIELDS.filter((field) => item[field] == null || String(item[field]).trim() === '');
+    mandatoryErrors.push(...missing);
+
+    // Business logic checks
+    if (Number(item.price) <= 0) {
+      businessErrors.push('price must be greater than zero');
+    }
+
+    if (Number(item.currentStockCount) <= 0) {
+      businessErrors.push('currentStockCount must be greater than zero');
+    }
+
+    if (Number(item.volumetricWeightCm) >= 2) {
+      businessErrors.push('volumetricWeightCm must be less than 2 kg');
+    }
+
+    // HIERARCHY LOGIC (business rules)
+    const hasParent = !!item.parentProductSkuCode;
+    const hasGrandParent = !!item.grandParentProductSkuCode;
+
+    const isGrandparent = !hasParent && !hasGrandParent;
+    const isParent = !hasParent && hasGrandParent;
+    const isChild = hasParent && hasGrandParent;
+
+    if (isGrandparent) {
+      if (hasParent) businessErrors.push('parentProductSkuCode should be null for grandparent');
+      if (hasGrandParent) businessErrors.push('grandParentProductSkuCode should be null for grandparent');
+    } else if (isParent) {
+      if (!hasGrandParent) businessErrors.push('grandParentProductSkuCode is required for parent');
+      if (hasParent) businessErrors.push('parentProductSkuCode should be null for parent');
+    } else if (isChild) {
+      if (!hasGrandParent) businessErrors.push('grandParentProductSkuCode is required for child');
+      if (!hasParent) businessErrors.push('parentProductSkuCode is required for child');
+    }
+
+    if (mandatoryErrors.length || businessErrors.length) {
+      missingErrors.push({
+        skuCode: item.productSkuCode || 'N/A',
+        mandatory: mandatoryErrors,
+        business: businessErrors,
+      });
+    }
+  });
+
+  // If errors exist
+  if (missingErrors.length > 0) {
+    const allMandatory = Array.from(new Set(missingErrors.flatMap((e) => e.mandatory)));
+
+    const allBusiness = Array.from(new Set(missingErrors.flatMap((e) => e.business)));
+
+    const mandatoryMessage = allMandatory.length ? `${allMandatory.join(', ')} are missing.` : null;
+
+    const businessMessage = allBusiness.length ? allBusiness : [];
+
+    return {
+      success: false,
+      validProducts: [],
+      message: {
+        mandatoryMessage,
+        businessMessage,
+      },
+    };
+  }
+
+  // Everything valid
   return {
+    success: true,
     validProducts: validatedProducts,
   };
 };

@@ -121,7 +121,10 @@ export const pushProductToChannelEngine = async (req, res) => {
   const { channelId } = req.params;
   try {
     const sellerId = req.sellerId;
-    const { validProducts = [] } = await productService.validateProducts(channelId, sellerId);
+    const { validProducts = [], success, message } = await productService.validateProducts(channelId, sellerId);
+    if (!success) {
+      return errorResponse(res, message, 400);
+    }
     if (validProducts?.length) {
       (async () => {
         try {
@@ -202,11 +205,10 @@ export const getProductById = async (req, res) => {
     const result = await productService.getProductById(id, locale);
 
     if (!result.success) {
-       return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED , 400);
+      return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED, 400);
     }
 
-    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200 , result.data);
-
+    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200, result.data);
   } catch (error) {
     console.error('Error:', error);
     errorLog(error);
@@ -325,7 +327,11 @@ export const getUserUnassignedProducts = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
-    const { products, pagination,appliedFilters } = await productService.getUserUnassignedProducts(sellerId, channelId, req.query);
+    const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
+      sellerId,
+      channelId,
+      req.query
+    );
 
     const responseData = {
       content: products || [],
