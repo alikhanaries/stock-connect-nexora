@@ -396,6 +396,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
       products: validProducts,
+      shipmentMethod: 'Aymakan',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
@@ -1151,7 +1152,6 @@ export const createManualShipmentService = async (shipmentData) => {
       products = [],
       trackTraceUrl = '',
       shippedFromCountryCode = 'SA',
-      shipmentId = '',
       description = '',
     } = shipmentData;
 
@@ -1305,18 +1305,11 @@ export const createManualShipmentService = async (shipmentData) => {
       status: 'SHIPPED',
       submissionDate: new Date(),
       isMerchantCreator: true,
-      ...(shipmentId && { shipmentId }),
+      shipmentMethod: 'Manual',
       ...(description && { description }),
       shipmentMerchantDetails: {
         name: user.firstName || user.username || 'Unknown',
         email: user.email || '',
-      },
-      extraData: {
-        manual: {
-          createdAt: new Date(),
-          trackTraceUrl: trackTraceUrl || '',
-          isManual: true,
-        },
       },
     });
 
