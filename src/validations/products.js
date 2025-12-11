@@ -93,10 +93,17 @@ export const getProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
-        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
-          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
-        })
+        .transform(val =>
+          val
+            .split(',')
+            .map(v => v.trim().replace(/'/g, ''))
+        )
+        .refine(
+          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
+          {
+            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+          }
+        )
         .optional(),
 
       minStockCount: z
@@ -195,76 +202,7 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
   querySchema.parse(req.query);
 
   bodySchema.parse(req.body);
-  // GOOGLE SHEET HEADER VALIDATION
-  const requiredFields = [
-    'grandParentProductSkuCode',
-    'parentProductSkuCode',
-    'productSkuCode',
-    'ageRangeDescription',
-    'apparelSizeBodyType',
-    'bottomsHeightType',
-    'brand',
-    'categoryTrail',
-    'color',
-    'stock',
-    'description',
-    'descriptionAr',
-    'ean',
-    'extraImageUrl1',
-    'extraImageUrl2',
-    'extraImageUrl3',
-    'gender',
-    'hsCodeAE',
-    'hsCodeSA',
-    'imageUrl',
-    'images[0]',
-    'images[1]',
-    'images[2]',
-    'images[3]',
-    'maxPrice',
-    'minPrice',
-    'msrp',
-    'ProductName',
-    'ProductNameAr',
-    'numberOfItems',
-    'price',
-    'price SAR',
-    'primaryImageUrl',
-    'purchasePrice',
-    'shippingCost',
-    'shippingTime',
-    'size',
-    'sizeType',
-    'status',
-    'vatRateType',
-    'volumetricWeightCm',
-  ];
-
-  const rawUrl = req.body.url;
-  const exportUrl = rawUrl.replace(/\/edit.*$/, '/export?format=csv');
-
-  let csvText = '';
-  try {
-    csvText = await (await fetch(exportUrl)).text();
-  } catch {
-    throw new Error('Unable to access Google Sheet CSV. Check permissions.');
-  }
-
-  const [headerLine] = csvText.split('\n');
-  if (!headerLine) throw new Error('Google Sheet is empty');
-
-  const headers = headerLine
-    .replace(/^\uFEFF/, '')
-    .split(',')
-    .map((h) => h.trim());
-
-  const missingFields = requiredFields.filter((f) => !headers.includes(f));
-
-  if (missingFields.length > 0) {
-    throw new Error(`${missingFields.join(', ')} ${missingFields.length === 1 ? 'is' : 'are'} missing`);
-  }
 });
-
 // /* IMPORT PRODUCTS BY CSV FILE VALIDATOR */
 export const importProductsFromCsvFileValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
@@ -512,10 +450,17 @@ export const getUserChannelProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
-        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
-          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
-        })
+        .transform(val =>
+          val
+            .split(',')
+            .map(v => v.trim().replace(/'/g, ''))
+        )
+        .refine(
+          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
+          {
+            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+          }
+        )
         .optional(),
 
       minPrice: z
@@ -622,10 +567,17 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
-        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
-          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
-        })
+        .transform(val =>
+          val
+            .split(',')
+            .map(v => v.trim().replace(/'/g, ''))
+        )
+        .refine(
+          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
+          {
+            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+          }
+        )
         .optional(),
 
       minPrice: z
