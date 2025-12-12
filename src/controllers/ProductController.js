@@ -373,10 +373,10 @@ export const exportProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId || req.sellerId;
 
-    // Parse filterGroups from query params or use groups from body
-    let groups = req.body.groups || [];
+    // Parse filterGroups from query params
+    let groups = [];
 
-    if (!groups.length && req.query.filterGroups) {
+    if (req.query.filterGroups) {
       try {
         const parsedGroups = JSON.parse(req.query.filterGroups);
         groups = parsedGroups.map((group) => ({
