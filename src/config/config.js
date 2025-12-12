@@ -28,4 +28,5 @@ export const config = {
   AYMAKAN_WEBHOOK_HEADER: process.env.AYMAKAN_WEBHOOK_HEADER,
   OCP_URL: process.env.OCP_URL,
   OCP_API_KEY: process.env.OCP_API_KEY,
+  BASE_URL: process.env.BASE_URL
 };

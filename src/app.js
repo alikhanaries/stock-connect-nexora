@@ -5,9 +5,20 @@ import apiRoutes from './routes/api.js';
 import nebimApiRoutes from './integrations/erp/nebim/routes/api.js';
 import kipApiRoutes from './integrations/erp/gurmenKip/routes/api.js';
 import ramseyApiRoutes from './integrations/erp/gurmenRamsey/routes/api.js';
-
 import cronJob from './cronJobs/index.js';
+
+import swaggerUi from "swagger-ui-express";
+import { loadSwagger } from "./util/swagger.js";
+
+const swaggerDocument = loadSwagger();
+
 const app = express();
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+  requestInterceptor: req => {
+    req.headers['Accept-Language'] = 'en';
+    return req;
+  }
+}));
 
 app.use(express.json());
 app.use(cors(corsOptions));
