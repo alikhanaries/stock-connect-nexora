@@ -371,41 +371,10 @@ export const unlinkProductFromChannel = async (req, res) => {
 // Exports products data as CSV file for a specific seller.
 export const exportProducts = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const {
-      status,
-      search,
-      minPrice,
-      maxPrice,
-      productSkuCode,
-      productType,
-      minStockCount,
-      maxStockCount,
-      sortBy,
-      sortOrder,
-    } = req.query;
+    const sellerId = req.params.sellerId || req.sellerId;
+    const groups = req.body.groups || [];
 
-    // Build filters only with non-empty values
-    const filters = {};
-    if (status) filters.status = status;
-    if (search) filters.search = search;
-    if (minPrice) filters.minPrice = minPrice;
-    if (maxPrice) filters.maxPrice = maxPrice;
-    if (productSkuCode) filters.productSkuCode = productSkuCode;
-    if (productType) filters.productType = productType;
-    if (minStockCount) filters.minStockCount = minStockCount;
-    if (maxStockCount) filters.maxStockCount = maxStockCount;
-    if (sortBy) filters.sortBy = sortBy;
-    if (sortOrder) filters.sortOrder = sortOrder;
-
-    // Remove any remaining undefined/empty values
-    Object.keys(filters).forEach((key) => {
-      if (!filters[key]) {
-        delete filters[key];
-      }
-    });
-
-    const result = await productService.exportProductsToCSV(sellerId, filters);
+    const result = await productService.exportProductsToCSV(groups, sellerId, req.query);
 
     if (!result.success) {
       return failResponse(res, result.message || req.locale.NO_PRODUCTS_FOUND, 404);

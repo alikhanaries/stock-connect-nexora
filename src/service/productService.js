@@ -1108,71 +1108,48 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
-export const exportProductsToCSV = async (sellerId = null, filters = {}) => {
+export const exportProductsToCSV = async (groups, sellerId, query) => {
   try {
-    const {
-      status,
-      search,
-      minPrice,
-      maxPrice,
-      productSkuCode,
-      productType,
-      minStockCount,
-      maxStockCount,
-      size = 100000,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
-    } = filters;
+    const { sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
-    // Build filters only with non-empty values
-    const filter = {
-      status: { $ne: 'removed' },
-      sellerId: new mongoose.Types.ObjectId(sellerId),
-    };
+    const orQueries = [];
 
-    // Apply filters directly if they exist
-    if (status) {
-      const statusValue = status.toString().trim().toLowerCase();
-      if (PRODUCT_STATUSES.includes(statusValue)) {
-        filter.status = statusValue;
+    for (const group of groups) {
+      if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
+
+      const andQueries = [];
+
+      for (const cond of group.conditions) {
+        const built = buildCondition(cond.field, cond.operator, cond.value);
+        if (built && Object.keys(built).length) {
+          andQueries.push(built);
+        }
+      }
+
+      if (andQueries.length === 1) {
+        orQueries.push(andQueries[0]);
+      } else if (andQueries.length > 1) {
+        orQueries.push({ $and: andQueries });
       }
     }
 
-    if (productSkuCode) {
-      filter.productSkuCode = { $regex: new RegExp(productSkuCode, 'i') };
-    }
+    let finalFilter = {};
 
-    if (minPrice || maxPrice) {
-      filter.price = {};
-      if (minPrice) filter.price.$gte = parseFloat(minPrice);
-      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
-    }
+    if (orQueries.length === 1) finalFilter = orQueries[0];
+    else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-    if (productType) {
-      const productTypes = String(productType)
-        .toLowerCase()
-        .split(',')
-        .map((t) => t.trim().replace(/'/g, ''));
-      filter.productType = { $in: productTypes };
-    }
+    finalFilter = {
+      ...finalFilter,
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      status: { $ne: 'removed' },
+    };
 
-    if (minStockCount || maxStockCount) {
-      filter.currentStockCount = {};
-      if (minStockCount) filter.currentStockCount.$gte = parseFloat(minStockCount);
-      if (maxStockCount) filter.currentStockCount.$lte = parseFloat(maxStockCount);
-    }
-
-    if (search) {
-      const regex = new RegExp(search, 'i');
-      filter.$or = [{ name: regex }, { productSkuCode: regex }];
-    }
-
-    // Sorting
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const [products, totalCount] = await Promise.all([
-      Product.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
-      Product.countDocuments(filter),
+    const [totalCount, products] = await Promise.all([
+      Product.countDocuments(finalFilter),
+
+      Product.find(finalFilter).sort(sort).lean(),
     ]);
 
     const validation = validateExportData(products, 'products');
