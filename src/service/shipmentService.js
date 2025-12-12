@@ -396,6 +396,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
       products: validProducts,
+      shipmentMethod: 'Aymakan',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
@@ -967,6 +968,12 @@ export const syncShipmentStatus = async (orderId) => {
 
     for (const shipment of shipments) {
       try {
+        // Skip manual shipments - they don't use Aymakan tracking
+        if (shipment.extraData?.manual?.isManual) {
+          console.log(`Skipping Aymakan tracking for manual shipment ${shipment._id}`);
+          continue;
+        }
+
         const tracking = await trackAymakanShipment(shipment.airWaybillNo);
         const trackingInfo = (tracking?.trackingInfo || []).map((info) => ({
           statusCode: info?.status_code ?? '',
@@ -1145,6 +1152,7 @@ export const createManualShipmentService = async (shipmentData) => {
       products = [],
       trackTraceUrl = '',
       shippedFromCountryCode = 'SA',
+      description = '',
     } = shipmentData;
 
     //Validate required fields
@@ -1152,6 +1160,7 @@ export const createManualShipmentService = async (shipmentData) => {
     if (!orderId) missingFields.push('orderId');
     if (!sellerId) missingFields.push('sellerId');
     if (!userId) missingFields.push('userId');
+    if (!pickUpId) missingFields.push('pickUpId');
     if (!airWaybillNo) missingFields.push('airWaybillNo');
     if (!merchantShipmentNo) missingFields.push('merchantShipmentNo');
     if (!method) missingFields.push('method');
@@ -1245,6 +1254,12 @@ export const createManualShipmentService = async (shipmentData) => {
       });
     }
 
+    //Validate and get pickup address
+    const pickupData = await getPickUpAddress(pickUpId);
+    if (!pickupData) {
+      throw new Error('Invalid pickup address ID');
+    }
+
     //Save or get existing delivery address from order
     let deliveryId;
     const existingDelivery = await DeliveryAddress.findOne({
@@ -1279,7 +1294,7 @@ export const createManualShipmentService = async (shipmentData) => {
       sellerId,
       userId,
       deliveryId,
-      ...(pickUpId && { pickUpId }),
+      pickUpId: pickupData._id,
       airWaybillNo,
       merchantShipmentNo,
       merchantOrderNo: order.merchantOrderNo || order.orderId,
@@ -1290,15 +1305,11 @@ export const createManualShipmentService = async (shipmentData) => {
       status: 'SHIPPED',
       submissionDate: new Date(),
       isMerchantCreator: true,
+      shipmentMethod: 'Manual',
+      ...(description && { description }),
       shipmentMerchantDetails: {
         name: user.firstName || user.username || 'Unknown',
         email: user.email || '',
-      },
-      extraData: {
-        manual: {
-          createdAt: new Date(),
-          trackTraceUrl,
-        },
       },
     });
 
@@ -1344,7 +1355,23 @@ export const createManualShipmentService = async (shipmentData) => {
       );
     }
 
-    // Step 12: Create order log entry
+    // Check if all SKUs are now SHIPPED and update order status
+    const updatedOrder = await Order.findById(orderId).lean();
+    const allShipped = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === 'SHIPPED');
+
+    if (allShipped) {
+      await Order.findByIdAndUpdate(orderId, { $set: { status: 'SHIPPED' } });
+
+      // Add order-level log entry
+      const orderLogEntry = {
+        status: 'SHIPPED',
+        description: `All items shipped`,
+        createdAt: convetDateToUTC(new Date()),
+      };
+      await OrderLogs.updateOne({ orderId: orderId }, { $push: { details: orderLogEntry } }, { upsert: true });
+    }
+
+    // Create shipment log entry
     const logEntry = {
       status: 'SHIPPED',
       description: `Manual shipment created with AWB: ${airWaybillNo}, Method: ${method}`,
