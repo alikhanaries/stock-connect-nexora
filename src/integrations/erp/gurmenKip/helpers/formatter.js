@@ -14,19 +14,29 @@ const extractSubproductImages = (subproducts) => {
   });
 };
 
-const formatBaseProduct = async (product, sellerId, subproductImages) => {
+const formatBaseProduct = async (product, sellerId, subproductImages, isImageUpdate) => {
   const imgItems = toArray(product.img_item).map((i) => i?.trim());
   const rawImages = cleanImages(product.image_url, imgItems, subproductImages);
-  const processed = await processProductImages(
-    {
-      primaryImageUrl: rawImages[0],
-      imageUrl: rawImages[0],
-      extraImageUrl1: rawImages[1],
-      extraImageUrl2: rawImages[2],
-      extraImageUrl3: rawImages[3],
-    },
-    sellerId
-  );
+
+  let processed = {};
+
+  if (isImageUpdate === true) {
+    const cdnImages = await processProductImages(rawImages, sellerId);
+
+    if (cdnImages.length > 0) {
+      processed = {
+        primaryImageUrl: cdnImages[0],
+        imageUrl: cdnImages[0],
+        extraImageUrl1: cdnImages[1] || null,
+        extraImageUrl2: cdnImages[2] || null,
+        extraImageUrl3: cdnImages[3] || null,
+        images: cdnImages,
+      };
+    } else {
+      // S3 upload failed → do NOT update images
+      processed = {};
+    }
+  }
 
   return {
     sellerId,
@@ -36,12 +46,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages) => {
     categoryTrail: product.category_path,
     vatRateType: 'STANDARD',
     status: product.active === '1' ? 'active' : 'inactive',
-    primaryImageUrl: processed.primaryImageUrl,
-    imageUrl: processed.imageUrl,
-    extraImageUrl1: processed.extraImageUrl1,
-    extraImageUrl2: processed.extraImageUrl2,
-    extraImageUrl3: processed.extraImageUrl3,
-    images: processed.images,
+    ...processed, // only included when isImageUpdate = true
     volumetricWeightCm: 0.3,
     hsCodeAE: product.code,
     hsCodeSA: product.code,
@@ -49,7 +54,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages) => {
   };
 };
 
-export const formatGurmanProduct = async (raw = [], sellerId) => {
+export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = false) => {
   if (!Array.isArray(raw) || !raw.length) return [];
 
   const formatted = [];
@@ -58,7 +63,7 @@ export const formatGurmanProduct = async (raw = [], sellerId) => {
     if (product.category_path) categoryTrails.add(product.category_path);
     const subproducts = toArray(product?.subproducts?.subproduct);
     const subproductImages = extractSubproductImages(subproducts);
-    const base = await formatBaseProduct(product, sellerId, subproductImages);
+    const base = await formatBaseProduct(product, sellerId, subproductImages, isImageUpdate);
     if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
     const grandParentSku = product.ws_code || product.code;
 
@@ -106,18 +111,26 @@ export const formatGurmanProduct = async (raw = [], sellerId) => {
         const stock = Number(variant.stock || 0);
         if (stock <= 0) continue;
 
-        const variantImgs = cleanImages(variant.image_url, toArray(variant.img_item));
-        const mergedChildImages = cleanImages(base.images, variantImgs);
-        const processedChild = await processProductImages(
-          {
-            primaryImageUrl: mergedChildImages[0],
-            imageUrl: mergedChildImages[0],
-            extraImageUrl1: mergedChildImages[1],
-            extraImageUrl2: mergedChildImages[2],
-            extraImageUrl3: mergedChildImages[3],
-          },
-          sellerId
-        );
+        let processedChild = {};
+
+        if (isImageUpdate === true) {
+          // Process only when isImageUpdate = true
+          const variantImgs = cleanImages(variant.image_url, toArray(variant.img_item));
+          const mergedChildImages = cleanImages(...(base.images || []), ...variantImgs);
+
+          if (mergedChildImages.length > 0) {
+            processedChild = {
+              primaryImageUrl: mergedChildImages[0],
+              imageUrl: mergedChildImages[0],
+              extraImageUrl1: mergedChildImages[1] || null,
+              extraImageUrl2: mergedChildImages[2] || null,
+              extraImageUrl3: mergedChildImages[3] || null,
+              images: mergedChildImages,
+            };
+          } else {
+            processedChild = {};
+          }
+        }
 
         formatted.push({
           ...base,
@@ -125,12 +138,7 @@ export const formatGurmanProduct = async (raw = [], sellerId) => {
           parentProductSkuCode: parentSku,
           grandParentProductSkuCode: null,
           productType: 'simple',
-          primaryImageUrl: processedChild.primaryImageUrl,
-          imageUrl: processedChild.imageUrl,
-          extraImageUrl1: processedChild.extraImageUrl1,
-          extraImageUrl2: processedChild.extraImageUrl2,
-          extraImageUrl3: processedChild.extraImageUrl3,
-          images: processedChild.images,
+          ...processedChild, // only applied when true
           price: parseFloat(variant.price_special || product.price_special_vat_included),
           minPrice: null,
           maxPrice: null,
