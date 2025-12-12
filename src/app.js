@@ -5,7 +5,7 @@ import apiRoutes from './routes/api.js';
 import nebimApiRoutes from './integrations/erp/nebim/routes/api.js';
 import kipApiRoutes from './integrations/erp/gurmenKip/routes/api.js';
 import ramseyApiRoutes from './integrations/erp/gurmenRamsey/routes/api.js';
-import elliteStringApiRoutes from './integrations/erp/elliteString/routes/api.js';
+import eliteStringLaIntimoApiRoutes from './integrations/erp/eliteStringLaIntimo/routes/api.js';
 
 import cronJob from './cronJobs/index.js';
 const app = express();
@@ -22,7 +22,7 @@ app.use('/api', apiRoutes);
 app.use('/api/erp/nebim', nebimApiRoutes);
 app.use('/api/erp/kip', kipApiRoutes);
 app.use('/api/erp/ramsey', ramseyApiRoutes);
-app.use('/api/erp/ellite-string', elliteStringApiRoutes);
+app.use('/api/erp/ellite_string_la_intimo', eliteStringLaIntimoApiRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });

@@ -1,13 +1,13 @@
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import Product from '#root/src/models/Product.js';
-import { createElliteStringAdapter } from '../elliteStringAdapter.js';
+import { createEliteStringLaIntimoAdapter } from '../eliteStringLaIntimoAdapter.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
-export const getElliteStringStock = async (sellerId) => {
+export const getEliteStringLaIntimoStock = async (sellerId) => {
   try {
-    const adapter = createElliteStringAdapter();
+    const adapter = createEliteStringLaIntimoAdapter();
     const products = await adapter.fetchProducts();
     const handleBatch = async (batch) => {
       const bulkOps = batch.map((product) => ({
@@ -26,11 +26,11 @@ export const getElliteStringStock = async (sellerId) => {
      * TODO (Debugging): This log is intentionally kept for debugging purposes.
      * Do NOT remove at this stage.
      */
-    console.log('ElliteString stock sync completed successfully.');
+    console.log('Elite String La Intimo stock sync completed successfully.');
 
     return true;
   } catch (error) {
-    console.error('ElliteString stock update failed:', error);
+    console.error('Elite String La Intimo stock update failed:', error);
     throw error;
   }
 };
