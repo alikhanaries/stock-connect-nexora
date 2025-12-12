@@ -1,4 +1,4 @@
-export function formatElliteStringProducts(rows = []) {
+export function formatEliteStringLaIntimoProducts(rows = []) {
   if (!Array.isArray(rows) || rows.length === 0) return [];
 
   const cleanRows = rows.slice(1); // directly skip first row ALWAYS
