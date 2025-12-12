@@ -372,7 +372,24 @@ export const unlinkProductFromChannel = async (req, res) => {
 export const exportProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId || req.sellerId;
-    const groups = req.body.groups || [];
+
+    // Parse filterGroups from query params or use groups from body
+    let groups = req.body.groups || [];
+
+    if (!groups.length && req.query.filterGroups) {
+      try {
+        const parsedGroups = JSON.parse(req.query.filterGroups);
+        groups = parsedGroups.map((group) => ({
+          conditions: group.conditions.map((cond) => ({
+            field: cond.field,
+            operator: cond.operator,
+            value: cond.value,
+          })),
+        }));
+      } catch (error) {
+        console.error('Failed to parse filterGroups:', error);
+      }
+    }
 
     const result = await productService.exportProductsToCSV(groups, sellerId, req.query);
 
