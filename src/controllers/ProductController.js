@@ -53,14 +53,14 @@ export const importProductsFromGoogleSheet = async (req, res) => {
     const isImageUpdate = req.query.isImageUpdate === 'true';
     const { url } = req.body;
     if (!req.body.url) {
-      return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
+      return failResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
     const exportUrl = await convertGoogleSheetUrlToExport(url);
     if (!exportUrl) {
-      return failResponse(res, req.locale.INVALID_URL, 500);
+      return failResponse(res, req?.locale?.INVALID_URL, 500);
     }
     // Send immediate response to client
-    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+    successResponse(res, req?.locale?.PRODUCT_IMPORTED_PROCESSING, 200);
     // Process file in background (async, no await here)
     productService
       .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId, isImageUpdate)
@@ -90,7 +90,7 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 export const importProductsFromCsvFile = async (req, res) => {
   try {
     // Send immediate response to client
-    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+    successResponse(res, req?.locale?.PRODUCT_IMPORTED_PROCESSING, 200);
     // Call service
     const sellerId = req.sellerId;
     const isImageUpdate = req.query.isImageUpdate === 'true';
