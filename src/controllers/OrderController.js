@@ -3,6 +3,7 @@ import orderService from '#service/orderService.js';
 import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS } from '#constants/common.js';
+import { getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -68,6 +69,8 @@ export const getOrderStats = async (req, res) => {
 
 export const getSyncedOrders = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
+    // TODO : Move this to service layer
     const { success, data } = await orderService.getNewOrders();
     if (!success) {
       return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
@@ -77,14 +80,22 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    const dataSavedInDb = await orderService.processOrders(data);
+    const [dataSavedInDb, response] = await Promise.allSettled([
+      orderService.processOrders(data),
+      getSyncedOrdersOcp(sellerId),
+    ]);
 
-    if (!dataSavedInDb.success) {
-      return Responses.errorResponse(res, dataSavedInDb.message, 500);
+    if (!dataSavedInDb.value.success && !response.value.success) {
+      return Responses.errorResponse(res, dataSavedInDb.value.message && response.value.message, 500);
     }
+
+    const newUpdateCount =
+      (dataSavedInDb?.value?.data?.upsertedCount ? dataSavedInDb?.value?.data?.upsertedCount : 0) +
+      (response?.value?.data?.upsertedCount ? response?.value?.data?.upsertedCount : 0);
+
     const message =
-      dataSavedInDb.data.upsertedCount > 0
-        ? `${dataSavedInDb.data.upsertedCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
+      newUpdateCount > 0
+        ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
         : req.locale.NO_NEW_ORDERS_FOUND;
 
     const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW');
