@@ -18,7 +18,7 @@ export const getUsdToSarRate = async () => {
   }
 };
 
-export const usdToSar = async (usd = 0) => {
+export const convertUsdToSar = async (usd = 0) => {
   const rate = await getUsdToSarRate();
-  return +(usd * rate).toFixed(2);
+  return Number((usd * rate).toFixed(2));
 };

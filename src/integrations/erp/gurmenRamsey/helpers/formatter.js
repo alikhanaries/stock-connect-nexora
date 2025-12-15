@@ -1,5 +1,5 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
-import { usdToSar } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { convertUsdToSar } from '#root/src/integrations/common/helpers/currencyConverter.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
@@ -74,7 +74,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
       parentProductSkuCode: null,
       grandParentProductSkuCode: null,
       productType: 'configurable',
-      price: await usdToSar(parseFloat(product.price_special) || 0),
+      price: await convertUsdToSar(parseFloat(product.price_special) || 0),
       currentStockCount: subproducts.reduce((s, v) => s + Number(v.stock || 0), 0),
       color: '',
       size: '',
@@ -100,7 +100,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
         color,
         size: '',
         ean: '',
-        price: await usdToSar(parseFloat(product.price_special) || 0),
+        price: await convertUsdToSar(parseFloat(product.price_special) || 0),
         currentStockCount: variants.reduce((s, v) => s + Number(v.stock || 0), 0),
       });
 
@@ -140,13 +140,13 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
           grandParentProductSkuCode: null,
           productType: 'simple',
           ...processedChild, // only applied when true
-          price: await usdToSar(parseFloat(variant.price_special || product.price_special_vat_included)),
-          msrp: await usdToSar(
+          price: await convertUsdToSar(parseFloat(variant.price_special || product.price_special_vat_included)),
+          msrp: await convertUsdToSar(
             parseFloat(variant.price_tl_vat_included_discount || product.price_special_vat_included)
           ),
           minPrice: null,
           maxPrice: null,
-          purchasePrice: await usdToSar(parseFloat(variant.price_special || product.price_special_vat_included)),
+          purchasePrice: await convertUsdToSar(parseFloat(variant.price_special || product.price_special_vat_included)),
           color,
           size,
           ean: variant.barcode || '',
