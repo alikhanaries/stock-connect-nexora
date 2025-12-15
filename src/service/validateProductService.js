@@ -1,7 +1,6 @@
-
 import Product from '#models/Product.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
-import { PRODUCT_REQUIRED_FIELDS} from '#constants/common.js';
+import { PRODUCT_REQUIRED_FIELDS } from '#constants/common.js';
 //  Validate products
 const validateProducts = async (channelId, sellerId) => {
   // Get all SKU codes linked to the channel
@@ -135,5 +134,5 @@ const validateProducts = async (channelId, sellerId) => {
 };
 
 export default {
-    validateProducts
-}
+  validateProducts,
+};
