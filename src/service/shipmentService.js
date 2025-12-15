@@ -302,7 +302,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     //  Step 4: Build shipped quantity map
     const shippedQtyMap = {};
     for (const shipment of existingShipments || []) {
-      if (!['SHIPMENT_CREATED', 'PICKED', 'DELIVERED'].includes(shipment.status)) continue;
+      if (!['SHIPMENT_CREATED', 'PICKED', 'DELIVERED', 'SHIPPED'].includes(shipment.status)) continue;
 
       for (const product of shipment.products || []) {
         const orderLineId = String(product.orderLineId);
@@ -786,6 +786,7 @@ export const getSingleShipmentService = async (id) => {
         deliveryDate: 1,
         createdAt: 1,
         updatedAt: 1,
+        shipmentMethod: 1,
         shipmentMerchantDetails: 1,
         deliveryDetails: 1,
         pickupDetails: 1,
@@ -801,9 +802,9 @@ export const getSingleShipmentService = async (id) => {
 
   const formattedShipmentData = transformShipmentResponse(shipment[0]);
 
-  // Fetch tracking info only if we have an AWB number
+  // Fetch tracking info only if we have an AWB number and it's not a manual shipment
   let trackingData = null;
-  if (formattedShipmentData?.airWaybillNo) {
+  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod !== 'Manual') {
     trackingData = await trackAymakanShipment(formattedShipmentData.airWaybillNo);
     formattedShipmentData.trackingInfo = formatShipmentTrackingInfo(trackingData?.trackingInfo);
   }
@@ -961,7 +962,7 @@ export const syncShipmentStatus = async (orderId) => {
     // Fetch all active shipments
     const shipments = await Shipment.find(
       { orderId, status: { $ne: 'CANCELED' } },
-      { airWaybillNo: 1, _id: 1, merchantShipmentNo: 1, products: 1, merchantOrderNo: 1, status: 1 }
+      { airWaybillNo: 1, _id: 1, merchantShipmentNo: 1, products: 1, merchantOrderNo: 1, status: 1, shipmentMethod: 1 }
     ).lean();
 
     if (!shipments.length) return { success: true, syncedShipments: 0 };
@@ -969,8 +970,7 @@ export const syncShipmentStatus = async (orderId) => {
     for (const shipment of shipments) {
       try {
         // Skip manual shipments - they don't use Aymakan tracking
-        if (shipment.extraData?.manual?.isManual) {
-          console.log(`Skipping Aymakan tracking for manual shipment ${shipment._id}`);
+        if (shipment.shipmentMethod === 'Manual') {
           continue;
         }
 
@@ -1084,7 +1084,7 @@ async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, 
 
   // --- 5️ Sync order-level status ---
   const updatedOrder = await Order.findById(orderId).lean();
-  const allMatch = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === shipmentStatus);
+  const allMatch = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === shipmentStatus.toUpperCase());
 
   if (allMatch) {
     const finalOrderStatus = shipmentStatus === 'SHIPMENT_CREATED' ? 'IN_PROGRESS' : shipmentStatus.toUpperCase();
@@ -1170,6 +1170,22 @@ export const createManualShipmentService = async (shipmentData) => {
       throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
 
+    const existingMerchantShipment = await Shipment.findOne({
+      merchantShipmentNo,
+    });
+
+    if (existingMerchantShipment) {
+      throw new Error(`Merchant shipment number '${merchantShipmentNo}' already exists`);
+    }
+
+    const existingAwb = await Shipment.findOne({
+      airWaybillNo,
+    });
+
+    if (existingAwb) {
+      throw new Error(`AWB number '${airWaybillNo}' already exists`);
+    }
+
     // Fetch the order
     const order = await Order.findById(orderId).lean();
     if (!order) {
@@ -1194,13 +1210,16 @@ export const createManualShipmentService = async (shipmentData) => {
     const productLineIds = products.map((p) => p.orderLineId?.toString());
     const existingShipments = await Shipment.find({
       orderId: orderId,
-      status: { $nin: ['CANCELED', 'RETURNED'] },
+      status: { $ne: 'CANCELED' },
       'products.orderLineId': { $in: productLineIds },
     }).lean();
 
     // Build shipped quantity map
     const shippedQtyMap = {};
     for (const shipment of existingShipments || []) {
+      // Only count shipments that are actually shipped or in transit
+      if (!['SHIPMENT_CREATED', 'PICKED', 'DELIVERED', 'SHIPPED'].includes(shipment.status)) continue;
+
       for (const product of shipment.products || []) {
         const orderLineId = String(product.orderLineId);
         const quantity = product.quantity || 0;
@@ -1339,33 +1358,69 @@ export const createManualShipmentService = async (shipmentData) => {
       extraData: {},
     });
 
-    //Update order SKU statuses
+    //Update order SKU statuses - only update if all available quantity has been shipped
     const orderLineIds = validatedProducts.map((p) => p.orderLineId);
     if (orderLineIds.length > 0) {
-      await Order.updateOne(
-        { _id: orderId, 'orderSkuList.skuList.id': { $in: orderLineIds } },
-        {
-          $set: {
-            'orderSkuList.skuList.$[elem].status': 'SHIPPED',
-          },
-        },
-        {
-          arrayFilters: [{ 'elem.id': { $in: orderLineIds } }],
+      // Fetch the latest order to check quantities
+      const currentOrder = await Order.findById(orderId).lean();
+
+      for (const product of validatedProducts) {
+        const orderLineId = product.orderLineId;
+        const matchedSku = currentOrder.orderSkuList?.skuList?.find((sku) => String(sku.id) === String(orderLineId));
+
+        if (matchedSku) {
+          const cancellationRequestedQty = matchedSku.cancellationRequestedQuantity || 0;
+          const availableQty = matchedSku.quantity - cancellationRequestedQty;
+          const alreadyShippedQty = shippedQtyMap[String(orderLineId)] || 0;
+          const totalShippedAfterThis = alreadyShippedQty + product.quantity;
+
+          // Only mark as SHIPPED if all available quantity has been shipped
+          // But preserve PARTIALLY_CANCELED status if there were cancellations
+          if (totalShippedAfterThis >= availableQty) {
+            // Don't update status if it's already PARTIALLY_CANCELED
+            if (matchedSku.status !== 'PARTIALLY_CANCELED') {
+              await Order.updateOne(
+                { _id: orderId },
+                {
+                  $set: {
+                    'orderSkuList.skuList.$[elem].status': 'SHIPPED',
+                  },
+                },
+                {
+                  arrayFilters: [{ 'elem.id': orderLineId }],
+                }
+              );
+            }
+          }
         }
-      );
+      }
     }
 
-    // Check if all SKUs are now SHIPPED and update order status
+    // Check if all SKUs are now SHIPPED (or PARTIALLY_CANCELED with all available items shipped) and update order status
     const updatedOrder = await Order.findById(orderId).lean();
-    const allShipped = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === 'SHIPPED');
+    const allShipped = updatedOrder.orderSkuList?.skuList?.every((sku) => {
+      const cancellationRequestedQty = sku.cancellationRequestedQuantity || 0;
+      const availableQty = sku.quantity - cancellationRequestedQty;
+      // Consider SKU as fully processed if:
+      // 1. It's marked SHIPPED
+      // 2. It's PARTIALLY_CANCELED and has cancellations (meaning available items are handled)
+      // 3. Available quantity is 0 (fully cancelled)
+      return sku.status === 'SHIPPED' || sku.status === 'PARTIALLY_CANCELED' || availableQty <= 0;
+    });
 
     if (allShipped) {
       await Order.findByIdAndUpdate(orderId, { $set: { status: 'SHIPPED' } });
 
+      // Check if there were any cancellations
+      const hasCancellations = updatedOrder.orderSkuList?.skuList?.some((sku) => {
+        const cancellationRequestedQty = sku.cancellationRequestedQuantity || 0;
+        return cancellationRequestedQty > 0;
+      });
+
       // Add order-level log entry
       const orderLogEntry = {
         status: 'SHIPPED',
-        description: `All items shipped`,
+        description: hasCancellations ? `All available items shipped` : `All items shipped`,
         createdAt: convetDateToUTC(new Date()),
       };
       await OrderLogs.updateOne({ orderId: orderId }, { $push: { details: orderLogEntry } }, { upsert: true });
