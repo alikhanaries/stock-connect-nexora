@@ -7,6 +7,7 @@ import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandl
 import { PRODUCT_STATUSES } from '#constants/common.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
+import validateProductService from '#service/validateProductService.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -122,7 +123,7 @@ export const pushProductToChannelEngine = async (req, res) => {
   const { channelId } = req.params;
   try {
     const sellerId = req.sellerId;
-    const { validProducts = [], success, message } = await productService.validateProducts(channelId, sellerId);
+    const { validProducts = [], success, message } = await validateProductService.validateProducts(channelId, sellerId);
     if (!success) {
       return errorResponse(res, message, 400);
     }
