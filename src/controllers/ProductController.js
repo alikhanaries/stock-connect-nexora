@@ -417,8 +417,9 @@ export const searchProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId;
     const groups = req.body.groups;
+    const { channelId } = req.query; 
 
-    const { products, pagination } = await productService.searchProuctsByFilter(groups, req.body, sellerId);
+    const { products, pagination } = await productService.searchProuctsByFilter(groups, req.body, sellerId, channelId);
 
     const responseData = {
       content: products || [],

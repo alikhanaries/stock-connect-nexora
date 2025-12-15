@@ -1301,7 +1301,7 @@ function buildCondition(field, operator, value) {
   }
 }
 
-export const searchProuctsByFilter = async (groups, query, sellerId) => {
+export const searchProuctsByFilter = async (groups, query, sellerId, channelId) => {
   const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
@@ -1340,6 +1340,12 @@ export const searchProuctsByFilter = async (groups, query, sellerId) => {
   };
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+  // if channelId
+  if (channelId) {
+    const channelDetails = await Channel.findOne({ channelId: Number(channelId) }, { channelName: 1, _id: 0 }).lean();
+    finalFilter.marketPlace = channelDetails.channelName;
+  }
 
   const [total, products] = await Promise.all([
     Product.countDocuments(finalFilter),
