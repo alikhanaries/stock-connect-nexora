@@ -58,12 +58,11 @@ const validateProducts = async (channelId, sellerId) => {
   const missingErrors = [];
 
   validatedProducts.forEach((item) => {
-    const mandatoryErrors = [];
     const businessErrors = [];
-
     // Mandatory field check
-    const missing = PRODUCT_REQUIRED_FIELDS.filter((field) => item[field] == null || String(item[field]).trim() === '');
-    mandatoryErrors.push(...missing);
+    const mandatoryErrors = PRODUCT_REQUIRED_FIELDS.filter(
+      (field) => !item[field] || String(item[field]).trim() === ''
+    );
 
     // Business logic checks
     if (Number(item.price) <= 0) {
@@ -108,20 +107,14 @@ const validateProducts = async (channelId, sellerId) => {
 
   // If errors exist
   if (missingErrors.length > 0) {
-    const allMandatory = Array.from(new Set(missingErrors.flatMap((e) => e.mandatory)));
-
-    const allBusiness = Array.from(new Set(missingErrors.flatMap((e) => e.business)));
-
-    const mandatoryMessage = allMandatory.length ? `${allMandatory.join(', ')} are missing.` : null;
-
-    const businessMessage = allBusiness.length ? allBusiness : [];
-
     return {
       success: false,
       validProducts: [],
       message: {
-        mandatoryMessage,
-        businessMessage,
+        mandatoryMessage: [...new Set(missingErrors.flatMap((e) => e.mandatory))].length
+          ? `${[...new Set(missingErrors.flatMap((e) => e.mandatory))].join(', ')} are missing`
+          : null,
+        businessMessage: [...new Set(missingErrors.flatMap((e) => e.business))],
       },
     };
   }
