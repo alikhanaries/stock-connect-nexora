@@ -12,16 +12,20 @@ import { formatShipmentTrackingInfo, syncShipmentStatus } from '#service/shipmen
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
-const formatOrder = (order) => {
+import Channel from '../models/Channel.js';
+
+const formatOrder = (order, channelImage) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
   const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
 
   return {
     _id: order._id,
+    channelNo: order.channelId || 1,
     orderID: order.orderId,
     quantity: totalQuantity,
     totalPrice: totalPrice,
+    channelImage: channelImage || '',
     customer,
     placedOn: order.orderDate,
     email: order.orderCustomer?.email,
@@ -103,7 +107,7 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.status = status; // or original string if you prefer
     }
 
-    const [totalOrders, orders] = await Promise.all([
+    const [totalOrders, orders, allChannels] = await Promise.all([
       Order.countDocuments(filter),
       Order.find(filter)
         .skip(skip)
@@ -112,10 +116,20 @@ const getAllOrders = async (query, sellerId) => {
         .collation({ locale: 'en_US', numericOrdering: true })
         .select(SELECTED_FIELDS)
         .lean(),
+
+      Channel.find().select('_id channelId channelImageUrl'),
     ]);
 
+    const channelMap = {};
+    allChannels.forEach((channel) => {
+      channelMap[channel.channelId] = channel.channelImageUrl;
+    });
+
     return {
-      data: orders.map(formatOrder),
+      data: orders.map((order) => {
+        const matchingChannel = channelMap[order.channelId] || null;
+        return formatOrder(order, matchingChannel);
+      }),
       appliedFilters: appliedFilters,
       pagination: getPagination(totalOrders, page, size),
     };

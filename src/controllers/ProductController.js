@@ -49,19 +49,20 @@ export const getTopSellingProduct = async (req, res) => {
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     const { url } = req.body;
     if (!req.body.url) {
-      return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
+      return failResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
     const exportUrl = await convertGoogleSheetUrlToExport(url);
     if (!exportUrl) {
-      return failResponse(res, req.locale.INVALID_URL, 500);
+      return failResponse(res, req?.locale?.INVALID_URL, 500);
     }
     // Send immediate response to client
-    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+    successResponse(res, req?.locale?.PRODUCT_IMPORTED_PROCESSING, 200);
     // Process file in background (async, no await here)
     productService
-      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId)
+      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId, isImageUpdate)
       .then((result) => {
         console.log('CSV processing completed:', result);
         // Send email notification after processing
@@ -88,13 +89,13 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 export const importProductsFromCsvFile = async (req, res) => {
   try {
     // Send immediate response to client
-    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+    successResponse(res, req?.locale?.PRODUCT_IMPORTED_PROCESSING, 200);
     // Call service
     const sellerId = req.sellerId;
-
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     // Process file in background (async, no await here)
     productService
-      .importProductsFromCsvFile(req.file.path, req.locale, sellerId)
+      .importProductsFromCsvFile(req.file.path, req.locale, sellerId, isImageUpdate)
       .then((result) => {
         console.log('CSV processing completed:', result.errorDetails);
         // Send email notification after processing
@@ -370,27 +371,27 @@ export const unlinkProductFromChannel = async (req, res) => {
 // Exports products data as CSV file for a specific seller.
 export const exportProducts = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const { status, search, minPrice, maxPrice, productSkuCode, sortBy, sortOrder } = req.query;
+    const sellerId = req.params.sellerId || req.sellerId;
 
-    // Build filters only with non-empty values
-    const filters = {};
-    if (status) filters.status = status;
-    if (search) filters.search = search;
-    if (minPrice) filters.minPrice = minPrice;
-    if (maxPrice) filters.maxPrice = maxPrice;
-    if (productSkuCode) filters.productSkuCode = productSkuCode;
-    if (sortBy) filters.sortBy = sortBy;
-    if (sortOrder) filters.sortOrder = sortOrder;
+    // Parse filterGroups from query params
+    let groups = [];
 
-    // Remove any remaining undefined/empty values
-    Object.keys(filters).forEach((key) => {
-      if (!filters[key]) {
-        delete filters[key];
+    if (req.query.filterGroups) {
+      try {
+        const parsedGroups = JSON.parse(req.query.filterGroups);
+        groups = parsedGroups.map((group) => ({
+          conditions: group.conditions.map((cond) => ({
+            field: cond.field,
+            operator: cond.operator,
+            value: cond.value,
+          })),
+        }));
+      } catch (error) {
+        console.error('Failed to parse filterGroups:', error);
       }
-    });
+    }
 
-    const result = await productService.exportProductsToCSV(sellerId, filters);
+    const result = await productService.exportProductsToCSV(groups, sellerId, req.query);
 
     if (!result.success) {
       return failResponse(res, result.message || req.locale.NO_PRODUCTS_FOUND, 404);
