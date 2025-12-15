@@ -804,7 +804,7 @@ export const getSingleShipmentService = async (id) => {
 
   // Fetch tracking info only if we have an AWB number and it's not a manual shipment
   let trackingData = null;
-  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod !== 'Manual') {
+  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod !== 'manual') {
     trackingData = await trackAymakanShipment(formattedShipmentData.airWaybillNo);
     formattedShipmentData.trackingInfo = formatShipmentTrackingInfo(trackingData?.trackingInfo);
   }
@@ -970,7 +970,7 @@ export const syncShipmentStatus = async (orderId) => {
     for (const shipment of shipments) {
       try {
         // Skip manual shipments - they don't use Aymakan tracking
-        if (shipment.shipmentMethod === 'Manual') {
+        if (shipment.shipmentMethod === 'manual') {
           continue;
         }
 
@@ -1170,30 +1170,26 @@ export const createManualShipmentService = async (shipmentData) => {
       throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
 
-    const existingMerchantShipment = await Shipment.findOne({
-      merchantShipmentNo,
-    });
+    // Check for duplicates and fetch order/user in parallel
+    const [existingMerchantShipment, existingAwb, order, user] = await Promise.all([
+      Shipment.findOne({ merchantShipmentNo }),
+      Shipment.findOne({ airWaybillNo }),
+      Order.findById(orderId).lean(),
+      User.findById(userId).lean(),
+    ]);
 
     if (existingMerchantShipment) {
       throw new Error(`Merchant shipment number '${merchantShipmentNo}' already exists`);
     }
 
-    const existingAwb = await Shipment.findOne({
-      airWaybillNo,
-    });
-
     if (existingAwb) {
       throw new Error(`AWB number '${airWaybillNo}' already exists`);
     }
 
-    // Fetch the order
-    const order = await Order.findById(orderId).lean();
     if (!order) {
       throw new Error(`Order with ID ${orderId} not found`);
     }
 
-    //Get user details for shipment merchant details
-    const user = await User.findById(userId).lean();
     if (!user) {
       throw new Error(`User with ID ${userId} not found`);
     }
@@ -1324,7 +1320,7 @@ export const createManualShipmentService = async (shipmentData) => {
       status: 'SHIPPED',
       submissionDate: new Date(),
       isMerchantCreator: true,
-      shipmentMethod: 'Manual',
+      shipmentMethod: 'manual',
       ...(description && { description }),
       shipmentMerchantDetails: {
         name: user.firstName || user.username || 'Unknown',
@@ -1429,7 +1425,7 @@ export const createManualShipmentService = async (shipmentData) => {
     // Create shipment log entry
     const logEntry = {
       status: 'SHIPPED',
-      description: `Manual shipment created with AWB: ${airWaybillNo}, Method: ${method}`,
+      description: `manual shipment created with AWB: ${airWaybillNo}, Method: ${method}`,
       createdAt: convetDateToUTC(new Date()),
     };
 
@@ -1437,7 +1433,7 @@ export const createManualShipmentService = async (shipmentData) => {
 
     return {
       success: true,
-      message: 'Manual shipment created successfully',
+      message: 'manual shipment created successfully',
       shipmentId: savedShipment._id,
       airWaybillNo,
       merchantShipmentNo,
