@@ -13,7 +13,7 @@ const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
  * and upserts them into MongoDB.
  */
 
-export const getGurmanProducts = async (sellerId) => {
+export const getGurmanProducts = async (sellerId, isImageUpdate) => {
   try {
     const gurman = createGurmanKipAdapter();
     const fetched = await gurman.fetchProducts();
@@ -46,7 +46,7 @@ export const getGurmanProducts = async (sellerId) => {
            * - Formats product fields
            * - Extracts category trail hierarchy
            */
-          const { products, categoryTrails } = await formatGurmanProduct(batch, sellerId);
+          const { products, categoryTrails } = await formatGurmanProduct(batch, sellerId, isImageUpdate);
           /**
            * Convert products into canonical format
            * (unified schema used across all sellers).
