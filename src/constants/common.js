@@ -122,25 +122,3 @@ export const PRODUCT_EXPORT_HEADERS = [
   'vatRateType',
   'volumetricWeightCm',
 ];
-
-// Product Required fields
-export const PRODUCT_REQUIRED_FIELDS = [
-  'productSkuCode',
-  'nameAr',
-  'name',
-  'description',
-  'descriptionAr',
-  'brand',
-  'ean',
-  'price',
-  'vatRateType',
-  'shippingCost',
-  'categoryTrail',
-  'primaryImageUrl',
-  'currentStockCount',
-  'volumetricWeightCm',
-  'hsCodeAE',
-  'hsCodeSA',
-  'size',
-  'color',
-];
