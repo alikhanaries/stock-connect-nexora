@@ -11,7 +11,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       const rawItems = [...(data.unShippedItems || []), ...(data.shippedItems || []), ...(data.cancelledItems || [])];
 
       const validItems = rawItems.filter((item) => item.id);
-      const merchantOrderNo = `${6}_${'OCP'}_${orderIdRaw}`;
+      const merchantOrderNo = `6_OCP_${orderIdRaw}`;
 
       const skuList = validItems.map((line) => {
         const lineId = String(line.id);
