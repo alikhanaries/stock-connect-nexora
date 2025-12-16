@@ -254,7 +254,65 @@ export const pushBatchToOCP = async (batch, index, sellerId) => {
   });
 };
 
+//  Validate products
+const validateProducts = async (channelId, sellerId) => {
+  // Get all SKU codes linked to the channel
+  const channelProducts = await UserChannelProducts.find(
+    { sellerId, channelId },
+    { 'skuList.skuCode': 1, _id: 0 }
+  ).lean();
 
+  const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
+  if (!skuCodes.length) return { validProducts: [] };
+
+  // Get products for those SKUs (child products)
+  const childProducts = await Product.find({
+    sellerId,
+    productSkuCode: { $in: skuCodes },
+    status: 'active',
+  }).lean();
+
+  // Collect parent SKUs from child products
+  const parentSkuCodes = new Set();
+  for (const p of childProducts) {
+    if (p.parentProductSkuCode) parentSkuCodes.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) parentSkuCodes.add(p.grandParentProductSkuCode);
+  }
+
+  // Fetch parent products
+  const parentProducts = await Product.find({
+    sellerId,
+    productSkuCode: { $in: Array.from(parentSkuCodes) },
+    status: 'active',
+  }).lean();
+
+  // Check if those parents have any grandparent
+  const grandParentSkuCodes = new Set();
+  for (const p of parentProducts) {
+    if (p.grandParentProductSkuCode) grandParentSkuCodes.add(p.grandParentProductSkuCode);
+  }
+
+  // Fetch grandparent products (if any)
+  let grandParentProducts = [];
+  if (grandParentSkuCodes.size > 0) {
+    grandParentProducts = await Product.find({
+      sellerId,
+      productSkuCode: { $in: Array.from(grandParentSkuCodes) },
+      status: 'active',
+    }).lean();
+  }
+
+  // Combine all (child + parent + grandparent) — remove duplicates
+  const allProductsMap = new Map();
+  [...childProducts, ...parentProducts, ...grandParentProducts].forEach((p) => {
+    allProductsMap.set(p.productSkuCode, p);
+  });
+  const validatedProducts = Array.from(allProductsMap.values());
+
+  return {
+    validProducts: validatedProducts,
+  };
+};
 
 //  Async push products to CE
 const pushProductsAsync = async (products, channelId, sellerId) => {
@@ -1309,6 +1367,7 @@ export default {
   addProductsToUserChannel,
   getAllProductIdsBySellerId,
   unlinkProductFromChannel,
+  validateProducts,
   pushProductsAsync,
   exportProductsToCSV,
   getProductById,
