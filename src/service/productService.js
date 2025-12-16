@@ -1182,6 +1182,17 @@ function normalizeArray(value) {
 }
 
 function buildCondition(field, operator, value) {
+  const BOOLEAN_FIELDS = ['liquidContents', 'heatSensitive'];
+
+  if (BOOLEAN_FIELDS.includes(field)) {
+    if (typeof value !== 'string') return null;
+
+    const v = value.toLowerCase();
+    if (v === 'true') return { [field]: true };
+    if (v === 'false') return { [field]: false };
+    return null;
+  }
+
   const num = Number(value);
   if (value === undefined || value === null) return null;
 
