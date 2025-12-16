@@ -4,7 +4,7 @@ import productService from '#service/productService.js';
 import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
-import { PRODUCT_STATUSES } from '#constants/common.js';
+import { PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
 
@@ -391,22 +391,33 @@ export const exportProducts = async (req, res) => {
       }
     }
 
-    const result = await productService.exportProductsToCSV(groups, sellerId, req.query);
+    // Validate data exists BEFORE setting headers
+    const validation = await productService.validateProductExportData(groups, sellerId);
 
-    if (!result.success) {
-      return failResponse(res, result.message || req.locale.NO_PRODUCTS_FOUND, 404);
+    if (!validation.success) {
+      return failResponse(
+        res,
+        req.locale?.NO_PRODUCTS_FOUND || validation.message || 'No products found to export',
+        404
+      );
     }
 
     // Set headers for CSV download with UTF-8 encoding
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="products_export_${Date.now()}.csv"`);
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
 
     // Add UTF-8 BOM for proper encoding
-    const csvWithBOM = '\uFEFF' + result.data;
+    res.write('\uFEFF');
 
-    return res.status(200).send(csvWithBOM);
+    // Write CSV headers
+    res.write(PRODUCT_EXPORT_HEADERS.join(',') + '\n');
+
+    // Stream data using cursor
+    await productService.exportProductsToCSV(groups, sellerId, req.query, res);
+
+    return res.end();
   } catch (error) {
     console.error('Controller Error: exportProducts:', error.message);
     errorLog(error);
