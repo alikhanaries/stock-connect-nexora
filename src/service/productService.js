@@ -1183,7 +1183,7 @@ export const exportProductsToCSV = async (groups, sellerId, query) => {
     const [totalCount, products] = await Promise.all([
       Product.countDocuments(finalFilter),
 
-      Product.find(finalFilter).sort(sort).lean(),
+      Product.find(finalFilter).sort(sort).allowDiskUse(true).lean(),
     ]);
 
     const validation = validateExportData(products, 'products');
