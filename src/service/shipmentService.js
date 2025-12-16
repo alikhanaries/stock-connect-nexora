@@ -396,7 +396,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
       products: validProducts,
-      shipmentMethod: 'Aymakan',
+      shipmentMethod: 'aymakan',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
