@@ -17,5 +17,7 @@ export const uploadProducts = (products) => {
     status: p.status,
     categories: p.categoryTrail,
     inventoryCount: p.currentStockCount ?? 0,
+    hsCodeAE: p.hsCodeAE,
+    hsCodeSA: p.hsCodeSA,
   }));
 };
