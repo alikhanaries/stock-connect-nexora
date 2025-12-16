@@ -1272,7 +1272,10 @@ export const searchProuctsByFilter = async (groups, query, sellerId, channelId) 
   finalFilter = {
     ...finalFilter,
     sellerId: new mongoose.Types.ObjectId(sellerId),
-    status: { $ne: 'removed' },
+    status:
+      finalFilter.status && finalFilter.status.$regex
+        ? { $regex: `^${finalFilter.status.$regex}$`, $options: finalFilter.status.$options, $ne: 'removed' }
+        : { $ne: 'removed' },
   };
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
