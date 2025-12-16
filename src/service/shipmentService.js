@@ -396,7 +396,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
       products: validProducts,
-      shipmentMethod: 'aymakan',
+      shipmentMethod: 'AYMAKAN',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
@@ -802,9 +802,9 @@ export const getSingleShipmentService = async (id) => {
 
   const formattedShipmentData = transformShipmentResponse(shipment[0]);
 
-  // Fetch tracking info only if we have an AWB number and it's not a manual shipment
+  // Fetch tracking info only if we have an AWB number and it's not a MANUAL shipment
   let trackingData = null;
-  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod !== 'manual') {
+  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod !== 'MANUAL') {
     trackingData = await trackAymakanShipment(formattedShipmentData.airWaybillNo);
     formattedShipmentData.trackingInfo = formatShipmentTrackingInfo(trackingData?.trackingInfo);
   }
@@ -969,8 +969,8 @@ export const syncShipmentStatus = async (orderId) => {
 
     for (const shipment of shipments) {
       try {
-        // Skip manual shipments - they don't use Aymakan tracking
-        if (shipment.shipmentMethod === 'manual') {
+        // Skip MANUAL shipments - they don't use Aymakan tracking
+        if (shipment.shipmentMethod === 'MANUAL') {
           continue;
         }
 
@@ -1320,7 +1320,7 @@ export const createManualShipmentService = async (shipmentData) => {
       status: 'SHIPPED',
       submissionDate: new Date(),
       isMerchantCreator: true,
-      shipmentMethod: 'manual',
+      shipmentMethod: 'MANUAL',
       ...(description && { description }),
       shipmentMerchantDetails: {
         name: user.firstName || user.username || 'Unknown',
@@ -1425,7 +1425,7 @@ export const createManualShipmentService = async (shipmentData) => {
     // Create shipment log entry
     const logEntry = {
       status: 'SHIPPED',
-      description: `manual shipment created with AWB: ${airWaybillNo}, Method: ${method}`,
+      description: `MANUAL shipment created with AWB: ${airWaybillNo}, Method: ${method}`,
       createdAt: convetDateToUTC(new Date()),
     };
 
@@ -1433,7 +1433,7 @@ export const createManualShipmentService = async (shipmentData) => {
 
     return {
       success: true,
-      message: 'manual shipment created successfully',
+      message: 'MANUAL shipment created successfully',
       shipmentId: savedShipment._id,
       airWaybillNo,
       merchantShipmentNo,
@@ -1441,7 +1441,7 @@ export const createManualShipmentService = async (shipmentData) => {
     };
   } catch (error) {
     console.error('Error in createManualShipmentService:', error.message, error.stack);
-    throw new Error(error.message || 'Failed to create manual shipment');
+    throw new Error(error.message || 'Failed to create MANUAL shipment');
   }
 };
 
