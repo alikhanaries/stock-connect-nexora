@@ -13,7 +13,7 @@ const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
  * and upserts them into MongoDB.
  */
 
-export const getRamseyProducts = async (sellerId) => {
+export const getRamseyProducts = async (sellerId, isImageUpdate) => {
   try {
     const ramsey = createGurmanRamseyAdapter();
     const fetched = await ramsey.fetchProducts();
@@ -45,7 +45,7 @@ export const getRamseyProducts = async (sellerId) => {
            * - Formats product fields
            * - Extracts category trail hierarchy
            */
-          const { products, categoryTrails } = await formatRamseyProduct(batch, sellerId);
+          const { products, categoryTrails } = await formatRamseyProduct(batch, sellerId, isImageUpdate);
 
           /**
            * Convert products into canonical format

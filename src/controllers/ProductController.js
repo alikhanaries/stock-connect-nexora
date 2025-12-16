@@ -371,27 +371,27 @@ export const unlinkProductFromChannel = async (req, res) => {
 // Exports products data as CSV file for a specific seller.
 export const exportProducts = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const { status, search, minPrice, maxPrice, productSkuCode, sortBy, sortOrder } = req.query;
+    const sellerId = req.params.sellerId || req.sellerId;
 
-    // Build filters only with non-empty values
-    const filters = {};
-    if (status) filters.status = status;
-    if (search) filters.search = search;
-    if (minPrice) filters.minPrice = minPrice;
-    if (maxPrice) filters.maxPrice = maxPrice;
-    if (productSkuCode) filters.productSkuCode = productSkuCode;
-    if (sortBy) filters.sortBy = sortBy;
-    if (sortOrder) filters.sortOrder = sortOrder;
+    // Parse filterGroups from query params
+    let groups = [];
 
-    // Remove any remaining undefined/empty values
-    Object.keys(filters).forEach((key) => {
-      if (!filters[key]) {
-        delete filters[key];
+    if (req.query.filterGroups) {
+      try {
+        const parsedGroups = JSON.parse(req.query.filterGroups);
+        groups = parsedGroups.map((group) => ({
+          conditions: group.conditions.map((cond) => ({
+            field: cond.field,
+            operator: cond.operator,
+            value: cond.value,
+          })),
+        }));
+      } catch (error) {
+        console.error('Failed to parse filterGroups:', error);
       }
-    });
+    }
 
-    const result = await productService.exportProductsToCSV(sellerId, filters);
+    const result = await productService.exportProductsToCSV(groups, sellerId, req.query);
 
     if (!result.success) {
       return failResponse(res, result.message || req.locale.NO_PRODUCTS_FOUND, 404);

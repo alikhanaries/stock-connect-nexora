@@ -152,8 +152,8 @@ productsRouter.get(
 );
 
 /* EXPORT PRODUCTS TO CSV */
-productsRouter.get(
-  '/export',
+productsRouter.post(
+  '/export/:sellerId',
   exportProductsValidator,
   checkLanguage,
   authMiddleware,

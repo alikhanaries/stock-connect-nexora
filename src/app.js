@@ -22,7 +22,7 @@ app.use('/api', apiRoutes);
 app.use('/api/erp/nebim', nebimApiRoutes);
 app.use('/api/erp/kip', kipApiRoutes);
 app.use('/api/erp/ramsey', ramseyApiRoutes);
-app.use('/api/erp/ellite_string_la_intimo', eliteStringLaIntimoApiRoutes);
+app.use('/api/erp/elite_string_la_intimo', eliteStringLaIntimoApiRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
