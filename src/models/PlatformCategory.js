@@ -11,8 +11,7 @@ const platformCategorySchema = new mongoose.Schema(
       type: Number,
       required: true,
       trim: true,
-      unique: true,
-      index: true,
+      index: true, // remove global unique
     },
     categoryName: {
       type: String,
@@ -56,6 +55,12 @@ const platformCategorySchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+//  unique per seller
+platformCategorySchema.index({ sellerId: 1, id: 1 }, { unique: true });
+
+//  already unique per seller + platformCategoryId
 platformCategorySchema.index({ sellerId: 1, platformCategoryId: 1 }, { unique: true });
+
 export const PlatformCategory = mongoose.model('PlatformCategory', platformCategorySchema);
 export default PlatformCategory;

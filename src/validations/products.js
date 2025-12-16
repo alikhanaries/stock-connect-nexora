@@ -93,17 +93,10 @@ export const getProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .transform(val =>
-          val
-            .split(',')
-            .map(v => v.trim().replace(/'/g, ''))
-        )
-        .refine(
-          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
-          {
-            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
-          }
-        )
+        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
+        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
+          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+        })
         .optional(),
 
       minStockCount: z
@@ -450,17 +443,10 @@ export const getUserChannelProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .transform(val =>
-          val
-            .split(',')
-            .map(v => v.trim().replace(/'/g, ''))
-        )
-        .refine(
-          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
-          {
-            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
-          }
-        )
+        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
+        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
+          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+        })
         .optional(),
 
       minPrice: z
@@ -567,17 +553,10 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
       productType: z
         .string()
         .toLowerCase()
-        .transform(val =>
-          val
-            .split(',')
-            .map(v => v.trim().replace(/'/g, ''))
-        )
-        .refine(
-          arr => arr.every(v => ['simple', 'configurable'].includes(v)),
-          {
-            message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
-          }
-        )
+        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
+        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
+          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+        })
         .optional(),
 
       minPrice: z
@@ -618,6 +597,19 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
 
 // /* EXPORT PRODUCTS VALIDATOR */
 export const exportProductsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    sellerId: z
+      .string({
+        required_error: 'sellerId is required',
+        invalid_type_error: 'sellerId must be a string',
+      })
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
+  });
+
+  paramsSchema.parse(req.params);
   headerSchema.parse(req.headers);
 
   const querySchema = z
