@@ -420,7 +420,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     await order.save();
     const logEntry = {
       status: 'SHIPMENT CREATED',
-      description: `Shipment created with AWN -${trackingNumber}`,
+      description: `Shipment created with AWB -${trackingNumber}`,
       createdAt: new Date(),
     };
 
@@ -936,7 +936,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     }
     const logEntry = {
       status: 'SHIPMENT CANCELED',
-      description: `Shipment canceled with AWN -${trackingNumber}`,
+      description: `Shipment canceled with AWB -${trackingNumber}`,
       createdAt: new Date(),
     };
 
@@ -1108,19 +1108,19 @@ function createLogEntry(status, awb, tracking, trackingInfo, isOrder = false) {
     case 'DELIVERED':
       return {
         status: 'DELIVERED',
-        description: `${label} delivered${isOrder ? '' : ` with AWN:${awb}`}`,
+        description: `${label} delivered${isOrder ? '' : ` with AWB:${awb}`}`,
         createdAt: tracking?.delivery_date || new Date(),
       };
     case 'PICKED':
       return {
         status: 'PICKED',
-        description: `${label} picked${isOrder ? '' : ` with AWN:${awb}`}`,
+        description: `${label} picked${isOrder ? '' : ` with AWB:${awb}`}`,
         createdAt: tracking?.pickup_date || new Date(),
       };
     case 'CANCELED':
       return {
         status: 'CANCELED',
-        description: `${label} canceled${isOrder ? '' : ` with AWN:${awb}`}`,
+        description: `${label} canceled${isOrder ? '' : ` with AWB:${awb}`}`,
         createdAt: utcTime,
       };
     default:
