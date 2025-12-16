@@ -19,42 +19,37 @@ const validateProducts = async (channelId, sellerId) => {
     status: 'active',
   }).lean();
 
-  // Collect parent SKUs from child products
-  const parentSkuCodes = new Set();
+  // Collect all related SKU codes (child + parent + grandparent)
+  const allSkuCodes = new Set();
+
   for (const p of childProducts) {
-    if (p.parentProductSkuCode) parentSkuCodes.add(p.parentProductSkuCode);
-    if (p.grandParentProductSkuCode) parentSkuCodes.add(p.grandParentProductSkuCode);
+    // child
+    allSkuCodes.add(p.productSkuCode);
+
+    // parent
+    if (p.parentProductSkuCode) {
+      allSkuCodes.add(p.parentProductSkuCode);
+    }
+
+    // grandparent
+    if (p.grandParentProductSkuCode) {
+      allSkuCodes.add(p.grandParentProductSkuCode);
+    }
   }
 
-  // Fetch parent products
-  const parentProducts = await Product.find({
+  // Fetch all related products
+  const allProducts = await Product.find({
     sellerId,
-    productSkuCode: { $in: Array.from(parentSkuCodes) },
+    productSkuCode: { $in: [...allSkuCodes] },
     status: 'active',
   }).lean();
 
-  // Check if those parents have any grandparent
-  const grandParentSkuCodes = new Set();
-  for (const p of parentProducts) {
-    if (p.grandParentProductSkuCode) grandParentSkuCodes.add(p.grandParentProductSkuCode);
-  }
-
-  // Fetch grandparent products (if any)
-  let grandParentProducts = [];
-  if (grandParentSkuCodes.size > 0) {
-    grandParentProducts = await Product.find({
-      sellerId,
-      productSkuCode: { $in: Array.from(grandParentSkuCodes) },
-      status: 'active',
-    }).lean();
-  }
-
-  // Combine all (child + parent + grandparent) — remove duplicates
   const allProductsMap = new Map();
-  [...childProducts, ...parentProducts, ...grandParentProducts].forEach((p) => {
+  for (const p of allProducts) {
     allProductsMap.set(p.productSkuCode, p);
-  });
-  const validatedProducts = Array.from(allProductsMap.values());
+  }
+
+  const validatedProducts = [...allProductsMap.values()];
   const missingErrors = [];
 
   validatedProducts.forEach((item) => {
