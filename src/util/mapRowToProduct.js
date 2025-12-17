@@ -19,6 +19,9 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
   const errorData = [];
   if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
   if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
+  if (isImageUpdate && !r.primaryimageurl) errorData.push('Primary image url is missing');
+  if (isImageUpdate && !r.imageurl) errorData.push('Image url is missing');
+
   if (errorData.length) return { rowNumber: index, errorData };
 
   let publicUrls = [];

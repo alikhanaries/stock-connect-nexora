@@ -382,26 +382,32 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         rowTasks.push(
           limit(async () => {
             try {
-              const current = currentRow;
               // Skip empty rows
               if (Object.values(row).every((v) => !v || String(v).trim() === '')) {
-                errorDetails.push({ rowNumber: current, errorData: [locale.EMPTY_ROW] });
+                errorDetails.push({
+                  rowNumber: currentRow,
+                  errorData: [locale.EMPTY_ROW],
+                });
                 invalidRowsCount++;
                 return;
               }
 
-              // Map to product
-              const product = await mapRowToProduct(row, current, locale, sellerId, isImageUpdate);
-              if (product.errorData) {
+              // Map row to product
+              const product = await mapRowToProduct(row, currentRow, locale, sellerId, isImageUpdate);
+
+              if (product?.errorData) {
                 errorDetails.push(product);
                 invalidRowsCount++;
                 return;
               }
 
-              // Determine type
+              // Basic hierarchy validation
               const { valid, errors } = validateHierarchy(product);
               if (!valid) {
-                errorDetails.push({ rowNumber: current, errorData: errors });
+                errorDetails.push({
+                  rowNumber: currentRow,
+                  errorData: errors,
+                });
                 invalidRowsCount++;
                 return;
               }
@@ -431,8 +437,53 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   const validProducts = validated.filter((v) => v.valid).map((v) => v.product);
 
-  // Fetch all existing products in ONE database query
-  const productSkuCodes = validProducts.map((p) => p.productSkuCode);
+  const referencedSKUs = new Set();
+
+  // From current import file
+  for (const p of parsedProducts) {
+    if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
+  }
+
+  // From database (single query)
+  const dbRefs = await Product.find({ sellerId }, { parentProductSkuCode: 1, grandParentProductSkuCode: 1 }).lean();
+
+  for (const p of dbRefs) {
+    if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
+  }
+
+  const finalValidProducts = [];
+
+  for (const product of validProducts) {
+    const rowErrors = [];
+
+    // FINAL & CORRECT simple-product detection
+    const isSimple = !referencedSKUs.has(product.productSkuCode);
+
+    if (isSimple) {
+      if (typeof product.price !== 'number' || product.price <= 0) {
+        rowErrors.push('Price must be greater than 0 for simple products.');
+      }
+
+      if (typeof product.currentStockCount !== 'number' || product.currentStockCount <= 0) {
+        rowErrors.push('Stock must be greater than 0 for simple products.');
+      }
+    }
+
+    if (rowErrors.length) {
+      errorDetails.push({
+        rowNumber: product.rowNumber,
+        errorData: rowErrors,
+      });
+      invalidRowsCount++;
+      continue;
+    }
+
+    finalValidProducts.push(product);
+  }
+
+  const productSkuCodes = finalValidProducts.map((p) => p.productSkuCode);
 
   const existingProducts = await Product.find(
     { sellerId, productSkuCode: { $in: productSkuCodes } },
@@ -445,7 +496,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   let updatedCount = 0;
 
   // Prepare bulk write operations
-  const bulkOps = validProducts.map((product) => {
+  const bulkOps = finalValidProducts.map((product) => {
     const existing = existingMap.get(product.productSkuCode);
 
     if (existing?.status === 'removed') {
@@ -455,11 +506,16 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     if (existing) updatedCount++;
     else insertedCount++;
 
-    if (product.categoryTrail) categoryTrailsSet.add(product.categoryTrail);
+    if (product.categoryTrail) {
+      categoryTrailsSet.add(product.categoryTrail);
+    }
 
     return {
       updateOne: {
-        filter: { sellerId, productSkuCode: product.productSkuCode },
+        filter: {
+          sellerId,
+          productSkuCode: product.productSkuCode,
+        },
         update: { $set: product },
         upsert: true,
       },
@@ -469,7 +525,13 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   // Bulk writes in parallel batches
   const bulkTasks = [];
   for (let i = 0; i < bulkOps.length; i += batchSize) {
-    bulkTasks.push(writeLimit(() => Product.bulkWrite(bulkOps.slice(i, i + batchSize), { ordered: false })));
+    bulkTasks.push(
+      writeLimit(() =>
+        Product.bulkWrite(bulkOps.slice(i, i + batchSize), {
+          ordered: false,
+        })
+      )
+    );
   }
   await Promise.all(bulkTasks);
 
