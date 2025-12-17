@@ -7,6 +7,7 @@ import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandl
 import { PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
+import Seller from '#models/Seller.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -373,6 +374,12 @@ export const exportProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId || req.sellerId;
 
+    // Fetch seller name for filename
+    const seller = await Seller.findById(sellerId).select('name').lean();
+    if (!seller) {
+      return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
     // Parse filterGroups from query params
     let groups = [];
 
@@ -402,9 +409,13 @@ export const exportProducts = async (req, res) => {
       );
     }
 
+    const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const filename = `${sellerName}_ProductExport_${exportDate}.csv`;
+
     // Set headers for CSV download with UTF-8 encoding
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="products_export_${Date.now()}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
 
