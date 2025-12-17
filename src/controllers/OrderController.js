@@ -178,7 +178,7 @@ export const cancelFullOrder = async (req, res) => {
 
     const order = await Order.findById(orderId).lean();
 
-    if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
+    if (!order) return Responses.failResponse(res, 'Order not found', 404);
 
     let orderResponse;
 
