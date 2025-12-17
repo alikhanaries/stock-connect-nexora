@@ -14,6 +14,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const existingOrdersMap = new Map(existingOrdersDb.map((order) => [order.orderId, order]));
 
   return orders.map((data) => {
+
     const orderIdRaw = `${sellerId}${data.id}`;
 
     const existingOrder = existingOrdersMap.get(String(orderIdRaw));
@@ -45,7 +46,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       return {
         id: lineId,
         channelOrderLineNo: lineId,
-        status: existingSku ? existingSku.status : lineStatus,
+        status: lineStatus,
         isFulfillmentByMarketplace: false,
         gtin: null,
         description: lineName,
@@ -181,10 +182,6 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
         countryIso: billAddr.country ?? billAddr.Country,
       },
     };
-
-    if (!existingOrder) {
-      updatePayload.status = data.status ?? data.Status ?? 'PENDING';
-    }
 
     const updateOperation = {
       $set: updatePayload,

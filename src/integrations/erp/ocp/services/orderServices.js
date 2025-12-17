@@ -5,6 +5,9 @@ import Seller from '#root/src/models/Seller.js';
 // import { ocpConfig } from '../config/config.js';
 import { sanitizeOcpOrdersData } from '../helpers/sanitizeOcpOrdersData.js';
 import { createERPAdapter } from '../../base/ERPFactory.js';
+import Shipment from '#root/src/models/Shipment/Shipment.js';
+import { cancelAymakanShipment } from '#root/src/service/aymakanService.js';
+import { BLOCKED_STATUSES, ORDER_STATUS_MAP } from '#root/src/constants/common.js';
 
 const adaptor = createERPAdapter('ocp');
 
@@ -87,5 +90,72 @@ export const processOrders = async (orders, sellerId) => {
   } catch (error) {
     console.error('Error in processOrders:', error.message);
     return { success: false, message: error.message };
+  }
+};
+
+export const cancelFullOrderOcp = async (orderId, order, reason = 'NA') => {
+  try {
+    const sellerId = order.sellerId;
+    const sellerData = await Seller.findOne({ _id: sellerId, isDeleted: false }).lean();
+    const ocpBrandSlug = sellerData.ocpSlugId;
+
+    if (!ocpBrandSlug) {
+      return { success: false, message: 'This seller is not yet integrated with Ocp' };
+    }
+
+    const shipments = await Shipment.find({
+      orderId,
+      status: { $nin: ['CANCELED', 'PICKED', 'DELIVERED'] },
+    }).lean();
+
+    if (shipments.length) {
+      await Promise.all(
+        shipments.map(async (s) => {
+          try {
+            await cancelAymakanShipment(s.airWaybillNo);
+          } catch (err) {
+            console.warn(`Aymakan cancel failed for ${s.airWaybillNo}:`, err.message);
+          }
+          await Shipment.updateOne({ _id: s._id }, { status: 'CANCELED' });
+        })
+      );
+    } else if (BLOCKED_STATUSES[order.status]) {
+      return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
+    }
+    // CANCEL ORDER IN OCP
+    const ocpOrderId = order.orderId;
+    const res = await adaptor.cancelFullOrder({ ocpBrandSlug: ocpBrandSlug, ocpOrderId, reason });
+
+    if (!res.success) {
+      let cleanMessage = res?.message || 'OCP Order cancellation failed';
+      return {
+        success: false,
+        message: cleanMessage,
+        statusCode: res.status,
+        data: null,
+      };
+    }
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      {
+        $set: {
+          status: ORDER_STATUS_MAP.CANCELED,
+          'orderSkuList.skuList.$[].status': ORDER_STATUS_MAP.CANCELED,
+        },
+      },
+      { new: true }
+    );
+    // ORDER LOG ENTRY
+    const logEntry = {
+      status: 'CANCELED',
+      description: 'Order Canceled',
+      createdAt: new Date(),
+    };
+    await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
+
+    return { success: true, data: updatedOrder.toObject() };
+  } catch (error) {
+    console.error('cancelFullOrder error:', error);
+    return { success: false, error: { message: error.message } };
   }
 };

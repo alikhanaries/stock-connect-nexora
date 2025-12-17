@@ -562,11 +562,8 @@ const transformOrderResponse = (response) => {
   };
 };
 
-const cancelFullOrder = async (orderId, reason = 'NA') => {
+const cancelFullOrder = async (orderId, order, reason = 'NA') => {
   try {
-    const order = await Order.findById(orderId).lean();
-    if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
-
     const lines = order.orderSkuList.skuList
       .map((item) => ({
         MerchantProductNo: item.merchantProductNo,
