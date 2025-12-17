@@ -448,20 +448,36 @@ productsRouter.get(
 /* EXPORT PRODUCTS TO CSV */
 /**
  * @openapi
- * /products/export:
- *   get:
+ * /products/export/{sellerId}:
+ *   post:
  *     tags: [Products]
  *     summary: Export products to CSV
  *     parameters:
  *       - in: header
  *         name: Accept-Language
- *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *       - in: path
+ *         name: sellerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     security:
+ *       - bearerAuth: []
  *     responses:
- *       200: { description: "CSV file" }
- *       400: { $ref: "#/components/schemas/FailResponse" }
+ *       200:
+ *         description: CSV file
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         $ref: "#/components/schemas/FailResponse"
  */
-productsRouter.get(
-  '/export',
+productsRouter.post(
+  '/export/:sellerId',
   exportProductsValidator,
   checkLanguage,
   authMiddleware,
