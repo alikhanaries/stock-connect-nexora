@@ -39,6 +39,10 @@ export const CHANNEL_IMAGE_MAP = {
   1733: 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/amazion123456789',
   1892: 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/noon',
   1635: 'https://axevhvmfbgbd.compat.objectstorage.me-riyadh-1.oraclecloud.com/stock_connect_assests/images/suppliers/amazion123456789',
+  10000000:
+    'https://objectstorage.me-riyadh-1.oraclecloud.com/n/axevhvmfbgbd/b/stock_connect_assests/o/images/suppliers/OCP',
+  2082: 'https://objectstorage.me-riyadh-1.oraclecloud.com/n/axevhvmfbgbd/b/stock_connect_assests/o/images/suppliers/Trendyol_logo.svg.png',
+  1893: 'https://objectstorage.me-riyadh-1.oraclecloud.com/n/axevhvmfbgbd/b/stock_connect_assests/o/images/suppliers/namshi.jpg',
 };
 
 export const ORDER_STATUS_MAP = {
