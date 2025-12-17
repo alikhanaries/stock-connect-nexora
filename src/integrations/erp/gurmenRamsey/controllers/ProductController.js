@@ -4,8 +4,11 @@ import { getRamseyProducts } from '../services/productService.js';
 export const syncRamseyProducts = (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     process.nextTick(() => {
-      getRamseyProducts(sellerId).catch((err) => console.error('Ramsey product sync (Gürmen Group) failed:', err));
+      getRamseyProducts(sellerId, isImageUpdate).catch((err) =>
+        console.error('Ramsey product sync (Gürmen Group) failed:', err)
+      );
     });
     return successResponse(res, 'Ramsey product sync (Gürmen Group) started in background.', 202);
   } catch (error) {

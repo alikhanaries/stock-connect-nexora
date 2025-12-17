@@ -13,6 +13,7 @@ import {
   addProductsToUserChannel,
   unlinkProductFromChannel,
   exportProducts,
+  searchProducts,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -151,13 +152,15 @@ productsRouter.get(
 );
 
 /* EXPORT PRODUCTS TO CSV */
-productsRouter.get(
-  '/export',
+productsRouter.post(
+  '/export/:sellerId',
   exportProductsValidator,
   checkLanguage,
   authMiddleware,
   verifySellerAccess,
   exportProducts
 );
+
+productsRouter.post('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
 
 export default productsRouter;
