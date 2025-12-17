@@ -220,7 +220,7 @@ export const cancelPartialOrderValidator = validate(async (req) => {
         z.object({
           orderLineId: z.number().min(1, 'Order line ID is required'),
           quantity: z.number().int('Quantity must be an integer').positive('Quantity must be greater than zero'),
-          merchantProductNo: z.string().min(1, 'merchantProductNo is required'),
+          merchantProductNo: z.string().optional(),
         })
       )
       .min(1, 'Products array cannot be empty'),
