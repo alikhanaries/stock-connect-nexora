@@ -14,6 +14,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const existingOrdersMap = new Map(existingOrdersDb.map((order) => [order.orderId, order]));
 
   return orders.map((data) => {
+
     const orderIdRaw = `${sellerId}${data.id}`;
 
     const existingOrder = existingOrdersMap.get(String(orderIdRaw));
