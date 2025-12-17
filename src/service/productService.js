@@ -672,8 +672,7 @@ const getAllProductIdsBySellerId = async (sellerId) => {
     const products = await Product.find(
       {
         sellerId: new mongoose.Types.ObjectId(sellerId),
-        status: { $ne: 'removed' },
-        productType: 'simple',
+        status: { $nin: ['removed', 'inactive'] },
       },
       { _id: 1 }
     ).lean();
