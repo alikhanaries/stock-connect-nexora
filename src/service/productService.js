@@ -1224,6 +1224,21 @@ export const exportProductsToCSV = async (groups, sellerId, query) => {
 };
 
 export const searchProuctsByFilter = async (filters = [], query, sellerId, channelId, search) => {
+  if (Array.isArray(filters) && typeof filters[0] === 'string') {
+    filters = [
+      {
+        conditions: filters.map((f) => {
+          const [field, operator, ...rest] = f.split(':');
+          return {
+            field,
+            operator,
+            value: rest.join(':'),
+          };
+        }),
+      },
+    ];
+  }
+
   const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
