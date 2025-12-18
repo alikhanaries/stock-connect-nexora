@@ -96,23 +96,38 @@ export async function validateHierarchyExistenceBatch(products, sellerId) {
  * - Done via a single aggregation + 2 updates for maximum performance
  */
 export async function resolveProductTypes(sellerId) {
-  const results = await Product.aggregate([
-    { $match: { sellerId } },
+  // Fetch only needed fields
+  const products = await Product.find(
+    { sellerId },
     {
-      $group: {
-        _id: null,
-        parents: { $addToSet: '$parentProductSkuCode' },
-        grands: { $addToSet: '$grandParentProductSkuCode' },
-      },
-    },
-    { $project: { refs: { $setUnion: ['$parents', '$grands'] } } },
-  ]);
+      productSkuCode: 1,
+      parentProductSkuCode: 1,
+      grandParentProductSkuCode: 1,
+    }
+  ).lean();
 
-  const refs = results[0]?.refs?.filter(Boolean) || [];
+  const configurableSKUs = new Set();
 
-  // Configurable = Appears in refs
-  await Product.updateMany({ sellerId, productSkuCode: { $in: refs } }, { $set: { productType: 'configurable' } });
+  for (const p of products) {
+    // RULE 1 & 2: referenced by others
+    if (p.parentProductSkuCode) configurableSKUs.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) configurableSKUs.add(p.grandParentProductSkuCode);
 
-  // Simple = Not referenced anywhere
-  await Product.updateMany({ sellerId, productSkuCode: { $nin: refs } }, { $set: { productType: 'simple' } });
+    // RULE 3: this row itself declares a grandparent
+    if (p.grandParentProductSkuCode) configurableSKUs.add(p.productSkuCode);
+  }
+
+  const configurableArray = [...configurableSKUs];
+
+  // CONFIGURABLE
+  await Product.updateMany(
+    { sellerId, productSkuCode: { $in: configurableArray } },
+    { $set: { productType: 'configurable' } }
+  );
+
+  // SIMPLE
+  await Product.updateMany(
+    { sellerId, productSkuCode: { $nin: configurableArray } },
+    { $set: { productType: 'simple' } }
+  );
 }
