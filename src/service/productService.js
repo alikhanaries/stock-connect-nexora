@@ -611,9 +611,9 @@ const getProductById = async (id, locale) => {
     }
   });
 
-  let root = map[rootSku];
+  let root = map[rootSku] || map[product.productSkuCode];
   let safety = 0;
-  while (safety < 10) {
+  while (root && safety < 10) {
     safety++;
     const parent = map[root.parentProductSkuCode];
     const grand = map[root.grandParentProductSkuCode];
