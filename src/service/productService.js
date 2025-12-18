@@ -240,12 +240,8 @@ export const pushBatchToOCP = async (batch, index, sellerId) => {
   let ocpApiCallCount = 0;
   return withRetry(async () => {
     ocpApiCallCount++;
-
-    const podName = process.env.HOSTNAME || 'unknown-pod';
-
     console.log(
       `[OCP_API_CALL] count=${ocpApiCallCount} ` +
-        `pod=${podName} ` +
         `batch=${index + 1} ` +
         `batchSize=${batch.length} ` +
         `sellerId=${sellerId} ` +
