@@ -21,7 +21,7 @@ import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
-import { uploadProducts } from '#service/channel/ocpService.js';
+import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -237,7 +237,20 @@ export const pushBatchToOCP = async (batch, index, sellerId) => {
   if (!seller) {
     throw new Error(`Seller with ID ${sellerId} not found`);
   }
+  let ocpApiCallCount = 0;
   return withRetry(async () => {
+    ocpApiCallCount++;
+
+    const podName = process.env.HOSTNAME || 'unknown-pod';
+
+    console.log(
+      `[OCP_API_CALL] count=${ocpApiCallCount} ` +
+        `pod=${podName} ` +
+        `batch=${index + 1} ` +
+        `batchSize=${batch.length} ` +
+        `sellerId=${sellerId} ` +
+        `time=${new Date().toISOString()}`
+    );
     const response = await fetch(`${OCP_URL}/api/v1/edge/import-products`, {
       method: 'POST',
       headers: {
@@ -315,7 +328,58 @@ const validateProducts = async (channelId, sellerId) => {
 };
 
 //  Async push products to CE
-const pushProductsAsync = async (products, channelId, sellerId) => {
+// const pushProductsAsync = async (products, channelId, sellerId) => {
+//   const channel = await Channel.findOne({ channelId });
+
+//   if (!channel) {
+//     throw new Error(`Channel with ID ${channelId} not found`);
+//   }
+
+//   const limit = pLimit(MAX_CONCURRENT);
+//   const batches = [];
+
+//   for (let i = 0; i < products.length; i += BATCH_SIZE) {
+//     batches.push(products.slice(i, i + BATCH_SIZE));
+//   }
+
+//   await Promise.allSettled(
+//     batches.map((batch, idx) =>
+//       limit(async () => {
+//         try {
+//           //return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+
+//           if (channel.channelName === 'OCP') {
+//             // Filter simple products for OCP
+//             const simpleProducts = batch
+//               .filter(({ productType }) => productType === 'simple')
+//               .map((product) =>
+//                 product.categoryTrail === 'Apparel > Dresses > Dresses'
+//                   ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
+//                   : product
+//               );
+
+//             return await pushBatchToOCP(uploadProducts(simpleProducts), idx, sellerId);
+//           } else {
+//             return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+//           }
+//         } catch (err) {
+//           console.error(`Batch ${idx} CE Push failed:`, err.message);
+//           return {
+//             AcceptedCount: 0,
+//             RejectedCount: batch.length,
+//             ProductMessages: batch.map((p) => ({
+//               Name: p.name,
+//               Reference: p.productSkuCode,
+//               Errors: [err.message],
+//               Warnings: p.Warnings,
+//             })),
+//           };
+//         }
+//       })
+//     )
+//   );
+// };
+export const pushProductsAsync = async (products, channelId, sellerId) => {
   const channel = await Channel.findOne({ channelId });
 
   if (!channel) {
@@ -323,34 +387,37 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
   }
 
   const limit = pLimit(MAX_CONCURRENT);
-  const batches = [];
+  let batches = [];
 
-  for (let i = 0; i < products.length; i += BATCH_SIZE) {
-    batches.push(products.slice(i, i + BATCH_SIZE));
+  if (channel.channelName === 'OCP') {
+    const simpleProducts = products
+      .filter(({ productType }) => productType === 'simple')
+      .map((product) =>
+        product.categoryTrail === 'Apparel > Dresses > Dresses'
+          ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
+          : product
+      );
+
+    const groupedByParent = groupByParent(simpleProducts);
+    batches = buildBatchesKeepingParentsIntact(groupedByParent, BATCH_SIZE);
+  } else {
+    for (let i = 0; i < products.length; i += BATCH_SIZE) {
+      batches.push(products.slice(i, i + BATCH_SIZE));
+    }
   }
 
   await Promise.allSettled(
     batches.map((batch, idx) =>
       limit(async () => {
         try {
-          //return await pushBatch(batch.map(mapProductToChannelEngine), idx);
-
           if (channel.channelName === 'OCP') {
-            // Filter simple products for OCP
-            const simpleProducts = batch
-              .filter(({ productType }) => productType === 'simple')
-              .map((product) =>
-                product.categoryTrail === 'Apparel > Dresses > Dresses'
-                  ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
-                  : product
-              );
-
-            return await pushBatchToOCP(uploadProducts(simpleProducts), idx, sellerId);
-          } else {
-            return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+            return await pushBatchToOCP(uploadProducts(batch), idx, sellerId);
           }
+
+          return await pushBatch(batch.map(mapProductToChannelEngine), idx);
         } catch (err) {
-          console.error(`Batch ${idx} CE Push failed:`, err.message);
+          console.error(`Batch ${idx} push failed`, err);
+
           return {
             AcceptedCount: 0,
             RejectedCount: batch.length,
@@ -366,7 +433,6 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
     )
   );
 };
-
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
