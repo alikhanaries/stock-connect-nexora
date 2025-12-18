@@ -1223,7 +1223,7 @@ export const exportProductsToCSV = async (groups, sellerId, query) => {
   }
 };
 
-export const searchProuctsByFilter = async (groups = [], query, sellerId, channelId) => {
+export const searchProuctsByFilter = async (filters = [], query, sellerId, channelId, search) => {
   const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
@@ -1231,7 +1231,7 @@ export const searchProuctsByFilter = async (groups = [], query, sellerId, channe
 
   const orQueries = [];
 
-  for (const group of groups) {
+  for (const group of filters) {
     if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
     const andQueries = [];
@@ -1255,14 +1255,16 @@ export const searchProuctsByFilter = async (groups = [], query, sellerId, channe
   if (orQueries.length === 1) finalFilter = orQueries[0];
   else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-  finalFilter = {
-    ...finalFilter,
-    sellerId: new mongoose.Types.ObjectId(sellerId),
-    status:
-      finalFilter.status && finalFilter.status.$regex
-        ? { $regex: `^${finalFilter.status.$regex}$`, $options: finalFilter.status.$options, $ne: 'removed' }
-        : { $ne: 'removed' },
-  };
+  finalFilter = finalFilter.status
+    ? {
+        $and: [{ ...finalFilter }, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      }
+    : {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
@@ -1270,7 +1272,16 @@ export const searchProuctsByFilter = async (groups = [], query, sellerId, channe
   if (channelId) {
     const channelDetails = await Channel.findOne({ channelId: Number(channelId) }, { channelName: 1, _id: 0 }).lean();
     if (channelDetails?.channelName) {
-      finalFilter.marketPlace = channelDetails.channelName;
+      const escaped = channelDetails.channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
+      finalFilter.marketPlace = { $regex: escaped, $options: 'i' };
+    }
+  }
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    if (finalFilter.$or) {
+      finalFilter.$or.push({ name: regex }, { productSkuCode: regex });
+    } else {
+      finalFilter.$or = [{ name: regex }, { productSkuCode: regex }];
     }
   }
 

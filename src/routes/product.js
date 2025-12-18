@@ -161,6 +161,6 @@ productsRouter.post(
   exportProducts
 );
 
-productsRouter.post('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
+productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
 
 export default productsRouter;

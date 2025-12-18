@@ -417,10 +417,16 @@ export const exportProducts = async (req, res) => {
 export const searchProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId;
-    const groups = req.body.groups;
-    const { channelId } = req.query; 
+    const { channelId, search } = req.query;
+    const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
 
-    const { products, pagination } = await productService.searchProuctsByFilter(groups, req.body, sellerId, channelId);
+    const { products, pagination } = await productService.searchProuctsByFilter(
+      filters,
+      req.query,
+      sellerId,
+      channelId,
+      search
+    );
 
     const responseData = {
       content: products || [],
