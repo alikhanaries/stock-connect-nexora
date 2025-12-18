@@ -489,7 +489,7 @@ productsRouter.post(
 /**
  * @openapi
  * /products/searchProducts/{sellerId}:
- *   post:
+ *   get:
  *     tags: [Products]
  *     summary: Search products by seller
  *     parameters:
@@ -503,6 +503,6 @@ productsRouter.post(
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  */
-productsRouter.post('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
+productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
 
 export default productsRouter;

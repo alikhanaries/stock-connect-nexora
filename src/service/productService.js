@@ -28,6 +28,7 @@ import mongoose from 'mongoose';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
+import { buildCondition } from '../helpers/productFilters.js';
 const {
   CHANNEL_ENGINE_BASE_URL,
   CHANNEL_ENGINE_API_KEY,
@@ -611,9 +612,9 @@ const getProductById = async (id, locale) => {
     }
   });
 
-  let root = map[rootSku];
+  let root = map[rootSku] || map[product.productSkuCode];
   let safety = 0;
-  while (safety < 10) {
+  while (root && safety < 10) {
     safety++;
     const parent = map[root.parentProductSkuCode];
     const grand = map[root.grandParentProductSkuCode];
@@ -672,8 +673,7 @@ const getAllProductIdsBySellerId = async (sellerId) => {
     const products = await Product.find(
       {
         sellerId: new mongoose.Types.ObjectId(sellerId),
-        status: { $ne: 'removed' },
-        productType: 'simple',
+        status: { $nin: ['removed', 'inactive'] },
       },
       { _id: 1 }
     ).lean();
@@ -1222,80 +1222,7 @@ export const exportProductsToCSV = async (groups, sellerId, query) => {
   }
 };
 
-function normalizeArray(value) {
-  if (Array.isArray(value)) {
-    return value.filter((v) => v !== undefined && v !== null && v !== '').map((v) => String(v).trim());
-  }
-
-  if (typeof value === 'string') {
-    return value
-      .split(',')
-      .map((v) => v.trim())
-      .filter((v) => v.length > 0);
-  }
-
-  if (value === undefined || value === null) return [];
-
-  return [String(value).trim()];
-}
-
-function buildCondition(field, operator, value) {
-  const num = Number(value);
-  if (value === undefined || value === null) return null;
-
-  switch (operator) {
-    // Arithmetic
-    case 'equal_to':
-      return { [field]: num };
-    case 'not_equal_to':
-      return { [field]: { $ne: num } };
-    case 'less_than':
-      return { [field]: { $lt: num } };
-    case 'not_less_than':
-      return { [field]: { $gte: num } };
-    case 'greater_than':
-      return { [field]: { $gt: num } };
-    case 'not_greater_than':
-      return { [field]: { $lte: num } };
-
-    // Text
-    case 'empty':
-      return { [field]: '' };
-    case 'not_empty':
-      return { [field]: { $exists: true, $ne: '' } };
-    case 'contains':
-      return { [field]: { $regex: value, $options: 'i' } };
-    case 'does_not_contain':
-      return { [field]: { $not: { $regex: value, $options: 'i' } } };
-
-    // List
-    case 'in_list':
-      return { [field]: { $in: normalizeArray(value) } };
-    case 'not_in_list':
-      return { [field]: { $nin: normalizeArray(value) } };
-
-    // Equals
-    case 'equals':
-      return { [field]: value };
-    case 'not_equals':
-      return { [field]: { $ne: value } };
-
-    // Multi-match
-    case 'contains_any': {
-      const list = normalizeArray(value);
-      return list.length ? { $or: list.map((v) => ({ [field]: { $regex: v, $options: 'i' } })) } : null;
-    }
-    case 'does_not_contains_any': {
-      const list = normalizeArray(value);
-      return list.length ? { $and: list.map((v) => ({ [field]: { $not: { $regex: v, $options: 'i' } } })) } : null;
-    }
-
-    default:
-      return null;
-  }
-}
-
-export const searchProuctsByFilter = async (groups, query, sellerId) => {
+export const searchProuctsByFilter = async (filters = [], query, sellerId, channelId, search) => {
   const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
@@ -1303,7 +1230,7 @@ export const searchProuctsByFilter = async (groups, query, sellerId) => {
 
   const orQueries = [];
 
-  for (const group of groups) {
+  for (const group of filters) {
     if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
     const andQueries = [];
@@ -1327,13 +1254,35 @@ export const searchProuctsByFilter = async (groups, query, sellerId) => {
   if (orQueries.length === 1) finalFilter = orQueries[0];
   else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-  finalFilter = {
-    ...finalFilter,
-    sellerId: new mongoose.Types.ObjectId(sellerId),
-    status: { $ne: 'removed' },
-  };
+  finalFilter = finalFilter.status
+    ? {
+        $and: [{ ...finalFilter }, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      }
+    : {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+  // if channelId
+  if (channelId) {
+    const channelDetails = await Channel.findOne({ channelId: Number(channelId) }, { channelName: 1, _id: 0 }).lean();
+    if (channelDetails?.channelName) {
+      const escaped = channelDetails.channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
+      finalFilter.marketPlace = { $regex: escaped, $options: 'i' };
+    }
+  }
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    if (finalFilter.$or) {
+      finalFilter.$or.push({ name: regex }, { productSkuCode: regex });
+    } else {
+      finalFilter.$or = [{ name: regex }, { productSkuCode: regex }];
+    }
+  }
 
   const [total, products] = await Promise.all([
     Product.countDocuments(finalFilter),
