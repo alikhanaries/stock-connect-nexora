@@ -1,27 +1,22 @@
 import { config } from '#config/config.js';
-import { ORDER_STATUS_MATCH, PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_EXPORT_HEADERS, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import {
-  determineProductType,
-  resolveProductTypes,
-  validateHierarchy,
-  validateHierarchyExistenceBatch,
-} from '#helpers/ProductHierarchy.js';
+import { resolveProductTypes, validateHierarchy, validateHierarchyExistenceBatch } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import {
+  createCSVExportResponse,
   escapeCsv,
   generateCSVFilename,
-  createCSVExportResponse,
   handleExportError,
   validateExportData,
 } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
-import Seller from '#models/Seller.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
+import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
-import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import { uploadProducts } from '#service/channel/ocpService.js';
+import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -371,61 +366,49 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
+  const parsedProducts = [];
   const categoryTrailsSet = new Set();
   let invalidRowsCount = 0;
+  let rowIndex = 1;
 
   const rowTasks = [];
-  const parsedProducts = [];
-  let rowIndex = 1;
 
   await new Promise((resolve, reject) => {
     stream
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
-        const current = rowIndex;
+        const currentRow = rowIndex;
 
         rowTasks.push(
           limit(async () => {
             try {
               // Skip empty rows
-              const isEmpty = Object.values(row).every((v) => !v || String(v).trim() === '');
-              if (isEmpty) {
-                errorDetails.push({ rowNumber: current, errorData: [locale.EMPTY_ROW] });
+              if (Object.values(row).every((v) => !v || String(v).trim() === '')) {
+                errorDetails.push({
+                  rowNumber: currentRow,
+                  errorData: [locale.EMPTY_ROW],
+                });
                 invalidRowsCount++;
                 return;
               }
 
-              // Map to product
-              const product = await mapRowToProduct(row, current, locale, sellerId, isImageUpdate);
-              if (product.errorData) {
+              // Map row to product
+              const product = await mapRowToProduct(row, currentRow, locale, sellerId, isImageUpdate);
+
+              if (product?.errorData) {
                 errorDetails.push(product);
                 invalidRowsCount++;
                 return;
               }
 
-              // Determine type
-              try {
-                product.productType = determineProductType(product);
-              } catch (e) {
-                errorDetails.push({ rowNumber: current, errorData: [e.message] });
-                invalidRowsCount++;
-                return;
-              }
-
-              // Price validation
-              if (product.productType === 'simple' && (!product.price || isNaN(product.price))) {
-                errorDetails.push({
-                  rowNumber: current,
-                  errorData: [locale.PRODUCT_PRICE_MISSING],
-                });
-                invalidRowsCount++;
-                return;
-              }
-              // Structure validation
+              // Basic hierarchy validation
               const { valid, errors } = validateHierarchy(product);
               if (!valid) {
-                errorDetails.push({ rowNumber: current, errorData: errors });
+                errorDetails.push({
+                  rowNumber: currentRow,
+                  errorData: errors,
+                });
                 invalidRowsCount++;
                 return;
               }
@@ -455,39 +438,85 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   const validProducts = validated.filter((v) => v.valid).map((v) => v.product);
 
-  // Fetch all existing products in ONE database query
-  const productSkuCodes = validProducts.map((p) => p.productSkuCode);
+  const referencedSKUs = new Set();
+
+  // From current import file
+  for (const p of parsedProducts) {
+    if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
+  }
+
+  // From database (single query)
+  const dbRefs = await Product.find({ sellerId }, { parentProductSkuCode: 1, grandParentProductSkuCode: 1 }).lean();
+
+  for (const p of dbRefs) {
+    if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
+  }
+
+  const finalValidProducts = [];
+
+  for (const product of validProducts) {
+    const rowErrors = [];
+
+    // FINAL & CORRECT simple-product detection
+    const isSimple = !referencedSKUs.has(product.productSkuCode);
+
+    if (isSimple) {
+      if (typeof product.price !== 'number' || product.price <= 0) {
+        rowErrors.push('Price must be greater than 0 for simple products.');
+      }
+
+      if (typeof product.currentStockCount !== 'number' || product.currentStockCount <= 0) {
+        rowErrors.push('Stock must be greater than 0 for simple products.');
+      }
+    }
+
+    if (rowErrors.length) {
+      errorDetails.push({
+        rowNumber: product.rowNumber,
+        errorData: rowErrors,
+      });
+      invalidRowsCount++;
+      continue;
+    }
+
+    finalValidProducts.push(product);
+  }
+
+  const productSkuCodes = finalValidProducts.map((p) => p.productSkuCode);
 
   const existingProducts = await Product.find(
     { sellerId, productSkuCode: { $in: productSkuCodes } },
     { productSkuCode: 1, status: 1 }
   ).lean();
 
-  const existingMap = new Map();
-  for (const p of existingProducts) {
-    existingMap.set(p.productSkuCode, p);
-  }
-
+  const existingMap = new Map(existingProducts.map((p) => [p.productSkuCode, p]));
   // Counters
   let insertedCount = 0;
   let updatedCount = 0;
 
   // Prepare bulk write operations
-  const bulkOps = validProducts.map((product) => {
+  const bulkOps = finalValidProducts.map((product) => {
     const existing = existingMap.get(product.productSkuCode);
 
     if (existing?.status === 'removed') {
       product.status = 'active';
     }
 
-    if (existing?._id) updatedCount++;
+    if (existing) updatedCount++;
     else insertedCount++;
 
-    if (product.categoryTrail) categoryTrailsSet.add(product.categoryTrail);
+    if (product.categoryTrail) {
+      categoryTrailsSet.add(product.categoryTrail);
+    }
 
     return {
       updateOne: {
-        filter: { sellerId, productSkuCode: product.productSkuCode },
+        filter: {
+          sellerId,
+          productSkuCode: product.productSkuCode,
+        },
         update: { $set: product },
         upsert: true,
       },
@@ -497,8 +526,13 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   // Bulk writes in parallel batches
   const bulkTasks = [];
   for (let i = 0; i < bulkOps.length; i += batchSize) {
-    const slice = bulkOps.slice(i, i + batchSize);
-    bulkTasks.push(writeLimit(() => Product.bulkWrite(slice, { ordered: false })));
+    bulkTasks.push(
+      writeLimit(() =>
+        Product.bulkWrite(bulkOps.slice(i, i + batchSize), {
+          ordered: false,
+        })
+      )
+    );
   }
   await Promise.all(bulkTasks);
 
