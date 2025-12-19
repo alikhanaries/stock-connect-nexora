@@ -123,7 +123,8 @@ export const cancelFullOrderOcp = async (orderId, order, reason = 'NA') => {
       return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
     }
     // CANCEL ORDER IN OCP
-    const ocpOrderId = order.orderId;
+    let ocpOrderId = order.orderId.slice(24);
+
     const res = await adaptor.cancelFullOrder({ ocpBrandSlug: ocpBrandSlug, ocpOrderId, reason });
 
     if (!res.success) {
