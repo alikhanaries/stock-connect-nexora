@@ -10,13 +10,13 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const existingOrdersMap = new Map(existingOrdersDb.map((order) => [order.orderId, order]));
 
   return orders.map((data) => {
-    const orderIdRaw = data.id;
+    const orderIdRaw = `${sellerId}${data.id}`;
 
     const existingOrder = existingOrdersMap.get(String(orderIdRaw));
 
-    const rawItems = [...(data.unShippedItems || []), ...(data.shippedItems || []), ...(data.cancelledItems || [])];
+    const allRawItems = [...(data.unShippedItems || []), ...(data.shippedItems || []), ...(data.cancelledItems || [])];
 
-    const validItems = rawItems.filter((item) => item.id);
+    const validItems = allRawItems.filter((item) => item.id);
     const merchantOrderNo = `6_OCP_${orderIdRaw}`;
 
     const skuList = validItems.map((line) => {
