@@ -1,33 +1,29 @@
 import { config } from '#config/config.js';
-import { ORDER_STATUS_MATCH, PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_EXPORT_HEADERS, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import {
-  determineProductType,
-  resolveProductTypes,
-  validateHierarchy,
-  validateHierarchyExistenceBatch,
-} from '#helpers/ProductHierarchy.js';
+import { resolveProductTypes, validateHierarchy, validateHierarchyExistenceBatch } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import {
+  createCSVExportResponse,
   escapeCsv,
   generateCSVFilename,
-  createCSVExportResponse,
   handleExportError,
   validateExportData,
 } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
-import Seller from '#models/Seller.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
+import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
-import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import { uploadProducts } from '#service/channel/ocpService.js';
+import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
+import { buildCondition } from '../helpers/productFilters.js';
 const {
   CHANNEL_ENGINE_BASE_URL,
   CHANNEL_ENGINE_API_KEY,
@@ -39,7 +35,6 @@ const {
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
-const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 const MAX_RETRIES = 3;
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -370,61 +365,49 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
+  const parsedProducts = [];
   const categoryTrailsSet = new Set();
   let invalidRowsCount = 0;
+  let rowIndex = 1;
 
   const rowTasks = [];
-  const parsedProducts = [];
-  let rowIndex = 1;
 
   await new Promise((resolve, reject) => {
     stream
       .pipe(csv())
       .on('data', (row) => {
         rowIndex++;
-        const current = rowIndex;
+        const currentRow = rowIndex;
 
         rowTasks.push(
           limit(async () => {
             try {
               // Skip empty rows
-              const isEmpty = Object.values(row).every((v) => !v || String(v).trim() === '');
-              if (isEmpty) {
-                errorDetails.push({ rowNumber: current, errorData: [locale.EMPTY_ROW] });
+              if (Object.values(row).every((v) => !v || String(v).trim() === '')) {
+                errorDetails.push({
+                  rowNumber: currentRow,
+                  errorData: [locale.EMPTY_ROW],
+                });
                 invalidRowsCount++;
                 return;
               }
 
-              // Map to product
-              const product = await mapRowToProduct(row, current, locale, sellerId, isImageUpdate);
-              if (product.errorData) {
+              // Map row to product
+              const product = await mapRowToProduct(row, currentRow, locale, sellerId, isImageUpdate);
+
+              if (product?.errorData) {
                 errorDetails.push(product);
                 invalidRowsCount++;
                 return;
               }
 
-              // Determine type
-              try {
-                product.productType = determineProductType(product);
-              } catch (e) {
-                errorDetails.push({ rowNumber: current, errorData: [e.message] });
-                invalidRowsCount++;
-                return;
-              }
-
-              // Price validation
-              if (product.productType === 'simple' && (!product.price || isNaN(product.price))) {
-                errorDetails.push({
-                  rowNumber: current,
-                  errorData: [locale.PRODUCT_PRICE_MISSING],
-                });
-                invalidRowsCount++;
-                return;
-              }
-              // Structure validation
+              // Basic hierarchy validation
               const { valid, errors } = validateHierarchy(product);
               if (!valid) {
-                errorDetails.push({ rowNumber: current, errorData: errors });
+                errorDetails.push({
+                  rowNumber: currentRow,
+                  errorData: errors,
+                });
                 invalidRowsCount++;
                 return;
               }
@@ -454,39 +437,85 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   const validProducts = validated.filter((v) => v.valid).map((v) => v.product);
 
-  // Fetch all existing products in ONE database query
-  const productSkuCodes = validProducts.map((p) => p.productSkuCode);
+  const referencedSKUs = new Set();
+
+  // From current import file
+  for (const p of parsedProducts) {
+    if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
+  }
+
+  // From database (single query)
+  const dbRefs = await Product.find({ sellerId }, { parentProductSkuCode: 1, grandParentProductSkuCode: 1 }).lean();
+
+  for (const p of dbRefs) {
+    if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
+  }
+
+  const finalValidProducts = [];
+
+  for (const product of validProducts) {
+    const rowErrors = [];
+
+    // FINAL & CORRECT simple-product detection
+    const isSimple = !referencedSKUs.has(product.productSkuCode);
+
+    if (isSimple) {
+      if (typeof product.price !== 'number' || product.price <= 0) {
+        rowErrors.push('Price must be greater than 0 for simple products.');
+      }
+
+      if (typeof product.currentStockCount !== 'number' || product.currentStockCount <= 0) {
+        rowErrors.push('Stock must be greater than 0 for simple products.');
+      }
+    }
+
+    if (rowErrors.length) {
+      errorDetails.push({
+        rowNumber: product.rowNumber,
+        errorData: rowErrors,
+      });
+      invalidRowsCount++;
+      continue;
+    }
+
+    finalValidProducts.push(product);
+  }
+
+  const productSkuCodes = finalValidProducts.map((p) => p.productSkuCode);
 
   const existingProducts = await Product.find(
     { sellerId, productSkuCode: { $in: productSkuCodes } },
     { productSkuCode: 1, status: 1 }
   ).lean();
 
-  const existingMap = new Map();
-  for (const p of existingProducts) {
-    existingMap.set(p.productSkuCode, p);
-  }
-
+  const existingMap = new Map(existingProducts.map((p) => [p.productSkuCode, p]));
   // Counters
   let insertedCount = 0;
   let updatedCount = 0;
 
   // Prepare bulk write operations
-  const bulkOps = validProducts.map((product) => {
+  const bulkOps = finalValidProducts.map((product) => {
     const existing = existingMap.get(product.productSkuCode);
 
     if (existing?.status === 'removed') {
       product.status = 'active';
     }
 
-    if (existing?._id) updatedCount++;
+    if (existing) updatedCount++;
     else insertedCount++;
 
-    if (product.categoryTrail) categoryTrailsSet.add(product.categoryTrail);
+    if (product.categoryTrail) {
+      categoryTrailsSet.add(product.categoryTrail);
+    }
 
     return {
       updateOne: {
-        filter: { sellerId, productSkuCode: product.productSkuCode },
+        filter: {
+          sellerId,
+          productSkuCode: product.productSkuCode,
+        },
         update: { $set: product },
         upsert: true,
       },
@@ -496,8 +525,13 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   // Bulk writes in parallel batches
   const bulkTasks = [];
   for (let i = 0; i < bulkOps.length; i += batchSize) {
-    const slice = bulkOps.slice(i, i + batchSize);
-    bulkTasks.push(writeLimit(() => Product.bulkWrite(slice, { ordered: false })));
+    bulkTasks.push(
+      writeLimit(() =>
+        Product.bulkWrite(bulkOps.slice(i, i + batchSize), {
+          ordered: false,
+        })
+      )
+    );
   }
   await Promise.all(bulkTasks);
 
@@ -611,9 +645,9 @@ const getProductById = async (id, locale) => {
     }
   });
 
-  let root = map[rootSku];
+  let root = map[rootSku] || map[product.productSkuCode];
   let safety = 0;
-  while (safety < 10) {
+  while (root && safety < 10) {
     safety++;
     const parent = map[root.parentProductSkuCode];
     const grand = map[root.grandParentProductSkuCode];
@@ -1107,7 +1141,52 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
-export const exportProductsToCSV = async (groups, sellerId, query) => {
+export const validateProductExportData = async (groups, sellerId) => {
+  try {
+    const orQueries = [];
+
+    for (const group of groups) {
+      if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
+
+      const andQueries = [];
+
+      for (const cond of group.conditions) {
+        const built = buildCondition(cond.field, cond.operator, cond.value);
+        if (built && Object.keys(built).length) {
+          andQueries.push(built);
+        }
+      }
+
+      if (andQueries.length === 1) {
+        orQueries.push(andQueries[0]);
+      } else if (andQueries.length > 1) {
+        orQueries.push({ $and: andQueries });
+      }
+    }
+
+    let finalFilter = {};
+
+    if (orQueries.length === 1) finalFilter = orQueries[0];
+    else if (orQueries.length > 1) finalFilter = { $or: orQueries };
+
+    finalFilter = {
+      ...finalFilter,
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      status: { $ne: 'removed' },
+    };
+
+    const products = await Product.find(finalFilter).select('_id').limit(1).lean();
+
+    return validateExportData(products, 'products');
+  } catch (error) {
+    console.error('Error in validateProductExportData:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+export const exportProductsToCSV = async (groups, sellerId, query, res) => {
+  let cursor = null;
+
   try {
     const { sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
@@ -1145,156 +1224,65 @@ export const exportProductsToCSV = async (groups, sellerId, query) => {
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const [totalCount, products] = await Promise.all([
-      Product.countDocuments(finalFilter),
+    // Use cursor to stream data batch by batch
+    cursor = Product.find(finalFilter).sort(sort).lean().cursor();
 
-      Product.find(finalFilter).sort(sort).lean(),
-    ]);
+    // Process products one by one using cursor
+    for await (const product of cursor) {
+      const row = [
+        product.grandParentProductSkuCode || '',
+        product.parentProductSkuCode || '',
+        product.productSkuCode || '',
+        product.ageRangeDescription || '',
+        product.brand || '',
+        product.categoryTrail || '',
+        product.color || '',
+        product.currentStockCount || 0,
+        product.description || '',
+        product.descriptionAr || '',
+        product.ean || '',
+        product.extraImageUrl1 || '',
+        product.extraImageUrl2 || '',
+        product.extraImageUrl3 || '',
+        product.gender || '',
+        product.hsCodeSA || '',
+        product.hsCodeAE || '',
+        product.imageUrl || '',
+        product.extraImageUrl1 || '',
+        product.extraImageUrl2 || '',
+        product.extraImageUrl3 || '',
+        product.maxPrice || 0,
+        product.minPrice || 0,
+        product.msrp || 0,
+        product.name || '',
+        product.nameAr || '',
+        product.price || 0,
+        product.primaryImageUrl || '',
+        product.purchasePrice || 0,
+        product.shippingCost || 0,
+        product.shippingTime || '',
+        product.size || '',
+        product.sizeType || '',
+        product.vatRateType || '',
+        product.volumetricWeightCm || 0,
+      ];
 
-    const validation = validateExportData(products, 'products');
-    if (!validation.success) {
-      return validation;
+      // Handle backpressure: if buffer is full, wait for drain event
+      if (!res.write(escapeCsv(row) + '\n')) {
+        await new Promise((resolve) => res.once('drain', resolve));
+      }
     }
-
-    // Process products in parallel chunks for better performance
-    const chunks = [];
-    for (let i = 0; i < products.length; i += EXPORT_CHUNK_SIZE) {
-      chunks.push(products.slice(i, i + EXPORT_CHUNK_SIZE));
-    }
-
-    // Process each chunk with custom row formatting
-    const processChunk = async (chunk) => {
-      return chunk.map((product) => {
-        const row = [
-          product.grandParentProductSkuCode || '',
-          product.parentProductSkuCode || '',
-          product.productSkuCode || '',
-          product.ageRangeDescription || '',
-          product.brand || '',
-          product.categoryTrail || '',
-          product.color || '',
-          product.currentStockCount || 0,
-          product.description || '',
-          product.descriptionAr || '',
-          product.ean || '',
-          product.extraImageUrl1 || '',
-          product.extraImageUrl2 || '',
-          product.extraImageUrl3 || '',
-          product.gender || '',
-          product.hsCodeSA || '',
-          product.hsCodeAE || '',
-          product.imageUrl || '',
-          product.extraImageUrl1 || '',
-          product.extraImageUrl2 || '',
-          product.extraImageUrl3 || '',
-          product.maxPrice || 0,
-          product.minPrice || 0,
-          product.msrp || 0,
-          product.name || '',
-          product.nameAr || '',
-          product.price || 0,
-          product.primaryImageUrl || '',
-          product.purchasePrice || 0,
-          product.shippingCost || 0,
-          product.shippingTime || '',
-          product.size || '',
-          product.sizeType || '',
-          product.vatRateType || '',
-          product.volumetricWeightCm || 0,
-        ];
-        return escapeCsv(row);
-      });
-    };
-
-    const processedChunks = await Promise.all(chunks.map(processChunk));
-
-    // Flatten the results and create CSV
-    const csvRows = [PRODUCT_EXPORT_HEADERS.join(','), ...processedChunks.flat()];
-    const filename = generateCSVFilename('products');
-
-    return {
-      ...createCSVExportResponse(csvRows, filename, products.length),
-      totalCount,
-    };
   } catch (error) {
-    return handleExportError(error, 'products');
+    console.error('Error in exportProductsToCSV:', error);
+    throw error;
+  } finally {
+    if (cursor) {
+      await cursor.close();
+    }
   }
 };
 
-function normalizeArray(value) {
-  if (Array.isArray(value)) {
-    return value.filter((v) => v !== undefined && v !== null && v !== '').map((v) => String(v).trim());
-  }
-
-  if (typeof value === 'string') {
-    return value
-      .split(',')
-      .map((v) => v.trim())
-      .filter((v) => v.length > 0);
-  }
-
-  if (value === undefined || value === null) return [];
-
-  return [String(value).trim()];
-}
-
-function buildCondition(field, operator, value) {
-  const num = Number(value);
-  if (value === undefined || value === null) return null;
-
-  switch (operator) {
-    // Arithmetic
-    case 'equal_to':
-      return { [field]: num };
-    case 'not_equal_to':
-      return { [field]: { $ne: num } };
-    case 'less_than':
-      return { [field]: { $lt: num } };
-    case 'not_less_than':
-      return { [field]: { $gte: num } };
-    case 'greater_than':
-      return { [field]: { $gt: num } };
-    case 'not_greater_than':
-      return { [field]: { $lte: num } };
-
-    // Text
-    case 'empty':
-      return { [field]: '' };
-    case 'not_empty':
-      return { [field]: { $exists: true, $ne: '' } };
-    case 'contains':
-      return { [field]: { $regex: value, $options: 'i' } };
-    case 'does_not_contain':
-      return { [field]: { $not: { $regex: value, $options: 'i' } } };
-
-    // List
-    case 'in_list':
-      return { [field]: { $in: normalizeArray(value) } };
-    case 'not_in_list':
-      return { [field]: { $nin: normalizeArray(value) } };
-
-    // Equals
-    case 'equals':
-      return { [field]: value };
-    case 'not_equals':
-      return { [field]: { $ne: value } };
-
-    // Multi-match
-    case 'contains_any': {
-      const list = normalizeArray(value);
-      return list.length ? { $or: list.map((v) => ({ [field]: { $regex: v, $options: 'i' } })) } : null;
-    }
-    case 'does_not_contains_any': {
-      const list = normalizeArray(value);
-      return list.length ? { $and: list.map((v) => ({ [field]: { $not: { $regex: v, $options: 'i' } } })) } : null;
-    }
-
-    default:
-      return null;
-  }
-}
-
-export const searchProuctsByFilter = async (groups, query, sellerId) => {
+export const searchProuctsByFilter = async (filters = [], query, sellerId, channelId, search) => {
   const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
@@ -1302,7 +1290,7 @@ export const searchProuctsByFilter = async (groups, query, sellerId) => {
 
   const orQueries = [];
 
-  for (const group of groups) {
+  for (const group of filters) {
     if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
     const andQueries = [];
@@ -1326,13 +1314,35 @@ export const searchProuctsByFilter = async (groups, query, sellerId) => {
   if (orQueries.length === 1) finalFilter = orQueries[0];
   else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-  finalFilter = {
-    ...finalFilter,
-    sellerId: new mongoose.Types.ObjectId(sellerId),
-    status: { $ne: 'removed' },
-  };
+  finalFilter = finalFilter.status
+    ? {
+        $and: [{ ...finalFilter }, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      }
+    : {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+  // if channelId
+  if (channelId) {
+    const channelDetails = await Channel.findOne({ channelId: Number(channelId) }, { channelName: 1, _id: 0 }).lean();
+    if (channelDetails?.channelName) {
+      const escaped = channelDetails.channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
+      finalFilter.marketPlace = { $regex: escaped, $options: 'i' };
+    }
+  }
+  if (search) {
+    const regex = new RegExp(search, 'i');
+    if (finalFilter.$or) {
+      finalFilter.$or.push({ name: regex }, { productSkuCode: regex });
+    } else {
+      finalFilter.$or = [{ name: regex }, { productSkuCode: regex }];
+    }
+  }
 
   const [total, products] = await Promise.all([
     Product.countDocuments(finalFilter),
@@ -1368,6 +1378,7 @@ export default {
   unlinkProductFromChannel,
   validateProducts,
   pushProductsAsync,
+  validateProductExportData,
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
