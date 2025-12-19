@@ -96,7 +96,7 @@ export const processOrders = async (orders, sellerId) => {
 export const cancelFullOrderOcp = async (orderId, order, reason = 'NA') => {
   try {
     const sellerId = order.sellerId;
-    const sellerData = await Seller.findOne({ _id: sellerId, isDeleted: false }).lean();
+    const sellerData = await Seller.findOne({ _id: sellerId, isDeleted: false }).select('ocpSlugId').lean();
     const ocpBrandSlug = sellerData.ocpSlugId;
 
     if (!ocpBrandSlug) {
@@ -106,7 +106,9 @@ export const cancelFullOrderOcp = async (orderId, order, reason = 'NA') => {
     const shipments = await Shipment.find({
       orderId,
       status: { $nin: ['CANCELED', 'PICKED', 'DELIVERED'] },
-    }).lean();
+    })
+      .select('airWaybillNo')
+      .lean();
 
     if (shipments.length) {
       await Promise.all(
