@@ -197,7 +197,8 @@ export const cancelPartialOrderOcp = async (orderId, order, reason = 'NA', produ
       return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
     }
     // ChannelEngine cancellation function (safe, non-throwing)
-    const ocpOrderId = order.orderId;
+    const ocpOrderId = order.orderId.slice(24);
+
     await adaptor.partialCancelOrderOcp({ ocpBrandSlug: ocpBrandSlug, ocpOrderId, reason, cancelItems });
 
     // ---- Update SKU-level status and cancellation quantity ----
