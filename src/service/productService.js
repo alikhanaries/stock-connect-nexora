@@ -15,6 +15,8 @@ import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
+import { mapRowToProduct } from '#utils/mapRowToProduct.js';
+import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { uploadProducts } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import csv from 'csv-parser';
@@ -309,8 +311,7 @@ const validateProducts = async (channelId, sellerId) => {
   };
 };
 
-//  Async push products to CE
-const pushProductsAsync = async (products, channelId, sellerId) => {
+export const pushProductsAsync = async (products, channelId, sellerId) => {
   const channel = await Channel.findOne({ channelId });
 
   if (!channel) {
@@ -318,34 +319,37 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
   }
 
   const limit = pLimit(MAX_CONCURRENT);
-  const batches = [];
+  let batches = [];
 
-  for (let i = 0; i < products.length; i += BATCH_SIZE) {
-    batches.push(products.slice(i, i + BATCH_SIZE));
+  if (channel.channelName === 'OCP') {
+    const simpleProducts = products
+      .filter(({ productType }) => productType === 'simple')
+      .map((product) =>
+        product.categoryTrail === 'Apparel > Dresses > Dresses'
+          ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
+          : product
+      );
+
+    const groupedByParent = groupByParent(simpleProducts);
+    batches = buildBatchesKeepingParentsIntact(groupedByParent, BATCH_SIZE);
+  } else {
+    for (let i = 0; i < products.length; i += BATCH_SIZE) {
+      batches.push(products.slice(i, i + BATCH_SIZE));
+    }
   }
 
   await Promise.allSettled(
     batches.map((batch, idx) =>
       limit(async () => {
         try {
-          //return await pushBatch(batch.map(mapProductToChannelEngine), idx);
-
           if (channel.channelName === 'OCP') {
-            // Filter simple products for OCP
-            const simpleProducts = batch
-              .filter(({ productType }) => productType === 'simple')
-              .map((product) =>
-                product.categoryTrail === 'Apparel > Dresses > Dresses'
-                  ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
-                  : product
-              );
-
-            return await pushBatchToOCP(uploadProducts(simpleProducts), idx, sellerId);
-          } else {
-            return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+            return await pushBatchToOCP(uploadProducts(batch), idx, sellerId);
           }
+
+          return await pushBatch(batch.map(mapProductToChannelEngine), idx);
         } catch (err) {
-          console.error(`Batch ${idx} CE Push failed:`, err.message);
+          console.error(`Batch ${idx} push failed`, err);
+
           return {
             AcceptedCount: 0,
             RejectedCount: batch.length,
@@ -361,7 +365,6 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
     )
   );
 };
-
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];

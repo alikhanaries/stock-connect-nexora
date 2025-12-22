@@ -21,3 +21,52 @@ export const uploadProducts = (products) => {
     hsCodeSA: p.hsCodeSA,
   }));
 };
+
+export const groupByParent = (products) => {
+  const map = new Map();
+
+  for (const product of products) {
+    const parentKey = product.parentProductSkuCode || product.productSkuCode;
+
+    if (!map.has(parentKey)) {
+      map.set(parentKey, []);
+    }
+
+    map.get(parentKey).push(product);
+  }
+
+  return Array.from(map.values());
+};
+
+export const buildBatchesKeepingParentsIntact = (groupedProducts, batchSize) => {
+  const batches = [];
+  let currentBatch = [];
+  let currentSize = 0;
+
+  for (const group of groupedProducts) {
+    if (group.length > batchSize) {
+      if (currentBatch.length > 0) {
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentSize = 0;
+      }
+      batches.push(group);
+      continue;
+    }
+
+    if (currentSize + group.length > batchSize) {
+      batches.push(currentBatch);
+      currentBatch = [];
+      currentSize = 0;
+    }
+
+    currentBatch.push(...group);
+    currentSize += group.length;
+  }
+
+  if (currentBatch.length > 0) {
+    batches.push(currentBatch);
+  }
+
+  return batches;
+};
