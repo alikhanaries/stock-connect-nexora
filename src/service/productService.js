@@ -1227,7 +1227,6 @@ export const exportProductsToCSV = async (groups, sellerId, query, res) => {
         product.grandParentProductSkuCode || '',
         product.parentProductSkuCode || '',
         product.productSkuCode || '',
-        product.ageRangeDescription || '',
         product.brand || '',
         product.categoryTrail || '',
         product.color || '',
