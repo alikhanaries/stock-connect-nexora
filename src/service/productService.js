@@ -1286,6 +1286,12 @@ export const exportProductsToCSV = async (groups, sellerId, query, res) => {
 };
 
 export const searchProuctsByFilter = async (filters = [], query, sellerId, channelId, search) => {
+  let channel = null;
+
+  if (channelId) {
+    channel = await Channel.findOne({ channelId: Number(channelId) }, { channelId: 1, channelName: 1, _id: 0 }).lean();
+  }
+
   if (Array.isArray(filters) && typeof filters[0] === 'string') {
     filters = [
       {
@@ -1347,9 +1353,8 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
 
   // if channelId
   if (channelId) {
-    const channelDetails = await Channel.findOne({ channelId: Number(channelId) }, { channelName: 1, _id: 0 }).lean();
-    if (channelDetails?.channelName) {
-      const escaped = channelDetails.channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
+    if (channel?.channelName) {
+      const escaped = channel.channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
       finalFilter.marketPlace = { $regex: escaped, $options: 'i' };
     }
   }
@@ -1378,6 +1383,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
+    channel,
   };
 };
 
