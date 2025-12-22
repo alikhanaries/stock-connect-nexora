@@ -35,7 +35,6 @@ const {
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
-const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 const MAX_RETRIES = 3;
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -1142,7 +1141,52 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
-export const exportProductsToCSV = async (groups, sellerId, query) => {
+export const validateProductExportData = async (groups, sellerId) => {
+  try {
+    const orQueries = [];
+
+    for (const group of groups) {
+      if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
+
+      const andQueries = [];
+
+      for (const cond of group.conditions) {
+        const built = buildCondition(cond.field, cond.operator, cond.value);
+        if (built && Object.keys(built).length) {
+          andQueries.push(built);
+        }
+      }
+
+      if (andQueries.length === 1) {
+        orQueries.push(andQueries[0]);
+      } else if (andQueries.length > 1) {
+        orQueries.push({ $and: andQueries });
+      }
+    }
+
+    let finalFilter = {};
+
+    if (orQueries.length === 1) finalFilter = orQueries[0];
+    else if (orQueries.length > 1) finalFilter = { $or: orQueries };
+
+    finalFilter = {
+      ...finalFilter,
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      status: { $ne: 'removed' },
+    };
+
+    const products = await Product.find(finalFilter).select('_id').limit(1).lean();
+
+    return validateExportData(products, 'products');
+  } catch (error) {
+    console.error('Error in validateProductExportData:', error);
+    return { success: false, message: error.message };
+  }
+};
+
+export const exportProductsToCSV = async (groups, sellerId, query, res) => {
+  let cursor = null;
+
   try {
     const { sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
@@ -1180,83 +1224,80 @@ export const exportProductsToCSV = async (groups, sellerId, query) => {
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const [totalCount, products] = await Promise.all([
-      Product.countDocuments(finalFilter),
+    // Use cursor to stream data batch by batch
+    cursor = Product.find(finalFilter).sort(sort).lean().cursor();
 
-      Product.find(finalFilter).sort(sort).lean(),
-    ]);
+    // Process products one by one using cursor
+    for await (const product of cursor) {
+      const row = [
+        product.grandParentProductSkuCode || '',
+        product.parentProductSkuCode || '',
+        product.productSkuCode || '',
+        product.ageRangeDescription || '',
+        product.brand || '',
+        product.categoryTrail || '',
+        product.color || '',
+        product.currentStockCount || 0,
+        product.description || '',
+        product.descriptionAr || '',
+        product.ean || '',
+        product.extraImageUrl1 || '',
+        product.extraImageUrl2 || '',
+        product.extraImageUrl3 || '',
+        product.gender || '',
+        product.hsCodeSA || '',
+        product.hsCodeAE || '',
+        product.imageUrl || '',
+        product.extraImageUrl1 || '',
+        product.extraImageUrl2 || '',
+        product.extraImageUrl3 || '',
+        product.maxPrice || 0,
+        product.minPrice || 0,
+        product.msrp || 0,
+        product.name || '',
+        product.nameAr || '',
+        product.price || 0,
+        product.primaryImageUrl || '',
+        product.purchasePrice || 0,
+        product.shippingCost || 0,
+        product.shippingTime || '',
+        product.size || '',
+        product.sizeType || '',
+        product.vatRateType || '',
+        product.volumetricWeightCm || 0,
+      ];
 
-    const validation = validateExportData(products, 'products');
-    if (!validation.success) {
-      return validation;
+      // Handle backpressure: if buffer is full, wait for drain event
+      if (!res.write(escapeCsv(row) + '\n')) {
+        await new Promise((resolve) => res.once('drain', resolve));
+      }
     }
-
-    // Process products in parallel chunks for better performance
-    const chunks = [];
-    for (let i = 0; i < products.length; i += EXPORT_CHUNK_SIZE) {
-      chunks.push(products.slice(i, i + EXPORT_CHUNK_SIZE));
-    }
-
-    // Process each chunk with custom row formatting
-    const processChunk = async (chunk) => {
-      return chunk.map((product) => {
-        const row = [
-          product.grandParentProductSkuCode || '',
-          product.parentProductSkuCode || '',
-          product.productSkuCode || '',
-          product.ageRangeDescription || '',
-          product.brand || '',
-          product.categoryTrail || '',
-          product.color || '',
-          product.currentStockCount || 0,
-          product.description || '',
-          product.descriptionAr || '',
-          product.ean || '',
-          product.extraImageUrl1 || '',
-          product.extraImageUrl2 || '',
-          product.extraImageUrl3 || '',
-          product.gender || '',
-          product.hsCodeSA || '',
-          product.hsCodeAE || '',
-          product.imageUrl || '',
-          product.extraImageUrl1 || '',
-          product.extraImageUrl2 || '',
-          product.extraImageUrl3 || '',
-          product.maxPrice || 0,
-          product.minPrice || 0,
-          product.msrp || 0,
-          product.name || '',
-          product.nameAr || '',
-          product.price || 0,
-          product.primaryImageUrl || '',
-          product.purchasePrice || 0,
-          product.shippingCost || 0,
-          product.shippingTime || '',
-          product.size || '',
-          product.sizeType || '',
-          product.vatRateType || '',
-          product.volumetricWeightCm || 0,
-        ];
-        return escapeCsv(row);
-      });
-    };
-
-    const processedChunks = await Promise.all(chunks.map(processChunk));
-
-    // Flatten the results and create CSV
-    const csvRows = [PRODUCT_EXPORT_HEADERS.join(','), ...processedChunks.flat()];
-    const filename = generateCSVFilename('products');
-
-    return {
-      ...createCSVExportResponse(csvRows, filename, products.length),
-      totalCount,
-    };
   } catch (error) {
-    return handleExportError(error, 'products');
+    console.error('Error in exportProductsToCSV:', error);
+    throw error;
+  } finally {
+    if (cursor) {
+      await cursor.close();
+    }
   }
 };
 
 export const searchProuctsByFilter = async (filters = [], query, sellerId, channelId, search) => {
+  if (Array.isArray(filters) && typeof filters[0] === 'string') {
+    filters = [
+      {
+        conditions: filters.map((f) => {
+          const [field, operator, ...rest] = f.split(':');
+          return {
+            field,
+            operator,
+            value: rest.join(':'),
+          };
+        }),
+      },
+    ];
+  }
+
   const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
@@ -1352,6 +1393,7 @@ export default {
   unlinkProductFromChannel,
   validateProducts,
   pushProductsAsync,
+  validateProductExportData,
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
