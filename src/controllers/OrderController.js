@@ -176,7 +176,9 @@ export const cancelFullOrder = async (req, res) => {
       return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
     }
 
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findById(orderId)
+      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .lean();
 
     if (!order) return Responses.failResponse(res, 'Order not found', 404);
 
