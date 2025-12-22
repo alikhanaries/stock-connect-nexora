@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { getReturns } from '#service/returnService.js';
+import { runDbBackup } from '../util/dbBackup.js';
 
 const fetchReturnsCron = () => {
   try {
@@ -19,6 +20,26 @@ const fetchReturnsCron = () => {
 
 };
 
+const dbBackupCron = () => {
+  try {
+    
+    cron.schedule('0 0 * * *', async () => {
+      console.log('DB backup cron started (12:00 AM)');
+      try {
+        await runDbBackup();
+        console.log('DB backup completed');
+      } catch (err) {
+        console.error('Error running DB backup:', err.message);
+      }
+    });
+  } catch (error) {
+    console.error('Error scheduling DB backup cron:', error.message);
+  }
+};
+
+dbBackupCron();
+
 export default {
   fetchReturnsCron,
+  dbBackupCron,
 };
