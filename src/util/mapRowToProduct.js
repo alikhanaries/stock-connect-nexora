@@ -19,6 +19,9 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
   const errorData = [];
   if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
   if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
+  if (!r.primaryimageurl) errorData.push('Primary image url is missing');
+  if (!r.imageurl) errorData.push('Image url is missing');
+
   if (errorData.length) return { rowNumber: index, errorData };
 
   let publicUrls = [];
@@ -42,6 +45,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
 
   // Build product (ALL fields preserved)
   const product = {
+    rowNumber: index,
     grandParentProductSkuCode: r.grandparentproductskucode || null,
     parentProductSkuCode: r.parentproductskucode || null,
     productSkuCode: r.productskucode,

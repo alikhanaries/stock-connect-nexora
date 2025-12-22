@@ -29,9 +29,9 @@ const sanitizeOrdersData = async (orders) => {
   return orders.map((data) => {
     const existingOrder = existingOrdersMap.get(data.Id);
 
-    let finalSellerId = data?.Lines?.[0]?.ExtraData?.find((a) => a.Key === 'sellerId')?.Value || null;
+    let finalSellerId;
 
-    if (!finalSellerId && Array.isArray(data.Lines) && data.Lines.length > 0) {
+    if (Array.isArray(data.Lines) && data.Lines.length > 0) {
       const firstSku = data.Lines[0].MerchantProductNo;
       if (firstSku) {
         finalSellerId = productSellerMap.get(firstSku) || null;

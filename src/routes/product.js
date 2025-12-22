@@ -22,7 +22,7 @@ import {
   importProductsFromGoogleSheetValidator,
   unlinkProductFromChannelValidator,
   exportProductsValidator,
-} from '#validations/products.js';
+  } from '#validations/products.js';
 import express from 'express';
 import {
   addProductsToUserChannelValidator,
@@ -41,7 +41,51 @@ const productsRouter = express.Router();
 
 //productsRouter.use(authMiddleware);
 
+/**
+ * @openapi
+ * /products:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get all products
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: size
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ */
+productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
+
 /* DELETE PRODUCT BY ID*/
+
+/**
+ * @openapi
+ * /products/deleteProduct/{id}:
+ *   delete:
+ *     tags: [Products]
+ *     summary: Delete a product by ID
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ */
 productsRouter.delete(
   '/deleteProduct/:id',
   deleteProductValidator,
@@ -51,6 +95,25 @@ productsRouter.delete(
   deleteProduct
 );
 
+
+/**
+ * @openapi
+ * /products/getProduct/{id}:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get product by ID
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ */
 productsRouter.get(
   '/getProduct/:id',
   getProductByIdValidator,
@@ -63,6 +126,29 @@ productsRouter.get(
 productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
+/**
+ * @openapi
+ * /products/importProductsFromGoogleSheet:
+ *   post:
+ *     tags: [Products]
+ *     summary: Import products from Google Sheet
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               url: { type: string }
+ *             required: [url]
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ */
 productsRouter.post(
   '/importProductsFromGoogleSheet',
   importProductsFromGoogleSheetValidator,
@@ -73,6 +159,29 @@ productsRouter.post(
 );
 
 /* UPLOAD PRODUCTS FROM CSV FILE */
+/**
+ * @openapi
+ * /products/importProductsFromCsvFile:
+ *   post:
+ *     tags: [Products]
+ *     summary: Import products from CSV file
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               file: { type: string, format: binary }
+ *             required: [file]
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ */
 productsRouter.post(
   '/importProductsFromCsvFile',
   importProductsFromCsvFileValidator,
@@ -84,6 +193,24 @@ productsRouter.post(
   importProductsFromCsvFile
 );
 
+
+/**
+ * @openapi
+ * /products/push-product-to-channelengine/{channelId}:
+ *   get:
+ *     tags: [Products]
+ *     summary: Push products to ChannelEngine
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: path
+ *         name: channelId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ */
 productsRouter.get(
   '/push-product-to-channelengine/:channelId',
   pushProductsToChannelEngineValidator,
@@ -93,8 +220,57 @@ productsRouter.get(
   pushProductToChannelEngine
 );
 
+
+/**
+ * @openapi
+ * /products/top-product:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get top selling products
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: query
+ *         name: size
+ *         schema: { type: integer }
+ *       - in: query
+ *         name: channel
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ */
 productsRouter.get('/top-product', getTopSellingProductValidator, checkLanguage, authMiddleware, getTopSellingProduct);
 
+
+/**
+ * @openapi
+ * /products/update-status:
+ *   patch:
+ *     tags: [Products]
+ *     summary: Update product status
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *               status:
+ *                 type: string
+ *                 enum: [active, inactive]
+ *             required: [ids, status]
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ */
 productsRouter.patch(
   '/update-status',
   updateProductStatusValidator,
@@ -105,6 +281,31 @@ productsRouter.patch(
 );
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
+/**
+ * @openapi
+ * /products/deleteMultipleProducts:
+ *   delete:
+ *     tags: [Products]
+ *     summary: Delete multiple products
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *             required: [ids]
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ */
 productsRouter.delete(
   '/deleteMultipleProducts',
   deleteMultipleProductsValidator,
@@ -115,6 +316,34 @@ productsRouter.delete(
 );
 
 /* ADD PRODUCTS TO USER CHANNEL PRODUCTSLIST */
+/**
+ * @openapi
+ * /products/addProductsToUserChannel/{id}:
+ *   put:
+ *     tags: [Products]
+ *     summary: Assign products to a user channel
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *               addAll: { type: boolean }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ */
 productsRouter.put(
   '/addProductsToUserChannel/:id',
   addProductsToUserChannelValidator,
@@ -124,6 +353,35 @@ productsRouter.put(
   addProductsToUserChannel
 );
 
+
+/**
+ * @openapi
+ * /products/unlink-product-from-channel/{channelId}:
+ *   delete:
+ *     tags: [Products]
+ *     summary: Unlink product from a channel
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: path
+ *         name: channelId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items: { type: string }
+ *             required: [ids]
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ */
 productsRouter.delete(
   '/unlink-product-from-channel/:channelId',
   unlinkProductFromChannelValidator,
@@ -133,6 +391,24 @@ productsRouter.delete(
   unlinkProductFromChannel
 );
 
+
+/**
+ * @openapi
+ * /products/user-channel-products/{channelId}:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get user channel assigned products
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: path
+ *         name: channelId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ */
 productsRouter.get(
   '/user-channel-products/:channelId',
   getUserChannelProductsValidator,
@@ -142,6 +418,24 @@ productsRouter.get(
   getUserChannelProducts
 );
 
+
+/**
+ * @openapi
+ * /products/get-user-unassigned-products/{channelId}:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get products not assigned to this channel
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: path
+ *         name: channelId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ */
 productsRouter.get(
   '/get-user-unassigned-products/:channelId',
   getUserUnassignedProductsValidator,
@@ -152,6 +446,36 @@ productsRouter.get(
 );
 
 /* EXPORT PRODUCTS TO CSV */
+/**
+ * @openapi
+ * /products/export/{sellerId}:
+ *   post:
+ *     tags: [Products]
+ *     summary: Export products to CSV
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *       - in: path
+ *         name: sellerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: CSV file
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         $ref: "#/components/schemas/FailResponse"
+ */
 productsRouter.post(
   '/export/:sellerId',
   exportProductsValidator,
@@ -161,6 +485,24 @@ productsRouter.post(
   exportProducts
 );
 
-productsRouter.post('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
+
+/**
+ * @openapi
+ * /products/searchProducts/{sellerId}:
+ *   get:
+ *     tags: [Products]
+ *     summary: Search products by seller
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: path
+ *         name: sellerId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ */
+productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
 
 export default productsRouter;

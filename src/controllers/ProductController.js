@@ -4,9 +4,10 @@ import productService from '#service/productService.js';
 import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
-import { PRODUCT_STATUSES } from '#constants/common.js';
+import { PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
+import Seller from '#models/Seller.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -373,6 +374,12 @@ export const exportProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId || req.sellerId;
 
+    // Fetch seller name for filename
+    const seller = await Seller.findById(sellerId).select('name').lean();
+    if (!seller) {
+      return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
     // Parse filterGroups from query params
     let groups = [];
 
@@ -391,22 +398,37 @@ export const exportProducts = async (req, res) => {
       }
     }
 
-    const result = await productService.exportProductsToCSV(groups, sellerId, req.query);
+    // Validate data exists BEFORE setting headers
+    const validation = await productService.validateProductExportData(groups, sellerId);
 
-    if (!result.success) {
-      return failResponse(res, result.message || req.locale.NO_PRODUCTS_FOUND, 404);
+    if (!validation.success) {
+      return failResponse(
+        res,
+        req.locale?.NO_PRODUCTS_FOUND || validation.message || 'No products found to export',
+        404
+      );
     }
+
+    const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const filename = `${sellerName}_ProductExport_${exportDate}.csv`;
 
     // Set headers for CSV download with UTF-8 encoding
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Pragma', 'no-cache');
 
     // Add UTF-8 BOM for proper encoding
-    const csvWithBOM = '\uFEFF' + result.data;
+    res.write('\uFEFF');
 
-    return res.status(200).send(csvWithBOM);
+    // Write CSV headers
+    res.write(PRODUCT_EXPORT_HEADERS.join(',') + '\n');
+
+    // Stream data using cursor
+    await productService.exportProductsToCSV(groups, sellerId, req.query, res);
+
+    return res.end();
   } catch (error) {
     console.error('Controller Error: exportProducts:', error.message);
     errorLog(error);
@@ -417,9 +439,16 @@ export const exportProducts = async (req, res) => {
 export const searchProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId;
-    const groups = req.body.groups;
+    const { channelId, search } = req.query;
+    const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
 
-    const { products, pagination } = await productService.searchProuctsByFilter(groups, req.body, sellerId);
+    const { products, pagination } = await productService.searchProuctsByFilter(
+      filters,
+      req.query,
+      sellerId,
+      channelId,
+      search
+    );
 
     const responseData = {
       content: products || [],
