@@ -244,7 +244,9 @@ export const cancelPartialOrder = async (req, res) => {
   try {
     const { orderId, reason, products } = req.body;
 
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findById(orderId)
+      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .lean();
 
     if (!order) return Responses.failResponse(res, 'Order not found', 404);
 
