@@ -45,6 +45,3 @@ const cleanupOldBackups = () => {
     }
   });
 };
-console.log('MONGO_URI:', !!process.env.DB_URL);
-console.log('BACKUP_DIR:', process.env.BACKUP_DIR);
-console.log('RETENTION_DAYS:', process.env.BACKUP_RETENTION_DAYS);
