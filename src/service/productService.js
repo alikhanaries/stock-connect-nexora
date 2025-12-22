@@ -1,15 +1,9 @@
 import { config } from '#config/config.js';
-import { ORDER_STATUS_MATCH, PRODUCT_EXPORT_HEADERS, PRODUCT_STATUSES } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { resolveProductTypes, validateHierarchy, validateHierarchyExistenceBatch } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
-import {
-  createCSVExportResponse,
-  escapeCsv,
-  generateCSVFilename,
-  handleExportError,
-  validateExportData,
-} from '#helpers/export.js';
+import { escapeCsv, validateExportData } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
