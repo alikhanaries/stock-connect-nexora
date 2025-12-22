@@ -237,16 +237,7 @@ export const pushBatchToOCP = async (batch, index, sellerId) => {
   if (!seller) {
     throw new Error(`Seller with ID ${sellerId} not found`);
   }
-  let ocpApiCallCount = 0;
   return withRetry(async () => {
-    ocpApiCallCount++;
-    console.log(
-      `[OCP_API_CALL] count=${ocpApiCallCount} ` +
-        `batch=${index + 1} ` +
-        `batchSize=${batch.length} ` +
-        `sellerId=${sellerId} ` +
-        `time=${new Date().toISOString()}`
-    );
     const response = await fetch(`${OCP_URL}/api/v1/edge/import-products`, {
       method: 'POST',
       headers: {
@@ -323,58 +314,6 @@ const validateProducts = async (channelId, sellerId) => {
   };
 };
 
-//  Async push products to CE
-// const pushProductsAsync = async (products, channelId, sellerId) => {
-//   const channel = await Channel.findOne({ channelId });
-
-//   if (!channel) {
-//     throw new Error(`Channel with ID ${channelId} not found`);
-//   }
-
-//   const limit = pLimit(MAX_CONCURRENT);
-//   const batches = [];
-
-//   for (let i = 0; i < products.length; i += BATCH_SIZE) {
-//     batches.push(products.slice(i, i + BATCH_SIZE));
-//   }
-
-//   await Promise.allSettled(
-//     batches.map((batch, idx) =>
-//       limit(async () => {
-//         try {
-//           //return await pushBatch(batch.map(mapProductToChannelEngine), idx);
-
-//           if (channel.channelName === 'OCP') {
-//             // Filter simple products for OCP
-//             const simpleProducts = batch
-//               .filter(({ productType }) => productType === 'simple')
-//               .map((product) =>
-//                 product.categoryTrail === 'Apparel > Dresses > Dresses'
-//                   ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
-//                   : product
-//               );
-
-//             return await pushBatchToOCP(uploadProducts(simpleProducts), idx, sellerId);
-//           } else {
-//             return await pushBatch(batch.map(mapProductToChannelEngine), idx);
-//           }
-//         } catch (err) {
-//           console.error(`Batch ${idx} CE Push failed:`, err.message);
-//           return {
-//             AcceptedCount: 0,
-//             RejectedCount: batch.length,
-//             ProductMessages: batch.map((p) => ({
-//               Name: p.name,
-//               Reference: p.productSkuCode,
-//               Errors: [err.message],
-//               Warnings: p.Warnings,
-//             })),
-//           };
-//         }
-//       })
-//     )
-//   );
-// };
 export const pushProductsAsync = async (products, channelId, sellerId) => {
   const channel = await Channel.findOne({ channelId });
 
