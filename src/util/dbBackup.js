@@ -1,10 +1,10 @@
+import { exec } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
-import { MongoClient } from 'mongodb';
+import os from 'os';
 import { uploadFileToS3 } from '../service/s3Service.js';
 
-const requiredEnvVars = ['BACKUP_DIR', 'DB_URL', 'DB_NAME', 'S3_BUCKET_DB_BACKUP'];
+const requiredEnvVars = ['BACKUP_DIR', 'DB_URL', 'S3_BUCKET_DB_BACKUP'];
 
 requiredEnvVars.forEach((key) => {
   if (!process.env[key]) {
@@ -14,11 +14,15 @@ requiredEnvVars.forEach((key) => {
 
 const BACKUP_DIR = process.env.BACKUP_DIR;
 const MONGO_URI = process.env.DB_URL;
-const DB_NAME = process.env.DB_NAME;
 const S3_BUCKET = process.env.S3_BUCKET_DB_BACKUP;
 const RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 2);
 
 export const runDbBackup = async () => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const tmpDir = os.tmpdir();
+  const dumpDir = path.join(tmpDir, `dump-${timestamp}`);
+  const archivePath = path.join(tmpDir, `dump-${timestamp}.tar.gz`);
+
   if (!fs.existsSync(BACKUP_DIR)) {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
   }
@@ -27,32 +31,8 @@ export const runDbBackup = async () => {
     cleanupOldBackups();
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const dumpDir = path.join(BACKUP_DIR, `json-dump-${timestamp}`);
-  const archivePath = `${dumpDir}.tar.gz`;
-
-  fs.mkdirSync(dumpDir, { recursive: true });
-
-  console.log('Starting JSON DB export…');
-
-  const client = new MongoClient(MONGO_URI);
-  await client.connect();
-  const db = client.db(DB_NAME);
-
-  const collections = await db.listCollections().toArray();
-
-  for (const { name } of collections) {
-    const data = await db.collection(name).find({}).toArray();
-
-    const filePath = path.join(dumpDir, `${name}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-
-    console.log(`Exported ${name} (${data.length} docs)`);
-  }
-
-  await client.close();
-
-  await execPromise(`tar -czf "${archivePath}" -C "${BACKUP_DIR}" "${path.basename(dumpDir)}"`);
+  await execPromise(`mongodump --uri="${MONGO_URI}" --out="${dumpDir}"`);
+  await execPromise(`tar -czf ${archivePath} -C ${tmpDir} dump-${timestamp}`);
 
   await uploadFileToS3(archivePath, `db-backups/${path.basename(archivePath)}`, S3_BUCKET);
 
