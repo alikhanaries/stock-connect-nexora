@@ -32,14 +32,15 @@ export const uploadImage = async (file, fileName, bucket) => {
   }
 };
 export const uploadFileToS3 = async (filePath, s3Key, bucket) => {
-  const fileBuffer = fs.readFileSync(filePath);
+  const stream = fs.createReadStream(filePath);
+  const { size } = fs.statSync(filePath);
 
   await s3Client.send(
     new PutObjectCommand({
       Bucket: bucket,
       Key: s3Key,
-      Body: fileBuffer,
-      ContentLength: fileBuffer.length,
+      Body: stream,
+      ContentLength: size,
     })
   );
 };

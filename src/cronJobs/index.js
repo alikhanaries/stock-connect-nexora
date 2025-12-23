@@ -17,27 +17,31 @@ const fetchReturnsCron = () => {
   } catch (error) {
     console.error('Error scheduling cron:', error.message);
   }
-
+  
 };
 
 const dbBackupCron = () => {
   try {
-    
-    cron.schedule('0 0 * * *', async () => {
-      console.log('DB backup cron started (12:00 AM)');
-      try {
-        await runDbBackup();
-        console.log('DB backup completed');
-      } catch (err) {
-        console.error('Error running DB backup:', err.message);
+    // Runs every day at 12:00 AM UTC
+    cron.schedule(
+      '0 0 * * *',
+      async () => {
+        console.log('DB backup cron started (12:00 AM UTC)');
+        try {
+          await runDbBackup();
+          console.log('DB backup completed');
+        } catch (err) {
+          console.error('Error running DB backup:', err.message);
+        }
+      },
+      {
+        timezone: 'UTC',
       }
-    });
+    );
   } catch (error) {
     console.error('Error scheduling DB backup cron:', error.message);
   }
 };
-
-dbBackupCron();
 
 export default {
   fetchReturnsCron,
