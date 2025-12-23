@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { config } from '#config/config.js';
 
@@ -29,4 +30,16 @@ export const uploadImage = async (file, fileName, bucket) => {
   } catch (error) {
     console.error('Error uploading image to s3:', error.message);
   }
+};
+export const uploadFileToS3 = async (filePath, s3Key, bucket) => {
+  const fileBuffer = fs.readFileSync(filePath);
+
+  await s3Client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: s3Key,
+      Body: fileBuffer,
+      ContentLength: fileBuffer.length,
+    })
+  );
 };
