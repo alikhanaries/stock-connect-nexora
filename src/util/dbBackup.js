@@ -4,6 +4,14 @@ import { exec } from 'child_process';
 import { MongoClient } from 'mongodb';
 import { uploadFileToS3 } from '../service/s3Service.js';
 
+const requiredEnvVars = ['BACKUP_DIR', 'DB_URL', 'DB_NAME', 'S3_BUCKET_DB_BACKUP'];
+
+requiredEnvVars.forEach((key) => {
+  if (!process.env[key]) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+});
+
 const BACKUP_DIR = process.env.BACKUP_DIR;
 const MONGO_URI = process.env.DB_URL;
 const DB_NAME = process.env.DB_NAME;
@@ -15,7 +23,9 @@ export const runDbBackup = async () => {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
   }
 
-  cleanupOldBackups();
+  if (fs.existsSync(BACKUP_DIR)) {
+    cleanupOldBackups();
+  }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dumpDir = path.join(BACKUP_DIR, `json-dump-${timestamp}`);
