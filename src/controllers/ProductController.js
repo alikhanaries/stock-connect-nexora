@@ -380,26 +380,14 @@ export const exportProducts = async (req, res) => {
       return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
     }
 
-    // Parse filterGroups from query params
-    let groups = [];
+    // Parse filter from query params
+    let filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
 
-    if (req.query.filterGroups) {
-      try {
-        const parsedGroups = JSON.parse(req.query.filterGroups);
-        groups = parsedGroups.map((group) => ({
-          conditions: group.conditions.map((cond) => ({
-            field: cond.field,
-            operator: cond.operator,
-            value: cond.value,
-          })),
-        }));
-      } catch (error) {
-        console.error('Failed to parse filterGroups:', error);
-      }
-    }
+    // Split comma-separated filters into individual filter strings
+    filters = filters.flatMap((f) => (f.includes(',') ? f.split(',') : f));
 
     // Validate data exists BEFORE setting headers
-    const validation = await productService.validateProductExportData(groups, sellerId);
+    const validation = await productService.validateProductExportData(filters, sellerId);
 
     if (!validation.success) {
       return failResponse(
@@ -426,7 +414,7 @@ export const exportProducts = async (req, res) => {
     res.write(PRODUCT_EXPORT_HEADERS.join(',') + '\n');
 
     // Stream data using cursor
-    await productService.exportProductsToCSV(groups, sellerId, req.query, res);
+    await productService.exportProductsToCSV(filters, sellerId, req.query, res);
 
     return res.end();
   } catch (error) {

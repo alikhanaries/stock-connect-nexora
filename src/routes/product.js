@@ -22,7 +22,7 @@ import {
   importProductsFromGoogleSheetValidator,
   unlinkProductFromChannelValidator,
   exportProductsValidator,
-  } from '#validations/products.js';
+} from '#validations/products.js';
 import express from 'express';
 import {
   addProductsToUserChannelValidator,
@@ -94,7 +94,6 @@ productsRouter.delete(
   verifySellerAccess,
   deleteProduct
 );
-
 
 /**
  * @openapi
@@ -193,7 +192,6 @@ productsRouter.post(
   importProductsFromCsvFile
 );
 
-
 /**
  * @openapi
  * /products/push-product-to-channelengine/{channelId}:
@@ -220,7 +218,6 @@ productsRouter.get(
   pushProductToChannelEngine
 );
 
-
 /**
  * @openapi
  * /products/top-product:
@@ -241,7 +238,6 @@ productsRouter.get(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  */
 productsRouter.get('/top-product', getTopSellingProductValidator, checkLanguage, authMiddleware, getTopSellingProduct);
-
 
 /**
  * @openapi
@@ -353,7 +349,6 @@ productsRouter.put(
   addProductsToUserChannel
 );
 
-
 /**
  * @openapi
  * /products/unlink-product-from-channel/{channelId}:
@@ -391,7 +386,6 @@ productsRouter.delete(
   unlinkProductFromChannel
 );
 
-
 /**
  * @openapi
  * /products/user-channel-products/{channelId}:
@@ -417,7 +411,6 @@ productsRouter.get(
   verifySellerAccess,
   getUserChannelProducts
 );
-
 
 /**
  * @openapi
@@ -476,7 +469,7 @@ productsRouter.get(
  *       400:
  *         $ref: "#/components/schemas/FailResponse"
  */
-productsRouter.post(
+productsRouter.get(
   '/export/:sellerId',
   exportProductsValidator,
   checkLanguage,
@@ -484,7 +477,6 @@ productsRouter.post(
   verifySellerAccess,
   exportProducts
 );
-
 
 /**
  * @openapi

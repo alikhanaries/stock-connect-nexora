@@ -655,6 +655,8 @@ export const exportProductsValidator = validate(async (req) => {
         .length(24, 'sellerId must be 24 characters long')
         .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
         .optional(),
+
+      filter: z.union([z.string(), z.array(z.string())]).optional(),
     })
     .passthrough()
     .refine(

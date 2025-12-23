@@ -1136,11 +1136,27 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
-export const validateProductExportData = async (groups, sellerId) => {
+export const validateProductExportData = async (filters, sellerId) => {
   try {
+    // Parse filters if they're strings
+    if (Array.isArray(filters) && typeof filters[0] === 'string') {
+      filters = [
+        {
+          conditions: filters.map((f) => {
+            const [field, operator, ...rest] = f.split(':');
+            return {
+              field,
+              operator,
+              value: rest.join(':'),
+            };
+          }),
+        },
+      ];
+    }
+
     const orQueries = [];
 
-    for (const group of groups) {
+    for (const group of filters) {
       if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
       const andQueries = [];
@@ -1179,15 +1195,31 @@ export const validateProductExportData = async (groups, sellerId) => {
   }
 };
 
-export const exportProductsToCSV = async (groups, sellerId, query, res) => {
+export const exportProductsToCSV = async (filters, sellerId, query, res) => {
   let cursor = null;
 
   try {
     const { sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
+    // Parse filters if they're strings
+    if (Array.isArray(filters) && typeof filters[0] === 'string') {
+      filters = [
+        {
+          conditions: filters.map((f) => {
+            const [field, operator, ...rest] = f.split(':');
+            return {
+              field,
+              operator,
+              value: rest.join(':'),
+            };
+          }),
+        },
+      ];
+    }
+
     const orQueries = [];
 
-    for (const group of groups) {
+    for (const group of filters) {
       if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
       const andQueries = [];
