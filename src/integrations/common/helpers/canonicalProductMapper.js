@@ -36,5 +36,6 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     extraImageUrl3: item.extraImageUrl3,
     vatRateType: item.vatRateType || 'STANDARD',
     productType: item.productType || 'simple',
+    source: item.source || 'MANUAL',
   };
 };
