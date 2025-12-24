@@ -9,8 +9,8 @@ import eliteStringLaIntimoApiRoutes from './integrations/erp/eliteStringLaIntimo
 import shopifyRoutes from './integrations/erp/shopify/routes/api.js';
 import cronJob from './cronJobs/index.js';
 
-import swaggerUi from 'swagger-ui-express';
-import { loadSwagger } from './util/swagger.js';
+import swaggerUi from "swagger-ui-express";
+import { loadSwagger } from "./util/swagger.js";
 
 const swaggerDocument = loadSwagger();
 
