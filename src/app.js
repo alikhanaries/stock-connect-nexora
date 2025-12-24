@@ -15,16 +15,12 @@ import { loadSwagger } from "./util/swagger.js";
 const swaggerDocument = loadSwagger();
 
 const app = express();
-app.use(
-  '/api-docs',
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerDocument, {
-    requestInterceptor: (req) => {
-      req.headers['Accept-Language'] = 'en';
-      return req;
-    },
-  })
-);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+  requestInterceptor: req => {
+    req.headers['Accept-Language'] = 'en';
+    return req;
+  }
+}));
 
 app.use(express.json());
 app.use(cors(corsOptions));
