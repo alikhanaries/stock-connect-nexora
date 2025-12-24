@@ -67,6 +67,7 @@ export const getAllShipments = async (req, res) => {
 
 export const ayMakanWebHook = async (req, res) => {
   try {
+    console.log('webhook api calling-------------------------------------');
     const payload = req.body;
 
     // Basic validation: check for tracking number & status
