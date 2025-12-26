@@ -32,7 +32,7 @@ export const runDbBackup = async () => {
   }
 
   await execPromise(`mongodump --uri="${MONGO_URI}" --out="${dumpDir}"`);
-  await execPromise(`tar -czf ${archivePath} -C ${tmpDir} dump-${timestamp}`);
+  await execPromise(`tar -czf "${archivePath}" -C "${tmpDir}" "dump-${timestamp}"`);
 
   await uploadFileToS3(archivePath, `db-backups/${path.basename(archivePath)}`, S3_BUCKET);
 
@@ -65,3 +65,5 @@ const cleanupOldBackups = () => {
     }
   });
 };
+
+runDbBackup();
