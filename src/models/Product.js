@@ -208,6 +208,7 @@ ProductSchema.index({
   brand: 'text',
   description: 'text',
 });
+ProductSchema.index({ sellerId: 1, status: 1, createdAt: 1 });
 
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;

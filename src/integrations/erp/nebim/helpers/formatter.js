@@ -1,38 +1,44 @@
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
-
+import { convertUsdToSar } from '#root/src/integrations/common/helpers/currencyConverter.js';
 export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) => {
-  if (!Array.isArray(raw) || raw.length === 0) {
-    return [];
-  }
+  if (!Array.isArray(raw) || raw.length === 0) return [];
 
+  // Helper to extract only Cat02
+  const extractCategory = (cat02 = '') => cat02?.trim() || '';
+
+  // Group by ItemCode safely
   const groupedByItemCode = raw.reduce((acc, item) => {
-    if (!item?.ItemCode) return acc;
-    const code = String(item.ItemCode).trim();
+    const code = item?.ItemCode ? String(item.ItemCode).trim() : null;
+    if (!code) return acc;
     if (!acc[code]) acc[code] = [];
     acc[code].push(item);
     return acc;
   }, {});
 
   let itemGroups = Object.entries(groupedByItemCode);
-
-  /**
-   * TODO: Remove this limit once full import is ready for production.
-   * This is just to avoid processing too many products during testing.
-   */
-  itemGroups = itemGroups.slice(0, 20);
-
   const formattedProducts = [];
 
   await processInBatches(itemGroups, batchSize, async (batch) => {
     for (const [itemCode, items] of batch) {
-      const validItems = items.filter((it) => it.ColorDesc?.trim() && it.ItemDim1Desc?.trim());
+      const safeItemCode = itemCode || '';
+
+      // Only stock items WITH price > 0
+      const stockItems = items.filter((it) => Number(it?.Qty || 0) > 0 && Number(it?.Price || 0) > 0);
+      if (stockItems.length === 0) continue;
+
+      // Must have Color & Size
+      const validItems = stockItems.filter((it) => it?.ColorDesc?.trim() && it?.ItemDim1Desc?.trim());
       if (validItems.length === 0) continue;
 
       const first = validItems[0];
+      const grandParentSku = safeItemCode;
+      const grandParentPrice = await convertUsdToSar(Number(first.Price || 0));
 
-      const grandParentSku = itemCode;
-      const grandParentProduct = await canonicalProductMapper(
+      // --------------------------
+      // GRANDPARENT PRODUCT
+      // --------------------------
+      const grandParentProduct = canonicalProductMapper(
         {
           sellerId,
           grandParentProductSkuCode: null,
@@ -46,85 +52,90 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
           color: '',
           size: '',
           ean: '',
-          categoryTrail: `${first.Cat01Desc || ''} > ${first.Cat02Desc || ''}`.trim(),
-          price: Number(first.Price) || 0,
-          minPrice: Number(first.Price) || 0,
-          maxPrice: Number(first.Price) || 0,
-          msrp: Number(first.Price) || 0,
-          purchasePrice: Number(first.Price) || 0,
-          shippingCost: 0,
-          shippingTime: 0,
-          currentStockCount: Number(first.Qty) || 0,
-          volumetricWeightCm: 0,
-          hsCodeAE: '1111111',
-          hsCodeSA: '1111111',
-          primaryImageUrl: first.ImageUrl || '',
-          imageUrl: first.ImageUrl || '',
-          vatRateType: 'STANDARD',
+          categoryTrail: extractCategory(first.Cat02Desc),
+          price: grandParentPrice,
+          minPrice: grandParentPrice,
+          maxPrice: grandParentPrice,
+          msrp: grandParentPrice,
+          purchasePrice: grandParentPrice,
+          currentStockCount: Number(first.Qty || 0),
+          hsCodeAE: first.HsCode || '',
+          hsCodeSA: first.HsCode || '',
           productType: 'configurable',
+          volumetricWeightCm: 0.3,
+          __sortItemCode: safeItemCode,
+          __sortLevel: 1,
+          __sortVariant: 0,
         },
         sellerId
       );
       formattedProducts.push(grandParentProduct);
 
+      // --------------------------
+      // GROUP BY COLOR SAFELY
+      // --------------------------
       const groupedByColor = validItems.reduce((acc, item) => {
-        const color = item.ColorDesc.trim();
+        const color = item?.ColorDesc ? item.ColorDesc.trim() : null;
+        if (!color) return acc;
         if (!acc[color]) acc[color] = [];
         acc[color].push(item);
         return acc;
       }, {});
 
       for (const [colorDesc, colorItems] of Object.entries(groupedByColor)) {
-        if (!colorDesc) continue;
+        const safeColorDesc = colorDesc || '';
 
-        const colorFirst = colorItems[0];
-        const safeColor = colorDesc.replace(/\s+/g, '_').toUpperCase();
-        const parentSku = `${itemCode}-${safeColor}`;
+        // Only stock & price > 0
+        const stockColorItems = colorItems.filter((v) => Number(v?.Qty || 0) > 0 && Number(v?.Price || 0) > 0);
+        if (stockColorItems.length === 0) continue;
 
-        const parentProduct = await canonicalProductMapper(
+        const firstColor = stockColorItems[0];
+        const parentSku = `${safeItemCode}_${firstColor.ColorCode || '0'}`;
+        const parentPrice = await convertUsdToSar(Number(firstColor.Price || 0));
+
+        // --------------------------
+        // PARENT PRODUCT
+        // --------------------------
+        const parentProduct = canonicalProductMapper(
           {
             sellerId,
             grandParentProductSkuCode: grandParentSku,
             parentProductSkuCode: null,
             productSkuCode: parentSku,
-            name: colorFirst.ItemName || '',
-            nameAr: colorFirst.ItemName || '',
-            description: colorFirst.ItemDesc || '',
-            descriptionAr: colorFirst.ItemDesc || '',
-            brand: colorFirst.BrandDesc || '',
-            color: colorDesc,
+            name: firstColor.ItemName || '',
+            nameAr: firstColor.ItemName || '',
+            description: firstColor.ItemDesc || '',
+            descriptionAr: firstColor.ItemDesc || '',
+            brand: firstColor.BrandDesc || '',
+            color: safeColorDesc,
             size: '',
             ean: '',
-            categoryTrail: `${colorFirst.Cat01Desc || ''} > ${colorFirst.Cat02Desc || ''}`.trim(),
-            price: Number(colorFirst.Price) || 0,
-            minPrice: Number(colorFirst.Price) || 0,
-            maxPrice: Number(colorFirst.Price) || 0,
-            msrp: Number(colorFirst.Price) || 0,
-            purchasePrice: Number(colorFirst.Price) || 0,
-            shippingCost: 0,
-            shippingTime: 0,
-            currentStockCount: Number(colorFirst.Qty) || 0,
-            volumetricWeightCm: 0,
-            hsCodeAE: '1111111',
-            hsCodeSA: '1111111',
-            primaryImageUrl: colorFirst.ImageUrl || '',
-            imageUrl: colorFirst.ImageUrl || '',
-            vatRateType: 'STANDARD',
+            categoryTrail: extractCategory(firstColor.Cat02Desc),
+            price: parentPrice,
+            minPrice: parentPrice,
+            maxPrice: parentPrice,
+            msrp: parentPrice,
+            purchasePrice: parentPrice,
+            currentStockCount: Number(firstColor.Qty || 0),
             productType: 'configurable',
+            volumetricWeightCm: 0.3,
+            __sortItemCode: safeItemCode,
+            __sortLevel: 2,
+            __sortVariant: Number(firstColor.ColorCode || 0),
           },
           sellerId
         );
         formattedProducts.push(parentProduct);
 
-        const colorItemsFiltered = colorItems.filter((v) => v.ItemDim1Desc?.trim());
-        if (colorItemsFiltered.length === 0) continue;
+        // --------------------------
+        // CHILD PRODUCTS (SIZE VARIANTS)
+        // --------------------------
+        for (const variant of stockColorItems) {
+          const sizeCode = variant?.ItemDim1Desc?.trim() || '';
+          const childSku = `${safeItemCode}_${variant.ColorCode || '0'}_${variant.ItemDim1Code || '0'}`;
+          const childPrice = await convertUsdToSar(Number(variant.Price || 0));
 
-        for (const variant of colorItemsFiltered) {
-          const sizeCode = variant.ItemDim1Desc.trim();
-          const safeSize = sizeCode.replace(/\s+/g, '_').toUpperCase();
-          const childSku = `${parentSku}-${safeSize}`;
-
-          const childProduct = await canonicalProductMapper(
+          const childProduct = canonicalProductMapper(
             {
               sellerId,
               grandParentProductSkuCode: null,
@@ -135,25 +146,21 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
               description: variant.ItemDesc || '',
               descriptionAr: variant.ItemDesc || '',
               brand: variant.BrandDesc || '',
-              color: colorDesc,
+              color: safeColorDesc,
               size: sizeCode,
               ean: variant.Barcode || '',
-              categoryTrail: `${variant.Cat01Desc || ''} > ${variant.Cat02Desc || ''}`.trim(),
-              price: Number(variant.Price) || 0,
-              minPrice: Number(variant.Price) || 0,
-              maxPrice: Number(variant.Price) || 0,
-              msrp: Number(variant.Price) || 0,
-              purchasePrice: Number(variant.Price) || 0,
-              shippingCost: 0,
-              shippingTime: 0,
-              currentStockCount: Number(variant.Qty) || 0,
-              volumetricWeightCm: 0,
-              hsCodeAE: '1111111',
-              hsCodeSA: '1111111',
-              primaryImageUrl: variant.ImageUrl || '',
-              imageUrl: variant.ImageUrl || '',
-              vatRateType: 'STANDARD',
+              categoryTrail: extractCategory(variant.Cat02Desc),
+              price: childPrice,
+              minPrice: childPrice,
+              maxPrice: childPrice,
+              msrp: childPrice,
+              purchasePrice: childPrice,
+              currentStockCount: Number(variant.Qty || 0),
               productType: 'simple',
+              volumetricWeightCm: 0.3,
+              __sortItemCode: safeItemCode,
+              __sortLevel: 3,
+              __sortVariant: Number(variant.ItemDim1Code || 0),
             },
             sellerId
           );
@@ -163,7 +170,28 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
       }
     }
   });
-  return formattedProducts.filter(Boolean);
+
+  // --------------------------
+  // FINAL SERIAL SORTING
+  // --------------------------
+  const sorted = formattedProducts.filter(Boolean).sort((a, b) => {
+    const itemA = a.__sortItemCode || '';
+    const itemB = b.__sortItemCode || '';
+    const lvlA = a.__sortLevel || 0;
+    const lvlB = b.__sortLevel || 0;
+    const varA = a.__sortVariant || 0;
+    const varB = b.__sortVariant || 0;
+
+    return itemA.localeCompare(itemB) || lvlA - lvlB || varA - varB;
+  });
+
+  // Remove temp fields
+  return sorted.map((p) => {
+    delete p.__sortItemCode;
+    delete p.__sortLevel;
+    delete p.__sortVariant;
+    return p;
+  });
 };
 
 export const formatNebimOrders = async (orders = [], batchSize = 500) => {

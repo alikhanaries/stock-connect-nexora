@@ -8,11 +8,10 @@ import {
   cancelShipment,
   createManualShipment,
 } from '#root/src/controllers/ShipmentController.js';
-import { authMiddleware, verifySellerAccess, webHookAuthMiddleware } from '#middleware/index.js';
+import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
 import {
   getShipmentValidator,
   createShipmentValidator,
-  ayMakanWebHookValidator,
   getSingleShipmentValidator,
   cancelShipmentValidator,
   createManualShipmentValidator,
@@ -135,7 +134,7 @@ router.get(
  *       200: { description: "Shipment updated" }
  *       400: { description: "Invalid payload" }
  */
-router.post('/ayMakanWebHook', ayMakanWebHookValidator, webHookAuthMiddleware, ayMakanWebHook);
+router.post('/ayMakanWebHook', ayMakanWebHook);
 
 // GET SINGLE SHIPMENT
 /**

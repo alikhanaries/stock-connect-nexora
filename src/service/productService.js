@@ -1,23 +1,15 @@
 import { config } from '#config/config.js';
-import { ORDER_STATUS_MATCH, PRODUCT_EXPORT_HEADERS, PRODUCT_STATUSES } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { resolveProductTypes, validateHierarchy, validateHierarchyExistenceBatch } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
-import {
-  createCSVExportResponse,
-  escapeCsv,
-  generateCSVFilename,
-  handleExportError,
-  validateExportData,
-} from '#helpers/export.js';
+import { escapeCsv, validateExportData } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
-import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
-import { uploadProducts } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import { buildFilter } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
@@ -1173,11 +1165,27 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
-export const validateProductExportData = async (groups, sellerId) => {
+export const validateProductExportData = async (filters, sellerId) => {
   try {
+    // Parse filters if they're strings
+    if (Array.isArray(filters) && typeof filters[0] === 'string') {
+      filters = [
+        {
+          conditions: filters.map((f) => {
+            const [field, operator, ...rest] = f.split(':');
+            return {
+              field,
+              operator,
+              value: rest.join(':'),
+            };
+          }),
+        },
+      ];
+    }
+
     const orQueries = [];
 
-    for (const group of groups) {
+    for (const group of filters) {
       if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
       const andQueries = [];
@@ -1216,15 +1224,31 @@ export const validateProductExportData = async (groups, sellerId) => {
   }
 };
 
-export const exportProductsToCSV = async (groups, sellerId, query, res) => {
+export const exportProductsToCSV = async (filters, sellerId, query, res) => {
   let cursor = null;
 
   try {
     const { sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
+    // Parse filters if they're strings
+    if (Array.isArray(filters) && typeof filters[0] === 'string') {
+      filters = [
+        {
+          conditions: filters.map((f) => {
+            const [field, operator, ...rest] = f.split(':');
+            return {
+              field,
+              operator,
+              value: rest.join(':'),
+            };
+          }),
+        },
+      ];
+    }
+
     const orQueries = [];
 
-    for (const group of groups) {
+    for (const group of filters) {
       if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
       const andQueries = [];
@@ -1265,7 +1289,6 @@ export const exportProductsToCSV = async (groups, sellerId, query, res) => {
         product.grandParentProductSkuCode || '',
         product.parentProductSkuCode || '',
         product.productSkuCode || '',
-        product.ageRangeDescription || '',
         product.brand || '',
         product.categoryTrail || '',
         product.color || '',

@@ -94,7 +94,6 @@ export const PRODUCT_EXPORT_HEADERS = [
   'grandParentProductSkuCode',
   'parentProductSkuCode',
   'productSkuCode',
-  'ageRangeDescription',
   'brand',
   'categoryTrail',
   'color',
