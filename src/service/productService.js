@@ -1,21 +1,15 @@
 import { config } from '#config/config.js';
-import { ORDER_STATUS_MATCH, PRODUCT_EXPORT_HEADERS, PRODUCT_STATUSES } from '#constants/common.js';
+import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { resolveProductTypes, validateHierarchy, validateHierarchyExistenceBatch } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
-import {
-  createCSVExportResponse,
-  escapeCsv,
-  generateCSVFilename,
-  handleExportError,
-  validateExportData,
-} from '#helpers/export.js';
+import { escapeCsv, validateExportData } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
-import { uploadProducts } from '#service/channel/ocpService.js';
+import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import csv from 'csv-parser';
 import fs from 'fs';
@@ -309,8 +303,7 @@ const validateProducts = async (channelId, sellerId) => {
   };
 };
 
-//  Async push products to CE
-const pushProductsAsync = async (products, channelId, sellerId) => {
+export const pushProductsAsync = async (products, channelId, sellerId) => {
   const channel = await Channel.findOne({ channelId });
 
   if (!channel) {
@@ -318,34 +311,37 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
   }
 
   const limit = pLimit(MAX_CONCURRENT);
-  const batches = [];
+  let batches = [];
 
-  for (let i = 0; i < products.length; i += BATCH_SIZE) {
-    batches.push(products.slice(i, i + BATCH_SIZE));
+  if (channel.channelName === 'OCP') {
+    const simpleProducts = products
+      .filter(({ productType }) => productType === 'simple')
+      .map((product) =>
+        product.categoryTrail === 'Apparel > Dresses > Dresses'
+          ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
+          : product
+      );
+
+    const groupedByParent = groupByParent(simpleProducts);
+    batches = buildBatchesKeepingParentsIntact(groupedByParent, BATCH_SIZE);
+  } else {
+    for (let i = 0; i < products.length; i += BATCH_SIZE) {
+      batches.push(products.slice(i, i + BATCH_SIZE));
+    }
   }
 
   await Promise.allSettled(
     batches.map((batch, idx) =>
       limit(async () => {
         try {
-          //return await pushBatch(batch.map(mapProductToChannelEngine), idx);
-
           if (channel.channelName === 'OCP') {
-            // Filter simple products for OCP
-            const simpleProducts = batch
-              .filter(({ productType }) => productType === 'simple')
-              .map((product) =>
-                product.categoryTrail === 'Apparel > Dresses > Dresses'
-                  ? { ...product, categoryTrail: 'Apparel > Dresses > Dress' }
-                  : product
-              );
-
-            return await pushBatchToOCP(uploadProducts(simpleProducts), idx, sellerId);
-          } else {
-            return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+            return await pushBatchToOCP(uploadProducts(batch), idx, sellerId);
           }
+
+          return await pushBatch(batch.map(mapProductToChannelEngine), idx);
         } catch (err) {
-          console.error(`Batch ${idx} CE Push failed:`, err.message);
+          console.error(`Batch ${idx} push failed`, err);
+
           return {
             AcceptedCount: 0,
             RejectedCount: batch.length,
@@ -361,7 +357,6 @@ const pushProductsAsync = async (products, channelId, sellerId) => {
     )
   );
 };
-
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
@@ -1141,11 +1136,27 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
-export const validateProductExportData = async (groups, sellerId) => {
+export const validateProductExportData = async (filters, sellerId) => {
   try {
+    // Parse filters if they're strings
+    if (Array.isArray(filters) && typeof filters[0] === 'string') {
+      filters = [
+        {
+          conditions: filters.map((f) => {
+            const [field, operator, ...rest] = f.split(':');
+            return {
+              field,
+              operator,
+              value: rest.join(':'),
+            };
+          }),
+        },
+      ];
+    }
+
     const orQueries = [];
 
-    for (const group of groups) {
+    for (const group of filters) {
       if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
       const andQueries = [];
@@ -1184,15 +1195,31 @@ export const validateProductExportData = async (groups, sellerId) => {
   }
 };
 
-export const exportProductsToCSV = async (groups, sellerId, query, res) => {
+export const exportProductsToCSV = async (filters, sellerId, query, res) => {
   let cursor = null;
 
   try {
     const { sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
+    // Parse filters if they're strings
+    if (Array.isArray(filters) && typeof filters[0] === 'string') {
+      filters = [
+        {
+          conditions: filters.map((f) => {
+            const [field, operator, ...rest] = f.split(':');
+            return {
+              field,
+              operator,
+              value: rest.join(':'),
+            };
+          }),
+        },
+      ];
+    }
+
     const orQueries = [];
 
-    for (const group of groups) {
+    for (const group of filters) {
       if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
       const andQueries = [];
@@ -1233,7 +1260,6 @@ export const exportProductsToCSV = async (groups, sellerId, query, res) => {
         product.grandParentProductSkuCode || '',
         product.parentProductSkuCode || '',
         product.productSkuCode || '',
-        product.ageRangeDescription || '',
         product.brand || '',
         product.categoryTrail || '',
         product.color || '',
@@ -1283,6 +1309,12 @@ export const exportProductsToCSV = async (groups, sellerId, query, res) => {
 };
 
 export const searchProuctsByFilter = async (filters = [], query, sellerId, channelId, search) => {
+  let channel = null;
+
+  if (channelId) {
+    channel = await Channel.findOne({ channelId: Number(channelId) }, { channelId: 1, channelName: 1, _id: 0 }).lean();
+  }
+
   if (Array.isArray(filters) && typeof filters[0] === 'string') {
     filters = [
       {
@@ -1344,9 +1376,8 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
 
   // if channelId
   if (channelId) {
-    const channelDetails = await Channel.findOne({ channelId: Number(channelId) }, { channelName: 1, _id: 0 }).lean();
-    if (channelDetails?.channelName) {
-      const escaped = channelDetails.channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
+    if (channel?.channelName) {
+      const escaped = channel.channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
       finalFilter.marketPlace = { $regex: escaped, $options: 'i' };
     }
   }
@@ -1375,6 +1406,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
+    channel,
   };
 };
 
