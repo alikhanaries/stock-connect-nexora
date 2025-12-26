@@ -1392,16 +1392,36 @@ export const createManualShipmentService = async (shipmentData) => {
       }
     }
 
-    // Check if all SKUs are now SHIPPED (or PARTIALLY_CANCELED with all available items shipped) and update order status
+    // Check if all SKUs are now SHIPPED (with all available quantities shipped) and update order status
     const updatedOrder = await Order.findById(orderId).lean();
+
+    // Get all shipments for this order (excluding canceled)
+    const allOrderShipments = await Shipment.find({
+      orderId: orderId,
+      status: { $in: ['SHIPMENT_CREATED', 'PICKED', 'DELIVERED', 'SHIPPED'] },
+    }).lean();
+
+    // Calculate total shipped quantity per orderLineId
+    const totalShippedMap = {};
+    allOrderShipments.forEach((shipment) => {
+      (shipment.products || []).forEach((product) => {
+        const lineId = String(product.orderLineId);
+        totalShippedMap[lineId] = (totalShippedMap[lineId] || 0) + (product.quantity || 0);
+      });
+    });
+
+    // Check if all available quantities have been shipped
     const allShipped = updatedOrder.orderSkuList?.skuList?.every((sku) => {
-      const cancellationRequestedQty = sku.cancellationRequestedQuantity || 0;
-      const availableQty = sku.quantity - cancellationRequestedQty;
+      const orderLineId = String(sku.id);
+      const orderedQty = sku.quantity || 0;
+      const cancelledQty = sku.cancellationRequestedQuantity || 0;
+      const availableQty = orderedQty - cancelledQty;
+      const shippedQty = totalShippedMap[orderLineId] || 0;
+
       // Consider SKU as fully processed if:
-      // 1. It's marked SHIPPED
-      // 2. It's PARTIALLY_CANCELED and has cancellations (meaning available items are handled)
-      // 3. Available quantity is 0 (fully cancelled)
-      return sku.status === 'SHIPPED' || sku.status === 'PARTIALLY_CANCELED' || availableQty <= 0;
+      // 1. Available quantity is 0 (fully cancelled)
+      // 2. All available quantity has been shipped
+      return availableQty <= 0 || shippedQty >= availableQty;
     });
 
     if (allShipped) {
