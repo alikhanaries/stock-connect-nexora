@@ -1330,7 +1330,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
     ];
   }
 
-  const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+  const { page = 1, size = 10, sortBy = 'name', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
