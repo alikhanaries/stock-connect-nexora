@@ -44,7 +44,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
     sellerId,
     name: product.name,
     description: product.details,
-    brand: 'Kip',
+    brand: 'kip',
     categoryTrail: product.category_path,
     vatRateType: 'STANDARD',
     status: product.active === '1' ? 'active' : 'inactive',
@@ -62,11 +62,13 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
   const formatted = [];
   const categoryTrails = new Set();
   for (const product of raw) {
+    if (product.category_path) categoryTrails.add(product.category_path);
     const subproducts = toArray(product?.subproducts?.subproduct);
     const subproductImages = extractSubproductImages(subproducts);
     const grandParentSku = product.ws_code || product.code;
     const uploadBaseImages = shouldUploadImages(grandParentSku, existingSkus, isImageUpdate);
     const base = await formatBaseProduct(product, sellerId, subproductImages, uploadBaseImages);
+    if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
     formatted.push({
       ...base,
       productSkuCode: grandParentSku,
@@ -80,8 +82,9 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
       ean: '',
     });
 
+    if (!subproducts.length) continue;
     const groupedByColor = subproducts.reduce((acc, sub) => {
-      const color = (sub.color || sub.color_drop || product.color_new || '').trim() || 'DEFAULT';
+      const color = (sub.color || sub.color_drop || product.color_new || '').trim() || 'Default';
       (acc[color] ||= []).push(sub);
       return acc;
     }, {});
@@ -98,7 +101,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
         color,
         size: '',
         ean: '',
-        price: await convertUsdToSar(parseFloat(product.price_special)),
+        price: await convertUsdToSar(parseFloat(product.price_special) || 0),
         currentStockCount: variants.reduce((s, v) => s + Number(v.stock || 0), 0),
       });
 
