@@ -65,5 +65,3 @@ const cleanupOldBackups = () => {
     }
   });
 };
-
-runDbBackup();
