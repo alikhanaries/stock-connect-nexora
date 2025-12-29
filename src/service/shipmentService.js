@@ -1399,7 +1399,9 @@ export const createManualShipmentService = async (shipmentData) => {
     const allOrderShipments = await Shipment.find({
       orderId: orderId,
       status: { $in: ['SHIPMENT_CREATED', 'PICKED', 'DELIVERED', 'SHIPPED'] },
-    }).lean();
+    })
+      .select('products')
+      .lean();
 
     // Calculate total shipped quantity per orderLineId
     const totalShippedMap = {};
