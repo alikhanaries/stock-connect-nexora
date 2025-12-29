@@ -6,7 +6,7 @@ import pLimit from 'p-limit';
 import { cleanNumber } from '../helpers/Common.js';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
-export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdate = false) => {
+export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdate = false, isNewSku = false) => {
   if (!row || typeof row !== 'object') return null;
 
   // Normalize keys
@@ -18,16 +18,19 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
   // Required validations
   const errorData = [];
   if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
-  if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
-  if (!r.primaryimageurl) errorData.push('Primary image url is missing');
-  if (!r.imageurl) errorData.push('Image url is missing');
+  if (isNewSku) {
+    if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
+    if (!r.primaryimageurl) errorData.push('Primary image url is missing');
+    if (!r.imageurl) errorData.push('Image url is missing');
+  }
 
   if (errorData.length) return { rowNumber: index, errorData };
 
   let publicUrls = [];
 
-  //  IMAGE HANDLING ONLY WHEN isImageUpdate === TRUE
-  if (isImageUpdate === true) {
+  //  IMAGE HANDLING ONLY WHEN isImageUpdate === TRUE AND NEW SKU COME
+  const shouldUploadImages = isNewSku || isImageUpdate === true;
+  if (shouldUploadImages) {
     const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
       .filter(Boolean)
       .map(normalizeImageUrl);
@@ -56,25 +59,27 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     brand: r.brand || null,
     ean: r.ean || null,
     price: cleanNumber(r.price),
-    minPrice: cleanNumber(r.minprice),
-    maxPrice: cleanNumber(r.maxprice),
+    minPrice: cleanNumber(r.minprice) || null,
+    maxPrice: cleanNumber(r.maxprice) || null,
     msrp: cleanNumber(r.msrp),
     purchasePrice: cleanNumber(r.purchaseprice),
     vatRateType: r.vatratetype ? r.vatratetype.toUpperCase() : 'STANDARD',
-    shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : 0,
+    shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : null,
     shippingTime: r.shippingtime || null,
-    primaryImageUrl: publicUrls[0] || null,
-    imageUrl: publicUrls[1] || null,
-    extraImageUrl1: publicUrls[2] || null,
-    extraImageUrl2: publicUrls[3] || null,
-    extraImageUrl3: publicUrls[4] || null,
-    images: publicUrls.filter(Boolean),
+    ...(publicUrls.length > 0 && {
+      primaryImageUrl: publicUrls[0],
+      imageUrl: publicUrls[1],
+      extraImageUrl1: publicUrls[2],
+      extraImageUrl2: publicUrls[3],
+      extraImageUrl3: publicUrls[4],
+      images: publicUrls,
+    }),
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
     attributes: r.attributes || null,
     categories: [],
     marketPlace: r.marketplace || null,
-    currentStockCount: parseInt(r.stock, 10) || 0,
+    currentStockCount: parseInt(r.stock, 10) || null,
     createdAt: new Date(),
     updatedAt: new Date(),
     size: r.size || null,
@@ -83,10 +88,10 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     hsCodeAE: r.hscodeae || null,
     hsCodeSA: r.hscodesa || null,
     longDescriptionAr: r.longdescriptionar || '',
-    gender: r.gender,
+    gender: r.gender || '',
     modelName: r.modelname || '',
-    ageRangeDescription: r.agerangedescription,
-    sizeType: r.sizetype,
+    ageRangeDescription: r.agerangedescription || '',
+    sizeType: r.sizetype || '',
     productCareInstructions: r.productcareinstructions || '',
     countryOfOrigin: r.countryoforigin || '',
     departmentName: r.departmentname || '',
