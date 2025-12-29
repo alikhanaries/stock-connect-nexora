@@ -160,11 +160,11 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
     })
     .strict()
     .refine((data) => data.url !== undefined && data.url !== null, {
-      message: 'url is required',
+      message: 'The URL field is mandatory and cannot be left empty.',
       path: ['url'],
     })
     .refine((data) => typeof data.url === 'string', {
-      message: 'url must be a string',
+      message: 'The URL value must be provided as a valid string.',
       path: ['url'],
     })
     .refine(
@@ -177,7 +177,7 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
         }
       },
       {
-        message: 'url must be a valid URL',
+        message: 'Please provide a valid URL to proceed.',
         path: ['url'],
       }
     );
@@ -655,6 +655,8 @@ export const exportProductsValidator = validate(async (req) => {
         .length(24, 'sellerId must be 24 characters long')
         .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
         .optional(),
+
+      filter: z.union([z.string(), z.array(z.string())]).optional(),
     })
     .passthrough()
     .refine(
