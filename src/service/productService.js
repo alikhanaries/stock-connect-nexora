@@ -1363,6 +1363,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
     Product.countDocuments(finalFilter),
 
     Product.find(finalFilter)
+      .collation({ locale: 'en', strength: 2 })
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
