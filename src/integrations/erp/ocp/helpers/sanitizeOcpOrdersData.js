@@ -30,7 +30,9 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       const rawPrice = line.effectiveLineItemPrice ?? line.price ?? 0;
       const price = Number(rawPrice);
 
-      const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => s.id === lineId);
+      const existingSkuMap = new Map(existingOrder?.orderSkuList?.skuList?.map((s) => [s.id, s]) || []);
+      const existingSku = existingSkuMap.get(lineId);
+
       const lineStatus = line.status ?? line.Status ?? 'PENDING';
 
       const imageUri = line.image?.imageURI ?? null;

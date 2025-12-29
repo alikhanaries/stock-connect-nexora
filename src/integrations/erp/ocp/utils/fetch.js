@@ -7,7 +7,6 @@ export const fetchFromOcp = async (endpoint, options = {}) => {
   const sessionUrl = `${OCP_URL}/${endpoint}`;
   const queryString = new URLSearchParams(query).toString();
   const url = `${sessionUrl}${queryString ? `?${queryString}` : ''}`;
-  console.log(url);
   try {
     const response = await fetch(url, {
       method,

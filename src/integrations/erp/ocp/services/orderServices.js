@@ -11,6 +11,10 @@ const adaptor = createERPAdapter('ocp');
 export const getSyncedOrdersOcp = async (sellerId) => {
   try {
     const sellerData = await Seller.findOne({ _id: sellerId, isDeleted: false }).lean();
+    if (!sellerData) {
+      return { success: false, message: 'Seller not found' };
+    }
+
     const ocpBrandSlug = sellerData.ocpSlugId;
 
     if (!ocpBrandSlug) {
@@ -34,6 +38,9 @@ export const getSyncedOrdersOcp = async (sellerId) => {
 
 export const processOrders = async (orders, sellerId) => {
   try {
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return { success: true, data: { message: 'No orders to sync' } };
+    }
     // Prepare bulk operations
     const operations = await sanitizeOcpOrdersData(orders, sellerId);
 
