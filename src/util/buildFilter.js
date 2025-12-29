@@ -1,18 +1,19 @@
 import mongoose from 'mongoose';
+const escaped = (str) => str.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
 
 export const buildFilter = ({ rawFilters = [], sellerId, search, channelName, buildCondition }) => {
-  let filters = rawFilters;
+  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+    throw new Error('Invalid sellerId');
+  }
 
-  if (Array.isArray(filters) && typeof filters[0] === 'string') {
+  let filters = Array.isArray(rawFilters) ? rawFilters : [];
+
+  if (filters.length && typeof filters[0] === 'string') {
     filters = [
       {
         conditions: filters.map((f) => {
           const [field, operator, ...rest] = f.split(':');
-          return {
-            field,
-            operator,
-            value: rest.join(':'),
-          };
+          return { field, operator, value: rest.join(':') };
         }),
       },
     ];
@@ -21,41 +22,37 @@ export const buildFilter = ({ rawFilters = [], sellerId, search, channelName, bu
   const orQueries = [];
 
   for (const group of filters) {
-    if (!Array.isArray(group.conditions) || !group.conditions.length) continue;
+    if (!Array.isArray(group.conditions)) continue;
 
-    const andQueries = [];
-
-    for (const cond of group.conditions) {
-      const built = buildCondition(cond.field, cond.operator, cond.value);
-      if (built && Object.keys(built).length) {
-        andQueries.push(built);
-      }
-    }
+    const andQueries = group.conditions.map((c) => buildCondition(c.field, c.operator, c.value)).filter(Boolean);
 
     if (andQueries.length === 1) orQueries.push(andQueries[0]);
     else if (andQueries.length > 1) orQueries.push({ $and: andQueries });
   }
 
-  let finalFilter = {};
-  if (orQueries.length === 1) finalFilter = orQueries[0];
-  else if (orQueries.length > 1) finalFilter = { $or: orQueries };
-
-  finalFilter = {
-    ...finalFilter,
+  let finalFilter = {
     sellerId: new mongoose.Types.ObjectId(sellerId),
     status: { $ne: 'removed' },
   };
 
+  if (orQueries.length === 1) {
+    finalFilter = { ...finalFilter, ...orQueries[0] };
+  } else if (orQueries.length > 1) {
+    finalFilter.$or = orQueries;
+  }
+
   if (channelName) {
-    const escaped = channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
-    finalFilter.marketPlace = { $regex: escaped, $options: 'i' };
+    finalFilter.marketPlace = {
+      $regex: escaped(channelName),
+      $options: 'i',
+    };
   }
 
   if (search) {
-    const regex = new RegExp(search, 'i');
-    finalFilter.$or = finalFilter.$or
-      ? [...finalFilter.$or, { name: regex }, { productSkuCode: regex }]
-      : [{ name: regex }, { productSkuCode: regex }];
+    const regex = new RegExp(escaped(search), 'i');
+    const searchOr = [{ name: regex }, { productSkuCode: regex }];
+
+    finalFilter.$or = finalFilter.$or ? [...finalFilter.$or, ...searchOr] : searchOr;
   }
 
   return finalFilter;
