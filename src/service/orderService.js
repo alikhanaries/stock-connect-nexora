@@ -580,9 +580,25 @@ const cancelFullOrder = async (orderId, reason = 'NA') => {
       IsMerchantCreator: true,
     };
 
+    // Check if order has any shipped shipments
+    const shippedShipments = await Shipment.find({
+      orderId,
+      status: { $in: ['SHIPPED', 'PICKED', 'DELIVERED'] },
+    }).lean();
+
+    if (shippedShipments.length > 0) {
+      return {
+        success: false,
+        error: {
+          message: 'Order has been shipped, cannot cancel now',
+          status: 400,
+        },
+      };
+    }
+
     const shipments = await Shipment.find({
       orderId,
-      status: { $nin: ['CANCELED', 'PICKED', 'DELIVERED'] },
+      status: { $nin: ['CANCELED', 'PICKED', 'DELIVERED', 'SHIPPED'] },
     }).lean();
 
     if (shipments.length) {
@@ -647,17 +663,53 @@ export const cancelPartialOrder = async (orderId, products, reason) => {
     const order = await Order.findById(orderId).lean();
     if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
 
-    // Collect shipped (DELIVERED) product IDs
-    const shippedProducts = new Set(
-      order.orderSkuList?.skuList
-        ?.filter((sku) => ['DELIVERED', 'PICKED'].includes(sku.status))
-        .map((sku) => sku.id.toString())
-    );
+    // Calculate shipped quantities per orderLineId
+    const productLineIds = products.map((p) => p.orderLineId.toString());
+    const shippedShipments = await Shipment.find({
+      orderId,
+      status: { $in: ['SHIPPED', 'PICKED', 'DELIVERED'] },
+      'products.orderLineId': { $in: productLineIds },
+    }).lean();
 
-    // Block cancel if any requested SKU is shipped
-    const hasShipped = products.some((p) => shippedProducts.has(p.orderLineId.toString()));
-    if (hasShipped) {
-      return { success: false, error: { message: 'Cannot cancel delivered order', status: 409 } };
+    // Build map of shipped quantities per orderLineId
+    const shippedQtyMap = {};
+    shippedShipments.forEach((shipment) => {
+      shipment.products.forEach((product) => {
+        const lineId = product.orderLineId.toString();
+        shippedQtyMap[lineId] = (shippedQtyMap[lineId] || 0) + (product.quantity || 0);
+      });
+    });
+
+    // Validate each product to be canceled
+    for (const cancelProduct of products) {
+      const orderLineId = cancelProduct.orderLineId.toString();
+      const orderSku = order.orderSkuList?.skuList?.find((sku) => sku.id.toString() === orderLineId);
+
+      if (!orderSku) {
+        return {
+          success: false,
+          error: {
+            message: `Product with orderLineId ${orderLineId} not found in order`,
+            status: 404,
+          },
+        };
+      }
+
+      const orderedQty = orderSku.quantity || 0;
+      const alreadyCanceledQty = orderSku.cancellationRequestedQuantity || 0;
+      const shippedQty = shippedQtyMap[orderLineId] || 0;
+      const availableToCancel = orderedQty - alreadyCanceledQty - shippedQty;
+
+      // Check if trying to cancel more than available
+      if (cancelProduct.quantity > availableToCancel) {
+        return {
+          success: false,
+          error: {
+            message: `Cannot cancel ${cancelProduct.quantity} units of ${cancelProduct.merchantProductNo}. Only ${availableToCancel} units available to cancel (${orderedQty} ordered, ${alreadyCanceledQty} already canceled, ${shippedQty} shipped)`,
+            status: 400,
+          },
+        };
+      }
     }
 
     // Prepare cancel payload for ChannelEngine
