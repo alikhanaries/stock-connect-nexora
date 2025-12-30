@@ -109,9 +109,6 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
         const safeSize = size.replace(/\s+/g, '_').toUpperCase();
         const childSku = `${parentSku}-${safeSize}`;
 
-        const stock = Number(variant.stock || 0);
-        if (stock <= 0) continue;
-
         let processedChild = {};
 
         if (isImageUpdate === true) {
@@ -150,7 +147,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
           color,
           size,
           ean: variant.barcode || '',
-          currentStockCount: stock,
+          currentStockCount: Number(variant.stock || 0),
           status: variant.active === '1' ? 'active' : 'inactive',
         });
       }
