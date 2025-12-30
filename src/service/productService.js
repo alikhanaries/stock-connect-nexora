@@ -767,11 +767,7 @@ const addProductsToUserChannel = async (sellerId, channelId, productIds, locale)
 };
 
 export const getUserChannelProducts = async (sellerId, channelId, query) => {
-  const rawFilters = query.filter
-    ? Array.isArray(query.filter)
-      ? query.filter
-      : [query.filter]
-    : [];
+  const rawFilters = query.filter ? (Array.isArray(query.filter) ? query.filter : [query.filter]) : [];
 
   const baseFilter = buildFilter({
     rawFilters,
