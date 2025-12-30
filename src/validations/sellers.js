@@ -11,10 +11,22 @@ const objectIdSchema = z.string().refine((val) => mongoose.Types.ObjectId.isVali
 export const createSellerValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 
+  const shopifyConfigSchema = z.object({
+    url: z
+      .string({ required_error: 'url is required' })
+      .url({ message: 'url must be a valid URL' })
+      .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL'),
+
+    apiVersion: z.string({ required_error: 'apiVersion is required' }).min(1, { message: 'apiVersion is required' }),
+
+    accessToken: z.string({ required_error: 'accessToken is required' }).min(1, { message: 'accessToken is required' }),
+  });
+
   const bodySchema = z.object({
     name: z
       .string({ required_error: 'Name is required' })
       .min(1, { message: 'Name must be at least 1 characters long' }),
+    shopifyConfig: shopifyConfigSchema.optional(),
   });
 
   await bodySchema.parseAsync(req.body);

@@ -101,13 +101,13 @@ export const createSeller = async (req, res) => {
   try {
     const newSeller = await sellerService.createSeller(req.body);
 
-    if (!newSeller.data) {
-      return response.failResponse(res, req.locale.FAILED_TO_CREATE_SELLER, 500);
-    }
-
     if (newSeller.isExist) {
       return response.failResponse(res, req.locale.SELLER_NAME_EXISTS, 409);
     }
+    if (!newSeller.data) {
+      return response.failResponse(res, req?.locale?.FAILED_TO_CREATE_SELLER, 500);
+    }
+
     return response.successResponse(res, req.locale.SELLER_CREATED_SUCCESSFULLY, 201, newSeller.data);
   } catch (error) {
     console.error('Error creating seller:', error);

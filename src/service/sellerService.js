@@ -5,20 +5,43 @@ import UserSeller from '#models/UserSeller.js';
 import PickupAddress from '#models/PickUpAddress.js';
 
 const createSeller = async (sellerData) => {
-  const { name, ocpSlugId } = sellerData;
+  try {
+    const { name, ocpSlugId, shopifyConfig } = sellerData;
 
-  const existingSeller = await Seller.findOne({ name });
-  if (existingSeller) {
-    return { isExist: true, data: null };
+    const existingSeller = await Seller.findOne({
+      name: { $regex: `^${name}$`, $options: 'i' },
+    });
+    if (existingSeller) {
+      return { isExist: true, data: null };
+    }
+
+    const sellerPayload = {
+      name: name.trim(),
+      ocpSlugId:
+        ocpSlugId?.trim() ||
+        name
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, '_'),
+    };
+
+    if (shopifyConfig) {
+      sellerPayload.shopifyConfig = shopifyConfig;
+    }
+
+    const seller = await Seller.create(sellerPayload);
+
+    return {
+      isExist: false,
+      data: seller,
+    };
+  } catch (err) {
+    console.error('createSeller error:', err);
+    throw err;
   }
-
-  const seller = new Seller({ name, ocpSlugId });
-  await seller.save();
-  return {
-    isExist: false,
-    data: seller,
-  };
 };
+
 const getAllSeller = async (query, creatorId, creatorRole) => {
   const isPaginated = query.page ? true : false;
   const { search, toDate, fromDate, status, sortBy = 'name', sortOrder = 'asc' } = query;

@@ -38,6 +38,28 @@ const sellerSchema = new Schema(
       enum: ['active', 'inactive'],
       default: 'active',
     },
+    shopifyConfig: {
+      type: new Schema(
+        {
+          url: {
+            type: String,
+            trim: true,
+            match: [/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL'],
+          },
+          apiVersion: {
+            type: String,
+            trim: true,
+          },
+          accessToken: {
+            type: String,
+            trim: true,
+            select: false, //  hidden by default
+          },
+        },
+        { _id: false }
+      ),
+      default: undefined, //  prevents empty {}
+    },
   },
   {
     timestamps: true,
@@ -53,6 +75,7 @@ sellerSchema.index(
 );
 
 sellerSchema.pre('validate', function (next) {
+  console.log('eeeeeeeeeee');
   if (!this.slug && this.name) {
     this.slug = this.name.toLowerCase().replace(/\s+/g, '_');
   }
