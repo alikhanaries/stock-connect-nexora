@@ -109,9 +109,6 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
         const size = (variant.size || '').trim() || 'NOSIZE';
         const safeSize = size.replace(/\s+/g, '_').toUpperCase();
         const childSku = `${parentSku}-${safeSize}`;
-
-        const stock = Number(variant.stock || 0);
-        if (stock <= 0) continue;
         const uploadChildImages = shouldUploadImages(childSku, existingSkus, isImageUpdate);
 
         let processedChild = {};
@@ -152,7 +149,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
           color,
           size,
           ean: variant.barcode || '',
-          currentStockCount: stock,
+          currentStockCount: Number(variant.stock || 0),
           status: variant.active === '1' ? 'active' : 'inactive',
         });
       }

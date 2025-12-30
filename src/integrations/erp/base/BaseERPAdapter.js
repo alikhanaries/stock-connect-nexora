@@ -8,4 +8,7 @@ export const createBaseERPAdapter = () => ({
   pushOrders: async () => {
     throw new Error('pushOrders() not implemented');
   },
+  fetchOrders: async () => {
+    throw new Error('fetchOrders() not implemented');
+  },
 });

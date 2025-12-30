@@ -11,6 +11,7 @@ import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
+import { buildFilter } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -766,11 +767,19 @@ const addProductsToUserChannel = async (sellerId, channelId, productIds, locale)
 };
 
 export const getUserChannelProducts = async (sellerId, channelId, query) => {
+  const rawFilters = query.filter ? (Array.isArray(query.filter) ? query.filter : [query.filter]) : [];
+
+  const baseFilter = buildFilter({
+    rawFilters,
+    sellerId,
+    buildCondition,
+  });
+
   const {
     page = 1,
     size = 10,
     search,
-    sortBy = '_id',
+    sortBy = 'name',
     sortOrder = 'asc',
     status,
     minPrice,
@@ -804,6 +813,22 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
     },
     { $unwind: '$productDetails' },
   ];
+  const productLevelFilter = {};
+
+  for (const key in baseFilter) {
+    if (key === '$or' || key === '$and') {
+      productLevelFilter[key] = baseFilter[key].map((cond) => {
+        const field = Object.keys(cond)[0];
+        return { [`productDetails.${field}`]: cond[field] };
+      });
+    } else if (!['sellerId', 'channelId'].includes(key)) {
+      productLevelFilter[`productDetails.${key}`] = baseFilter[key];
+    }
+  }
+
+  if (Object.keys(productLevelFilter).length) {
+    pipeline.push({ $match: productLevelFilter });
+  }
 
   const matchProductStage = { 'productDetails.status': { $ne: 'removed' } };
 
@@ -845,7 +870,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   pipeline.push({ $match: matchProductStage });
 
   const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
-  const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : '_id';
+  const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
 
   const sortStage = {
     $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
@@ -1315,85 +1340,26 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
     channel = await Channel.findOne({ channelId: Number(channelId) }, { channelId: 1, channelName: 1, _id: 0 }).lean();
   }
 
-  if (Array.isArray(filters) && typeof filters[0] === 'string') {
-    filters = [
-      {
-        conditions: filters.map((f) => {
-          const [field, operator, ...rest] = f.split(':');
-          return {
-            field,
-            operator,
-            value: rest.join(':'),
-          };
-        }),
-      },
-    ];
-  }
+  const finalFilter = buildFilter({
+    rawFilters: filters,
+    sellerId,
+    search,
+    channelName: channel?.channelName,
+    buildCondition,
+  });
 
-  const { page = 1, size = 10, sortBy = 'createdAt', sortOrder = 'asc' } = query;
+  const { page = 1, size = 10, sortBy = 'name', sortOrder = 'asc' } = query;
 
   const currentPage = Math.max(1, Number(page));
   const limit = Math.max(1, Number(size));
 
-  const orQueries = [];
-
-  for (const group of filters) {
-    if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
-
-    const andQueries = [];
-
-    for (const cond of group.conditions) {
-      const built = buildCondition(cond.field, cond.operator, cond.value);
-      if (built && Object.keys(built).length) {
-        andQueries.push(built);
-      }
-    }
-
-    if (andQueries.length === 1) {
-      orQueries.push(andQueries[0]);
-    } else if (andQueries.length > 1) {
-      orQueries.push({ $and: andQueries });
-    }
-  }
-
-  let finalFilter = {};
-
-  if (orQueries.length === 1) finalFilter = orQueries[0];
-  else if (orQueries.length > 1) finalFilter = { $or: orQueries };
-
-  finalFilter = finalFilter.status
-    ? {
-        $and: [{ ...finalFilter }, { status: { $ne: 'removed' } }],
-        sellerId: new mongoose.Types.ObjectId(sellerId),
-      }
-    : {
-        ...finalFilter,
-        sellerId: new mongoose.Types.ObjectId(sellerId),
-        status: { $ne: 'removed' },
-      };
-
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
-
-  // if channelId
-  if (channelId) {
-    if (channel?.channelName) {
-      const escaped = channel.channelName.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
-      finalFilter.marketPlace = { $regex: escaped, $options: 'i' };
-    }
-  }
-  if (search) {
-    const regex = new RegExp(search, 'i');
-    if (finalFilter.$or) {
-      finalFilter.$or.push({ name: regex }, { productSkuCode: regex });
-    } else {
-      finalFilter.$or = [{ name: regex }, { productSkuCode: regex }];
-    }
-  }
 
   const [total, products] = await Promise.all([
     Product.countDocuments(finalFilter),
 
     Product.find(finalFilter)
+      .collation({ locale: 'en', strength: 2 })
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
