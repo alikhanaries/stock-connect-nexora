@@ -195,7 +195,10 @@ export const getOrderById = async (id) => {
       const status = product.status?.toUpperCase() || '';
 
       // Skip cancelled items from unshipped and collect separately
-      if (status === 'CANCELED' || status === 'PARTIALLY_CANCELED' || status === 'IN_COMBI') {
+      if (
+        (status === 'CANCELED' || status === 'PARTIALLY_CANCELED' || status === 'IN_COMBI') &&
+        product?.cancellationRequestedQuantity !== 0
+      ) {
         cancelledItems.push({
           id: product?.id,
           merchantProductNo: product.merchantProductNo,
@@ -271,7 +274,7 @@ export const getOrderById = async (id) => {
             trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
           };
         }) || [],
-      shipmentMode: shipment.shipmentMode || 'AYMAKAN',
+      shipmentMode: shipment.shipmentMethod || 'AYMAKAN',
     }));
 
     // Fetch main order details
