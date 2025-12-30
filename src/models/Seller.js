@@ -54,12 +54,12 @@ const sellerSchema = new Schema(
           accessToken: {
             type: String,
             trim: true,
-            select: false, // 🔐 hidden by default
+            select: false, //  hidden by default
           },
         },
         { _id: false }
       ),
-      default: undefined, // ✅ prevents empty {}
+      default: undefined, //  prevents empty {}
     },
   },
   {
