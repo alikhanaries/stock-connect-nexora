@@ -44,7 +44,7 @@ export const updateSellerValidator = validate(async (req) => {
     .object({
       name: z.string().min(1).optional(),
 
-      shopifyStorUrl: z
+      shopifyStoreUrl: z
         .string()
         .url({ message: 'url must be a valid URL' })
         .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
@@ -57,11 +57,11 @@ export const updateSellerValidator = validate(async (req) => {
     .refine(
       (data) =>
         // either all 3 provided or none
-        (!data.shopifyStorUrl && !data.shopifyApiVersion && !data.shopifyAccessToken) ||
-        (data.shopifyStorUrl && data.shopifyApiVersion && data.shopifyAccessToken),
+        (!data.shopifyStoreUrl && !data.shopifyApiVersion && !data.shopifyAccessToken) ||
+        (data.shopifyStoreUrl && data.shopifyApiVersion && data.shopifyAccessToken),
       {
-        message: 'shopifyStorUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
-        path: ['shopifyStorUrl'],
+        message: 'shopifyStoreUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
+        path: ['shopifyStoreUrl'],
       }
     );
 
