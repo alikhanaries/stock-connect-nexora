@@ -12,7 +12,7 @@ const S3_BUCKET = process.env.S3_BUCKET_DB_BACKUP;
 const RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 2);
 
 export const runDbBackup = async () => {
-  const missingVars = requiredEnvVars.filter((key) => !process.env[key]);
+  const missingVars = requiredEnvVars.filter((key) => !process.env[key] || process.env[key].trim() === '');
 
   if (missingVars.length) {
     console.warn(`Missing env vars: ${missingVars.join(', ')}`);
