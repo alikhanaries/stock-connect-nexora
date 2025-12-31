@@ -900,7 +900,10 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
     },
   });
 
-  const result = await UserChannelProducts.aggregate(pipeline, { allowDiskUse: true });
+  const result = await UserChannelProducts.aggregate(pipeline, {
+    allowDiskUse: true,
+    collation: { locale: 'en', strength: 2 },
+  });
   const total = result[0]?.totalCount[0]?.count || 0;
   const products = result[0]?.paginatedResults || [];
 
