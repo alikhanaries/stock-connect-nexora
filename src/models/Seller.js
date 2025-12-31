@@ -75,7 +75,6 @@ sellerSchema.index(
 );
 
 sellerSchema.pre('validate', function (next) {
-  console.log('eeeeeeeeeee');
   if (!this.slug && this.name) {
     this.slug = this.name.toLowerCase().replace(/\s+/g, '_');
   }

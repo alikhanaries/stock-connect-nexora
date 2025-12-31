@@ -9,7 +9,7 @@ const createSeller = async (sellerData) => {
     const { name, ocpSlugId, shopifyConfig } = sellerData;
 
     const existingSeller = await Seller.findOne({
-      name: { $regex: `^${name}$`, $options: 'i' },
+      name: { $regex: `^${name.trim()}$`, $options: 'i' },
     });
     if (existingSeller) {
       return { isExist: true, data: null };
@@ -26,8 +26,13 @@ const createSeller = async (sellerData) => {
           .replace(/\s+/g, '_'),
     };
 
-    if (shopifyConfig) {
-      sellerPayload.shopifyConfig = shopifyConfig;
+    // Attach Shopify config only when fully present
+    if (shopifyConfig?.url && shopifyConfig?.apiVersion && shopifyConfig?.accessToken) {
+      sellerPayload.shopifyConfig = {
+        url: shopifyConfig.url,
+        apiVersion: shopifyConfig.apiVersion,
+        accessToken: shopifyConfig.accessToken,
+      };
     }
 
     const seller = await Seller.create(sellerPayload);

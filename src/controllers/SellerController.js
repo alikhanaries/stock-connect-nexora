@@ -99,7 +99,21 @@ export const softDeleteSellers = async (req, res) => {
 
 export const createSeller = async (req, res) => {
   try {
-    const newSeller = await sellerService.createSeller(req.body);
+    const { shopifyStorUrl, shopifyApiVersion, shopifyAccessToken, ...restBody } = req.body;
+
+    const payload = {
+      ...restBody,
+      shopifyConfig:
+        shopifyStorUrl && shopifyApiVersion && shopifyAccessToken
+          ? {
+              url: shopifyStorUrl,
+              apiVersion: shopifyApiVersion,
+              accessToken: shopifyAccessToken,
+            }
+          : undefined,
+    };
+
+    const newSeller = await sellerService.createSeller(payload);
 
     if (newSeller.isExist) {
       return response.failResponse(res, req.locale.SELLER_NAME_EXISTS, 409);
