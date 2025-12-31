@@ -99,14 +99,14 @@ export const softDeleteSellers = async (req, res) => {
 
 export const createSeller = async (req, res) => {
   try {
-    const { shopifyStorUrl, shopifyApiVersion, shopifyAccessToken, ...restBody } = req.body;
+    const { shopifyStoreUrl, shopifyApiVersion, shopifyAccessToken, ...restBody } = req.body;
 
     const payload = {
       ...restBody,
       shopifyConfig:
-        shopifyStorUrl && shopifyApiVersion && shopifyAccessToken
+        shopifyStoreUrl && shopifyApiVersion && shopifyAccessToken
           ? {
-              url: shopifyStorUrl,
+              url: shopifyStoreUrl,
               apiVersion: shopifyApiVersion,
               accessToken: shopifyAccessToken,
             }
