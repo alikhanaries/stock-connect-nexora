@@ -27,7 +27,7 @@ const sanitizeOrdersData = async (orders) => {
   const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
 
   return orders.map((data) => {
-    const existingOrder = existingOrdersMap.get(data.Id);
+    const existingOrder = existingOrdersMap.get(String(data.Id));
 
     let finalSellerId;
 

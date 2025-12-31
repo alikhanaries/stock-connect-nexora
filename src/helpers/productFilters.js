@@ -29,7 +29,9 @@ export function buildCondition(field, operator, value) {
   }
 
   // Numeric operators
-  if (!isNaN(value)) {
+  const numeric_operators = ['less_than', 'greater_than'];
+
+  if (numeric_operators.includes(operator) && !isNaN(value)) {
     const num = Number(value);
 
     switch (operator) {
