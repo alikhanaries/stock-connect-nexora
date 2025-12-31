@@ -6,18 +6,18 @@ import { uploadFileToS3 } from '../service/s3Service.js';
 
 const requiredEnvVars = ['BACKUP_DIR', 'DB_URL', 'S3_BUCKET_DB_BACKUP'];
 
-requiredEnvVars.forEach((key) => {
-  if (!process.env[key]) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
-});
-
 const BACKUP_DIR = process.env.BACKUP_DIR;
 const MONGO_URI = process.env.DB_URL;
 const S3_BUCKET = process.env.S3_BUCKET_DB_BACKUP;
 const RETENTION_DAYS = Number(process.env.BACKUP_RETENTION_DAYS || 2);
 
 export const runDbBackup = async () => {
+  const missingVars = requiredEnvVars.filter((key) => !process.env[key]);
+
+  if (missingVars.length) {
+    console.warn(`Missing env vars: ${missingVars.join(', ')}`);
+    return;
+  }
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const tmpDir = os.tmpdir();
   const dumpDir = path.join(tmpDir, `dump-${timestamp}`);
