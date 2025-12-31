@@ -40,9 +40,31 @@ export const updateSellerValidator = validate(async (req) => {
   });
   await paramsSchema.parseAsync(req.params);
 
-  const bodySchema = z.object({
-    name: z.string().min(1).optional(),
-  });
+  const bodySchema = z
+    .object({
+      name: z.string().min(1).optional(),
+
+      shopifyStorUrl: z
+        .string()
+        .url({ message: 'url must be a valid URL' })
+        .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
+        .optional(),
+
+      shopifyApiVersion: z.string().min(1).optional(),
+
+      shopifyAccessToken: z.string().min(1).optional(),
+    })
+    .refine(
+      (data) =>
+        // either all 3 provided or none
+        (!data.shopifyStorUrl && !data.shopifyApiVersion && !data.shopifyAccessToken) ||
+        (data.shopifyStorUrl && data.shopifyApiVersion && data.shopifyAccessToken),
+      {
+        message: 'shopifyStorUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
+        path: ['shopifyStorUrl'],
+      }
+    );
+
   await bodySchema.parseAsync(req.body);
 });
 
