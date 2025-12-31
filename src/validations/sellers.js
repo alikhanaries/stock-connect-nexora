@@ -36,10 +36,10 @@ export const createSellerValidator = validate(async (req) => {
     .refine(
       (data) =>
         // either all 3 are present or none
-        (!data.shopifyStorUrl && !data.shopifyApiVersion && !data.shopifyAccessToken) ||
-        (data.shopifyStorUrl && data.shopifyApiVersion && data.shopifyAccessToken),
+        (!data.shopifyStoreUrl && !data.shopifyApiVersion && !data.shopifyAccessToken) ||
+        (data.shopifyStoreUrl && data.shopifyApiVersion && data.shopifyAccessToken),
       {
-        message: 'shopifyStorUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
+        message: 'shopifyStoreUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
         path: ['shopifyStorUrl'],
       }
     );
