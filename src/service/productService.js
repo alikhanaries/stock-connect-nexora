@@ -196,6 +196,17 @@ export const updateProductStatus = async (ids, status, sellerId) => {
   return result.modifiedCount || 0;
 };
 
+export const freezeProduct = async (ids, isFrozen, sellerId) => {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+  const filter = {
+    _id: { $in: ids },
+    sellerId,
+    isFrozen: { $ne: isFrozen },
+  };
+  const result = await Product.updateMany(filter, { $set: { isFrozen, updatedAt: new Date() } });
+  return result.modifiedCount ?? 0;
+};
+
 // Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
   try {
@@ -1417,4 +1428,5 @@ export default {
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
+  freezeProduct,
 };

@@ -14,6 +14,7 @@ import {
   unlinkProductFromChannel,
   exportProducts,
   searchProducts,
+  freezeProducts,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -22,6 +23,7 @@ import {
   importProductsFromGoogleSheetValidator,
   unlinkProductFromChannelValidator,
   exportProductsValidator,
+  freezeProductsValidator,
 } from '#validations/products.js';
 import express from 'express';
 import {
@@ -496,5 +498,54 @@ productsRouter.get(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  */
 productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
+
+/**
+ * @openapi
+ * /products/freeze:
+ *   put:
+ *     tags: [Products]
+ *     summary: Freeze or unfreeze products
+ *     description: Freeze or unfreeze products by product IDs
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - ids
+ *               - isFrozen
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   example: "65a1f8d7c9e77c0012abcd34"
+ *               isFrozen:
+ *                 type: boolean
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Products frozen/unfrozen successfully
+ *       400:
+ *         description: Invalid request
+ *       404:
+ *         description: No matching products found
+ */
+
+productsRouter.patch(
+  '/freeze',
+  freezeProductsValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  freezeProducts
+);
 
 export default productsRouter;

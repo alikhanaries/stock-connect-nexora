@@ -299,6 +299,48 @@ export const updateProductStatusValidator = validate(async (req) => {
   bodySchema.parse(req.body);
 });
 
+// /* FREEZE / UNFREEZE PRODUCTS VALIDATOR */
+export const freezeProductsValidator = validate(async (req) => {
+  // validate headers
+  headerSchema.parse(req.headers);
+
+  // validate body
+  const bodySchema = z
+    .object({
+      ids: z
+        .array(
+          z
+            .string()
+            .length(24, 'Each productId must be exactly 24 characters')
+            .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format')
+        )
+        .nonempty('Product IDs cannot be empty')
+        .refine((ids) => new Set(ids).size === ids.length, {
+          message: 'Duplicate productIds are not allowed',
+        }),
+
+      isFrozen: z.boolean({
+        required_error: 'isFrozen is required',
+        invalid_type_error: 'isFrozen must be a boolean',
+      }),
+    })
+    .strict();
+
+  // validate query (optional sellerId)
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]{24}$/, 'sellerId must be a valid ObjectId')
+        .optional(),
+    })
+    .passthrough();
+
+  bodySchema.parse(req.body);
+  querySchema.parse(req.query);
+});
+
 // /* GET TOP SELLING PRODUCT VALIDATOR */
 export const getTopSellingProductValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
