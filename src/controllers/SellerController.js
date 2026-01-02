@@ -114,7 +114,7 @@ export const createSeller = async (req, res) => {
     return response.errorResponse(res, error.message, 500);
   }
 };
-export const getAllSeller = async (req, res) => {
+export const getAllUserSeller = async (req, res) => {
   try {
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
@@ -127,6 +127,16 @@ export const getAllSeller = async (req, res) => {
     const message = seller && seller.length > 0 ? req.locale.SELLER_FETCHED_SUCCESSFULLY : req.locale.NO_SELLER_FIND;
 
     return response.successResponse(res, message, 200, responseData);
+  } catch (error) {
+    return response.errorResponse(res, error.message, 500);
+  }
+};
+
+export const getAllSeller = async (req, res) => {
+  try {
+    const { seller } = await sellerService.getAllSeller({});
+
+    return response.successResponse(res, 'Sellers fetched successfully', 200, seller || []);
   } catch (error) {
     return response.errorResponse(res, error.message, 500);
   }

@@ -4,13 +4,14 @@ import {
   updateSeller,
   updateSellerStatus,
   createSeller,
-  getAllSeller,
+  getAllUserSeller,
   getSellerById,
   savePickupAddress,
   getAyMakanCities,
   getAllPickupAddresses,
   updatePickupAddress,
   deletePickupAddress,
+  getAllSeller,
 } from '#controllers/SellerController.js';
 import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
@@ -113,7 +114,8 @@ seller.post(
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  */
-seller.get('/', getAllSellerValidator, checkLanguage, authMiddleware, getAllSeller);
+seller.get('/', getAllSellerValidator, checkLanguage, authMiddleware, getAllUserSeller);
+seller.get('/getAllSeller', getAllSeller);
 
 /**
  * @swagger
