@@ -115,7 +115,7 @@ seller.post(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  */
 seller.get('/', getAllSellerValidator, checkLanguage, authMiddleware, getAllUserSeller);
-seller.get('/getAllSeller', getAllSeller);
+seller.get('/getAllSeller', checkLanguage, getAllSeller);
 
 /**
  * @swagger
