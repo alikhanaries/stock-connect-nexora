@@ -4,11 +4,12 @@ import Order from '#root/src/models/Orders.js';
 export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const orderIds = orders.map((data) => String(data.id));
 
-  const channelNo = await Channel.findOne({ channelName: 'OCP' }).select('channelId globalChannelId -_id').lean();
-
-  const existingOrdersDb = await Order.find({
-    orderId: { $in: orderIds },
-  }).lean();
+  const [channelNo, existingOrdersDb] = await Promise.all([
+    Channel.findOne({ channelName: 'OCP' }).select('channelId globalChannelId -_id').lean(),
+    Order.find({
+      orderId: { $in: orderIds },
+    }).lean(),
+  ]);
 
   const existingOrdersMap = new Map(existingOrdersDb.map((order) => [order.orderId, order]));
 
