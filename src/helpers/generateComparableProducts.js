@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 export const makeComparableProductFromSchema = (product, ProductModel) => {
   const schemaPaths = Object.keys(ProductModel.schema.paths);
 
@@ -20,21 +21,42 @@ export const makeComparableProductFromSchema = (product, ProductModel) => {
   );
 };
 
-export const getChangedFields = (newObj, oldObj) => {
-  if (!oldObj) return newObj;
-  const ignoredFields = ['productType']; // any other calculated fields
-  return Object.fromEntries(
-    Object.keys(newObj)
-      .filter((key) => {
-        if (ignoredFields.includes(key)) return false; // ignore calculated fields
-        const newVal = newObj[key];
-        const oldVal = oldObj[key];
+const IGNORED_FIELDS = new Set([
+  // calculated / volatile
+  'productType',
+  'status',
 
-        // ignore null/undefined
-        if (newVal == null) return false;
+  // image derivatives
+  'images',
+  'primaryImageUrl',
+  'imageUrl',
+  'extraImageUrl1',
+  'extraImageUrl2',
+  'extraImageUrl3',
 
-        return newVal !== oldVal;
-      })
-      .map((key) => [key, newObj[key]])
-  );
+  // system fields
+  'createdAt',
+  'updatedAt',
+  'syncedAt',
+]);
+
+export const getChangedFields = (newObj = {}, oldObj = {}) => {
+  const changes = {};
+
+  for (const key of Object.keys(newObj)) {
+    if (IGNORED_FIELDS.has(key)) continue;
+
+    const newVal = newObj[key];
+    const oldVal = oldObj[key];
+
+    // both null / undefined → no change
+    if (newVal == null && oldVal == null) continue;
+
+    // deep compare (arrays, objects, primitives)
+    if (!isDeepStrictEqual(newVal, oldVal)) {
+      changes[key] = newVal;
+    }
+  }
+
+  return changes;
 };
