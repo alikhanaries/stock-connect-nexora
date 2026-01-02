@@ -35,7 +35,6 @@ const seller = express.Router();
  *   name: Sellers
  *   description: Seller management APIs
  */
-
 /**
  * @swagger
  * /seller/create:
@@ -53,18 +52,46 @@ const seller = express.Router();
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               name:
- *                 type: string
- *             required: [name]
+ *             oneOf:
+ *               # Case 1: Only name (no Shopify config)
+ *               - type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                 required:
+ *                   - name
+ *
+ *               # Case 2: Name + full Shopify config
+ *               - type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   shopifyStoreUrl:
+ *                     type: string
+ *                     format: uri
+ *                     example: https://example.myshopify.com
+ *                   shopifyApiVersion:
+ *                     type: string
+ *                     example: 2025-10
+ *                   shopifyAccessToken:
+ *                     type: string
+ *                     example: shpat_xxxxxxxxx
+ *                 required:
+ *                   - name
+ *                   - shopifyStoreUrl
+ *                   - shopifyApiVersion
+ *                   - shopifyAccessToken
  *     security:
  *       - bearerAuth: []
  *     responses:
- *       201: { $ref: "#/components/schemas/SuccessResponse" }
- *       409: { $ref: "#/components/schemas/FailResponse" }
- *       500: { $ref: "#/components/schemas/FailResponse" }
+ *       201:
+ *         $ref: "#/components/schemas/SuccessResponse"
+ *       409:
+ *         $ref: "#/components/schemas/FailResponse"
+ *       500:
+ *         $ref: "#/components/schemas/FailResponse"
  */
+
 seller.post(
   '/create',
   authMiddleware,
