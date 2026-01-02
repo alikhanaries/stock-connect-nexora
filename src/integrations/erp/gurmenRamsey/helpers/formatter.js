@@ -48,7 +48,6 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
     brand: product.brand,
     categoryTrail: product.category_path,
     vatRateType: 'STANDARD',
-    status: product.active === '1' ? 'active' : 'inactive',
     ...processed, // Process only when isImageUpdate = true and new sku come
     volumetricWeightCm: 0.3,
     hsCodeAE: product.code,
@@ -70,6 +69,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
     const uploadBaseImages = shouldUploadImages(grandParentSku, existingSkus, isImageUpdate);
     const base = await formatBaseProduct(product, sellerId, subproductImages, uploadBaseImages);
     if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
+    const totalStock = subproducts.reduce((s, v) => s + Number(v.stock || 0), 0);
 
     formatted.push({
       ...base,
@@ -78,7 +78,8 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
       grandParentProductSkuCode: null,
       productType: 'configurable',
       price: await priceConverter('USD', parseFloat(product.price_special) || 0),
-      currentStockCount: subproducts.reduce((s, v) => s + Number(v.stock || 0), 0),
+      currentStockCount: totalStock,
+      status: totalStock > 0 ? 'active' : 'inactive',
       color: '',
       size: '',
       ean: '',
@@ -94,6 +95,8 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
     for (const [color, variants] of Object.entries(groupedByColor)) {
       const safeColor = color.replace(/\s+/g, '_').toUpperCase();
       const parentSku = `${grandParentSku}-${safeColor}`;
+      const parentStock = variants.reduce((s, v) => s + Number(v.stock || 0), 0);
+
       formatted.push({
         ...base,
         productSkuCode: parentSku,
@@ -104,7 +107,8 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
         size: '',
         ean: '',
         price: await priceConverter('USD', parseFloat(product.price_special) || 0),
-        currentStockCount: variants.reduce((s, v) => s + Number(v.stock || 0), 0),
+        currentStockCount: parentStock,
+        status: parentStock > 0 ? 'active' : 'inactive',
       });
 
       for (const variant of variants) {
@@ -157,7 +161,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
           size,
           ean: variant.barcode || '',
           currentStockCount: Number(variant.stock || 0),
-          status: variant.active === '1' ? 'active' : 'inactive',
+          status: Number(variant.stock) > 0 ? 'active' : 'inactive',
         });
       }
     }
