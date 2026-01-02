@@ -83,13 +83,9 @@ const seller = express.Router();
  *                   - shopifyAccessToken
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       201:
- *         $ref: "#/components/schemas/SuccessResponse"
- *       409:
- *         $ref: "#/components/schemas/FailResponse"
- *       500:
- *         $ref: "#/components/schemas/FailResponse"
+ *       201: { $ref: "#/components/schemas/SuccessResponse" }
+ *       409: { $ref: "#/components/schemas/FailResponse" }
+ *       500: { $ref: "#/components/schemas/FailResponse" }
  */
 
 seller.post(
