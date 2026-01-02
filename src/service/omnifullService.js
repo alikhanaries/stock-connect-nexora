@@ -19,11 +19,79 @@ export const handleOmnifulQCWebhook = async (webhookPayload) => {
     }
 
     // Validate required fields
-    if (!poId || !order_details) {
+    if (!poId) {
       return {
         success: false,
-        message: 'Missing required fields: id or order_details',
+        message: 'Missing required field: id',
         statusCode: 400,
+      };
+    }
+
+    if (!order_details) {
+      return {
+        success: false,
+        message: 'Missing required field: order_details',
+        statusCode: 400,
+      };
+    }
+
+    // Find shipment by purchase_order_id in extraData.omniful
+    const shipment = await Shipment.findOne({
+      'extraData.omniful.purchase_order_id': poId.toString(),
+    })
+      .select('_id orderId extraData')
+      .lean();
+
+    if (!shipment) {
+      return {
+        success: false,
+        message: `No shipment found for purchase order ID: ${poId}`,
+        statusCode: 404,
+      };
+    }
+
+    // Validate that shipment has a valid orderId
+    if (!shipment.orderId) {
+      return {
+        success: false,
+        message: `Shipment found but has no associated order ID`,
+        statusCode: 400,
+      };
+    }
+
+    const orderIdStr = shipment.orderId.toString();
+
+    // Validate that order exists
+    const order = await Order.findById(shipment.orderId).select('merchantOrderNo').lean();
+    if (!order) {
+      return {
+        success: false,
+        message: `Order not found for ID: ${orderIdStr}`,
+        statusCode: 404,
+      };
+    }
+
+    // Validate return exists before processing QC data
+    let returnDoc = await Return.findOne({
+      orderId: orderIdStr,
+    });
+
+    if (!returnDoc && order.merchantOrderNo) {
+      returnDoc = await Return.findOne({
+        merchantOrderNo: order.merchantOrderNo,
+      });
+    }
+
+    if (!returnDoc) {
+      return {
+        success: false,
+        message: `No return found for order ID: ${orderIdStr}. Cannot update QC details for an order without a return.`,
+        statusCode: 404,
+        debug: {
+          shipmentId: shipment._id,
+          orderId: orderIdStr,
+          poId: poId.toString(),
+        },
       };
     }
 
@@ -48,50 +116,6 @@ export const handleOmnifulQCWebhook = async (webhookPayload) => {
       qcStatus = 'REJECTED';
     }
     qcData.qcStatus = qcStatus;
-
-    // Find shipment by purchase_order_id in extraData.omniful
-    const shipment = await Shipment.findOne({
-      'extraData.omniful.purchase_order_id': poId.toString(),
-    })
-      .select('_id orderId extraData')
-      .lean();
-
-    if (!shipment) {
-      return {
-        success: false,
-        message: `No shipment found for purchase order ID: ${poId}`,
-        statusCode: 404,
-      };
-    }
-
-    const orderIdStr = shipment.orderId.toString();
-
-    let returnDoc = await Return.findOne({
-      orderId: orderIdStr,
-    });
-
-    if (!returnDoc) {
-      const order = await Order.findById(shipment.orderId).select('merchantOrderNo').lean();
-      if (order?.merchantOrderNo) {
-        returnDoc = await Return.findOne({
-          merchantOrderNo: order.merchantOrderNo,
-        });
-        console.log('Searched by merchantOrderNo:', order.merchantOrderNo, 'Found:', !!returnDoc);
-      }
-    }
-
-    if (!returnDoc) {
-      return {
-        success: false,
-        message: `No return found for order ID: ${orderIdStr}. Please ensure a return exists for this order.`,
-        statusCode: 404,
-        debug: {
-          shipmentId: shipment._id,
-          orderId: orderIdStr,
-          poId: poId.toString(),
-        },
-      };
-    }
 
     // Update return with QC data
     returnDoc.omniful = qcData;
