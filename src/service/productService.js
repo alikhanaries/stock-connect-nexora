@@ -576,7 +576,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     })
     .filter(Boolean);
 
-  // Execute bulk writes in batches
+  // Bulk writes in parallel batches
   const bulkTasks = [];
   for (let i = 0; i < bulkOps.length; i += batchSize) {
     bulkTasks.push(
