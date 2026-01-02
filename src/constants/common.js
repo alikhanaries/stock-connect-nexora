@@ -74,6 +74,7 @@ export const SELECTED_FIELDS = [
   'orderDate',
   'createdAt',
   'channelId',
+  'totalVat',
 ].join(' ');
 
 export const BLOCKED_STATUSES = {
