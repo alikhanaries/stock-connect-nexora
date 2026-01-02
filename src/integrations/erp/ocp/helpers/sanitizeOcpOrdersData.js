@@ -1,7 +1,10 @@
+import Channel from '#root/src/models/Channel.js';
 import Order from '#root/src/models/Orders.js';
 
 export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const orderIds = orders.map((data) => String(data.id));
+
+  const channelNo = await Channel.findOne({ channelName: 'OCP' }).select('channelId globalChannelId -_id').lean();
 
   const existingOrdersDb = await Order.find({
     orderId: { $in: orderIds },
@@ -17,7 +20,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
     const allRawItems = [...(data.unShippedItems || []), ...(data.shippedItems || []), ...(data.cancelledItems || [])];
 
     const validItems = allRawItems.filter((item) => item.id);
-    const merchantOrderNo = `6_OCP_${orderIdRaw}`;
+    const merchantOrderNo = `${channelNo.channelId ?? 6}_OCP_${orderIdRaw}`;
 
     const skuList = validItems.map((line) => {
       const lineId = String(line.id);
@@ -98,10 +101,10 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
 
     const updatePayload = {
       orderId: orderId,
-      channelId: 6,
+      channelId: Number(channelNo.channelId ?? 6),
       channelName: 'OCP',
       globalChannelName: 'OCP',
-      globalChannelId: null,
+      globalChannelId: Number(channelNo.globalChannelId ?? 0),
       orderDate: createdAt,
       merchantComment: null,
       merchantOrderNo: merchantOrderNo,
