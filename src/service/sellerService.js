@@ -3,7 +3,7 @@ import { getPagination } from '#helpers/PaginationHandler.js';
 import { PRODUCT_STATUSES, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import PickupAddress from '#models/PickUpAddress.js';
-
+import { formatSellerResponse } from '#helpers/formatSellerResponse.js';
 const createSeller = async (sellerData) => {
   try {
     const { name, ocpSlugId, shopifyConfig } = sellerData;
@@ -96,31 +96,59 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
 
     const [totalElements, seller] = await Promise.all([
       Seller.countDocuments(filter),
-      Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).skip(skip).limit(limit).lean(),
+      Seller.find(filter)
+        .select('+shopifyConfig.accessToken')
+        .sort(sort)
+        .collation({ locale: 'en', strength: 2 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
     ]);
 
     return {
-      seller,
+      seller: seller.map(formatSellerResponse),
       pagination: getPagination(totalElements, page, limit),
       appliedFilters,
     };
   } else {
-    const seller = await Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).lean();
+    const seller = await Seller.find(filter)
+      .select('+shopifyConfig.accessToken')
+      .sort(sort)
+      .collation({ locale: 'en', strength: 2 })
+      .lean();
     return {
-      seller,
+      seller: seller.map(formatSellerResponse),
       appliedFilters,
     };
   }
 };
 
-const updateSeller = async (id, name, statusValue, ocpSlugId) => {
-  const updateData = {};
-  if (name) updateData.name = name;
-  if (statusValue) updateData.status = statusValue;
-  if (ocpSlugId) updateData.ocpSlugId = ocpSlugId;
+const updateSeller = async (id, payload) => {
+  const { name, status, ocpSlugId, shopifyConfig } = payload;
 
-  if (Object.keys(updateData).length === 0) return null;
-  const updatedSeller = await Seller.findOneAndUpdate({ _id: id, isDeleted: false }, updateData, { new: true }).lean();
+  const updateData = {};
+  if (name !== undefined) updateData.name = name.trim();
+  if (status !== undefined) updateData.status = status;
+  if (ocpSlugId !== undefined) updateData.ocpSlugId = ocpSlugId.trim();
+
+  // Update Shopify config only if provided
+  if (shopifyConfig) {
+    updateData.shopifyConfig = {
+      url: shopifyConfig.url,
+      apiVersion: shopifyConfig.apiVersion,
+      accessToken: shopifyConfig.accessToken,
+    };
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return null;
+  }
+
+  const updatedSeller = await Seller.findOneAndUpdate(
+    { _id: id, isDeleted: false },
+    { $set: updateData },
+    { new: true }
+  ).lean();
   return updatedSeller;
 };
 
@@ -139,8 +167,14 @@ export const updateSellerStatus = async (ids, status) => {
 };
 
 export const getSellerById = async (id) => {
-  const user = await Seller.findById({ _id: id, isDeleted: false }).lean();
-  return user;
+  const seller = await Seller.findOne({
+    _id: id,
+    isDeleted: false,
+  })
+    .select('+shopifyConfig.accessToken')
+    .lean();
+
+  return formatSellerResponse(seller);
 };
 export const saveSellerPickUpAdressDetails = async (payload) => {
   try {
