@@ -5,20 +5,48 @@ import UserSeller from '#models/UserSeller.js';
 import PickupAddress from '#models/PickUpAddress.js';
 import { formatSellerResponse } from '#helpers/formatSellerResponse.js';
 const createSeller = async (sellerData) => {
-  const { name, ocpSlugId } = sellerData;
+  try {
+    const { name, ocpSlugId, shopifyConfig } = sellerData;
 
-  const existingSeller = await Seller.findOne({ name });
-  if (existingSeller) {
-    return { isExist: true, data: null };
+    const existingSeller = await Seller.findOne({
+      name: { $regex: `^${name.trim()}$`, $options: 'i' },
+    });
+    if (existingSeller) {
+      return { isExist: true, data: null };
+    }
+
+    const sellerPayload = {
+      name: name.trim(),
+      ocpSlugId:
+        ocpSlugId?.trim() ||
+        name
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, '_'),
+    };
+
+    // Attach Shopify config only when fully present
+    if (shopifyConfig?.url && shopifyConfig?.apiVersion && shopifyConfig?.accessToken) {
+      sellerPayload.shopifyConfig = {
+        url: shopifyConfig.url,
+        apiVersion: shopifyConfig.apiVersion,
+        accessToken: shopifyConfig.accessToken,
+      };
+    }
+
+    const seller = await Seller.create(sellerPayload);
+
+    return {
+      isExist: false,
+      data: seller,
+    };
+  } catch (err) {
+    console.error('createSeller error:', err);
+    throw err;
   }
-
-  const seller = new Seller({ name, ocpSlugId });
-  await seller.save();
-  return {
-    isExist: false,
-    data: seller,
-  };
 };
+
 const getAllSeller = async (query, creatorId, creatorRole) => {
   const isPaginated = query.page ? true : false;
   const { search, toDate, fromDate, status, sortBy = 'name', sortOrder = 'asc' } = query;

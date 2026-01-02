@@ -11,11 +11,38 @@ const objectIdSchema = z.string().refine((val) => mongoose.Types.ObjectId.isVali
 export const createSellerValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 
-  const bodySchema = z.object({
-    name: z
-      .string({ required_error: 'Name is required' })
-      .min(1, { message: 'Name must be at least 1 characters long' }),
-  });
+  const bodySchema = z
+    .object({
+      name: z
+        .string({ required_error: 'Name is required' })
+        .min(1, { message: 'Name must be at least 1 character long' }),
+
+      shopifyStoreUrl: z
+        .string({ required_error: 'url is required' })
+        .url({ message: 'url must be a valid URL' })
+        .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
+        .optional(),
+
+      shopifyApiVersion: z
+        .string({ required_error: 'apiVersion is required' })
+        .min(1, { message: 'apiVersion is required' })
+        .optional(),
+
+      shopifyAccessToken: z
+        .string({ required_error: 'accessToken is required' })
+        .min(1, { message: 'accessToken is required' })
+        .optional(),
+    })
+    .refine(
+      (data) =>
+        // either all 3 are present or none
+        (!data.shopifyStoreUrl && !data.shopifyApiVersion && !data.shopifyAccessToken) ||
+        (data.shopifyStoreUrl && data.shopifyApiVersion && data.shopifyAccessToken),
+      {
+        message: 'shopifyStoreUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
+        path: ['shopifyStorUrl'],
+      }
+    );
 
   await bodySchema.parseAsync(req.body);
 });
