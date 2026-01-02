@@ -14,7 +14,7 @@ import {
   unlinkProductFromChannel,
   exportProducts,
   searchProducts,
-  freezeProducts,
+  freezeOrUnfreezeProducts,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -23,7 +23,7 @@ import {
   importProductsFromGoogleSheetValidator,
   unlinkProductFromChannelValidator,
   exportProductsValidator,
-  freezeProductsValidator,
+  freezeOrUnfreezeProductsValidator,
 } from '#validations/products.js';
 import express from 'express';
 import {
@@ -541,11 +541,11 @@ productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, v
 
 productsRouter.patch(
   '/freeze',
-  freezeProductsValidator,
+  freezeOrUnfreezeProductsValidator,
   checkLanguage,
   authMiddleware,
   verifySellerAccess,
-  freezeProducts
+  freezeOrUnfreezeProducts
 );
 
 export default productsRouter;

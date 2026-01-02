@@ -196,7 +196,7 @@ export const updateProductStatus = async (ids, status, sellerId) => {
   return result.modifiedCount || 0;
 };
 
-export const freezeProduct = async (ids, isFrozen, sellerId) => {
+export const freezeOrUnfreezeProducts = async (ids, isFrozen, sellerId) => {
   if (!Array.isArray(ids) || ids.length === 0) return 0;
   const filter = {
     _id: { $in: ids },
@@ -1428,5 +1428,5 @@ export default {
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
-  freezeProduct,
+  freezeOrUnfreezeProducts,
 };

@@ -173,7 +173,7 @@ export const updateProductStatus = async (req, res) => {
   }
 };
 
-export const freezeProducts = async (req, res) => {
+export const freezeOrUnfreezeProducts = async (req, res) => {
   try {
     const { ids, isFrozen } = req.body;
     const sellerId = req.sellerId;
@@ -185,7 +185,7 @@ export const freezeProducts = async (req, res) => {
     if (invalidIds.length > 0) {
       return failResponse(res, `${req.locale.INVALID_PRODUCT_IDS} ${invalidIds.join(', ')}`, 400);
     }
-    const updatedCount = await productService.freezeProduct(ids, isFrozen, sellerId);
+    const updatedCount = await productService.freezeOrUnfreezeProducts(ids, isFrozen, sellerId);
     if (updatedCount === 0) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
     }

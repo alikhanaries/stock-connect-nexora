@@ -300,7 +300,7 @@ export const updateProductStatusValidator = validate(async (req) => {
 });
 
 // /* FREEZE / UNFREEZE PRODUCTS VALIDATOR */
-export const freezeProductsValidator = validate(async (req) => {
+export const freezeOrUnfreezeProductsValidator = validate(async (req) => {
   // validate headers
   headerSchema.parse(req.headers);
 
