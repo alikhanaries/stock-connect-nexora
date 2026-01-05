@@ -16,8 +16,8 @@ import Channel from '../models/Channel.js';
 
 const formatOrder = (order, channelImage) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const totalPrice = order.totalVat
-    ? order.totalVat
+  const totalPrice = order.totalInclVat
+    ? order.totalInclVat
     : order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
   return {
