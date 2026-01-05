@@ -912,6 +912,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
             primaryImageUrl: '$productDetails.primaryImageUrl',
             currentStockCount: '$productDetails.currentStockCount',
             createdAt: '$productDetails.createdAt',
+            isFrozen: '$productDetails.isFrozen',
           },
         },
       ],
