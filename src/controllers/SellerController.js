@@ -21,18 +21,36 @@ export const updateSeller = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { name, status, ocpSlugId } = req.body;
+    const { name, status, ocpSlugId, shopifyStoreUrl, shopifyApiVersion, shopifyAccessToken } = req.body;
 
-    const statusValue = status?.toString().toLowerCase();
-    if (!statusValue || !PRODUCT_STATUSES.includes(statusValue)) {
-      return response.failResponse(
-        res,
-        `${req.locale.PLEASE_PROVIDE_VALID_STATUS} ${PRODUCT_STATUSES.join(', ')}`,
-        400
-      );
+    // Validate status only if provided
+    let statusValue;
+    if (status !== undefined) {
+      statusValue = status.toString().toLowerCase();
+      if (!PRODUCT_STATUSES.includes(statusValue)) {
+        return response.failResponse(
+          res,
+          `${req.locale.PLEASE_PROVIDE_VALID_STATUS} ${PRODUCT_STATUSES.join(', ')}`,
+          400
+        );
+      }
     }
 
-    const updatedSeller = await sellerService.updateSeller(id, name, statusValue, ocpSlugId);
+    const payload = {
+      name,
+      status: statusValue,
+      ocpSlugId,
+      shopifyConfig:
+        shopifyStoreUrl && shopifyApiVersion && shopifyAccessToken
+          ? {
+              url: shopifyStoreUrl,
+              apiVersion: shopifyApiVersion,
+              accessToken: shopifyAccessToken,
+            }
+          : undefined,
+    };
+
+    const updatedSeller = await sellerService.updateSeller(id, payload);
     if (!updatedSeller) {
       return response.failResponse(res, req.locale.SELLER_NOT_FOUND, 404);
     }
@@ -99,22 +117,36 @@ export const softDeleteSellers = async (req, res) => {
 
 export const createSeller = async (req, res) => {
   try {
-    const newSeller = await sellerService.createSeller(req.body);
+    const { shopifyStoreUrl, shopifyApiVersion, shopifyAccessToken, ...restBody } = req.body;
 
-    if (!newSeller.data) {
-      return response.failResponse(res, req.locale.FAILED_TO_CREATE_SELLER, 500);
-    }
+    const payload = {
+      ...restBody,
+      shopifyConfig:
+        shopifyStoreUrl && shopifyApiVersion && shopifyAccessToken
+          ? {
+              url: shopifyStoreUrl,
+              apiVersion: shopifyApiVersion,
+              accessToken: shopifyAccessToken,
+            }
+          : undefined,
+    };
+
+    const newSeller = await sellerService.createSeller(payload);
 
     if (newSeller.isExist) {
       return response.failResponse(res, req.locale.SELLER_NAME_EXISTS, 409);
     }
+    if (!newSeller.data) {
+      return response.failResponse(res, req?.locale?.FAILED_TO_CREATE_SELLER, 500);
+    }
+
     return response.successResponse(res, req.locale.SELLER_CREATED_SUCCESSFULLY, 201, newSeller.data);
   } catch (error) {
     console.error('Error creating seller:', error);
     return response.errorResponse(res, error.message, 500);
   }
 };
-export const getAllSeller = async (req, res) => {
+export const getAllUserSeller = async (req, res) => {
   try {
     const creatorRole = req.user.role;
     const creatorId = req.user._id;
@@ -127,6 +159,16 @@ export const getAllSeller = async (req, res) => {
     const message = seller && seller.length > 0 ? req.locale.SELLER_FETCHED_SUCCESSFULLY : req.locale.NO_SELLER_FIND;
 
     return response.successResponse(res, message, 200, responseData);
+  } catch (error) {
+    return response.errorResponse(res, error.message, 500);
+  }
+};
+
+export const getAllSeller = async (req, res) => {
+  try {
+    const { seller } = await sellerService.getAllSeller({});
+
+    return response.successResponse(res, 'Sellers fetched successfully', 200, seller || []);
   } catch (error) {
     return response.errorResponse(res, error.message, 500);
   }

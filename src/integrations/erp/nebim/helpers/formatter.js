@@ -1,6 +1,6 @@
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
-import { convertUsdToSar } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
 export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) => {
   if (!Array.isArray(raw) || raw.length === 0) return [];
 
@@ -33,7 +33,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
 
       const first = validItems[0];
       const grandParentSku = safeItemCode;
-      const grandParentPrice = await convertUsdToSar(Number(first.Price || 0));
+      const grandParentPrice = await priceConverter('USD', Number(first.Price || 0));
 
       // --------------------------
       // GRANDPARENT PRODUCT
@@ -91,7 +91,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
 
         const firstColor = stockColorItems[0];
         const parentSku = `${safeItemCode}_${firstColor.ColorCode || '0'}`;
-        const parentPrice = await convertUsdToSar(Number(firstColor.Price || 0));
+        const parentPrice = await priceConverter('USD', Number(firstColor.Price || 0));
 
         // --------------------------
         // PARENT PRODUCT
@@ -133,7 +133,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
         for (const variant of stockColorItems) {
           const sizeCode = variant?.ItemDim1Desc?.trim() || '';
           const childSku = `${safeItemCode}_${variant.ColorCode || '0'}_${variant.ItemDim1Code || '0'}`;
-          const childPrice = await convertUsdToSar(Number(variant.Price || 0));
+          const childPrice = await priceConverter('USD', Number(variant.Price || 0));
 
           const childProduct = canonicalProductMapper(
             {
