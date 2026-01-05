@@ -196,15 +196,19 @@ export const updateProductStatus = async (ids, status, sellerId) => {
   return result.modifiedCount || 0;
 };
 
-export const freezeOrUnfreezeProducts = async (ids, isFrozen, sellerId) => {
+export const syncfreezeOrUnfreezeToStockConnect = async (ids, isFrozen, sellerId) => {
   if (!Array.isArray(ids) || ids.length === 0) return 0;
-  const filter = {
-    _id: { $in: ids },
-    sellerId,
-    isFrozen: { $ne: isFrozen },
-  };
-  const result = await Product.updateMany(filter, { $set: { isFrozen, updatedAt: new Date() } });
-  return result.modifiedCount ?? 0;
+  const products = await Product.find(
+    {
+      _id: { $in: ids },
+      sellerId,
+      isFrozen: { $ne: isFrozen },
+    },
+    { productSkuCode: 1 }
+  ).lean();
+  if (!products.length) return [];
+  await Product.updateMany({ _id: { $in: ids }, sellerId }, { $set: { isFrozen, updatedAt: new Date() } });
+  return products.map((p) => p.productSkuCode);
 };
 
 // Retry helper with exponential backoff
@@ -1428,5 +1432,5 @@ export default {
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
-  freezeOrUnfreezeProducts,
+  syncfreezeOrUnfreezeToStockConnect,
 };

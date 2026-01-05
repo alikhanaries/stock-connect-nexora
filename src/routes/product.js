@@ -501,17 +501,25 @@ productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, v
 
 /**
  * @openapi
- * /products/freeze:
- *   put:
+ * /products/freeze/{channelId}:
+ *   patch:
  *     tags: [Products]
  *     summary: Freeze or unfreeze products
- *     description: Freeze or unfreeze products by product IDs
+ *     description: Freeze or unfreeze products by product IDs and sync with ChannelEngine
  *     parameters:
+ *       - in: path
+ *         name: channelId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: "65a1f8d7c9e77c0012abcd99"
+ *         description: Channel ID
  *       - in: header
  *         name: Accept-Language
  *         schema:
  *           type: string
  *           enum: [en, ar, zh-CN, tr]
+ *         description: Response language
  *     requestBody:
  *       required: true
  *       content:
@@ -527,20 +535,35 @@ productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, v
  *                 items:
  *                   type: string
  *                   example: "65a1f8d7c9e77c0012abcd34"
+ *                 description: List of product IDs
  *               isFrozen:
  *                 type: boolean
  *                 example: true
+ *                 description: true = freeze, false = unfreeze
  *     responses:
  *       200:
  *         description: Products frozen/unfrozen successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Products frozen successfully
  *       400:
- *         description: Invalid request
+ *         description: Invalid request or invalid product IDs
  *       404:
- *         description: No matching products found
+ *         description: No matching products found to update
+ *       500:
+ *         description: Internal server error
  */
 
 productsRouter.patch(
-  '/freeze',
+  '/freeze/:channelId',
   freezeOrUnfreezeProductsValidator,
   checkLanguage,
   authMiddleware,

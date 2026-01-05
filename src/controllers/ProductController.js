@@ -185,8 +185,8 @@ export const freezeOrUnfreezeProducts = async (req, res) => {
     if (invalidIds.length > 0) {
       return failResponse(res, `${req.locale.INVALID_PRODUCT_IDS} ${invalidIds.join(', ')}`, 400);
     }
-    const updatedCount = await productService.freezeOrUnfreezeProducts(ids, isFrozen, sellerId);
-    if (updatedCount === 0) {
+    const updatedSkus = await productService.syncfreezeOrUnfreezeToStockConnect(ids, isFrozen, sellerId);
+    if (!updatedSkus.length) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
     }
     const statusMessage = isFrozen === true ? 'Products frozen successfully' : 'Products unfrozen successfully';
@@ -492,4 +492,5 @@ export default {
   unlinkProductFromChannel,
   exportProducts,
   searchProducts,
+  freezeOrUnfreezeProducts,
 };
