@@ -491,6 +491,8 @@ export const getReturnById = async (id) => {
       totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
       orderInfo,
       returnLogsData,
+      orderInfo: orderInfo,
+      omniful: returnData.omniful || null,
     };
 
     return formatReturnDetails(aggregatedResult);
