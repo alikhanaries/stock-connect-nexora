@@ -531,6 +531,93 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
   }
 };
 
+export const getAllShipmentsAdminService = async ({
+  page = 1,
+  size = 10,
+  sellerId,
+  status,
+  search,
+  sortOrder = 'desc',
+}) => {
+  const currentPage = Number(page);
+  const perPage = Number(size);
+  const skip = (currentPage - 1) * perPage;
+  const sortDirection = sortOrder === 'asc' ? 1 : -1;
+
+  const matchStage = {};
+  const appliedFilters = {};
+
+  if (sellerId) {
+    matchStage.sellerId = new mongoose.Types.ObjectId(sellerId);
+    appliedFilters.sellerId = sellerId;
+  }
+
+  if (status) {
+    matchStage.status = {
+      $in: status.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
+    };
+    appliedFilters.status = status;
+  }
+
+  const pipeline = [
+    { $match: matchStage },
+    {
+      $lookup: {
+        from: 'deliveryaddresses',
+        localField: 'deliveryId',
+        foreignField: '_id',
+        as: 'deliveryInfo',
+      },
+    },
+    { $unwind: { path: '$deliveryInfo', preserveNullAndEmptyArrays: true } },
+  ];
+
+  if (search && search.trim()) {
+    const regex = new RegExp(search.trim(), 'i');
+    pipeline.push({
+      $match: {
+        $or: [
+          { airWaybillNo: { $regex: regex } },
+          { status: { $regex: regex } },
+          { 'shipmentMerchantDetails.name': { $regex: regex } },
+          { 'deliveryInfo.name': { $regex: regex } },
+        ],
+      },
+    });
+    appliedFilters.search = search;
+  }
+
+  pipeline.push(
+    {
+      $project: {
+        orderId: 1,
+        createdAt: 1,
+        status: 1,
+        airWaybillNo: 1,
+        sellerId: 1,
+        shipmentMerchantDetails: 1,
+        deliveryCustomer: {
+          name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
+          email: { $ifNull: ['$deliveryInfo.email', '$shipmentMerchantDetails.email'] },
+        },
+      },
+    },
+    { $sort: { createdAt: sortDirection } },
+    { $skip: skip },
+    { $limit: perPage }
+  );
+
+  const shipmentData = await Shipment.aggregate(pipeline);
+
+  const total = await Shipment.countDocuments(matchStage);
+
+  return {
+    shipments: shipmentData,
+    pagination: getPagination(total, currentPage, perPage),
+    appliedFilters,
+  };
+};
+
 export const ayMakanWebHookService = async (data) => {
   try {
     if (!data?.tracking_number) {
@@ -1470,6 +1557,7 @@ export const createManualShipmentService = async (shipmentData) => {
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
+  getAllShipmentsAdminService,
   createPartialShipmentService,
   saveDeliveryAddress,
   getPickUpAddress,
