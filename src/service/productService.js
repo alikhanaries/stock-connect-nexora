@@ -196,6 +196,31 @@ export const updateProductStatus = async (ids, status, sellerId) => {
   return result.modifiedCount || 0;
 };
 
+export const syncFreezeOrUnfreezeToChannelEngine = async ({ skuCodes, isFrozen }) => {
+  if (!skuCodes?.length) return;
+
+  const payload = skuCodes.map((sku) => ({
+    MerchantProductNo: sku,
+    Reason: isFrozen ? 'Item no more available' : 'Item available again',
+    Action: isFrozen ? 'FREEZE' : 'UNFREEZE',
+  }));
+
+  const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/freeze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CE-KEY': CHANNEL_ENGINE_API_KEY,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`ChannelEngine sync failed: ${response.status} - ${text}`);
+  }
+  return response.json();
+};
+
 // Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
   try {
@@ -1417,4 +1442,5 @@ export default {
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
+  syncFreezeOrUnfreezeToChannelEngine,
 };
