@@ -73,17 +73,18 @@ export const handleOmnifulQCWebhook = async (webhookPayload) => {
 
     // Validate return exists before processing QC data
     const returnDoc = await Return.findOne({
-      orderId: orderIdStr,
+      merchantOrderNo: order.merchantOrderNo,
     });
 
     if (!returnDoc) {
       return {
         success: false,
-        message: `No return found for order ID: ${orderIdStr}. Cannot update QC details for an order without a return.`,
+        message: `No return found for merchantOrderNo: ${order.merchantOrderNo}. Cannot update QC details for an order without a return.`,
         statusCode: 404,
         debug: {
           shipmentId: shipment._id,
           orderId: orderIdStr,
+          merchantOrderNo: order.merchantOrderNo,
           poId: poId.toString(),
         },
       };
@@ -93,23 +94,12 @@ export const handleOmnifulQCWebhook = async (webhookPayload) => {
     const qcData = {
       poId: poId.toString(),
       totalQuantity: order_details.quantity || 0,
-      qc: {
-        passed: order_details.grn_pass_quantity || 0,
-        failed: order_details.grn_fail_quantity || 0,
-      },
+      passed: order_details.grn_pass_quantity || 0,
+      failed: order_details.grn_fail_quantity || 0,
+      status: webhookPayload.data.status || '',
+      remark: webhookPayload.data.remark || '',
       lastUpdated: new Date(),
     };
-
-    // Determine QC status
-    let qcStatus = 'PENDING';
-    if (qcData.qc.passed > 0 && qcData.qc.failed === 0) {
-      qcStatus = 'ACCEPTED';
-    } else if (qcData.qc.failed > 0 && qcData.qc.passed > 0) {
-      qcStatus = 'PARTIAL';
-    } else if (qcData.qc.failed > 0 && qcData.qc.passed === 0) {
-      qcStatus = 'REJECTED';
-    }
-    qcData.qcStatus = qcStatus;
 
     // Update return with QC data
     returnDoc.omniful = qcData;
@@ -126,7 +116,6 @@ export const handleOmnifulQCWebhook = async (webhookPayload) => {
         orderId: shipment.orderId,
         shipmentId: shipment._id,
         poId: poId.toString(),
-        qcStatus: qcData.qcStatus,
         qcData,
       },
     };
