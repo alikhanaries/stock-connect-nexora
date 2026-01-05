@@ -26,7 +26,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
     const skuList = validItems.map((line) => {
       const lineId = String(line.id);
 
-      const lineName = line.name ?? '';
+      const lineName = line.name ?? line.slug ?? '';
       const lineSku = line.sku ?? '';
       const lineNodeId = String(line.nodeId ?? '');
 
@@ -116,6 +116,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       shippingCostsInclVat: shipping,
       totalInclVat: total,
       totalVat: tax,
+      totalExclVat: subTotal,
 
       originalSubTotalInclVat: subTotal,
       originalShippingCostsInclVat: shipping,
