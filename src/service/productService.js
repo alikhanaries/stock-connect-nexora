@@ -361,11 +361,13 @@ export const pushProductsAsync = async (products, channelId, sellerId) => {
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
+  const parsedRows = [];
   const parsedProducts = [];
   const categoryTrailsSet = new Set();
   let invalidRowsCount = 0;
   let rowIndex = 1;
 
+  const incomingSkuSet = new Set();
   const rowTasks = [];
 
   await new Promise((resolve, reject) => {
@@ -388,29 +390,12 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
                 return;
               }
 
-              // Map row to product
-              const product = await mapRowToProduct(row, currentRow, locale, sellerId, isImageUpdate);
+              const sku = row.ProductSkuCode;
+              if (sku) incomingSkuSet.add(String(sku).trim());
 
-              if (product?.errorData) {
-                errorDetails.push(product);
-                invalidRowsCount++;
-                return;
-              }
-
-              // Basic hierarchy validation
-              const { valid, errors } = validateHierarchy(product);
-              if (!valid) {
-                errorDetails.push({
-                  rowNumber: currentRow,
-                  errorData: errors,
-                });
-                invalidRowsCount++;
-                return;
-              }
-
-              parsedProducts.push(product);
+              parsedRows.push({ row, rowNumber: currentRow });
             } catch (err) {
-              console.error('Row error:', err.message);
+              console.error('Row read error:', err.message);
               invalidRowsCount++;
             }
           })
@@ -419,11 +404,42 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       .on('end', resolve)
       .on('error', reject);
   });
-
-  // Wait for all row parsing tasks
   await Promise.all(rowTasks);
+  const existingProducts = await Product.find(
+    { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
+    { productSkuCode: 1 }
+  ).lean();
 
-  // Validate parent/grandparent relationships
+  const existingSkuSet = new Set(existingProducts.map((p) => p.productSkuCode));
+  for (const { row, rowNumber } of parsedRows) {
+    try {
+      const sku = row.ProductSkuCode;
+      const normalizedSku = String(sku).trim();
+      const isNewSku = !existingSkuSet.has(normalizedSku);
+      const product = await mapRowToProduct(row, rowNumber, locale, sellerId, isImageUpdate, isNewSku);
+      if (product?.errorData) {
+        errorDetails.push(product);
+        invalidRowsCount++;
+        continue;
+      }
+
+      // Basic hierarchy validation
+      const { valid, errors } = validateHierarchy(product);
+      if (!valid) {
+        errorDetails.push({
+          rowNumber,
+          errorData: errors,
+        });
+        invalidRowsCount++;
+        continue;
+      }
+
+      parsedProducts.push(product);
+    } catch (err) {
+      console.error('Row error:', err.message);
+      invalidRowsCount++;
+    }
+  }
   const { validated, errors: hierarchyErrors } = await validateHierarchyExistenceBatch(parsedProducts, sellerId);
 
   if (hierarchyErrors.length) {
@@ -456,8 +472,9 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
     // FINAL & CORRECT simple-product detection
     const isSimple = !referencedSKUs.has(product.productSkuCode);
+    const isNewSku = !existingSkuSet.has(product.productSkuCode);
 
-    if (isSimple) {
+    if (isNewSku && isSimple) {
       if (typeof product.price !== 'number' || product.price <= 0) {
         rowErrors.push('Price must be greater than 0 for simple products.');
       }
@@ -481,12 +498,14 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   const productSkuCodes = finalValidProducts.map((p) => p.productSkuCode);
 
-  const existingProducts = await Product.find(
-    { sellerId, productSkuCode: { $in: productSkuCodes } },
-    { productSkuCode: 1, status: 1 }
-  ).lean();
-
-  const existingMap = new Map(existingProducts.map((p) => [p.productSkuCode, p]));
+  const existingMap = new Map(
+    (
+      await Product.find(
+        { sellerId, productSkuCode: { $in: productSkuCodes } },
+        { productSkuCode: 1, status: 1 }
+      ).lean()
+    ).map((p) => [p.productSkuCode, p])
+  );
   // Counters
   let insertedCount = 0;
   let updatedCount = 0;
@@ -767,11 +786,7 @@ const addProductsToUserChannel = async (sellerId, channelId, productIds, locale)
 };
 
 export const getUserChannelProducts = async (sellerId, channelId, query) => {
-  const rawFilters = query.filter
-    ? Array.isArray(query.filter)
-      ? query.filter
-      : [query.filter]
-    : [];
+  const rawFilters = query.filter ? (Array.isArray(query.filter) ? query.filter : [query.filter]) : [];
 
   const baseFilter = buildFilter({
     rawFilters,
@@ -904,7 +919,10 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
     },
   });
 
-  const result = await UserChannelProducts.aggregate(pipeline, { allowDiskUse: true });
+  const result = await UserChannelProducts.aggregate(pipeline, {
+    allowDiskUse: true,
+    collation: { locale: 'en', strength: 2 },
+  });
   const total = result[0]?.totalCount[0]?.count || 0;
   const products = result[0]?.paginatedResults || [];
 

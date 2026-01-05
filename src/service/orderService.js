@@ -16,9 +16,10 @@ import Channel from '../models/Channel.js';
 
 const formatOrder = (order, channelImage) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
+  const totalPrice = order.totalVat
+    ? order.totalVat
+    : order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
-
   return {
     _id: order._id,
     channelNo: order.channelId || 1,
@@ -195,7 +196,10 @@ export const getOrderById = async (id) => {
       const status = product.status?.toUpperCase() || '';
 
       // Skip cancelled items from unshipped and collect separately
-      if (status === 'CANCELED' || status === 'PARTIALLY_CANCELED' || status === 'IN_COMBI') {
+      if (
+        (status === 'CANCELED' || status === 'PARTIALLY_CANCELED' || status === 'IN_COMBI') &&
+        product?.cancellationRequestedQuantity !== 0
+      ) {
         cancelledItems.push({
           id: product?.id,
           merchantProductNo: product.merchantProductNo,
@@ -271,7 +275,7 @@ export const getOrderById = async (id) => {
             trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
           };
         }) || [],
-      shipmentMode: shipment.shipmentMode || 'AYMAKAN',
+      shipmentMode: shipment.shipmentMethod || 'AYMAKAN',
     }));
 
     // Fetch main order details

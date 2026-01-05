@@ -36,16 +36,51 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
       async (batch, batchIndex) => {
         const batchId = batchIndex + 1;
         const startTime = Date.now();
-
+        const incomingSkus = new Set();
         console.log(`\n[Batch ${batchId}] Started — Items: ${batch.length}`);
         try {
           /**
-           * formatRamseyProduct:
-           * ---------------------
-           * - Formats product fields
-           * - Extracts category trail hierarchy
+           * Collect incoming SKU codes
            */
-          const { products, categoryTrails } = await formatRamseyProduct(batch, sellerId, isImageUpdate);
+
+          for (const p of batch) {
+            const gp = p.ws_code || p.code;
+            incomingSkus.add(gp);
+
+            const subs = Array.isArray(p?.subproducts?.subproduct) ? p.subproducts.subproduct : [];
+
+            for (const s of subs) {
+              const color = (s.color || s.color_drop || '').trim() || 'DEFAULT';
+              const size = (s.size || '').trim() || 'NOSIZE';
+
+              incomingSkus.add(
+                `${gp}-${color.replace(/\s+/g, '_').toUpperCase()}-${size.replace(/\s+/g, '_').toUpperCase()}`
+              );
+            }
+          }
+
+          /**
+           * Fetch existing SKUs from DB
+           */
+          const skuList = Array.from(incomingSkus);
+
+          const existingSkus = new Set(
+            (
+              await Product.find(
+                {
+                  sellerId,
+                  productSkuCode: { $in: skuList },
+                },
+                { productSkuCode: 1 }
+              )
+            ).map((p) => p.productSkuCode)
+          );
+
+          /**
+           * Format products
+           */
+
+          const { products, categoryTrails } = await formatRamseyProduct(batch, sellerId, isImageUpdate, existingSkus);
 
           /**
            * Convert products into canonical format
