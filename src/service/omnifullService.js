@@ -72,15 +72,9 @@ export const handleOmnifulQCWebhook = async (webhookPayload) => {
     }
 
     // Validate return exists before processing QC data
-    let returnDoc = await Return.findOne({
+    const returnDoc = await Return.findOne({
       orderId: orderIdStr,
     });
-
-    if (!returnDoc && order.merchantOrderNo) {
-      returnDoc = await Return.findOne({
-        merchantOrderNo: order.merchantOrderNo,
-      });
-    }
 
     if (!returnDoc) {
       return {
