@@ -10,7 +10,6 @@ const ReturnSchema = new mongoose.Schema(
     },
     merchantReturnNo: {
       type: String,
-      required: true,
       index: true,
     },
     merchantOrderNo: {
