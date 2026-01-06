@@ -303,15 +303,6 @@ export const updateProductStatusValidator = validate(async (req) => {
 export const freezeOrUnfreezeProductsValidator = validate(async (req) => {
   // validate headers
   headerSchema.parse(req.headers);
-  const paramsSchema = z.object({
-    channelId: z
-      .string({
-        required_error: 'channelId is required',
-        invalid_type_error: 'channelId must be a string',
-      })
-      .regex(/^\d+$/, 'channelId must be a numeric string')
-      .transform((val) => parseInt(val, 10)),
-  });
   // validate body
   const bodySchema = z
     .object({
@@ -347,7 +338,6 @@ export const freezeOrUnfreezeProductsValidator = validate(async (req) => {
 
   bodySchema.parse(req.body);
   querySchema.parse(req.query);
-  paramsSchema.parse(req.params);
 });
 
 // /* GET TOP SELLING PRODUCT VALIDATOR */

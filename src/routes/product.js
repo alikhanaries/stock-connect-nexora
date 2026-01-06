@@ -501,19 +501,12 @@ productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, v
 
 /**
  * @openapi
- * /products/freeze/{channelId}:
+ * /products/freeze:
  *   patch:
  *     tags: [Products]
  *     summary: Freeze or unfreeze products
  *     description: Freeze or unfreeze products by product IDs and sync with ChannelEngine
  *     parameters:
- *       - in: path
- *         name: channelId
- *         required: true
- *         schema:
- *           type: string
- *           example: "65a1f8d7c9e77c0012abcd99"
- *         description: Channel ID
  *       - in: header
  *         name: Accept-Language
  *         schema:
@@ -563,7 +556,7 @@ productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, v
  */
 
 productsRouter.patch(
-  '/freeze/:channelId',
+  '/freeze',
   freezeOrUnfreezeProductsValidator,
   checkLanguage,
   authMiddleware,
