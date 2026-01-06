@@ -70,7 +70,7 @@ export const getAllShipments = async (req, res) => {
 export const getAllShipmentsAdmin = async (req, res) => {
   try {
     if (req.user.role !== USER_ROLES.MASTER_ADMIN) {
-      return Responses.errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
+      return errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
     }
     const { page = 1, size = 10, status, sellerId, search, sortOrder } = req.query;
 

@@ -3,7 +3,6 @@ import orderService from '#service/orderService.js';
 import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS, USER_ROLES } from '#constants/common.js';
-import { getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
 import { cancelFullOrderOcp, getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
 import Order from '../models/Orders.js';
 
