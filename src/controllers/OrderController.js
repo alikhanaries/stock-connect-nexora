@@ -2,7 +2,8 @@ import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
 import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
-import { VALID_PERIODS } from '#constants/common.js';
+import { VALID_PERIODS, USER_ROLES } from '#constants/common.js';
+import { getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
 import { cancelFullOrderOcp, getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
 import Order from '../models/Orders.js';
 
@@ -27,6 +28,35 @@ export const getAllOrders = async (req, res) => {
   } catch (error) {
     console.error('Controller Error:', error.message);
     errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export const getAdminOrders = async (req, res) => {
+  try {
+    if (req.user.role !== USER_ROLES.MASTER_ADMIN) {
+      return Responses.errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
+    }
+
+    const { sellerId, channelId } = req.query;
+
+    const { data, appliedFilters, pagination } = await orderService.getAdminOrders(req.query, sellerId, channelId);
+
+    if (!data.length) {
+      return Responses.successResponse(res, req.locale.NO_ORDERS_FOUND, 200, {
+        content: [],
+        appliedFilters: appliedFilters || {},
+        ...pagination,
+      });
+    }
+
+    return Responses.successResponse(res, req.locale.ORDERS_FETCHED_SUCCESSFULLY, 200, {
+      content: data,
+      appliedFilters: appliedFilters || {},
+      ...pagination,
+    });
+  } catch (error) {
+    console.error('Admin Orders Controller Error:', error.message);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
