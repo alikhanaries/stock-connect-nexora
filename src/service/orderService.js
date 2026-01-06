@@ -143,7 +143,10 @@ const getAdminOrders = async (query, sellerId, channelId) => {
   try {
     const { page = 1, size = 10, search, fromDate, toDate, status, sortOrder = 'desc', sortBy = 'orderId' } = query;
 
-    const skip = (page - 1) * size;
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const sizeNum = Math.min(Math.max(parseInt(size, 10) || 10, 1), 100);
+
+    const skip = (pageNum - 1) * sizeNum;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
     const filter = {};
@@ -158,8 +161,10 @@ const getAdminOrders = async (query, sellerId, channelId) => {
       appliedFilters.channelId = channelId;
     }
 
-    if (search) {
-      const regex = { $regex: search, $options: 'i' };
+    const trimmedSearch = search?.trim();
+
+    if (trimmedSearch && trimmedSearch.length <= 50) {
+      const regex = { $regex: trimmedSearch, $options: 'i' };
       filter.$or = [
         { orderId: regex },
         { 'orderSkuList.skuList.description': regex },
@@ -168,13 +173,17 @@ const getAdminOrders = async (query, sellerId, channelId) => {
         { 'orderCustomer.lastName': regex },
         { 'orderCustomer.phone': regex },
       ];
-      appliedFilters.search = search;
+      appliedFilters.search = trimmedSearch;
     }
 
     if (fromDate || toDate) {
       filter.createdAt = {};
-      if (fromDate) filter.createdAt.$gte = new Date(fromDate);
-      if (toDate) filter.createdAt.$lte = new Date(toDate);
+      if (fromDate && !isNaN(Date.parse(fromDate))) {
+        filter.createdAt.$gte = new Date(fromDate);
+      }
+      if (toDate && !isNaN(Date.parse(toDate))) {
+        filter.createdAt.$gte = new Date(toDate);
+      }
       appliedFilters.fromDate = fromDate;
       appliedFilters.toDate = toDate;
     }
@@ -185,12 +194,15 @@ const getAdminOrders = async (query, sellerId, channelId) => {
       appliedFilters.status = status;
     }
 
+    const allowedSortFields = ['orderId', 'createdAt', 'status'];
+    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'orderId';
+
     const [totalOrders, orders, allChannels] = await Promise.all([
       Order.countDocuments(filter),
       Order.find(filter)
         .skip(skip)
         .limit(size)
-        .sort({ [sortBy]: sortDirection })
+        .sort({ [safeSortBy]: sortDirection })
         .collation({ locale: 'en_US', numericOrdering: true })
         .select(SELECTED_FIELDS)
         .lean(),
