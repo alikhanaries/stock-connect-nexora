@@ -16,9 +16,10 @@ import Channel from '../models/Channel.js';
 
 const formatOrder = (order, channelImage) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const totalPrice = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
+  const totalPrice = order.totalInclVat
+    ? order.totalInclVat
+    : order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
-
   return {
     _id: order._id,
     channelNo: order.channelId || 1,
@@ -649,11 +650,8 @@ const transformOrderResponse = (response) => {
   };
 };
 
-const cancelFullOrder = async (orderId, reason = 'NA') => {
+const cancelFullOrder = async (orderId, order, reason = 'NA') => {
   try {
-    const order = await Order.findById(orderId).lean();
-    if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
-
     const lines = order.orderSkuList.skuList
       .map((item) => ({
         MerchantProductNo: item.merchantProductNo,

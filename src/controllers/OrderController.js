@@ -4,6 +4,8 @@ import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS, USER_ROLES } from '#constants/common.js';
 import { getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
+import { cancelFullOrderOcp, getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
+import Order from '../models/Orders.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -204,7 +206,19 @@ export const cancelFullOrder = async (req, res) => {
       return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
     }
 
-    const orderResponse = await orderService.cancelFullOrder(orderId, reason);
+    const order = await Order.findById(orderId)
+      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .lean();
+
+    if (!order) return Responses.failResponse(res, 'Order not found', 404);
+
+    let orderResponse;
+
+    if (order.channelName === 'OCP') {
+      orderResponse = await cancelFullOrderOcp(orderId, order, reason);
+    } else {
+      orderResponse = await orderService.cancelFullOrder(orderId, order, reason);
+    }
 
     if (!orderResponse.success) {
       return Responses.failResponse(
