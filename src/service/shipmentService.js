@@ -539,8 +539,8 @@ export const getAllShipmentsAdminService = async ({
   search,
   sortOrder = 'desc',
 }) => {
-  const currentPage = Number(page);
-  const perPage = Number(size);
+  const currentPage = Math.max(parseInt(page, 10) || 1, 1);
+  const perPage = Math.min(parseInt(size, 10) || 10, 100);
   const skip = (currentPage - 1) * perPage;
   const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
@@ -553,9 +553,8 @@ export const getAllShipmentsAdminService = async ({
   }
 
   if (status) {
-    matchStage.status = {
-      $in: status.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
-    };
+    const statuses = status.split(',').map((s) => s.trim().toUpperCase());
+    matchStage.status = { $in: statuses };
     appliedFilters.status = status;
   }
 
@@ -572,25 +571,30 @@ export const getAllShipmentsAdminService = async ({
     { $unwind: { path: '$deliveryInfo', preserveNullAndEmptyArrays: true } },
   ];
 
-  if (search && search.trim()) {
-    const regex = new RegExp(search.trim(), 'i');
+  const trimmedSearch = search?.trim();
+
+  if (trimmedSearch && trimmedSearch.length <= 50) {
+    const safeRegex = new RegExp(trimmedSearch, 'i');
+
     pipeline.push({
       $match: {
         $or: [
-          { airWaybillNo: { $regex: regex } },
-          { status: { $regex: regex } },
-          { 'shipmentMerchantDetails.name': { $regex: regex } },
-          { 'deliveryInfo.name': { $regex: regex } },
+          { airWaybillNo: { $regex: safeRegex } },
+          { status: { $regex: safeRegex } },
+          { 'shipmentMerchantDetails.name': { $regex: safeRegex } },
+          { 'deliveryInfo.name': { $regex: safeRegex } },
         ],
       },
     });
-    appliedFilters.search = search;
+
+    appliedFilters.search = trimmedSearch;
   }
 
   pipeline.push(
     {
       $project: {
         orderId: 1,
+
         createdAt: 1,
         status: 1,
         airWaybillNo: 1,
