@@ -930,41 +930,39 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
   const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
 
-  const sortStage = {
-    $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
-  };
-
   pipeline.push({
-    $facet: {
-      paginatedResults: [
-        sortStage, // <-- SORT MOVED HERE ✔
-        { $skip: (currentPage - 1) * limit },
-        { $limit: limit },
-        {
-          $project: {
-            _id: '$productDetails._id',
-            name: '$productDetails.name',
-            productSkuCode: '$productDetails.productSkuCode',
-            price: '$productDetails.price',
-            msrp: '$productDetails.msrp',
-            status: '$productDetails.status',
-            primaryImageUrl: '$productDetails.primaryImageUrl',
-            currentStockCount: '$productDetails.currentStockCount',
-            createdAt: '$productDetails.createdAt',
-            isFrozen: '$productDetails.isFrozen',
-          },
-        },
-      ],
-      totalCount: [{ $count: 'count' }],
-    },
+    $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
   });
 
-  const result = await UserChannelProducts.aggregate(pipeline, {
-    allowDiskUse: true,
-    collation: { locale: 'en', strength: 2 },
-  });
-  const total = result[0]?.totalCount[0]?.count || 0;
-  const products = result[0]?.paginatedResults || [];
+  const dataPipeline = [
+    ...pipeline,
+    { $skip: (currentPage - 1) * limit },
+    { $limit: limit + 1 },
+    {
+      $project: {
+        'productDetails._id': 1,
+        'productDetails.name': 1,
+        'productDetails.productSkuCode': 1,
+        'productDetails.price': 1,
+        'productDetails.msrp': 1,
+        'productDetails.status': 1,
+        'productDetails.primaryImageUrl': 1,
+        'productDetails.currentStockCount': 1,
+        'productDetails.createdAt': 1,
+        'productDetails.isFrozen': 1,
+      },
+    },
+    { $replaceRoot: { newRoot: '$productDetails' } },
+  ];
+
+  const countPipeline = [...pipeline, { $count: 'count' }];
+
+  const [products, result] = await Promise.all([
+    UserChannelProducts.aggregate(dataPipeline, { allowDiskUse: true }),
+    UserChannelProducts.aggregate(countPipeline),
+  ]);
+
+  const total = result[0]?.count || 0;
 
   return {
     channel: channelDetails,
