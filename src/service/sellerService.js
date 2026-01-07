@@ -11,8 +11,14 @@ const createSeller = async (sellerData) => {
     const existingSeller = await Seller.findOne({
       name: { $regex: `^${name.trim()}$`, $options: 'i' },
     });
-    if (existingSeller) {
+
+    if (existingSeller && existingSeller.isDeleted === false) {
       return { isExist: true, data: null };
+    }
+
+    if (existingSeller && existingSeller.isDeleted === true) {
+      const restored = await Seller.findByIdAndUpdate(existingSeller._id, { isDeleted: false, status: 'active' });
+      return { isExist: false, data: restored };
     }
 
     const sellerPayload = {
