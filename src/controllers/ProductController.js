@@ -170,6 +170,32 @@ export const updateProductStatus = async (req, res) => {
     return errorResponse(res, err, 500);
   }
 };
+
+export const freezeOrUnfreezeProducts = async (req, res) => {
+  try {
+    const { ids, isFrozen } = req.body;
+    const sellerId = req.sellerId;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return failResponse(res, req.locale.PRODUCT_IDS_REQUIRED, 400);
+    }
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return failResponse(res, `${req.locale.INVALID_PRODUCT_IDS} ${invalidIds.join(', ')}`, 400);
+    }
+    const updatedSkus = await productService.syncfreezeOrUnfreezeToStockConnect(ids, isFrozen, sellerId);
+    if (!updatedSkus.length) {
+      return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
+    }
+    const statusMessage = isFrozen === true ? 'Products frozen successfully' : 'Products unfrozen successfully';
+    return successResponse(res, statusMessage, 200);
+  } catch (err) {
+    console.error('Error updating product freeze status:', err);
+    errorLog(err);
+    return errorResponse(res, err, 500);
+  }
+};
+
 /* DELETE PRODUCT BY ID*/
 export const deleteProduct = async (req, res) => {
   try {
@@ -464,4 +490,5 @@ export default {
   unlinkProductFromChannel,
   exportProducts,
   searchProducts,
+  freezeOrUnfreezeProducts,
 };
