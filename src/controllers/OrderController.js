@@ -281,7 +281,6 @@ export const exportOrders = async (req, res) => {
     if (!result.success) {
       return Responses.failResponse(res, result.message || req.locale.NO_ORDERS_FOUND, 404);
     }
-
     // Set headers for CSV download with UTF-8 encoding
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
