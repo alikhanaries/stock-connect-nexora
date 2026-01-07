@@ -1,5 +1,6 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { MIN_STOCK } from '#root/src/integrations/common/constants/common.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
@@ -78,7 +79,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
       productType: 'configurable',
       price: await priceConverter('USD', parseFloat(product.price_special) || 0),
       currentStockCount: totalStock,
-      status: totalStock < 3 ? 'inactive' : 'active',
+      status: totalStock < MIN_STOCK ? 'inactive' : 'active',
       color: '',
       size: '',
       ean: '',
@@ -107,7 +108,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
         ean: '',
         price: await priceConverter('USD', parseFloat(product.price_special)),
         currentStockCount: parentStock,
-        status: parentStock < 3 ? 'inactive' : 'active',
+        status: parentStock < MIN_STOCK ? 'inactive' : 'active',
       });
 
       for (const variant of variants) {
@@ -159,7 +160,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
           size,
           ean: variant.barcode || '',
           currentStockCount: Number(variant.stock || 0),
-          status: Number(variant.stock) < 3 ? 'inactive' : 'active',
+          status: Number(variant.stock) < MIN_STOCK ? 'inactive' : 'active',
         });
       }
     }

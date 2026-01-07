@@ -62,11 +62,9 @@ const getAllOrders = async (query, sellerId) => {
 
       filter.$or = [
         { orderId: regex },
-        { 'orderSkuList.skuList.description': regex },
         { 'orderCustomer.email': regex },
         { 'orderCustomer.firstName': regex },
         { 'orderCustomer.lastName': regex },
-        { 'orderCustomer.phone': regex },
       ];
     }
 

@@ -197,6 +197,46 @@ export const updateProductStatus = async (ids, status, sellerId) => {
   return result.modifiedCount || 0;
 };
 
+export const syncFreezeOrUnfreezeToChannelEngine = async ({ skuCodes, isFrozen }) => {
+  if (!skuCodes?.length) return;
+
+  const payload = skuCodes.map((sku) => ({
+    MerchantProductNo: sku,
+    Reason: isFrozen ? 'Item no more available' : 'Item available again',
+    Action: isFrozen ? 'FREEZE' : 'UNFREEZE',
+  }));
+
+  const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/freeze`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CE-KEY': CHANNEL_ENGINE_API_KEY,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`ChannelEngine sync failed: ${response.status} - ${text}`);
+  }
+  return response.json();
+};
+
+export const syncfreezeOrUnfreezeToStockConnect = async (ids, isFrozen, sellerId) => {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+  const products = await Product.find(
+    {
+      _id: { $in: ids },
+      sellerId,
+      isFrozen: { $ne: isFrozen },
+    },
+    { productSkuCode: 1 }
+  ).lean();
+  if (!products.length) return [];
+  await Product.updateMany({ _id: { $in: ids }, sellerId }, { $set: { isFrozen, updatedAt: new Date() } });
+  return products.map((p) => p.productSkuCode);
+};
+
 // Retry helper with exponential backoff
 const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
   try {
@@ -930,41 +970,39 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
   const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
 
-  const sortStage = {
-    $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
-  };
-
   pipeline.push({
-    $facet: {
-      paginatedResults: [
-        sortStage, // <-- SORT MOVED HERE ✔
-        { $skip: (currentPage - 1) * limit },
-        { $limit: limit },
-        {
-          $project: {
-            _id: '$productDetails._id',
-            name: '$productDetails.name',
-            productSkuCode: '$productDetails.productSkuCode',
-            price: '$productDetails.price',
-            msrp: '$productDetails.msrp',
-            status: '$productDetails.status',
-            primaryImageUrl: '$productDetails.primaryImageUrl',
-            currentStockCount: '$productDetails.currentStockCount',
-            createdAt: '$productDetails.createdAt',
-            isFrozen: '$productDetails.isFrozen',
-          },
-        },
-      ],
-      totalCount: [{ $count: 'count' }],
-    },
+    $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
   });
 
-  const result = await UserChannelProducts.aggregate(pipeline, {
-    allowDiskUse: true,
-    collation: { locale: 'en', strength: 2 },
-  });
-  const total = result[0]?.totalCount[0]?.count || 0;
-  const products = result[0]?.paginatedResults || [];
+  const dataPipeline = [
+    ...pipeline,
+    { $skip: (currentPage - 1) * limit },
+    { $limit: limit + 1 },
+    {
+      $project: {
+        'productDetails._id': 1,
+        'productDetails.name': 1,
+        'productDetails.productSkuCode': 1,
+        'productDetails.price': 1,
+        'productDetails.msrp': 1,
+        'productDetails.status': 1,
+        'productDetails.primaryImageUrl': 1,
+        'productDetails.currentStockCount': 1,
+        'productDetails.createdAt': 1,
+        'productDetails.isFrozen': 1,
+      },
+    },
+    { $replaceRoot: { newRoot: '$productDetails' } },
+  ];
+
+  const countPipeline = [...pipeline, { $count: 'count' }];
+
+  const [products, result] = await Promise.all([
+    UserChannelProducts.aggregate(dataPipeline, { allowDiskUse: true }),
+    UserChannelProducts.aggregate(countPipeline),
+  ]);
+
+  const total = result[0]?.count || 0;
 
   return {
     channel: channelDetails,
@@ -1457,4 +1495,6 @@ export default {
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
+  syncFreezeOrUnfreezeToChannelEngine,
+  syncfreezeOrUnfreezeToStockConnect,
 };
