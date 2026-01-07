@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-
+import ReturntatusInfo from './ReturnStatusInfo.js';
 const ReturnSchema = new mongoose.Schema(
   {
     returnId: {
@@ -68,8 +68,14 @@ const ReturnSchema = new mongoose.Schema(
           type: Number,
           default: 0,
         },
+        price: {
+          type: Number,
+          default: 0,
+        },
       },
     ],
+    shipmentId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Shipment' }],
+    logs: [ReturntatusInfo],
   },
   {
     timestamps: true,

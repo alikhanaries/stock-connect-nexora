@@ -8,6 +8,7 @@ import {
   getSingleShipment,
   cancelShipment,
   createManualShipment,
+  createReverseShipment,
 } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -16,6 +17,7 @@ import {
   getSingleShipmentValidator,
   cancelShipmentValidator,
   createManualShipmentValidator,
+  createReverseShipmentValidator,
 } from '#validations/shipment.js';
 
 const router = express.Router();
@@ -293,6 +295,15 @@ router.post(
   checkLanguage,
   authMiddleware,
   createManualShipment
+);
+
+// CREATE REVERSE SHIPMENT
+router.post(
+  '/createReverseShipment',
+  createReverseShipmentValidator,
+  checkLanguage,
+  authMiddleware,
+  createReverseShipment
 );
 
 export default router;

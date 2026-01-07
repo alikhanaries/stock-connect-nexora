@@ -124,3 +124,19 @@ export const createManualShipmentValidator = validate(async (req) => {
 
   return bodySchema.parse(req.body);
 });
+
+// REVERSE SHIPMENT VALIDATOR
+export const createReverseShipmentValidator = validate(async (req) => {
+  //  Validate headers
+  headerSchema.parse(req.headers);
+
+  //  Define updated body schema
+  const bodySchema = z.object({
+    deliverId: z.string().nonempty({ message: 'deliverId is required' }),
+    orderId: z.string().nonempty({ message: 'orderId is required' }),
+    returnId: z.string().nonempty({ message: 'returnId is required' }),
+  });
+
+  // Validate body
+  bodySchema.parse(req.body);
+});
