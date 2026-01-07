@@ -16,8 +16,8 @@ import Channel from '../models/Channel.js';
 
 const formatOrder = (order, channelImage) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const totalPrice = order.totalVat
-    ? order.totalVat
+  const totalPrice = order.totalInclVat
+    ? order.totalInclVat
     : order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
   return {
@@ -136,6 +136,94 @@ const getAllOrders = async (query, sellerId) => {
     };
   } catch (err) {
     console.error('Error fetching orders:', err.message);
+    return { success: false, message: err.message };
+  }
+};
+
+const getAdminOrders = async (query, sellerId, channelId) => {
+  try {
+    const { page = 1, size = 10, search, fromDate, toDate, status, sortOrder = 'desc', sortBy = 'orderId' } = query;
+
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const sizeNum = Math.min(Math.max(parseInt(size, 10) || 10, 1), 100);
+
+    const skip = (pageNum - 1) * sizeNum;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+    const appliedFilters = {};
+    const filter = {};
+
+    if (sellerId) {
+      filter.sellerId = sellerId;
+      appliedFilters.sellerId = sellerId;
+    }
+
+    if (channelId) {
+      filter.channelId = channelId;
+      appliedFilters.channelId = channelId;
+    }
+
+    const trimmedSearch = search?.trim();
+
+    if (trimmedSearch && trimmedSearch.length <= 50) {
+      const regex = { $regex: trimmedSearch, $options: 'i' };
+      filter.$or = [
+        { orderId: regex },
+        { 'orderSkuList.skuList.description': regex },
+        { 'orderCustomer.email': regex },
+        { 'orderCustomer.firstName': regex },
+        { 'orderCustomer.lastName': regex },
+        { 'orderCustomer.phone': regex },
+      ];
+      appliedFilters.search = trimmedSearch;
+    }
+
+    if (fromDate || toDate) {
+      filter.createdAt = {};
+      if (fromDate && !isNaN(Date.parse(fromDate))) {
+        filter.createdAt.$gte = new Date(fromDate);
+      }
+      if (toDate && !isNaN(Date.parse(toDate))) {
+        filter.createdAt.$gte = new Date(toDate);
+      }
+      appliedFilters.fromDate = fromDate;
+      appliedFilters.toDate = toDate;
+    }
+
+    if (status) {
+      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+      filter.status = { $in: statusArray };
+      appliedFilters.status = status;
+    }
+
+    const allowedSortFields = ['orderId', 'createdAt', 'status'];
+    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'orderId';
+
+    const [totalOrders, orders, allChannels] = await Promise.all([
+      Order.countDocuments(filter),
+      Order.find(filter)
+        .skip(skip)
+        .limit(size)
+        .sort({ [safeSortBy]: sortDirection })
+        .collation({ locale: 'en_US', numericOrdering: true })
+        .select(SELECTED_FIELDS)
+        .lean(),
+      Channel.find().select('_id channelId channelImageUrl'),
+    ]);
+
+    const channelMap = {};
+    allChannels.forEach((channel) => {
+      channelMap[channel.channelId] = channel.channelImageUrl;
+    });
+
+    return {
+      data: orders.map((order) => {
+        const matchingChannel = channelMap[order.channelId] || null;
+        return formatOrder(order, matchingChannel);
+      }),
+      appliedFilters,
+      pagination: getPagination(totalOrders, page, size),
+    };
+  } catch (err) {
     return { success: false, message: err.message };
   }
 };
@@ -562,11 +650,8 @@ const transformOrderResponse = (response) => {
   };
 };
 
-const cancelFullOrder = async (orderId, reason = 'NA') => {
+const cancelFullOrder = async (orderId, order, reason = 'NA') => {
   try {
-    const order = await Order.findById(orderId).lean();
-    if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
-
     const lines = order.orderSkuList.skuList
       .map((item) => ({
         MerchantProductNo: item.merchantProductNo,
@@ -825,6 +910,7 @@ export const formatOrderTrackingInf = (data) => {
 
 export default {
   getAllOrders,
+  getAdminOrders,
   getOrderById,
   processOrders,
   getNewOrders,

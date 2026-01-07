@@ -124,14 +124,12 @@ export const pushProductToChannelEngine = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const { validProducts = [] } = await productService.validateProducts(channelId, sellerId);
-    if (validProducts?.length) {
-      (async () => {
-        try {
-          await productService.pushProductsAsync(validProducts, channelId, sellerId);
-        } catch (err) {
-          console.error('Async push failed:', err);
-        }
-      })();
+
+    if (validProducts.length > 0) {
+      // Fire-and-forget (non-blocking)
+      productService
+        .pushProductsAsync(validProducts, channelId, sellerId)
+        .catch((err) => console.error('Async push failed:', err));
     }
     return successResponse(res, req.locale.ALL_PRODUCTS_PUSH_SUCCESS, 200, null);
   } catch (err) {
@@ -193,6 +191,7 @@ export const freezeOrUnfreezeProducts = async (req, res) => {
       skuCodes: updatedSkus,
       isFrozen,
     });
+
     const statusMessage = isFrozen === true ? 'Products frozen successfully' : 'Products unfrozen successfully';
     return successResponse(res, statusMessage, 200);
   } catch (err) {

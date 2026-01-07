@@ -26,7 +26,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
     const skuList = validItems.map((line) => {
       const lineId = String(line.id);
 
-      const lineName = line.name ?? '';
+      const lineName = line.name ?? line.slug ?? '';
       const lineSku = line.sku ?? '';
       const lineNodeId = String(line.nodeId ?? '');
 
@@ -45,7 +45,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       return {
         id: lineId,
         channelOrderLineNo: lineId,
-        status: existingSku ? existingSku.status : lineStatus,
+        status: lineStatus,
         isFulfillmentByMarketplace: false,
         gtin: null,
         description: lineName,
@@ -104,6 +104,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       orderId: orderId,
       channelId: Number(channelNo.channelId ?? 6),
       channelName: 'OCP',
+      status: data.status ?? data.Status ?? 'PENDING',
       globalChannelName: 'OCP',
       globalChannelId: Number(channelNo.globalChannelId ?? 0),
       orderDate: createdAt,
@@ -116,6 +117,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       shippingCostsInclVat: shipping,
       totalInclVat: total,
       totalVat: tax,
+      totalExclVat: subTotal,
 
       originalSubTotalInclVat: subTotal,
       originalShippingCostsInclVat: shipping,
@@ -181,10 +183,6 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
         countryIso: billAddr.country ?? billAddr.Country,
       },
     };
-
-    if (!existingOrder) {
-      updatePayload.status = data.status ?? data.Status ?? 'PENDING';
-    }
 
     const updateOperation = {
       $set: updatePayload,
