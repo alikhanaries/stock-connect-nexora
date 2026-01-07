@@ -78,7 +78,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
       productType: 'configurable',
       price: await priceConverter('USD', parseFloat(product.price_special) || 0),
       currentStockCount: totalStock,
-      status: totalStock > 0 ? 'active' : 'inactive',
+      status: totalStock < 3 ? 'inactive' : 'active',
       color: '',
       size: '',
       ean: '',
@@ -107,7 +107,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
         ean: '',
         price: await priceConverter('USD', parseFloat(product.price_special)),
         currentStockCount: parentStock,
-        status: parentStock > 0 ? 'active' : 'inactive',
+        status: parentStock < 3 ? 'inactive' : 'active',
       });
 
       for (const variant of variants) {
@@ -159,7 +159,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
           size,
           ean: variant.barcode || '',
           currentStockCount: Number(variant.stock || 0),
-          status: Number(variant.stock) > 0 ? 'active' : 'inactive',
+          status: Number(variant.stock) < 3 ? 'inactive' : 'active',
         });
       }
     }

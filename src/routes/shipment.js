@@ -3,6 +3,7 @@ import { checkLanguage } from '#middleware/index.js';
 import {
   createShipment,
   getAllShipments,
+  getAllShipmentsAdmin,
   ayMakanWebHook,
   getSingleShipment,
   cancelShipment,
@@ -105,6 +106,63 @@ router.get(
   verifySellerAccess,
   getAllShipments
 );
+
+/**
+ * @swagger
+ * /admin/shipments:
+ *   get:
+ *     tags: [Shipments]
+ *     summary: Get all shipments (Admin)
+ *     description: "Fetch all shipments. Supports optional filters: sellerId, status, and search."
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         required: false
+ *         description: Language for response messages
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: size
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *         description: Number of shipments per page
+ *       - in: query
+ *         name: sellerId
+ *         schema:
+ *           type: string
+ *         description: Optional seller ID to filter shipments by seller
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Optional comma-separated status filter (e.g., \"pending,shipped\")
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Optional search text (matches AWB number, shipment name, or delivery name)
+ *     responses:
+ *       200:
+ *         description: "Shipments fetched successfully"
+ *       400:
+ *         description: "Bad request"
+ *       401:
+ *         description: "Unauthorized"
+ *       500:
+ *         description: "Internal server error"
+ */
+
+router.get('/admin/shipments', getShipmentValidator, checkLanguage, authMiddleware, getAllShipmentsAdmin);
 
 // WEBHOOK FOR AYMAKAN
 /**
