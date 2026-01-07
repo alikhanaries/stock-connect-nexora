@@ -387,7 +387,7 @@ export const flattenAggregatedOrder = (order = {}) => {
   if (order.createdAt) flattened.createdAt = order.createdAt;
   if (order.updatedAt) flattened.updatedAt = order.updatedAt;
 
-  // Ensure both 'orderId' and 'id' are present for header compatibility
+  // Ensure 'orderId' is present
   const resolveOrderId = () => {
     // prefer explicit top-level fields
     if (safeGet(order, 'orderId')) return safeGet(order, 'orderId');
@@ -404,7 +404,6 @@ export const flattenAggregatedOrder = (order = {}) => {
 
   const resolvedId = resolveOrderId();
   flattened.orderId = flattened.orderId || resolvedId;
-  flattened.id = flattened.id || resolvedId;
 
   return flattened;
 };

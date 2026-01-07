@@ -270,6 +270,8 @@ router.get(
  */
 router.patch('/merchant-cancellation', merchantCancelIdValidator, checkLanguage, authMiddleware, merchantCancelById);
 
+router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, exportOrders);
+
 /**
  * @swagger
  * /orders/{id}:
@@ -356,7 +358,4 @@ router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMidd
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
 router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
-
-// Export orders as CSV
-router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, exportOrders);
 export default router;

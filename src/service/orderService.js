@@ -1,6 +1,11 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
+import {
+  ORDER_STATUS_MAP,
+  SELECTED_FIELDS,
+  BLOCKED_STATUSES,
+  ORDER_EXPORT_EXCLUDED_COLUMNS,
+} from '#constants/common.js';
 import orderhelper, {
   flattenAggregatedOrder,
   getAggregatedOrderHeaders,
@@ -14,13 +19,7 @@ import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo, syncShipmentStatus } from '#service/shipmentService.js';
 import { formatDateTime } from '#helpers/Common.js';
-import {
-  escapeCsv,
-  generateCSVFilename,
-  createCSVExportResponse,
-  validateExportData,
-  generateDynamicHeaders,
-} from '#helpers/export.js';
+import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
@@ -919,7 +918,7 @@ export const formatOrderTrackingInf = (data) => {
   });
 };
 
-export const exportOrdersToCSV = async (sellerId, filters = {}) => {
+export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '') => {
   try {
     // Validate sellerId is provided
     if (!sellerId) {
@@ -1006,7 +1005,10 @@ export const exportOrdersToCSV = async (sellerId, filters = {}) => {
     ];
 
     // Remove any duplicate headers
-    const organizedHeaders = [...new Set(combinedHeaders)];
+    const deduplicatedHeaders = [...new Set(combinedHeaders)];
+
+    // Filter out excluded columns
+    const organizedHeaders = deduplicatedHeaders.filter((header) => !ORDER_EXPORT_EXCLUDED_COLUMNS.includes(header));
 
     // Create CSV with organized headers
     const csvRows = [organizedHeaders.join(',')];
@@ -1034,7 +1036,10 @@ export const exportOrdersToCSV = async (sellerId, filters = {}) => {
     const processedChunks = await Promise.all(chunks.map(processChunk));
     csvRows.push(...processedChunks.flat());
 
-    const filename = generateCSVFilename('orders');
+    // Generate filename with seller name
+    const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const filename = `${sanitizedSellerName}_OrderExport_${exportDate}.csv`;
 
     return {
       ...createCSVExportResponse(csvRows, filename, orders.length),

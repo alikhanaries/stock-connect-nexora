@@ -5,6 +5,7 @@ import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS, USER_ROLES } from '#constants/common.js';
 import { cancelFullOrderOcp, getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
 import Order from '../models/Orders.js';
+import Seller from '#models/Seller.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -256,6 +257,12 @@ export const exportOrders = async (req, res) => {
     const sellerId = req.sellerId;
     const { status, platform, search } = req.query;
 
+    // Fetch seller name for filename
+    const seller = await Seller.findById(sellerId).select('name').lean();
+    if (!seller) {
+      return Responses.failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
     // Build filters only with non-empty values
     const filters = {};
     if (status) filters.status = status;
@@ -269,7 +276,7 @@ export const exportOrders = async (req, res) => {
       }
     });
 
-    const result = await orderService.exportOrdersToCSV(sellerId, filters);
+    const result = await orderService.exportOrdersToCSV(sellerId, filters, seller.name);
 
     if (!result.success) {
       return Responses.failResponse(res, result.message || req.locale.NO_ORDERS_FOUND, 404);
