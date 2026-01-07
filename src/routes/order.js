@@ -9,6 +9,7 @@ import {
   merchantCancelById,
   cancelFullOrder,
   cancelPartialOrder,
+  exportOrders,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -20,6 +21,7 @@ import {
   syncOrdersValidator,
   cancelFullOrderValidator,
   cancelPartialOrderValidator,
+  exportOrdersValidator,
 } from '#validations/orders.js';
 const router = express.Router();
 
@@ -267,6 +269,8 @@ router.get(
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
 router.patch('/merchant-cancellation', merchantCancelIdValidator, checkLanguage, authMiddleware, merchantCancelById);
+
+router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, exportOrders);
 
 /**
  * @swagger

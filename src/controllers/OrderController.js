@@ -5,6 +5,7 @@ import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS, USER_ROLES } from '#constants/common.js';
 import { cancelFullOrderOcp, getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
 import Order from '../models/Orders.js';
+import Seller from '#models/Seller.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -247,5 +248,52 @@ export const cancelPartialOrder = async (req, res) => {
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);
+  }
+};
+
+// Exports orders data as CSV file for a specific seller.
+export const exportOrders = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { status, platform, search } = req.query;
+
+    // Fetch seller name for filename
+    const seller = await Seller.findById(sellerId).select('name').lean();
+    if (!seller) {
+      return Responses.failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    // Build filters only with non-empty values
+    const filters = {};
+    if (status) filters.status = status;
+    if (platform) filters.platform = platform;
+    if (search) filters.search = search;
+
+    // Remove any remaining undefined/empty values
+    Object.keys(filters).forEach((key) => {
+      if (!filters[key]) {
+        delete filters[key];
+      }
+    });
+
+    const result = await orderService.exportOrdersToCSV(sellerId, filters, seller.name);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || req.locale.NO_ORDERS_FOUND, 404);
+    }
+    // Set headers for CSV download with UTF-8 encoding
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    // Add UTF-8 BOM for proper encoding
+    const csvWithBOM = '\uFEFF' + result.data;
+
+    return res.status(200).send(csvWithBOM);
+  } catch (error) {
+    console.error('Controller Error: exportOrders:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
   }
 };
