@@ -1,6 +1,6 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
-import { MIN_STOCK } from '#root/src/integrations/common/constants/common.js';
+import { MIN_STOCK } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
