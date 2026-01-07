@@ -187,6 +187,11 @@ export const freezeOrUnfreezeProducts = async (req, res) => {
     if (!updatedSkus.length) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
     }
+    await productService.syncFreezeOrUnfreezeToChannelEngine({
+      skuCodes: updatedSkus,
+      isFrozen,
+    });
+
     const statusMessage = isFrozen === true ? 'Products frozen successfully' : 'Products unfrozen successfully';
     return successResponse(res, statusMessage, 200);
   } catch (err) {
