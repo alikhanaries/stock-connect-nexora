@@ -206,35 +206,56 @@ export const syncFreezeOrUnfreezeToChannelEngine = async ({ skuCodes, isFrozen }
     Action: isFrozen ? 'FREEZE' : 'UNFREEZE',
   }));
 
-  const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/freeze`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CE-KEY': CHANNEL_ENGINE_API_KEY,
-    },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/freeze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CE-KEY': CHANNEL_ENGINE_API_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`ChannelEngine sync failed: ${response.status} - ${text}`);
+    let result = null;
+    try {
+      result = await response.json();
+    } catch {
+      // Ignore ChannelEngine errors; Stock Connect update already succeeded
+    }
+    if (!response.ok) {
+      return;
+    }
+    return result;
+  } catch (err) {
+    console.warn('ChannelEngine Request failed', err.message);
+    return;
   }
-  return response.json();
 };
 
 export const syncfreezeOrUnfreezeToStockConnect = async (ids, isFrozen, sellerId) => {
-  if (!Array.isArray(ids) || ids.length === 0) return 0;
+  if (!Array.isArray(ids) || !ids.length) {
+    return { skuCodes: [], hasParent: false };
+  }
   const products = await Product.find(
-    {
-      _id: { $in: ids },
-      sellerId,
-      isFrozen: { $ne: isFrozen },
-    },
-    { productSkuCode: 1 }
+    { _id: { $in: ids }, sellerId, isFrozen: { $ne: isFrozen } },
+    { _id: 1, productSkuCode: 1, productType: 1 }
   ).lean();
-  if (!products.length) return [];
-  await Product.updateMany({ _id: { $in: ids }, sellerId }, { $set: { isFrozen, updatedAt: new Date() } });
-  return products.map((p) => p.productSkuCode);
+  let hasParent = false;
+  const childIds = [];
+  const skuCodes = [];
+  for (const p of products) {
+    if (p.productType === 'configurable') {
+      hasParent = true;
+    } else {
+      childIds.push(p._id);
+      skuCodes.push(p.productSkuCode);
+    }
+  }
+  if (!childIds.length) {
+    return { skuCodes: [], hasParent };
+  }
+  await Product.updateMany({ _id: { $in: childIds }, sellerId }, { $set: { isFrozen, updatedAt: new Date() } });
+  return { skuCodes, hasParent };
 };
 
 // Retry helper with exponential backoff
