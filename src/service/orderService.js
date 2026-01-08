@@ -937,12 +937,9 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
       filter.$or = [
         { orderId: regex },
-        { 'orderSkuList.skuList.description': regex },
         { 'orderCustomer.email': regex },
         { 'orderCustomer.firstName': regex },
         { 'orderCustomer.lastName': regex },
-        { 'orderCustomer.phone': regex },
-        { merchantOrderNo: regex },
       ];
     }
 
@@ -951,10 +948,23 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     }
 
     if (status) {
-      const statusList = status.split(',').map((s) => s.trim());
-      const validStatuses = statusList.filter((s) => Object.keys(ORDER_STATUS_MAP).includes(s.toUpperCase()));
-      if (validStatuses.length > 0) {
-        filter.status = { $in: validStatuses };
+      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+
+      // Validate against enum
+      const validStatuses = Object.values(ORDER_STATUS_MAP);
+      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+
+      if (invalid.length > 0) {
+        console.warn(`Invalid status values ignored: ${invalid.join(', ')}`);
+      }
+
+      // Build Mongo filter (case-insensitive) - only use valid statuses
+      const validStatusArray = statusArray.filter((s) => validStatuses.includes(s));
+
+      if (validStatusArray.length > 0) {
+        filter.status = {
+          $in: validStatusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+        };
       }
     }
 

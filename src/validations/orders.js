@@ -237,9 +237,17 @@ export const exportOrdersValidator = validate(async (req) => {
     status: z
       .string()
       .optional()
-      .refine((val) => !val || Object.keys(ORDER_STATUS_MAP).includes(val.toUpperCase()), {
-        message: `Invalid status. Valid statuses are: ${Object.keys(ORDER_STATUS_MAP).join(', ')}`,
-      }),
+      .refine(
+        (val) => {
+          if (!val) return true;
+          const validStatuses = Object.values(ORDER_STATUS_MAP);
+          const statusArray = val.split(',').map((s) => s.trim().toUpperCase());
+          return statusArray.every((s) => validStatuses.includes(s));
+        },
+        {
+          message: `Invalid status. Valid statuses are: ${Object.values(ORDER_STATUS_MAP).join(', ')}`,
+        }
+      ),
 
     platform: z.string().optional(),
 
