@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getAllOrders,
+  getAdminOrders,
   getOrderById,
   getSyncedOrders,
   getOrderStats,
@@ -8,6 +9,7 @@ import {
   merchantCancelById,
   cancelFullOrder,
   cancelPartialOrder,
+  exportOrders,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -19,6 +21,7 @@ import {
   syncOrdersValidator,
   cancelFullOrderValidator,
   cancelPartialOrderValidator,
+  exportOrdersValidator,
 } from '#validations/orders.js';
 const router = express.Router();
 
@@ -77,6 +80,92 @@ const router = express.Router();
  *         $ref: "#/components/schemas/SuccessResponse"
  */
 router.get('/', getAllOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, getAllOrders);
+/**
+ * @swagger
+ * /orders/admin/orders:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Get orders for master-admin (global, seller, or marketplace scoped)
+ *     description: >
+ *       Returns all orders if no query params are provided.
+ *       Optionally filter by sellerId and/or marketplace.
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *       - in: query
+ *         name: sellerId
+ *         schema:
+ *           type: string
+ *         description: Filter orders by seller
+ *       - in: query
+ *         name: marketplace
+ *         schema:
+ *           type: string
+ *         description: Filter orders by marketplace (requires sellerId)
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: size
+ *         schema: { type: integer }
+ *         description: Number of orders per page
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *         description: Search term (orderId, customer, email, etc.)
+ *       - in: query
+ *         name: fromDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: toDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: status
+ *         schema: { type: string }
+ *         description: Comma-separated order statuses (e.g., NEW, IN_PROGRESS)
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string }
+ *         description: Field to sort by (default: orderId)
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Orders fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/SuccessResponse"
+ *       403:
+ *         description: Unauthorized role
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/ErrorResponse"
+ */
+
+router.get('/admin/orders', getAllOrdersValidator, checkLanguage, authMiddleware, getAdminOrders);
 
 /**
  * @swagger
@@ -180,6 +269,8 @@ router.get(
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
 router.patch('/merchant-cancellation', merchantCancelIdValidator, checkLanguage, authMiddleware, merchantCancelById);
+
+router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, exportOrders);
 
 /**
  * @swagger

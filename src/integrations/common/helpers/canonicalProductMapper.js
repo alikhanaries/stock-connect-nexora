@@ -1,10 +1,8 @@
-import mongoose from 'mongoose';
-
 export const canonicalProductMapper = (item = {}, sellerId) => {
   if (!item) return null;
 
   return {
-    sellerId: new mongoose.Types.ObjectId(sellerId),
+    sellerId: sellerId,
     grandParentProductSkuCode: item.grandParentProductSkuCode || null,
     parentProductSkuCode: item.parentProductSkuCode || null,
     productSkuCode: item.productSkuCode,
@@ -36,5 +34,7 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     extraImageUrl3: item.extraImageUrl3,
     vatRateType: item.vatRateType || 'STANDARD',
     productType: item.productType || 'simple',
+    source: item.source || 'MANUAL',
+    status: item.status,
   };
 };

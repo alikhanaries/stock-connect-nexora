@@ -16,7 +16,7 @@ export const fetchProducts = async (req, res) => {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
-    //  Accepted for async/background processing
+    ///  Accepted for async/background processing
     successResponse(res, 'Shopify product sync started in background', 202);
 
     process.nextTick(async () => {

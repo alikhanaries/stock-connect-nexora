@@ -74,7 +74,7 @@ export const SELECTED_FIELDS = [
   'orderDate',
   'createdAt',
   'channelId',
-  'totalVat',
+  'totalInclVat',
 ].join(' ');
 
 export const BLOCKED_STATUSES = {
@@ -126,4 +126,21 @@ export const PRODUCT_EXPORT_HEADERS = [
   'sizeType',
   'vatRateType',
   'volumetricWeightCm',
+];
+
+export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
+  'sellerId',
+  'channelId',
+  'globalChannelId',
+  'globalChannelName',
+  'merchantComment',
+  'originalShippingCostsInclVat',
+  'originalSubTotalFee',
+  'originalOrderFee',
+  'originalTotalFee',
+  'totalFee',
+  'orderShippingAddress_gender',
+  'orderBillingAddress_gender',
+  'orderCustomer_languageCode',
+  'orderPaymentDetails_currencyCode',
 ];

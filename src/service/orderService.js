@@ -1,7 +1,16 @@
 import Order from '#models/Orders.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
-import orderhelper from '#helpers/Order.js';
+import {
+  ORDER_STATUS_MAP,
+  SELECTED_FIELDS,
+  BLOCKED_STATUSES,
+  ORDER_EXPORT_EXCLUDED_COLUMNS,
+} from '#constants/common.js';
+import orderhelper, {
+  flattenAggregatedOrder,
+  getAggregatedOrderHeaders,
+  getOrganizedOrderRowData,
+} from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
@@ -9,15 +18,18 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo, syncShipmentStatus } from '#service/shipmentService.js';
-import { formatDateTime } from '#root/src/helpers/Common.js';
+import { formatDateTime } from '#helpers/Common.js';
+import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 
+const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
+
 const formatOrder = (order, channelImage) => {
   const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const totalPrice = order.totalVat
-    ? order.totalVat
+  const totalPrice = order.totalInclVat
+    ? order.totalInclVat
     : order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
   return {
@@ -62,11 +74,9 @@ const getAllOrders = async (query, sellerId) => {
 
       filter.$or = [
         { orderId: regex },
-        { 'orderSkuList.skuList.description': regex },
         { 'orderCustomer.email': regex },
         { 'orderCustomer.firstName': regex },
         { 'orderCustomer.lastName': regex },
-        { 'orderCustomer.phone': regex },
       ];
     }
 
@@ -136,6 +146,94 @@ const getAllOrders = async (query, sellerId) => {
     };
   } catch (err) {
     console.error('Error fetching orders:', err.message);
+    return { success: false, message: err.message };
+  }
+};
+
+const getAdminOrders = async (query, sellerId, channelId) => {
+  try {
+    const { page = 1, size = 10, search, fromDate, toDate, status, sortOrder = 'desc', sortBy = 'orderId' } = query;
+
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const sizeNum = Math.min(Math.max(parseInt(size, 10) || 10, 1), 100);
+
+    const skip = (pageNum - 1) * sizeNum;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+    const appliedFilters = {};
+    const filter = {};
+
+    if (sellerId) {
+      filter.sellerId = sellerId;
+      appliedFilters.sellerId = sellerId;
+    }
+
+    if (channelId) {
+      filter.channelId = channelId;
+      appliedFilters.channelId = channelId;
+    }
+
+    const trimmedSearch = search?.trim();
+
+    if (trimmedSearch && trimmedSearch.length <= 50) {
+      const regex = { $regex: trimmedSearch, $options: 'i' };
+      filter.$or = [
+        { orderId: regex },
+        { 'orderSkuList.skuList.description': regex },
+        { 'orderCustomer.email': regex },
+        { 'orderCustomer.firstName': regex },
+        { 'orderCustomer.lastName': regex },
+        { 'orderCustomer.phone': regex },
+      ];
+      appliedFilters.search = trimmedSearch;
+    }
+
+    if (fromDate || toDate) {
+      filter.createdAt = {};
+      if (fromDate && !isNaN(Date.parse(fromDate))) {
+        filter.createdAt.$gte = new Date(fromDate);
+      }
+      if (toDate && !isNaN(Date.parse(toDate))) {
+        filter.createdAt.$gte = new Date(toDate);
+      }
+      appliedFilters.fromDate = fromDate;
+      appliedFilters.toDate = toDate;
+    }
+
+    if (status) {
+      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+      filter.status = { $in: statusArray };
+      appliedFilters.status = status;
+    }
+
+    const allowedSortFields = ['orderId', 'createdAt', 'status'];
+    const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'orderId';
+
+    const [totalOrders, orders, allChannels] = await Promise.all([
+      Order.countDocuments(filter),
+      Order.find(filter)
+        .skip(skip)
+        .limit(size)
+        .sort({ [safeSortBy]: sortDirection })
+        .collation({ locale: 'en_US', numericOrdering: true })
+        .select(SELECTED_FIELDS)
+        .lean(),
+      Channel.find().select('_id channelId channelImageUrl'),
+    ]);
+
+    const channelMap = {};
+    allChannels.forEach((channel) => {
+      channelMap[channel.channelId] = channel.channelImageUrl;
+    });
+
+    return {
+      data: orders.map((order) => {
+        const matchingChannel = channelMap[order.channelId] || null;
+        return formatOrder(order, matchingChannel);
+      }),
+      appliedFilters,
+      pagination: getPagination(totalOrders, page, size),
+    };
+  } catch (err) {
     return { success: false, message: err.message };
   }
 };
@@ -562,11 +660,8 @@ const transformOrderResponse = (response) => {
   };
 };
 
-const cancelFullOrder = async (orderId, reason = 'NA') => {
+const cancelFullOrder = async (orderId, order, reason = 'NA') => {
   try {
-    const order = await Order.findById(orderId).lean();
-    if (!order) return { success: false, error: { message: 'Order not found', status: 404 } };
-
     const lines = order.orderSkuList.skuList
       .map((item) => ({
         MerchantProductNo: item.merchantProductNo,
@@ -823,8 +918,142 @@ export const formatOrderTrackingInf = (data) => {
   });
 };
 
+export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '') => {
+  try {
+    // Validate sellerId is provided
+    if (!sellerId) {
+      return {
+        success: false,
+        message: 'Seller ID is required for export',
+      };
+    }
+
+    const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
+
+    const filter = { sellerId: sellerId };
+
+    if (search) {
+      const regex = { $regex: search, $options: 'i' };
+
+      filter.$or = [
+        { orderId: regex },
+        { 'orderSkuList.skuList.description': regex },
+        { 'orderCustomer.email': regex },
+        { 'orderCustomer.firstName': regex },
+        { 'orderCustomer.lastName': regex },
+        { 'orderCustomer.phone': regex },
+        { merchantOrderNo: regex },
+      ];
+    }
+
+    if (platform) {
+      filter.channelName = { $regex: platform, $options: 'i' };
+    }
+
+    if (status) {
+      const statusList = status.split(',').map((s) => s.trim());
+      const validStatuses = statusList.filter((s) => Object.keys(ORDER_STATUS_MAP).includes(s.toUpperCase()));
+      if (validStatuses.length > 0) {
+        filter.status = { $in: validStatuses };
+      }
+    }
+
+    const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+    const [orders, totalCount] = await Promise.all([
+      Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
+      Order.countDocuments(filter),
+    ]);
+
+    // Validate export data
+    const validation = validateExportData(orders, 'orders');
+    if (!validation.success) {
+      return validation;
+    }
+
+    const dynamicHeaders = generateDynamicHeaders(Order, [
+      'orderSkuList',
+      'orderCustomer',
+      'orderPaymentDetails',
+      'orderShippingAddress',
+      'orderBillingAddress',
+    ]);
+
+    // Get a sample order to determine aggregated headers structure
+    const sampleOrder = orders[0];
+    const { customerHeaders, paymentHeaders, shippingHeaders, billingHeaders, skuHeaders } =
+      getAggregatedOrderHeaders(sampleOrder);
+
+    const filteredDynamicHeaders = dynamicHeaders.filter(
+      (header) =>
+        !header.startsWith('orderSkuList') &&
+        !(header.includes('orderId') && header.includes('_')) && // <-- allow top-level 'orderId'
+        !header.includes('createdAt') &&
+        !header.includes('updatedAt')
+    );
+
+    // Combine all headers in the desired order
+    const combinedHeaders = [
+      ...filteredDynamicHeaders,
+      ...skuHeaders,
+      ...shippingHeaders,
+      ...billingHeaders,
+      ...customerHeaders,
+      ...paymentHeaders,
+      'createdAt',
+      'updatedAt',
+    ];
+
+    // Remove any duplicate headers
+    const deduplicatedHeaders = [...new Set(combinedHeaders)];
+
+    // Filter out excluded columns
+    const organizedHeaders = deduplicatedHeaders.filter((header) => !ORDER_EXPORT_EXCLUDED_COLUMNS.includes(header));
+
+    // Create CSV with organized headers
+    const csvRows = [organizedHeaders.join(',')];
+
+    // Process orders in chunks for better performance
+    const chunks = [];
+    for (let i = 0; i < orders.length; i += EXPORT_CHUNK_SIZE) {
+      chunks.push(orders.slice(i, i + EXPORT_CHUNK_SIZE));
+    }
+
+    // Process each chunk
+    const processChunk = async (chunk) => {
+      return chunk.map((order) => {
+        // Flatten the aggregated order data
+        const flattenedOrder = flattenAggregatedOrder(order);
+
+        // Get organized row data
+        const rowData = getOrganizedOrderRowData(flattenedOrder, organizedHeaders);
+
+        return escapeCsv(rowData);
+      });
+    };
+
+    // Process all chunks in parallel
+    const processedChunks = await Promise.all(chunks.map(processChunk));
+    csvRows.push(...processedChunks.flat());
+
+    // Generate filename with seller name
+    const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const filename = `${sanitizedSellerName}_OrderExport_${exportDate}.csv`;
+
+    return {
+      ...createCSVExportResponse(csvRows, filename, orders.length),
+      totalCount,
+    };
+  } catch (error) {
+    console.error('Error exporting orders:', error.message);
+    throw error;
+  }
+};
+
 export default {
   getAllOrders,
+  getAdminOrders,
   getOrderById,
   processOrders,
   getNewOrders,
@@ -835,4 +1064,5 @@ export default {
   backgroundAcknowledgementOrders,
   cancelFullOrder,
   cancelPartialOrder,
+  exportOrdersToCSV,
 };

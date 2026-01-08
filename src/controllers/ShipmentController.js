@@ -1,6 +1,7 @@
 import {
   createPartialShipmentService,
   getAllShipmentsService,
+  getAllShipmentsAdminService,
   ayMakanWebHookService,
   getSingleShipmentService,
   cancelShipmentService,
@@ -8,6 +9,7 @@ import {
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
+import { USER_ROLES } from '#constants/common.js';
 
 export const createShipment = async (req, res) => {
   try {
@@ -53,6 +55,38 @@ export const getAllShipments = async (req, res) => {
     const responseData = {
       content: shipments || [],
       appliedFilters: appliedFilters || {},
+      ...pagination,
+    };
+    const message = shipments && shipments.length > 0 ? 'Shipments fetched successfully' : 'No shipments found';
+
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Get Shipment Controller Error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error?.message || 'Internal server error', 400);
+  }
+};
+
+export const getAllShipmentsAdmin = async (req, res) => {
+  try {
+    if (req.user.role !== USER_ROLES.MASTER_ADMIN) {
+      return errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
+    }
+    const { page = 1, size = 10, status, sellerId, search, sortOrder } = req.query;
+
+    const { shipments, pagination, appliedFilters } = await getAllShipmentsAdminService({
+      page,
+      size,
+      status,
+      sellerId,
+      search,
+      sortOrder,
+    });
+
+    const responseData = {
+      content: shipments || [],
+      appliedFilters: appliedFilters || {},
+
       ...pagination,
     };
     const message = shipments && shipments.length > 0 ? 'Shipments fetched successfully' : 'No shipments found';
