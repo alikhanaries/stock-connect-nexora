@@ -46,7 +46,7 @@ export const convetDateToUTC = (dateTime) => {
 export const cleanNumber = (value) => {
   if (value === undefined || value === null || value === '') return null;
 
-  return parseFloat(String(value).replace(/,/g, '').trim())}
+  return parseFloat(String(value).replace(/,/g, '').trim());}
 export default {
   formatDateTime,
   formatCustomerName,
