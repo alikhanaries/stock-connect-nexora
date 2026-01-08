@@ -1,5 +1,6 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
-import { convertUsdToSar } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { MIN_STOCK } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
@@ -8,20 +9,22 @@ const cleanImages = (...imgGroups) => {
     .map((i) => i.trim());
   return [...new Set(merged)];
 };
-const extractSubproductImages = (subproducts) => {
-  return subproducts.flatMap((sub) => {
-    const items = toArray(sub.img_item);
-    return cleanImages(sub.image_url, items);
-  });
+const extractSubproductImages = (subproducts) =>
+  subproducts.flatMap((sub) => cleanImages(sub.image_url, toArray(sub.img_item)));
+
+const shouldUploadImages = (sku, existingSkus, isImageUpdate) => {
+  const isNewSku = !existingSkus.has(sku);
+  if (isNewSku) return true;
+  return isImageUpdate === true;
 };
 
-const formatBaseProduct = async (product, sellerId, subproductImages, isImageUpdate) => {
+const formatBaseProduct = async (product, sellerId, subproductImages, uploadImages) => {
   const imgItems = toArray(product.img_item).map((i) => i?.trim());
   const rawImages = cleanImages(product.image_url, imgItems, subproductImages);
 
   let processed = {};
 
-  if (isImageUpdate === true) {
+  if (uploadImages) {
     const cdnImages = await processProductImages(rawImages, sellerId);
 
     if (cdnImages.length > 0) {
@@ -46,8 +49,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, isImageUpd
     brand: product.brand,
     categoryTrail: product.category_path,
     vatRateType: 'STANDARD',
-    status: product.active === '1' ? 'active' : 'inactive',
-    ...processed, // only included when isImageUpdate = true
+    ...processed, // Process only when isImageUpdate = true and new sku come
     volumetricWeightCm: 0.3,
     hsCodeAE: product.code,
     hsCodeSA: product.code,
@@ -55,8 +57,8 @@ const formatBaseProduct = async (product, sellerId, subproductImages, isImageUpd
   };
 };
 
-export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = false) => {
-  if (!Array.isArray(raw) || !raw.length) return [];
+export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = false, existingSkus = new Set()) => {
+  if (!raw.length) return { products: [], categoryTrails: [] };
 
   const formatted = [];
   const categoryTrails = new Set();
@@ -64,9 +66,11 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
     if (product.category_path) categoryTrails.add(product.category_path);
     const subproducts = toArray(product?.subproducts?.subproduct);
     const subproductImages = extractSubproductImages(subproducts);
-    const base = await formatBaseProduct(product, sellerId, subproductImages, isImageUpdate);
-    if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
     const grandParentSku = product.ws_code || product.code;
+    const uploadBaseImages = shouldUploadImages(grandParentSku, existingSkus, isImageUpdate);
+    const base = await formatBaseProduct(product, sellerId, subproductImages, uploadBaseImages);
+    if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
+    const totalStock = subproducts.reduce((s, v) => s + Number(v.stock || 0), 0);
 
     formatted.push({
       ...base,
@@ -74,8 +78,9 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
       parentProductSkuCode: null,
       grandParentProductSkuCode: null,
       productType: 'configurable',
-      price: await convertUsdToSar(parseFloat(product.price_special) || 0),
-      currentStockCount: subproducts.reduce((s, v) => s + Number(v.stock || 0), 0),
+      price: await priceConverter('USD', parseFloat(product.price_special) || 0),
+      currentStockCount: totalStock,
+      status: totalStock < MIN_STOCK ? 'inactive' : 'active',
       color: '',
       size: '',
       ean: '',
@@ -91,6 +96,8 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
     for (const [color, variants] of Object.entries(groupedByColor)) {
       const safeColor = color.replace(/\s+/g, '_').toUpperCase();
       const parentSku = `${grandParentSku}-${safeColor}`;
+      const parentStock = variants.reduce((s, v) => s + Number(v.stock || 0), 0);
+
       formatted.push({
         ...base,
         productSkuCode: parentSku,
@@ -100,8 +107,9 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
         color,
         size: '',
         ean: '',
-        price: await convertUsdToSar(parseFloat(product.price_special) || 0),
-        currentStockCount: variants.reduce((s, v) => s + Number(v.stock || 0), 0),
+        price: await priceConverter('USD', parseFloat(product.price_special) || 0),
+        currentStockCount: parentStock,
+        status: parentStock < MIN_STOCK ? 'inactive' : 'active',
       });
 
       for (const variant of variants) {
@@ -109,13 +117,12 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
         const safeSize = size.replace(/\s+/g, '_').toUpperCase();
         const childSku = `${parentSku}-${safeSize}`;
 
-        const stock = Number(variant.stock || 0);
-        if (stock <= 0) continue;
+        const uploadChildImages = shouldUploadImages(childSku, existingSkus, isImageUpdate);
 
         let processedChild = {};
 
-        if (isImageUpdate === true) {
-          // Process only when isImageUpdate = true
+        if (uploadChildImages) {
+          // Upload images only when isImageUpdate is true and the SKU is new
           const variantImgs = cleanImages(variant.image_url, toArray(variant.img_item));
           const mergedChildImages = cleanImages(...(base.images || []), ...variantImgs);
 
@@ -140,18 +147,22 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
           grandParentProductSkuCode: null,
           productType: 'simple',
           ...processedChild, // only applied when true
-          price: await convertUsdToSar(parseFloat(variant.price_special || product.price_special_vat_included)),
-          msrp: await convertUsdToSar(
+          price: await priceConverter('USD', parseFloat(variant.price_special || product.price_special_vat_included)),
+          msrp: await priceConverter(
+            'USD',
             parseFloat(variant.price_tl_vat_included_discount || product.price_special_vat_included)
           ),
           minPrice: null,
           maxPrice: null,
-          purchasePrice: await convertUsdToSar(parseFloat(variant.price_special || product.price_special_vat_included)),
+          purchasePrice: await priceConverter(
+            'USD',
+            parseFloat(variant.price_special || product.price_special_vat_included)
+          ),
           color,
           size,
           ean: variant.barcode || '',
-          currentStockCount: stock,
-          status: variant.active === '1' ? 'active' : 'inactive',
+          currentStockCount: Number(variant.stock || 0),
+          status: Number(variant.stock) < MIN_STOCK ? 'inactive' : 'active',
         });
       }
     }

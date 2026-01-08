@@ -200,8 +200,15 @@ const ProductSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+    updatedAt: {
+      type: Date,
+    },
+    createdAt: {
+      type: Date,
+    },
+    syncedAt: { type: Date, default: null },
   },
-  { timestamps: true }
+  { timestamps: false }
 );
 
 // Indexes for performance
@@ -217,6 +224,6 @@ ProductSchema.index({
   description: 'text',
 });
 ProductSchema.index({ sellerId: 1, status: 1, createdAt: 1 });
-
+ProductSchema.index({ sellerId: 1, syncedAt: 1, updatedAt: 1 });
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;

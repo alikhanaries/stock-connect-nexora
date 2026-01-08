@@ -124,14 +124,12 @@ export const pushProductToChannelEngine = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const { validProducts = [] } = await productService.validateProducts(channelId, sellerId);
-    if (validProducts?.length) {
-      (async () => {
-        try {
-          await productService.pushProductsAsync(validProducts, channelId, sellerId);
-        } catch (err) {
-          console.error('Async push failed:', err);
-        }
-      })();
+
+    if (validProducts.length > 0) {
+      // Fire-and-forget (non-blocking)
+      productService
+        .pushProductsAsync(validProducts, channelId, sellerId)
+        .catch((err) => console.error('Async push failed:', err));
     }
     return successResponse(res, req.locale.ALL_PRODUCTS_PUSH_SUCCESS, 200, null);
   } catch (err) {
@@ -172,6 +170,37 @@ export const updateProductStatus = async (req, res) => {
     return errorResponse(res, err, 500);
   }
 };
+
+export const freezeOrUnfreezeProducts = async (req, res) => {
+  try {
+    const { ids, isFrozen } = req.body;
+    const sellerId = req.sellerId;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return failResponse(res, req.locale.PRODUCT_IDS_REQUIRED, 400);
+    }
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return failResponse(res, `${req.locale.INVALID_PRODUCT_IDS} ${invalidIds.join(', ')}`, 400);
+    }
+    const updatedSkus = await productService.syncfreezeOrUnfreezeToStockConnect(ids, isFrozen, sellerId);
+    if (!updatedSkus.length) {
+      return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
+    }
+    await productService.syncFreezeOrUnfreezeToChannelEngine({
+      skuCodes: updatedSkus,
+      isFrozen,
+    });
+
+    const statusMessage = isFrozen === true ? 'Products frozen successfully' : 'Products unfrozen successfully';
+    return successResponse(res, statusMessage, 200);
+  } catch (err) {
+    console.error('Error updating product freeze status:', err);
+    errorLog(err);
+    return errorResponse(res, err, 500);
+  }
+};
+
 /* DELETE PRODUCT BY ID*/
 export const deleteProduct = async (req, res) => {
   try {
@@ -380,26 +409,14 @@ export const exportProducts = async (req, res) => {
       return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
     }
 
-    // Parse filterGroups from query params
-    let groups = [];
+    // Parse filter from query params
+    let filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
 
-    if (req.query.filterGroups) {
-      try {
-        const parsedGroups = JSON.parse(req.query.filterGroups);
-        groups = parsedGroups.map((group) => ({
-          conditions: group.conditions.map((cond) => ({
-            field: cond.field,
-            operator: cond.operator,
-            value: cond.value,
-          })),
-        }));
-      } catch (error) {
-        console.error('Failed to parse filterGroups:', error);
-      }
-    }
+    // Split comma-separated filters into individual filter strings
+    filters = filters.flatMap((f) => (f.includes(',') ? f.split(',') : f));
 
     // Validate data exists BEFORE setting headers
-    const validation = await productService.validateProductExportData(groups, sellerId);
+    const validation = await productService.validateProductExportData(filters, sellerId);
 
     if (!validation.success) {
       return failResponse(
@@ -426,7 +443,7 @@ export const exportProducts = async (req, res) => {
     res.write(PRODUCT_EXPORT_HEADERS.join(',') + '\n');
 
     // Stream data using cursor
-    await productService.exportProductsToCSV(groups, sellerId, req.query, res);
+    await productService.exportProductsToCSV(filters, sellerId, req.query, res);
 
     return res.end();
   } catch (error) {
@@ -478,4 +495,5 @@ export default {
   unlinkProductFromChannel,
   exportProducts,
   searchProducts,
+  freezeOrUnfreezeProducts,
 };

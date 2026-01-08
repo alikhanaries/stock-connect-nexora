@@ -7,8 +7,8 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     parentProductSkuCode: item.parentProductSkuCode || null,
     productSkuCode: item.productSkuCode,
     name: item.name || '',
-    nameAr: item.nameAr || '',
-    descriptionAr: item.descriptionAr || '',
+    nameAr: item.nameAr,
+    descriptionAr: item.descriptionAr,
     description: item.description || '',
     brand: item.brand || '',
     color: item.color || '',
@@ -35,5 +35,6 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     vatRateType: item.vatRateType || 'STANDARD',
     productType: item.productType || 'simple',
     source: item.source || 'MANUAL',
+    status: item.status,
   };
 };
