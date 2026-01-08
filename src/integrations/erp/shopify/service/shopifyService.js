@@ -1,6 +1,5 @@
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
-import { shopifyConfig } from '#root/src/integrations/erp/shopify/config/config.js';
-const { SHOPIFY_SHOP_URL, SHOPIFY_API_VERSION, ACCESS_TOKEN } = shopifyConfig;
+import Seller from '#root/src/models/Seller.js';
 const PRODUCTS_QUERY = `
 query getProducts($cursor: String) {
   shop {
@@ -84,18 +83,19 @@ query getProducts($cursor: String) {
 }
 `;
 
-export const fetchProducts = async () => {
+export const fetchProducts = async (sellerData) => {
   try {
     let cursor = null;
     let hasNextPage = true;
     const allProducts = [];
 
+    const { url, apiVersion, accessToken } = sellerData;
     while (hasNextPage) {
-      const response = await fetch(`${SHOPIFY_SHOP_URL}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+      const response = await fetch(`${url}/admin/api/${apiVersion}/graphql.json`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Shopify-Access-Token': ACCESS_TOKEN,
+          'X-Shopify-Access-Token': accessToken,
         },
         body: JSON.stringify({
           query: PRODUCTS_QUERY,
@@ -189,5 +189,22 @@ export const fetchProducts = async () => {
   } catch (err) {
     console.error('Shopify GraphQL fetch error:', err);
     return [];
+  }
+};
+
+export const fetchShopifyCredentials = async (sellerId) => {
+  try {
+    const shopifyData = await Seller.findById(sellerId).select(
+      '_id shopifyConfig.url shopifyConfig.apiVersion +shopifyConfig.accessToken'
+    );
+
+    if (!shopifyData?.shopifyConfig) {
+      return null;
+    }
+
+    return shopifyData;
+  } catch (error) {
+    console.error('fetchShopifyCredentials error:', error);
+    throw error;
   }
 };

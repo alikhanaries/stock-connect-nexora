@@ -5,9 +5,9 @@ import { formatProducts } from '#root/src/integrations/erp/shopify/helpers/forma
 import { fetchProducts } from '#root/src/integrations/erp/shopify/service/shopifyService.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
-export const fetchAndStoreShopifyProducts = async (sellerId) => {
+export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
   try {
-    const rawResponse = await fetchProducts();
+    const rawResponse = await fetchProducts(sellerData);
 
     const rawProducts = rawResponse;
 
