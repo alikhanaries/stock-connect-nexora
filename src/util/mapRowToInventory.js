@@ -9,11 +9,14 @@ export const mapRowToInventory = async (row, index, locale) => {
 
   // Required validations
   const errorData = [];
-  if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
-  if (r.currentstockcount === undefined || r.currentstockcount === '') {
-    errorData.push(locale.CURRENT_STOCK_COUNT_MISSING);
-  }
+  if (!r.productskucode) errorData.push(locale.INVENTORY_SKUCODE_MISSING);
   const parsedStock = Number(r.currentstockcount);
+  if (r.currentstockcount === undefined || r.currentstockcount === '') {
+    errorData.push(`${locale.CURRENT_STOCK_COUNT_MISSING} for SKU: ${r.productskucode || ''}`);
+  } else if (Number.isNaN(parsedStock) || parsedStock < 0) {
+    errorData.push(`${locale.INVALID_STOCK_COUNT} for SKU: ${r.productskucode || ''}`);
+  }
+
   if (errorData.length) return { rowNumber: index, errorData };
 
   // Build inventory object
