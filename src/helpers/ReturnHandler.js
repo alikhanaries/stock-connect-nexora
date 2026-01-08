@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
 
@@ -145,6 +146,113 @@ export const buildReturnAggregationPipeline = () => {
       },
     },
   ];
+};
+
+export const buildReturnMatchAndPipeline = (query = {}, { includeSearchNameSplit = false } = {}) => {
+  const { status, platform, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
+
+  const matchConditions = {};
+
+  // ====== Filters ======
+  const addFilter = (key, value, transform = (v) => v, includeInApplied = false) => {
+    if (value !== undefined && value !== null && value !== '') {
+      matchConditions[key] = transform(value);
+      if (includeInApplied) {
+        appliedFilters[key] = value;
+      }
+    }
+  };
+
+  // Validate status if provided
+  if (status) {
+    const statusArray = status
+      .toString()
+      .split(',')
+      .map((s) => s.trim().toUpperCase());
+
+    // Check each provided status
+    const invalid = statusArray.filter((s) => !Object.values(RETURN_STATUS).includes(s));
+
+    if (invalid.length > 0) {
+      throw new Error(
+        `Invalid status: ${invalid.join(', ')}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`
+      );
+    }
+  }
+
+  // Add filter (case-insensitive)
+  addFilter(
+    'status',
+    status,
+    (v) => {
+      const arr = v.split(',').map((s) => s.trim());
+
+      return {
+        $in: arr.map((s) => new RegExp(`^${s}$`, 'i')),
+      };
+    },
+    true
+  );
+
+  addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
+  addFilter('channelId', channelId, (v) => parseInt(v, 10));
+  addFilter('returnId', returnId);
+  addFilter('orderId', orderID);
+  addFilter('orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
+
+  // ====== Search Filter ======
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    const searchConditions = [
+      { returnId: { $regex: searchRegex } },
+      { orderId: { $regex: searchRegex } },
+      { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
+      { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
+      { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
+    ];
+
+    // Handle full name searches
+    const searchTerms = search.trim().split(/\s+/);
+    if (searchTerms.length > 1) {
+      const [firstTerm, ...rest] = searchTerms;
+      const lastTerm = rest.join(' ');
+      const firstRegex = new RegExp(firstTerm, 'i');
+      const lastRegex = new RegExp(lastTerm, 'i');
+
+      searchConditions.push(
+        {
+          $and: [
+            { 'orderInfo.orderCustomer.firstName': firstRegex },
+            { 'orderInfo.orderCustomer.lastName': lastRegex },
+          ],
+        },
+        {
+          $and: [
+            { 'orderInfo.orderCustomer.lastName': firstRegex },
+            { 'orderInfo.orderCustomer.firstName': lastRegex },
+          ],
+        }
+      );
+    }
+
+    matchConditions.$or = searchConditions;
+  }
+
+  // ====== Date Range Filter ======
+  if (dateFrom || dateTo) {
+    matchConditions.createdAt = {};
+    if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
+  }
+
+  // ====== Build Aggregation Pipeline ======
+  const pipeline = buildReturnAggregationPipeline();
+
+  if (Object.keys(matchConditions).length > 0) {
+    pipeline.push({ $match: matchConditions });
+  }
+
+  return { pipeline, matchConditions };
 };
 
 export const addStatusManipulationStages = () => {
@@ -366,6 +474,7 @@ export default {
   getOrderDataByOrderLineIds,
   isNameOrEmailSearch,
   buildReturnAggregationPipeline,
+  buildReturnMatchAndPipeline,
   addStatusManipulationStages,
   formatReturnDetails,
 };
