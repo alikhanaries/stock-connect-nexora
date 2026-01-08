@@ -60,7 +60,7 @@ const getAllOrders = async (query, sellerId) => {
       fromDate,
       status,
       sortOrder = 'desc',
-      sortBy = 'orderId',
+      sortBy = 'orderDate',
       platform = '',
     } = query;
     const skip = (page - 1) * size;
