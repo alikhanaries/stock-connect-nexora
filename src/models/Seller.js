@@ -38,7 +38,6 @@ const sellerSchema = new Schema(
       enum: ['active', 'inactive'],
       default: 'active',
     },
-
     shopifyConfig: {
       type: new Schema(
         {
