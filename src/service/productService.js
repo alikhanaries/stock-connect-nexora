@@ -7,6 +7,7 @@ import { escapeCsv, validateExportData } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
+import Inventory from '#models/Inventory.js';
 import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
@@ -589,6 +590,14 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   }
   await Promise.all(bulkTasks);
 
+  // insert inventories for products imported/updated
+  await upsertInventoriesForProducts({
+    sellerId,
+    productSkuCodes,
+    batchSize,
+    writeLimit,
+  });
+
   // Delete file async (non-blocking)
   if (deleteAfter && filePath) {
     fs.unlink(filePath, (err) => {
@@ -614,6 +623,58 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     invalidRowsCount,
     errorDetails,
   };
+};
+
+export const upsertInventoriesForProducts = async ({ sellerId, productSkuCodes, batchSize, writeLimit }) => {
+  if (!productSkuCodes.length) return;
+
+  const now = new Date();
+
+  // 1. Fetch ALL required product data in ONE query
+  const products = await Product.find(
+    {
+      sellerId,
+      productSkuCode: { $in: productSkuCodes },
+    },
+    {
+      _id: 1,
+      sellerId: 1,
+      productSkuCode: 1,
+      currentStockCount: 1,
+    }
+  ).lean();
+
+  if (!products.length) return;
+
+  // 2. Build inventory bulk ops once
+  const inventoryBulkOps = products.map((product) => ({
+    updateOne: {
+      filter: {
+        sellerId: product.sellerId,
+        productId: product._id,
+      },
+      update: {
+        $setOnInsert: {
+          productSkuCode: product.productSkuCode,
+        },
+        $set: {
+          currentStockCount: product.currentStockCount ?? 0,
+          lastSyncedAt: now,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  // 3. Batch bulkWrite with concurrency
+  const bulkTasks = [];
+  for (let i = 0; i < inventoryBulkOps.length; i += batchSize) {
+    const batch = inventoryBulkOps.slice(i, i + batchSize);
+
+    bulkTasks.push(writeLimit(() => Inventory.bulkWrite(batch, { ordered: false })));
+  }
+
+  await Promise.all(bulkTasks);
 };
 
 /* Google Sheet Import */
