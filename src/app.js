@@ -9,22 +9,18 @@ import eliteStringLaIntimoApiRoutes from './integrations/erp/eliteStringLaIntimo
 import shopifyRoutes from './integrations/erp/shopify/routes/api.js';
 import cronJob from './cronJobs/index.js';
 
-import swaggerUi from 'swagger-ui-express';
-import { loadSwagger } from './util/swagger.js';
+import swaggerUi from "swagger-ui-express";
+import { loadSwagger } from "./util/swagger.js";
 
 const swaggerDocument = loadSwagger();
 
 const app = express();
-app.use(
-  '/api-docs',
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerDocument, {
-    requestInterceptor: (req) => {
-      req.headers['Accept-Language'] = 'en';
-      return req;
-    },
-  })
-);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+  requestInterceptor: req => {
+    req.headers['Accept-Language'] = 'en';
+    return req;
+  }
+}));
 
 app.use(express.json());
 app.use(cors(corsOptions));
