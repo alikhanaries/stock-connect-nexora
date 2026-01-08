@@ -8,12 +8,12 @@ export const importInventoryFromGoogleSheet = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const { url } = req.body;
-    if (!req.body.url) {
+    if (!url) {
       return failResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
     const exportUrl = await convertGoogleSheetUrlToExport(url);
     if (!exportUrl) {
-      return failResponse(res, req?.locale?.INVALID_URL, 500);
+      return failResponse(res, req?.locale?.INVALID_URL, 400);
     }
     // Send immediate response to client
     successResponse(res, req?.locale?.INVENTORY_IMPORTED_PROCESSING, 200);
