@@ -90,15 +90,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       continue;
     }
 
-    if (typeof inventory.currentStockCount !== 'number' || inventory.currentStockCount < 0) {
-      errorDetails.push({
-        rowNumber: inventory.rowNumber,
-        errorData: [`Stock must be 0 or greater for SKU ${inventory.productSkuCode}`],
-      });
-      invalidRowsCount++;
-      continue;
-    }
-
     bulkOps.push({
       updateOne: {
         filter: { sellerId, productSkuCode: inventory.productSkuCode },
@@ -139,7 +130,9 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   // 5. Cleanup
   if (deleteAfter && filePath) {
-    fs.unlink(filePath, () => {});
+    fs.unlink(filePath, (err) => {
+      if (err) console.log('File cleanup failed:', err.message);
+    });
   }
 
   return {
@@ -165,6 +158,18 @@ export const importInventoryFromGoogleSheet = async (url, locale, sellerId) => {
   }
 };
 
+/* CSV File Import */
+export const importInventoryFromCsvFile = async (filePath, locale, sellerId) => {
+  try {
+    const stream = fs.createReadStream(filePath);
+    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId });
+  } catch (err) {
+    console.error('Error in importInventoryFromCsvFile:', err);
+    throw new Error(err.message); // force the catch block
+  }
+};
+
 export default {
   importInventoryFromGoogleSheet,
+  importInventoryFromCsvFile,
 };

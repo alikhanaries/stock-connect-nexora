@@ -174,5 +174,10 @@
   "FAILED_TO_UPDATE_RETURN": "فشل في تحديث المرتجع",
   "RETURN_UPDATED_SUCCESSFULLY": "تم تحديث المرتجع بنجاح",
   "INVALID_RETURN_ID_FORMAT": "تنسيق معرف المرتجع غير صحيح",
-  "RETURN_FETCHED_SUCCESSFULLY": "تم جلب المرتجع بنجاح"
+  "RETURN_FETCHED_SUCCESSFULLY": "تم جلب المرتجع بنجاح",
+
+  "INVENTORY_IMPORTED_PROCESSING": "جارٍ معالجة استيراد المخزون",
+  "CURRENT_STOCK_COUNT_MISSING": "عدد المخزون الحالي غير موجود",
+  "INVENTORY_SKUCODE_MISSING": "رمز المنتج (skucode) الخاص بالمخزون مفقود",
+  "INVALID_STOCK_COUNT": "عدد المخزون غير صالح"
 }
