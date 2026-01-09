@@ -293,7 +293,6 @@ export const getOrderById = async (id) => {
 
       // Cancelled items
       if (
-        // (status === 'CANCELED' || status === 'PARTIALLY_CANCELED' || status === 'IN_COMBI') &&
         product.cancellationRequestedQuantity > 0
       ) {
         cancelledItems.push({
