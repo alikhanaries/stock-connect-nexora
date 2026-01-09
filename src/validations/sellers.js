@@ -11,27 +11,32 @@ const objectIdSchema = z.string().refine((val) => mongoose.Types.ObjectId.isVali
 export const createSellerValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 
+  const emptyToUndefined = (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val);
+
   const bodySchema = z
     .object({
       name: z
         .string({ required_error: 'Name is required' })
         .min(1, { message: 'Name must be at least 1 character long' }),
 
-      shopifyStoreUrl: z
-        .string({ required_error: 'url is required' })
-        .url({ message: 'url must be a valid URL' })
-        .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
-        .optional(),
+      shopifyStoreUrl: z.preprocess(
+        emptyToUndefined,
+        z
+          .string()
+          .url({ message: 'shopifyStoreUrl must be a valid URL' })
+          .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
+          .optional()
+      ),
 
-      shopifyApiVersion: z
-        .string({ required_error: 'apiVersion is required' })
-        .min(1, { message: 'apiVersion is required' })
-        .optional(),
+      shopifyApiVersion: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'apiVersion is required' }).optional()
+      ),
 
-      shopifyAccessToken: z
-        .string({ required_error: 'accessToken is required' })
-        .min(1, { message: 'accessToken is required' })
-        .optional(),
+      shopifyAccessToken: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'accessToken is required' }).optional()
+      ),
     })
     .refine(
       (data) =>
@@ -40,7 +45,7 @@ export const createSellerValidator = validate(async (req) => {
         (data.shopifyStoreUrl && data.shopifyApiVersion && data.shopifyAccessToken),
       {
         message: 'shopifyStoreUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
-        path: ['shopifyStorUrl'],
+        path: ['shopifyStoreUrl'],
       }
     );
 
@@ -67,19 +72,33 @@ export const updateSellerValidator = validate(async (req) => {
   });
   await paramsSchema.parseAsync(req.params);
 
+  const emptyToUndefined = (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val);
+
   const bodySchema = z
     .object({
-      name: z.string().min(1).optional(),
+      name: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'Name must be at least 1 character long' }).optional()
+      ),
 
-      shopifyStoreUrl: z
-        .string()
-        .url({ message: 'url must be a valid URL' })
-        .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
-        .optional(),
+      shopifyStoreUrl: z.preprocess(
+        emptyToUndefined,
+        z
+          .string()
+          .url({ message: 'shopifyStoreUrl must be a valid URL' })
+          .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
+          .optional()
+      ),
 
-      shopifyApiVersion: z.string().min(1).optional(),
+      shopifyApiVersion: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'apiVersion is required' }).optional()
+      ),
 
-      shopifyAccessToken: z.string().min(1).optional(),
+      shopifyAccessToken: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'accessToken is required' }).optional()
+      ),
     })
     .refine(
       (data) =>

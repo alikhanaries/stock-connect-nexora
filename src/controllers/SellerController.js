@@ -40,20 +40,24 @@ export const updateSeller = async (req, res) => {
       name,
       status: statusValue,
       ocpSlugId,
-      shopifyConfig:
-        shopifyStoreUrl && shopifyApiVersion && shopifyAccessToken
-          ? {
-              url: shopifyStoreUrl,
-              apiVersion: shopifyApiVersion,
-              accessToken: shopifyAccessToken,
-            }
-          : undefined,
+      shopifyConfig: {
+        url: shopifyStoreUrl,
+        apiVersion: shopifyApiVersion,
+        accessToken: shopifyAccessToken,
+      },
     };
 
     const updatedSeller = await sellerService.updateSeller(id, payload);
+    console.log('updatedSeller', updatedSeller);
+
     if (!updatedSeller) {
       return response.failResponse(res, req.locale.SELLER_NOT_FOUND, 404);
     }
+
+    if (!updatedSeller.isUpdated) {
+      return response.failResponse(res, req.locale.NOTHING_TO_UPDATE || 'No changes detected', 400);
+    }
+
     return response.successResponse(res, req.locale.SELLER_UPDATED_SUCCESSFULLY, 200, updatedSeller);
   } catch (error) {
     console.log('Update seller error: ', error);
@@ -121,14 +125,11 @@ export const createSeller = async (req, res) => {
 
     const payload = {
       ...restBody,
-      shopifyConfig:
-        shopifyStoreUrl && shopifyApiVersion && shopifyAccessToken
-          ? {
-              url: shopifyStoreUrl,
-              apiVersion: shopifyApiVersion,
-              accessToken: shopifyAccessToken,
-            }
-          : undefined,
+      shopifyConfig: {
+        url: shopifyStoreUrl,
+        apiVersion: shopifyApiVersion,
+        accessToken: shopifyAccessToken,
+      },
     };
 
     const newSeller = await sellerService.createSeller(payload);
