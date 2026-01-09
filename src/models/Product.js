@@ -192,6 +192,14 @@ const ProductSchema = new mongoose.Schema(
       default: 'Regular',
       enum: ['Regular', 'Short', 'Tall', 'Extra Tall', 'Petite', 'Big & Tall'],
     },
+    source: {
+      type: String,
+      enum: ['SHOPIFY', 'MANUAL', 'AMAZON', 'NOON', 'TRENDYOL'],
+      default: 'MANUAL',
+      uppercase: true,
+      trim: true,
+      index: true,
+    },
     updatedAt: {
       type: Date,
     },
