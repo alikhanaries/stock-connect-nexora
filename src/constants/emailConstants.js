@@ -22,3 +22,16 @@ export const resetPasswordConstants = {
   RESET_PASSWORD_FOOTER:
     '© 2025 {tenantName}. All rights reserved. You received this email because you signed up on our platform.',
 };
+
+export const importInventoryConstant = {
+  INVENTORY_UPDATE_STATUS: 'Inventory Update Status',
+  INVENTORY_UPDATE_FAILED: 'Inventory Update Failed!',
+  INVENTORY_UPDATE_SUCCESS: 'Inventory Update Successful!',
+  INV_UPDATE_FAILED: 'Your inventory update has failed due to some errors.',
+  INV_UPDATE_SUCCESS: 'Your inventory update has been completed successfully.',
+  INV_UPDATE_SKIPPED_SKUS: 'Skipped SKUs:',
+  INV_UPDATE_FOOTER: 'All rights reserved.',
+  SUBJECT: 'Inventory Update Notification',
+  INV_UPDATE_PARTIAL_SUCCESS:
+    'Important: Some entries in your file were not updated successfully. Refer to the table below for the row numbers and corresponding error details.',
+};
