@@ -368,7 +368,7 @@ export const getOrderById = async (id) => {
     return {
       ...filteredData,
       shippedItems,
-      deliveredItems, // ✅ NEW
+      deliveredItems, // NEW
       unshippedItems,
       cancelledItems,
       orderLogsData,
