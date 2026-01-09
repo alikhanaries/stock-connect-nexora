@@ -90,7 +90,28 @@ export const importInventoryFromCsvFile = async (req, res) => {
   }
 };
 
+export const updateSingleInventory = async (req, res) => {
+  try {
+    const sellerId = req.sellerId; // from auth middleware
+    const { productId, currentStockCount } = req.body;
+
+    // Extra safety (validator already handles this, but OK to keep)
+    if (!productId || typeof currentStockCount !== 'number') {
+      return failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+
+    const result = await inventoryService.updateSingleInventory(productId, currentStockCount, req.locale, sellerId);
+
+    return successResponse(res, req.locale.SUCCESS, 200, result);
+  } catch (error) {
+    console.error('updateSingleInventory error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error.message, error.statusCode);
+  }
+};
+
 export default {
   importInventoryFromGoogleSheet,
   importInventoryFromCsvFile,
+  updateSingleInventory,
 };
