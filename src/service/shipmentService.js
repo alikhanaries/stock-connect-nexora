@@ -1360,7 +1360,7 @@ export const createManualShipmentService = async (shipmentData) => {
       description = '',
     } = shipmentData;
 
-    /* -------------------- VALIDATION -------------------- */
+    //Validate required fields
     const missingFields = [];
     if (!orderId) missingFields.push('orderId');
     if (!sellerId) missingFields.push('sellerId');
@@ -1375,7 +1375,7 @@ export const createManualShipmentService = async (shipmentData) => {
       throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
 
-    /* -------------------- PARALLEL FETCH -------------------- */
+    // Check for duplicates and fetch order/user in parallel
     const [existingMerchantShipment, existingAwb, order, user] = await Promise.all([
       Shipment.findOne({ merchantShipmentNo }),
       Shipment.findOne({ airWaybillNo }),
@@ -1383,54 +1383,88 @@ export const createManualShipmentService = async (shipmentData) => {
       User.findById(userId).lean(),
     ]);
 
-    if (existingMerchantShipment) throw new Error(`Merchant shipment number '${merchantShipmentNo}' already exists`);
-    if (existingAwb) throw new Error(`AWB number '${airWaybillNo}' already exists`);
-    if (!order) throw new Error(`Order with ID ${orderId} not found`);
-    if (!user) throw new Error(`User with ID ${userId} not found`);
+    if (existingMerchantShipment) {
+      throw new Error(`Merchant shipment number '${merchantShipmentNo}' already exists`);
+    }
 
-    /* -------------------- ORDER SKU MAP -------------------- */
+    if (existingAwb) {
+      throw new Error(`AWB number '${airWaybillNo}' already exists`);
+    }
+
+    if (!order) {
+      throw new Error(`Order with ID ${orderId} not found`);
+    }
+
+    if (!user) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+
+    //Validate products against order
     const orderSkuMap = new Map();
-    order.orderSkuList?.skuList?.forEach((sku) => {
-      orderSkuMap.set(sku.merchantProductNo.toLowerCase(), sku);
-    });
+    if (order.orderSkuList?.skuList) {
+      order.orderSkuList.skuList.forEach((sku) => {
+        orderSkuMap.set(sku.merchantProductNo.toLowerCase(), sku);
+      });
+    }
 
-    /* -------------------- EXISTING SHIPMENTS -------------------- */
-    const productLineIds = products.map((p) => String(p.orderLineId));
-
+    // Fetch existing shipments to calculate already shipped quantities
+    const productLineIds = products.map((p) => p.orderLineId?.toString());
     const existingShipments = await Shipment.find({
-      orderId,
-      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'] },
+      orderId: orderId,
+      status: { $ne: 'CANCELED' },
       'products.orderLineId': { $in: productLineIds },
     }).lean();
 
+    // Build shipped quantity map
     const shippedQtyMap = {};
-    existingShipments.forEach((shipment) => {
-      shipment.products?.forEach((p) => {
-        const id = String(p.orderLineId);
-        shippedQtyMap[id] = (shippedQtyMap[id] || 0) + (p.quantity || 0);
-      });
-    });
+    for (const shipment of existingShipments || []) {
+      // Only count shipments that are actually shipped or in transit
+      if (!['SHIPMENT_CREATED', 'PICKED', 'DELIVERED', 'SHIPPED'].includes(shipment.status)) continue;
 
-    /* -------------------- PRODUCT VALIDATION -------------------- */
+      for (const product of shipment.products || []) {
+        const orderLineId = String(product.orderLineId);
+        const quantity = product.quantity || 0;
+
+        if (productLineIds.includes(orderLineId)) {
+          shippedQtyMap[orderLineId] = (shippedQtyMap[orderLineId] || 0) + quantity;
+        }
+      }
+    }
+
     const validatedProducts = [];
-
     for (const product of products) {
       const orderSku = orderSkuMap.get(product.merchantProductNo.toLowerCase());
-      if (!orderSku) throw new Error(`Product ${product.merchantProductNo} not found in order`);
+      if (!orderSku) {
+        throw new Error(`Product ${product.merchantProductNo} not found in order ${order.orderId}`);
+      }
 
-      if (product.quantity <= 0) throw new Error(`Invalid quantity for ${product.merchantProductNo}`);
+      // Check if quantity is valid
+      if (product.quantity <= 0) {
+        throw new Error(`Invalid quantity for product ${product.merchantProductNo}`);
+      }
 
-      const orderedQty = orderSku.quantity || 0;
-      const cancelledQty = orderSku.cancellationRequestedQuantity || 0;
-      const availableQty = orderedQty - cancelledQty;
+      // Calculate available quantity (ordered - cancelled)
+      const orderedQuantity = orderSku.quantity || 0;
+      const cancelledQuantity = orderSku.cancellationRequestedQuantity || 0;
+      const availableQuantity = orderedQuantity - cancelledQuantity;
 
-      const alreadyShipped = shippedQtyMap[String(product.orderLineId)] || 0;
-      const remainingQty = availableQty - alreadyShipped;
+      // Get already shipped quantity for this product
+      const orderLineId = String(product.orderLineId);
+      const alreadyShippedQty = shippedQtyMap[orderLineId] || 0;
+      const remainingQuantity = availableQuantity - alreadyShippedQty;
 
-      if (remainingQty <= 0) throw new Error(`All quantity already shipped for ${product.merchantProductNo}`);
+      // Validate requested quantity doesn't exceed remaining quantity
+      if (remainingQuantity <= 0) {
+        throw new Error(
+          `Cannot ship ${product.merchantProductNo}. All ${availableQuantity} available units have already been shipped`
+        );
+      }
 
-      if (product.quantity > remainingQty)
-        throw new Error(`Cannot ship ${product.quantity}. Only ${remainingQty} remaining`);
+      if (product.quantity > remainingQuantity) {
+        throw new Error(
+          `Cannot ship ${product.quantity} units of ${product.merchantProductNo}. Only ${remainingQuantity} units remaining (${orderedQuantity} ordered, ${cancelledQuantity} cancelled, ${alreadyShippedQty} already shipped)`
+        );
+      }
 
       validatedProducts.push({
         merchantProductNo: product.merchantProductNo,
@@ -1440,33 +1474,42 @@ export const createManualShipmentService = async (shipmentData) => {
       });
     }
 
-    /* -------------------- PICKUP & DELIVERY -------------------- */
+    //Validate and get pickup address
     const pickupData = await getPickUpAddress(pickUpId);
-    if (!pickupData) throw new Error('Invalid pickup address ID');
+    if (!pickupData) {
+      throw new Error('Invalid pickup address ID');
+    }
 
+    //Save or get existing delivery address from order
     let deliveryId;
-    const existingDelivery = await DeliveryAddress.findOne({ orderId }).lean();
+    const existingDelivery = await DeliveryAddress.findOne({
+      orderId: orderId,
+    }).lean();
 
     if (existingDelivery) {
       deliveryId = existingDelivery._id;
     } else {
-      const savedDelivery = await saveDeliveryAddress({
-        orderId,
+      // Create delivery address from order shipping address
+      const deliveryData = {
+        orderId: orderId,
         name: `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim(),
         email: order.orderCustomer?.email || '',
-        phone: order.orderCustomer?.phone || '',
+        phone: order.orderCustomer?.phone || order.orderShippingAddress?.phone || '',
         address: order.orderShippingAddress?.streetName || '',
         city: order.orderShippingAddress?.city || '',
         country: order.orderShippingAddress?.country || '',
         postcode: order.orderShippingAddress?.zipCode || '',
-      });
+      };
+
+      const savedDelivery = await saveDeliveryAddress(deliveryData);
       deliveryId = savedDelivery._id;
     }
 
-    /* -------------------- CREATE SHIPMENT -------------------- */
-    const totalPieces = validatedProducts.reduce((s, p) => s + p.quantity, 0);
+    //Calculate pieces (total quantity)
+    const totalPieces = validatedProducts.reduce((sum, p) => sum + p.quantity, 0);
 
-    const shipment = await new Shipment({
+    //Create shipment in DB
+    const shipmentDoc = new Shipment({
       orderId,
       sellerId,
       userId,
@@ -1481,83 +1524,150 @@ export const createManualShipmentService = async (shipmentData) => {
       pieces: totalPieces,
       status: 'SHIPPED',
       submissionDate: new Date(),
-      shipmentMethod: 'MANUAL',
       isMerchantCreator: true,
+      shipmentMethod: 'MANUAL',
       ...(description && { description }),
-    }).save();
+      shipmentMerchantDetails: {
+        name: user.firstName || user.username || 'Unknown',
+        email: user.email || '',
+      },
+    });
 
-    /* -------------------- CHANNEL ENGINE -------------------- */
-    await createShipmentWithChannelEngine({
+    const savedShipment = await shipmentDoc.save();
+
+    //Prepare lines for ChannelEngine
+    const channelEngineLines = validatedProducts.map((p) => ({
+      merchantProductNo: p.merchantProductNo,
+      quantity: p.quantity,
+      orderLineId: p.orderLineId,
+    }));
+
+    //Send to ChannelEngine
+    const channelEngineResponse = await createShipmentWithChannelEngine({
       merchantShipmentNo,
       merchantOrderNo: order.merchantOrderNo || order.orderId,
-      lines: validatedProducts,
+      lines: channelEngineLines,
       trackTraceNo: airWaybillNo,
-      trackTraceUrl,
+      trackTraceUrl: trackTraceUrl || '',
+      returnTrackTraceNo: '',
       method,
       shippedFromCountryCode,
       shipmentDate: new Date(),
+      returnMethod: '',
       isMerchantCreator: true,
       airWaybillNo,
+      extraData: {},
     });
 
-    /* -------------------- ORDER STATUS LOGIC -------------------- */
+    //Update order SKU statuses - only update if all available quantity has been shipped
+    const orderLineIds = validatedProducts.map((p) => p.orderLineId);
+    if (orderLineIds.length > 0) {
+      // Fetch the latest order to check quantities
+      const currentOrder = await Order.findById(orderId).lean();
+
+      for (const product of validatedProducts) {
+        const orderLineId = product.orderLineId;
+        const matchedSku = currentOrder.orderSkuList?.skuList?.find((sku) => String(sku.id) === String(orderLineId));
+
+        if (matchedSku) {
+          const cancellationRequestedQty = matchedSku.cancellationRequestedQuantity || 0;
+          const availableQty = matchedSku.quantity - cancellationRequestedQty;
+          const alreadyShippedQty = shippedQtyMap[String(orderLineId)] || 0;
+          const totalShippedAfterThis = alreadyShippedQty + product.quantity;
+
+          // Only mark as SHIPPED if all available quantity has been shipped
+          // But preserve PARTIALLY_CANCELED status if there were cancellations
+          if (totalShippedAfterThis >= availableQty) {
+            // Don't update status if it's already PARTIALLY_CANCELED
+            if (matchedSku.status !== 'PARTIALLY_CANCELED') {
+              await Order.updateOne(
+                { _id: orderId },
+                {
+                  $set: {
+                    'orderSkuList.skuList.$[elem].status': 'SHIPPED',
+                  },
+                },
+                {
+                  arrayFilters: [{ 'elem.id': orderLineId }],
+                }
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // Check if all SKUs are now SHIPPED (with all available quantities shipped) and update order status
     const updatedOrder = await Order.findById(orderId).lean();
 
-    const allShipments = await Shipment.find({
-      orderId,
-      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'] },
-    }).lean();
+    // Get all shipments for this order (excluding canceled)
+    const allOrderShipments = await Shipment.find({
+      orderId: orderId,
+      status: { $in: ['SHIPMENT_CREATED', 'PICKED', 'DELIVERED', 'SHIPPED'] },
+    })
+      .select('products')
+      .lean();
 
+    // Calculate total shipped quantity per orderLineId
     const totalShippedMap = {};
-    allShipments.forEach((s) =>
-      s.products?.forEach((p) => {
-        const id = String(p.orderLineId);
-        totalShippedMap[id] = (totalShippedMap[id] || 0) + (p.quantity || 0);
-      })
-    );
+    allOrderShipments.forEach((shipment) => {
+      (shipment.products || []).forEach((product) => {
+        const lineId = String(product.orderLineId);
+        totalShippedMap[lineId] = (totalShippedMap[lineId] || 0) + (product.quantity || 0);
+      });
+    });
 
-    const allShipped = updatedOrder.orderSkuList.skuList.every((sku) => {
-      const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
-      const shippedQty = totalShippedMap[String(sku.id)] || 0;
+    // Check if all available quantities have been shipped
+    const allShipped = updatedOrder.orderSkuList?.skuList?.every((sku) => {
+      const orderLineId = String(sku.id);
+      const orderedQty = sku.quantity || 0;
+      const cancelledQty = sku.cancellationRequestedQuantity || 0;
+      const availableQty = orderedQty - cancelledQty;
+      const shippedQty = totalShippedMap[orderLineId] || 0;
+
+      // Consider SKU as fully processed if:
+      // 1. Available quantity is 0 (fully cancelled)
+      // 2. All available quantity has been shipped
       return availableQty <= 0 || shippedQty >= availableQty;
     });
 
-    const partiallyShipped = updatedOrder.orderSkuList.skuList.some((sku) => {
-      const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
-      const shippedQty = totalShippedMap[String(sku.id)] || 0;
-      return shippedQty > 0 && shippedQty < availableQty;
-    });
-
     if (allShipped) {
-      await Order.findByIdAndUpdate(orderId, { status: 'SHIPPED' });
-    } else if (partiallyShipped) {
-      await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' });
+      await Order.findByIdAndUpdate(orderId, { $set: { status: 'SHIPPED' } });
+
+      // Check if there were any cancellations
+      const hasCancellations = updatedOrder.orderSkuList?.skuList?.some((sku) => {
+        const cancellationRequestedQty = sku.cancellationRequestedQuantity || 0;
+        return cancellationRequestedQty > 0;
+      });
+
+      // Add order-level log entry
+      const orderLogEntry = {
+        status: 'SHIPPED',
+        description: hasCancellations ? `All available items shipped` : `All items shipped`,
+        createdAt: convetDateToUTC(new Date()),
+      };
+      await OrderLogs.updateOne({ orderId: orderId }, { $push: { details: orderLogEntry } }, { upsert: true });
     }
 
-    /* -------------------- LOGS -------------------- */
-    await OrderLogs.updateOne(
-      { orderId },
-      {
-        $push: {
-          details: {
-            status: allShipped ? 'SHIPPED' : 'IN_PROGRESS',
-            description: allShipped ? 'All available items shipped' : 'Order partially shipped',
-            createdAt: convetDateToUTC(new Date()),
-          },
-        },
-      },
-      { upsert: true }
-    );
+    // Create shipment log entry
+    const logEntry = {
+      status: 'SHIPPED',
+      description: `MANUAL shipment created with AWB: ${airWaybillNo}, Method: ${method}`,
+      createdAt: convetDateToUTC(new Date()),
+    };
+
+    await OrderLogs.updateOne({ orderId: orderId }, { $push: { details: logEntry } }, { upsert: true });
 
     return {
       success: true,
       message: 'MANUAL shipment created successfully',
-      shipmentId: shipment._id,
+      shipmentId: savedShipment._id,
       airWaybillNo,
       merchantShipmentNo,
+      channelEngineResponse,
     };
   } catch (error) {
-    console.error('createManualShipmentService error:', error);
+    console.error('Error in createManualShipmentService:', error.message, error.stack);
     throw new Error(error.message || 'Failed to create MANUAL shipment');
   }
 };
