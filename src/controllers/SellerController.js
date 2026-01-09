@@ -48,7 +48,7 @@ export const updateSeller = async (req, res) => {
     };
 
     const updatedSeller = await sellerService.updateSeller(id, payload);
-    console.log('updatedSeller', updatedSeller);
+  
 
     if (!updatedSeller) {
       return response.failResponse(res, req.locale.SELLER_NOT_FOUND, 404);
