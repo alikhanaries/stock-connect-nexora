@@ -66,7 +66,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   await Promise.all(rowTasks);
 
   if (!incomingSkuSet.size) {
-    return { success: true, message: 'No valid rows found' };
+    return { success: true, message: 'No valid rows found', updatedCount: 0, invalidRowsCount: 0 };
   }
 
   // 2. Fetch existing inventories
