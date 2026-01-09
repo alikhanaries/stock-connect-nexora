@@ -180,7 +180,7 @@ export const freezeOrUnfreezeProducts = async (req, res) => {
       return failResponse(res, req.locale.PRODUCT_IDS_REQUIRED, 400);
     }
     const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
-    if (invalidIds.length) {
+    if (invalidIds.length > 0) {
       return failResponse(res, `${req.locale.INVALID_PRODUCT_IDS} ${invalidIds.join(', ')}`, 400);
     }
     const { skuCodes, hasParent } = await productService.syncfreezeOrUnfreezeToStockConnect(ids, isFrozen, sellerId);
