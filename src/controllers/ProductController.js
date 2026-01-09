@@ -183,12 +183,15 @@ export const freezeOrUnfreezeProducts = async (req, res) => {
     if (invalidIds.length > 0) {
       return failResponse(res, `${req.locale.INVALID_PRODUCT_IDS} ${invalidIds.join(', ')}`, 400);
     }
-    const updatedSkus = await productService.syncfreezeOrUnfreezeToStockConnect(ids, isFrozen, sellerId);
-    if (!updatedSkus.length) {
+    const { skuCodes, hasParent } = await productService.syncfreezeOrUnfreezeToStockConnect(ids, isFrozen, sellerId);
+    if (hasParent) {
+      return failResponse(res, 'Parent products are not supported and were skipped', 400);
+    }
+    if (!skuCodes.length) {
       return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
     }
     await productService.syncFreezeOrUnfreezeToChannelEngine({
-      skuCodes: updatedSkus,
+      skuCodes,
       isFrozen,
     });
 
