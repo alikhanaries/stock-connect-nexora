@@ -148,20 +148,16 @@ export const buildReturnAggregationPipeline = () => {
   ];
 };
 
+export const addFilter = (matchConditions, key, value, transform = (v) => v) => {
+  if (value !== undefined && value !== null && value !== '') {
+    matchConditions[key] = transform(value);
+  }
+};
+
 export const buildReturnMatchAndPipeline = (query = {}, { includeSearchNameSplit = false } = {}) => {
   const { status, platform, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
 
   const matchConditions = {};
-
-  // ====== Filters ======
-  const addFilter = (key, value, transform = (v) => v, includeInApplied = false) => {
-    if (value !== undefined && value !== null && value !== '') {
-      matchConditions[key] = transform(value);
-      if (includeInApplied) {
-        appliedFilters[key] = value;
-      }
-    }
-  };
 
   // Validate status if provided
   if (status) {
@@ -180,27 +176,23 @@ export const buildReturnMatchAndPipeline = (query = {}, { includeSearchNameSplit
     }
   }
 
-  // Add filter (case-insensitive)
-  addFilter(
-    'status',
-    status,
-    (v) => {
-      const arr = v.split(',').map((s) => s.trim());
+  // Filters
+  addFilter(matchConditions, 'status', status, (v) => ({
+    $in: v.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
+  }));
 
-      return {
-        $in: arr.map((s) => new RegExp(`^${s}$`, 'i')),
-      };
-    },
-    true
-  );
+  addFilter(matchConditions, 'platform', platform, (v) => ({
+    $regex: new RegExp(v, 'i'),
+  }));
 
-  addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
-  addFilter('channelId', channelId, (v) => parseInt(v, 10));
-  addFilter('returnId', returnId);
-  addFilter('orderId', orderID);
-  addFilter('orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
+  addFilter(matchConditions, 'channelId', channelId, (v) => parseInt(v, 10));
 
-  // ====== Search Filter ======
+  addFilter(matchConditions, 'returnId', returnId);
+  addFilter(matchConditions, 'orderId', orderID);
+
+  addFilter(matchConditions, 'orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
+
+  // Search Filter
   if (search) {
     const searchRegex = new RegExp(search, 'i');
     const searchConditions = [
@@ -238,14 +230,14 @@ export const buildReturnMatchAndPipeline = (query = {}, { includeSearchNameSplit
     matchConditions.$or = searchConditions;
   }
 
-  // ====== Date Range Filter ======
+  // Date Filter
   if (dateFrom || dateTo) {
     matchConditions.createdAt = {};
     if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
     if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
   }
 
-  // ====== Build Aggregation Pipeline ======
+  // Build Aggregation
   const pipeline = buildReturnAggregationPipeline();
 
   if (Object.keys(matchConditions).length > 0) {
