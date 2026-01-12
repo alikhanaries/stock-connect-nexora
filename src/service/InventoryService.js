@@ -246,7 +246,16 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
   try {
     const now = new Date();
 
-    // 1. Update inventory record
+    // 1. Ensure product exists (mandatory for inventory)
+    const product = await Product.findById(productId, { _id: 1, productSkuCode: 1 }).lean();
+
+    if (!product) {
+      const error = new Error(locale.NOT_FOUND);
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // 2. Upsert inventory (insert if missing, update if exists)
     const inventory = await Inventory.findOneAndUpdate(
       { sellerId, productId },
       {
@@ -254,38 +263,36 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
           currentStockCount,
           lastSyncedAt: now,
         },
+        $setOnInsert: {
+          sellerId,
+          productId,
+          productSkuCode: product.productSkuCode,
+          createdAt: now,
+        },
       },
       {
         new: true,
+        upsert: true,
         lean: true,
       }
     );
 
-    if (!inventory) {
-      const error = new Error(locale.NOT_FOUND);
-      error.statusCode = 404;
-      throw error;
-    }
-
-    // 2. Update product stock count
-    const productUpdateResult = await Product.updateOne(
+    // 3. Update product stock count
+    await Product.updateOne(
       { _id: productId },
       {
         $set: {
-          currentStockCount: currentStockCount,
+          currentStockCount,
           updatedAt: now,
         },
       }
     );
 
-    if (productUpdateResult.matchedCount === 0) {
-      console.warn(`Product stock update failed for productId=${productId}`);
-    }
-
     return {
       productId,
       currentStockCount: inventory.currentStockCount,
       lastSyncedAt: inventory.lastSyncedAt,
+      inventoryId: inventory._id,
     };
   } catch (err) {
     console.error('Service updateSingleInventory error:', err);
