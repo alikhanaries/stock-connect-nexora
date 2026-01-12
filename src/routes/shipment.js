@@ -298,6 +298,48 @@ router.post(
 );
 
 // CREATE REVERSE SHIPMENT
+/**
+ * @swagger
+ * /shipment/createReverseShipment:
+ *   post:
+ *     tags: [Shipments]
+ *     summary: Create a reverse shipment
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               deliverId:
+ *                 type: string
+ *                 example: "DEL123456"
+ *               orderId:
+ *                 type: string
+ *                 example: "ORD987654"
+ *               returnId:
+ *                 type: string
+ *                 example: "RET456789"
+ *             required:
+ *               - deliverId
+ *               - orderId
+ *               - returnId
+ *     responses:
+ *       201:
+ *         description: Reverse shipment created successfully
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Unauthorized
+ */
 router.post(
   '/createReverseShipment',
   createReverseShipmentValidator,
