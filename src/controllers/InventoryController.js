@@ -110,8 +110,31 @@ export const updateSingleInventory = async (req, res) => {
   }
 };
 
+export const syncStockToChannelsController = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+
+    // Immediate response (non-blocking)
+    successResponse(res, req.locale.SYNC_STARTED, 202);
+
+    // Background execution (NO await)
+    inventoryService
+      .syncProductStock(sellerId)
+      .then((result) => {
+        console.log('Inventory sync completed:', result);
+      })
+      .catch((err) => {
+        console.error('Inventory sync failed:', err.message);
+      });
+  } catch (err) {
+    console.error('Controller syncInventory error:', err);
+    return errorResponse(res, err.message);
+  }
+};
+
 export default {
   importInventoryFromGoogleSheet,
   importInventoryFromCsvFile,
   updateSingleInventory,
+  syncStockToChannelsController,
 };

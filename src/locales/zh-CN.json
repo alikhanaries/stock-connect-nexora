@@ -184,5 +184,6 @@
   "INVENTORY_IMPORTED_PROCESSING": "库存导入正在处理中",
   "CURRENT_STOCK_COUNT_MISSING": "当前库存数量缺失",
   "INVENTORY_SKUCODE_MISSING": "库存 SKU 代码缺失",
-  "INVALID_STOCK_COUNT": "库存数量无效"
+  "INVALID_STOCK_COUNT": "库存数量无效",
+  "SYNC_STARTED": "同步开始成功"
 }

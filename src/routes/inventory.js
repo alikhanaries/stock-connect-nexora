@@ -3,12 +3,13 @@ import {
   importInventoryFromGoogleSheet,
   importInventoryFromCsvFile,
   updateSingleInventory,
+  syncStockToChannelsController,
 } from '#controllers/InventoryController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 
 import { importProductsFromGoogleSheetValidator, importProductsFromCsvFileValidator } from '#validations/products.js';
 import upload from '#helpers/FileHandler.js'; // the above multer setup
-import { updateSingleInventoryValidator } from '#validations/inventory.js';
+import { updateSingleInventoryValidator, syncInventoryToChannelsValidator } from '#validations/inventory.js';
 const inventoryRouter = express.Router();
 
 /* UPLOAD INVENTORIES FROM GOOGLE SHEET */
@@ -117,6 +118,39 @@ inventoryRouter.patch(
   authMiddleware,
   verifySellerAccess,
   updateSingleInventory
+);
+
+/* SYNC STOCK TO CHANNEL */
+/**
+ * @openapi
+ * /sync/channels:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Sync inventory to channels
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *       - in: query
+ *         name: sellerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Seller ID for which inventory should be synced
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ *       404: { $ref: "#/components/schemas/FailResponse" }
+ */
+inventoryRouter.get(
+  '/sync/stock',
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  syncInventoryToChannelsValidator,
+  syncStockToChannelsController
 );
 
 export default inventoryRouter;
