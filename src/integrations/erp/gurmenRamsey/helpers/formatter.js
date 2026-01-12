@@ -46,7 +46,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
     sellerId,
     name: product.name,
     description: product.details,
-    brand: product.brand,
+    brand: 'ramsey',
     categoryTrail: product.category_path,
     vatRateType: 'STANDARD',
     ...processed, // Process only when isImageUpdate = true and new sku come
