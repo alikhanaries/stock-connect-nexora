@@ -9,6 +9,7 @@ import categoryRoutes from './category.js'; //
 import invoiceRoutes from './invoice.js';
 import seller from './seller.js';
 import shipmentRoutes from './shipment.js';
+import inventoryRoutes from './inventory.js';
 
 const router = express.Router();
 
@@ -22,4 +23,5 @@ router.use('/invoice', invoiceRoutes);
 router.use('/category', categoryRoutes);
 router.use('/seller', seller);
 router.use('/shipment', shipmentRoutes);
+router.use('/inventory', inventoryRoutes);
 export default router;

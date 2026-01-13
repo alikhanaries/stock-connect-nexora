@@ -173,5 +173,11 @@
   "FAILED_TO_UPDATE_RETURN": "İadeyi güncelleme başarısız",
   "RETURN_UPDATED_SUCCESSFULLY": "İade başarıyla güncellendi",
   "INVALID_RETURN_ID_FORMAT": "Geçersiz iade ID formatı",
-  "RETURN_FETCHED_SUCCESSFULLY": "İade başarıyla getirildi"
+  "RETURN_FETCHED_SUCCESSFULLY": "İade başarıyla getirildi",
+
+  "INVENTORY_IMPORTED_PROCESSING": "Envanter içe aktarma işlemi devam ediyor",
+  "CURRENT_STOCK_COUNT_MISSING": "Mevcut stok sayısı eksik",
+  "INVENTORY_SKUCODE_MISSING": "Envanter SKU kodu eksik",
+  "INVALID_STOCK_COUNT": "Geçersiz stok sayımı",
+  "SYNC_STARTED": "Senkronizasyon başarıyla başlatıldı"
 }

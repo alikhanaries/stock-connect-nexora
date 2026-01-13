@@ -71,7 +71,7 @@
   "PRODUCT_DELETE_SUCCESS": "Product deleted successfully",
   "PRODUCT_IMPORT_ERROR": "Error in upload",
   "PRODUCT_NOT_FOUND": "Product not found",
-  "PRODUCT_FETCH_SUCCESS" : "Product fetched successfully",
+  "PRODUCT_FETCH_SUCCESS": "Product fetched successfully",
   "PRODUCT_FETCH_FAILED": "Product fetch failed",
   "PRODUCT_MARKED_DELETED": "products marked as deleted successfully",
   "FAILED_FETCHING_SHEET": "Failed to fetch sheet",
@@ -175,5 +175,11 @@
   "FAILED_TO_UPDATE_RETURN": "Failed to update return",
   "RETURN_UPDATED_SUCCESSFULLY": "Return updated successfully",
   "INVALID_RETURN_ID_FORMAT": "Invalid return ID format",
-  "RETURN_FETCHED_SUCCESSFULLY": "Return fetched successfully"
+  "RETURN_FETCHED_SUCCESSFULLY": "Return fetched successfully",
+
+  "INVENTORY_IMPORTED_PROCESSING": "Inventory import is processing",
+  "CURRENT_STOCK_COUNT_MISSING": "Current stock count is missing",
+  "INVENTORY_SKUCODE_MISSING": "Inventory skucode is missing",
+  "INVALID_STOCK_COUNT": "Invalid stock count",
+  "SYNC_STARTED": "Sync started successfully"
 }
