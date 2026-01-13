@@ -155,9 +155,9 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
   }
 };
 
-export const buildReturnMatchAndPipeline = (query = {}, { includeSearchNameSplit = false } = {}) => {
+export const buildReturnMatchAndPipeline = (query = {}) => {
   const { status, platform, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
-  console.log(includeSearchNameSplit);
+
   const matchConditions = {};
 
   // Validate status if provided
