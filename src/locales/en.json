@@ -180,5 +180,6 @@
   "INVENTORY_IMPORTED_PROCESSING": "Inventory import is processing",
   "CURRENT_STOCK_COUNT_MISSING": "Current stock count is missing",
   "INVENTORY_SKUCODE_MISSING": "Inventory skucode is missing",
-  "INVALID_STOCK_COUNT": "Invalid stock count"
+  "INVALID_STOCK_COUNT": "Invalid stock count",
+  "SYNC_STARTED": "Sync started successfully"
 }

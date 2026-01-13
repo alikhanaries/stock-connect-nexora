@@ -1,15 +1,21 @@
 import Inventory from '#models/Inventory.js';
 import Product from '#models/Product.js';
 import { mapRowToInventory } from '#utils/mapRowToInventory.js';
+import { config } from '../config/config.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
+import { ObjectId } from 'mongodb';
+
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE } = config;
+const MAX_RETRIES = 3;
+const MAX_TASK_BUFFER = 1000;
 
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
@@ -247,7 +253,7 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
     const now = new Date();
 
     // 1. Ensure product exists (mandatory for inventory)
-    const product = await Product.findById(productId, { _id: 1, productSkuCode: 1 }).lean();
+    const product = await Product.findOne({ _id: new ObjectId(productId) }, { _id: 1, productSkuCode: 1 }).lean();
 
     if (!product) {
       const error = new Error(locale.NOT_FOUND);
@@ -300,8 +306,140 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
   }
 };
 
+async function sendStockBatch(stockUpdates, retries = MAX_RETRIES) {
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}offer/stock?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(stockUpdates),
+    });
+
+    const rawText = await response.text();
+
+    // Do not retry client errors
+    if (!response.ok) {
+      if (response.status >= 400 && response.status < 500) {
+        throw new Error(`Non-retryable HTTP ${response.status}: ${rawText}`);
+      }
+      throw new Error(`HTTP ${response.status}: ${rawText}`);
+    }
+
+    if (!rawText) return { success: true };
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return { success: true };
+    }
+  } catch (err) {
+    if (retries > 0) {
+      await new Promise((r) => setTimeout(r, (MAX_RETRIES - retries + 1) * 1000));
+      return sendStockBatch(stockUpdates, retries - 1);
+    }
+    throw err;
+  }
+}
+
+export const syncStockToChannelEngine = async (sellerId) => {
+  try {
+    if (!ObjectId.isValid(sellerId)) {
+      throw new Error('Invalid sellerId');
+    }
+
+    const allowedMarketplaces = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
+
+    const marketplaceRegex = new RegExp(
+      allowedMarketplaces.map((m) => `\\b${m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).join('|'),
+      'i'
+    );
+
+    const cursor = Product.find(
+      {
+        sellerId: new ObjectId(sellerId),
+        marketPlace: {
+          $exists: true,
+          $ne: null,
+          $regex: marketplaceRegex,
+        },
+      },
+      { productSkuCode: 1, currentStockCount: 1 }
+    )
+      .lean()
+      .cursor();
+
+    let batch = [];
+    let totalSynced = 0;
+    let failedBatches = 0;
+    const tasks = [];
+
+    for await (const product of cursor) {
+      if (!product.productSkuCode) continue;
+
+      batch.push({
+        MerchantProductNo: product.productSkuCode,
+        StockLocations: [{ Stock: Number(product.currentStockCount) || 0 }],
+      });
+
+      if (batch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
+        const payload = batch;
+        batch = [];
+
+        tasks.push(
+          limit(() =>
+            sendStockBatch(payload)
+              .then(() => {
+                totalSynced += payload.length;
+              })
+              .catch((err) => {
+                failedBatches++;
+                console.error(`Batch failed (${payload.length} items):`, err.message);
+              })
+          )
+        );
+      }
+
+      if (tasks.length >= MAX_TASK_BUFFER) {
+        await Promise.all(tasks);
+        tasks.length = 0;
+      }
+    }
+
+    // Send remaining batch
+    if (batch.length) {
+      tasks.push(
+        limit(() =>
+          sendStockBatch(batch)
+            .then(() => {
+              totalSynced += batch.length;
+            })
+            .catch((err) => {
+              failedBatches++;
+              console.error(`Final batch failed (${batch.length} items):`, err.message);
+            })
+        )
+      );
+    }
+
+    // Await remaining tasks
+    if (tasks.length) {
+      await Promise.all(tasks);
+    }
+
+    return {
+      success: true,
+      message: 'Inventory sync completed',
+      totalSynced,
+      failedBatches,
+    };
+  } catch (err) {
+    console.error('Service syncProductStock error:', err);
+    throw err;
+  }
+};
+
 export default {
   importInventoryFromGoogleSheet,
   importInventoryFromCsvFile,
   updateSingleInventory,
+  syncStockToChannelEngine,
 };

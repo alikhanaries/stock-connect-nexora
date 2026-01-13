@@ -179,5 +179,6 @@
   "INVENTORY_IMPORTED_PROCESSING": "جارٍ معالجة استيراد المخزون",
   "CURRENT_STOCK_COUNT_MISSING": "عدد المخزون الحالي غير موجود",
   "INVENTORY_SKUCODE_MISSING": "رمز المنتج (skucode) الخاص بالمخزون مفقود",
-  "INVALID_STOCK_COUNT": "عدد المخزون غير صالح"
+  "INVALID_STOCK_COUNT": "عدد المخزون غير صالح",
+  "SYNC_STARTED": "بدأت المزامنة بنجاح"
 }
