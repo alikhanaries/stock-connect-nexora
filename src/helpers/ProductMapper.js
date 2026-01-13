@@ -381,7 +381,7 @@ export const mapProductToChannelEngine = (product) => {
     Url: product.primaryImageUrl || null,
     ImageUrl: product.imageUrl || null,
     CategoryTrail: product.categoryTrail || null,
-    IsFrozen: false,
+    IsFrozen: product.isFrozen || false,
     ExtraImageUrl1: product.extraImageUrl1 || null,
     ExtraImageUrl2: product.extraImageUrl2 || null,
     ExtraImageUrl3: product.extraImageUrl3 || null,

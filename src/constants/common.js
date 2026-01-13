@@ -1,6 +1,6 @@
 // Define valid statuses for channels
 export const VALID_STATUSES = ['active', 'inactive', 'removed'];
-
+export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED'];
 // Map status to display messages
 export const STATUS_MESSAGES = { active: 'activated', inactive: 'inactivated', removed: 'removed' };
 
@@ -89,6 +89,7 @@ export const RETURN_STATUS = {
   IN_PROGRESS: 'IN_PROGRESS',
   RECEIVED: 'RECEIVED',
   CANCELLED: 'CANCELLED',
+  SHIPMENT_CREATED: 'SHIPMENT_CREATED',
 };
 
 export const PRODUCT_EXPORT_HEADERS = [
