@@ -10,6 +10,7 @@ import {
   getOrderDataByOrderLineIds,
   isNameOrEmailSearch,
   buildReturnAggregationPipeline,
+  buildReturnMatchAndPipeline,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
 import {
@@ -136,18 +137,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
-    const matchConditions = {};
-
-    // ====== Filters ======
-    const addFilter = (key, value, transform = (v) => v, includeInApplied = false) => {
-      if (value !== undefined && value !== null && value !== '') {
-        matchConditions[key] = transform(value);
-        if (includeInApplied) {
-          appliedFilters[key] = value;
-        }
-      }
-    };
-
     // Validate status if provided
     if (status) {
       const statusArray = status
@@ -163,79 +152,13 @@ export const getReturnsFromDatabase = async (query = {}) => {
           `Invalid status: ${invalid.join(', ')}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`
         );
       }
+
+      appliedFilters.status = status;
     }
 
-    // Add filter (case-insensitive)
-    addFilter(
-      'status',
-      status,
-      (v) => {
-        const arr = v.split(',').map((s) => s.trim());
-
-        return {
-          $in: arr.map((s) => new RegExp(`^${s}$`, 'i')),
-        };
-      },
-      true
-    );
-
-    addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
-    addFilter('channelId', channelId, (v) => parseInt(v, 10));
-    addFilter('returnId', returnId);
-    addFilter('orderId', orderID);
-    addFilter('orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
-
-    // ====== Search Filter ======
-    if (search) {
-      const searchRegex = new RegExp(search, 'i');
-      const searchConditions = [
-        { returnId: { $regex: searchRegex } },
-        { orderId: { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
-      ];
-
-      // Handle full name searches
-      const searchTerms = search.trim().split(/\s+/);
-      if (searchTerms.length > 1) {
-        const [firstTerm, ...rest] = searchTerms;
-        const lastTerm = rest.join(' ');
-        const firstRegex = new RegExp(firstTerm, 'i');
-        const lastRegex = new RegExp(lastTerm, 'i');
-
-        searchConditions.push(
-          {
-            $and: [
-              { 'orderInfo.orderCustomer.firstName': firstRegex },
-              { 'orderInfo.orderCustomer.lastName': lastRegex },
-            ],
-          },
-          {
-            $and: [
-              { 'orderInfo.orderCustomer.lastName': firstRegex },
-              { 'orderInfo.orderCustomer.firstName': lastRegex },
-            ],
-          }
-        );
-      }
-
-      matchConditions.$or = searchConditions;
-    }
-
-    // ====== Date Range Filter ======
-    if (dateFrom || dateTo) {
-      matchConditions.createdAt = {};
-      if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
-      if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
-    }
-
-    // ====== Build Aggregation Pipeline ======
-    const pipeline = buildReturnAggregationPipeline();
-
-    if (Object.keys(matchConditions).length > 0) {
-      pipeline.push({ $match: matchConditions });
-    }
+    const { pipeline } = buildReturnMatchAndPipeline(query, {
+      includeSearchNameSplit: true,
+    });
 
     pipeline.push(
       {
@@ -265,7 +188,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       }
     );
 
-    if (search && isNameOrEmailSearch(search)) {
+    if (query.search && isNameOrEmailSearch(query.search)) {
       pipeline.push({
         $match: {
           $or: [{ customer: { $ne: null } }, { email: { $ne: null } }, { orderID: { $ne: null } }],
@@ -323,28 +246,18 @@ export const getReturnsFromDatabase = async (query = {}) => {
   }
 };
 
-export const getReturnStats = async (sellerId = null) => {
+export const getReturnStats = async (query = {}) => {
   try {
-    // Build base pipeline without status manipulation
-    const basePipeline = buildReturnAggregationPipeline();
+    const { pipeline } = buildReturnMatchAndPipeline(query);
 
-    if (sellerId) {
-      basePipeline.push({
-        $match: {
-          'orderInfo.sellerId': sellerId,
-        },
-      });
-    }
+    pipeline.push({
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+      },
+    });
 
-    // Get total quantity grouped by return status (raw status from DB)
-    const statusPipeline = [
-      ...basePipeline,
-      { $unwind: '$products' },
-      { $group: { _id: '$status', totalQuantity: { $sum: '$products.quantity' } } },
-      { $sort: { _id: 1 } },
-    ];
-
-    const statusStats = await Return.aggregate(statusPipeline);
+    const statusStats = await Return.aggregate(pipeline);
 
     // Initialize stats with all return statuses set to 0
     const stats = Object.values(RETURN_STATUS).reduce((acc, status) => {
@@ -353,9 +266,9 @@ export const getReturnStats = async (sellerId = null) => {
     }, {});
 
     // Update stats with actual counts from database
-    statusStats.forEach(({ _id, totalQuantity }) => {
-      if (_id && Object.values(RETURN_STATUS).includes(_id)) {
-        stats[_id] = totalQuantity;
+    statusStats.forEach(({ _id, count }) => {
+      if (_id && stats[_id] !== undefined) {
+        stats[_id] = count;
       }
     });
 

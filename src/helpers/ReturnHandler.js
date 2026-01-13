@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
 
@@ -145,6 +146,105 @@ export const buildReturnAggregationPipeline = () => {
       },
     },
   ];
+};
+
+export const addFilter = (matchConditions, key, value, transform = (v) => v) => {
+  if (value !== undefined && value !== null && value !== '') {
+    matchConditions[key] = transform(value);
+  }
+};
+
+export const buildReturnMatchAndPipeline = (query = {}, { includeSearchNameSplit = false } = {}) => {
+  const { status, platform, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
+
+  const matchConditions = {};
+
+  // Validate status if provided
+  if (status) {
+    const statusArray = status
+      .toString()
+      .split(',')
+      .map((s) => s.trim().toUpperCase());
+
+    // Check each provided status
+    const invalid = statusArray.filter((s) => !Object.values(RETURN_STATUS).includes(s));
+
+    if (invalid.length > 0) {
+      throw new Error(
+        `Invalid status: ${invalid.join(', ')}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`
+      );
+    }
+  }
+
+  // Filters
+  addFilter(matchConditions, 'status', status, (v) => ({
+    $in: v.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
+  }));
+
+  addFilter(matchConditions, 'platform', platform, (v) => ({
+    $regex: new RegExp(v, 'i'),
+  }));
+
+  addFilter(matchConditions, 'channelId', channelId, (v) => parseInt(v, 10));
+
+  addFilter(matchConditions, 'returnId', returnId);
+  addFilter(matchConditions, 'orderId', orderID);
+
+  addFilter(matchConditions, 'orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
+
+  // Search Filter
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    const searchConditions = [
+      { returnId: { $regex: searchRegex } },
+      { orderId: { $regex: searchRegex } },
+      { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
+      { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
+      { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
+    ];
+
+    // Handle full name searches
+    const searchTerms = search.trim().split(/\s+/);
+    if (searchTerms.length > 1) {
+      const [firstTerm, ...rest] = searchTerms;
+      const lastTerm = rest.join(' ');
+      const firstRegex = new RegExp(firstTerm, 'i');
+      const lastRegex = new RegExp(lastTerm, 'i');
+
+      searchConditions.push(
+        {
+          $and: [
+            { 'orderInfo.orderCustomer.firstName': firstRegex },
+            { 'orderInfo.orderCustomer.lastName': lastRegex },
+          ],
+        },
+        {
+          $and: [
+            { 'orderInfo.orderCustomer.lastName': firstRegex },
+            { 'orderInfo.orderCustomer.firstName': lastRegex },
+          ],
+        }
+      );
+    }
+
+    matchConditions.$or = searchConditions;
+  }
+
+  // Date Filter
+  if (dateFrom || dateTo) {
+    matchConditions.createdAt = {};
+    if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
+  }
+
+  // Build Aggregation
+  const pipeline = buildReturnAggregationPipeline();
+
+  if (Object.keys(matchConditions).length > 0) {
+    pipeline.push({ $match: matchConditions });
+  }
+
+  return { pipeline, matchConditions };
 };
 
 export const addStatusManipulationStages = () => {
@@ -366,6 +466,7 @@ export default {
   getOrderDataByOrderLineIds,
   isNameOrEmailSearch,
   buildReturnAggregationPipeline,
+  buildReturnMatchAndPipeline,
   addStatusManipulationStages,
   formatReturnDetails,
 };
