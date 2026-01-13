@@ -358,5 +358,4 @@ router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMidd
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
 router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
-
 export default router;
