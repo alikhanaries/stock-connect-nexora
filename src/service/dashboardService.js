@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { ORDER_FLOW_STATUS_CONFIG } from '#constants/dashboard.js';
 import Order from '#models/Orders.js';
-import { getDateRange, DAY_MS } from '../helpers/dashboard.js';
+import { getDateRange, getPreviousRange } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null) => {
   try {
@@ -28,29 +28,7 @@ const getOrderFlowStatus = async (sellerId, period = null) => {
     if (!currentRange) throw new Error(`Invalid period "${period}". Allowed: today, weekly, monthly`);
 
     // Calculate previous range
-    const previousRange = (() => {
-      const { start } = currentRange;
-      switch (period) {
-        case 'today': {
-          const y = new Date(start);
-          y.setDate(y.getDate() - 1);
-          return {
-            start: new Date(y.getFullYear(), y.getMonth(), y.getDate()),
-            end: new Date(y.getFullYear(), y.getMonth(), y.getDate(), 23, 59, 59, 999),
-          };
-        }
-        case 'weekly':
-          return {
-            start: new Date(start.getTime() - 7 * DAY_MS),
-            end: new Date(start.getTime() - 1),
-          };
-        case 'monthly':
-          return {
-            start: new Date(start.getFullYear(), start.getMonth() - 1, 1),
-            end: new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999),
-          };
-      }
-    })();
+    const previousRange = getPreviousRange(period, currentRange);
 
     // Aggregate current & previous
     const [currentAgg, previousAgg] = await Promise.all(

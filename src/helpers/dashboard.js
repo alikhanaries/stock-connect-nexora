@@ -32,6 +32,32 @@ export const getDateRange = (period, offset = 0) => {
   return { start, end };
 };
 
+export const getPreviousRange = (period, currentRange) => {
+  const { start } = currentRange;
+
+  switch (period) {
+    case 'today': {
+      const y = new Date(start);
+      y.setDate(y.getDate() - 1);
+      return {
+        start: new Date(y.setHours(0, 0, 0, 0)),
+        end: new Date(y.setHours(23, 59, 59, 999)),
+      };
+    }
+    case 'weekly':
+      return {
+        start: new Date(start.getTime() - 7 * DAY_MS),
+        end: new Date(start.getTime() - 1),
+      };
+    case 'monthly':
+      return {
+        start: new Date(start.getFullYear(), start.getMonth() - 1, 1),
+        end: new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999),
+      };
+  }
+};
+
 export default {
   getDateRange,
+  getPreviousRange,
 };
