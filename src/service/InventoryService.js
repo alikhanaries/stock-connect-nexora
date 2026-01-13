@@ -13,8 +13,7 @@ const DB_WRITE_CONCURRENCY = 4;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
-const API_BATCH_SIZE = 500; // Channel API safe payload size
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE } = config;
 const MAX_RETRIES = 3;
 const MAX_TASK_BUFFER = 1000;
 
@@ -374,7 +373,7 @@ export const syncProductStock = async (sellerId) => {
         StockLocations: [{ Stock: Number(product.currentStockCount) || 0 }],
       });
 
-      if (batch.length === API_BATCH_SIZE) {
+      if (batch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
         const payload = batch;
         batch = [];
 
