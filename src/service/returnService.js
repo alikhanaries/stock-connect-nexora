@@ -118,21 +118,7 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const {
-      status,
-      platform,
-      channelId,
-      returnId,
-      orderID,
-      sellerId,
-      search,
-      dateFrom,
-      dateTo,
-      sortOrder = 'asc',
-      sortBy = 'placedOn',
-      page = 1,
-      size = 10,
-    } = query;
+    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10 } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;

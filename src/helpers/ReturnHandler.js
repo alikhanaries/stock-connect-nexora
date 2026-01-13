@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { RETURN_STATUS } from '#root/src/constants/common.js';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
 
@@ -154,7 +155,7 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
   }
 };
 
-export const buildReturnMatchAndPipeline = (query = {}, { includeSearchNameSplit = false } = {}) => {
+export const buildReturnMatchAndPipeline = (query = {}) => {
   const { status, platform, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
 
   const matchConditions = {};
