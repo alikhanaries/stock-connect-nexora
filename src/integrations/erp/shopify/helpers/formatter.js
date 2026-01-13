@@ -128,8 +128,8 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           const size = variant.size || '';
 
           const childSku =
-            variant.id ||
             variant.sku ||
+            variant.id ||
             (size ? `${parentSku}-${size.replace(/\s+/g, '_').toUpperCase()}` : `${parentSku}-${variant.id}`);
 
           const variantImages = extractImages(product, variant);
