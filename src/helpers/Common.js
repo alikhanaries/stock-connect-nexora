@@ -27,11 +27,6 @@ export const formatCustomerName = (customer) => {
   return `${firstName} ${lastName}`.trim() || '';
 };
 
-export default {
-  formatDateTime,
-  formatCustomerName,
-};
-
 export const convetDateToUTC = (dateTime) => {
   // Treat input as UTC+3 (your local timezone)
   const date = new Date(`${dateTime}+03:00`);
@@ -51,5 +46,8 @@ export const convetDateToUTC = (dateTime) => {
 export const cleanNumber = (value) => {
   if (value === undefined || value === null || value === '') return null;
 
-  return parseFloat(String(value).replace(/,/g, '').trim());
+  return parseFloat(String(value).replace(/,/g, '').trim());}
+export default {
+  formatDateTime,
+  formatCustomerName,
 };

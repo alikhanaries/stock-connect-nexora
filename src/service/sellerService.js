@@ -22,6 +22,7 @@ const createSeller = async (sellerData) => {
     }
 
     const sellerPayload = {
+      isDeleted: false,
       name: name.trim(),
       ocpSlugId:
         ocpSlugId?.trim() ||
@@ -132,30 +133,52 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
 const updateSeller = async (id, payload) => {
   const { name, status, ocpSlugId, shopifyConfig } = payload;
 
+  // 1️ Find seller first
+  const seller = await Seller.findOne({ _id: id, isDeleted: false });
+  if (!seller) return null; // SELLER NOT FOUND
+
+  let isUpdated = false;
   const updateData = {};
-  if (name !== undefined) updateData.name = name.trim();
-  if (status !== undefined) updateData.status = status;
-  if (ocpSlugId !== undefined) updateData.ocpSlugId = ocpSlugId.trim();
 
-  // Update Shopify config only if provided
+  if (name !== undefined && name.trim() !== seller.name) {
+    updateData.name = name.trim();
+    isUpdated = true;
+  }
+
+  if (status !== undefined && status !== seller.status) {
+    updateData.status = status;
+    isUpdated = true;
+  }
+
+  if (ocpSlugId !== undefined && ocpSlugId.trim() !== seller.ocpSlugId) {
+    updateData.ocpSlugId = ocpSlugId.trim();
+    isUpdated = true;
+  }
+
   if (shopifyConfig) {
-    updateData.shopifyConfig = {
-      url: shopifyConfig.url,
-      apiVersion: shopifyConfig.apiVersion,
-      accessToken: shopifyConfig.accessToken,
-    };
+    if (
+      shopifyConfig.url !== seller.shopifyConfig?.url ||
+      shopifyConfig.apiVersion !== seller.shopifyConfig?.apiVersion ||
+      shopifyConfig.accessToken !== seller.shopifyConfig?.accessToken
+    ) {
+      updateData.shopifyConfig = {
+        url: shopifyConfig.url,
+        apiVersion: shopifyConfig.apiVersion,
+        accessToken: shopifyConfig.accessToken,
+      };
+      isUpdated = true;
+    }
   }
 
-  if (Object.keys(updateData).length === 0) {
-    return null;
+  // 2️ Nothing changed
+  if (!isUpdated) {
+    return { isUpdated: false };
   }
 
-  const updatedSeller = await Seller.findOneAndUpdate(
-    { _id: id, isDeleted: false },
-    { $set: updateData },
-    { new: true }
-  ).lean();
-  return updatedSeller;
+  // 3️ Update
+  const updatedSeller = await Seller.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+
+  return { isUpdated: true, seller: updatedSeller };
 };
 
 const softDeleteSellers = async (ids) => {

@@ -89,6 +89,7 @@ export const RETURN_STATUS = {
   IN_PROGRESS: 'IN_PROGRESS',
   RECEIVED: 'RECEIVED',
   CANCELLED: 'CANCELLED',
+  SHIPMENT_CREATED: 'SHIPMENT_CREATED',
 };
 
 export const PRODUCT_EXPORT_HEADERS = [
@@ -126,4 +127,21 @@ export const PRODUCT_EXPORT_HEADERS = [
   'sizeType',
   'vatRateType',
   'volumetricWeightCm',
+];
+
+export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
+  'sellerId',
+  'channelId',
+  'globalChannelId',
+  'globalChannelName',
+  'merchantComment',
+  'originalShippingCostsInclVat',
+  'originalSubTotalFee',
+  'originalOrderFee',
+  'originalTotalFee',
+  'totalFee',
+  'orderShippingAddress_gender',
+  'orderBillingAddress_gender',
+  'orderCustomer_languageCode',
+  'orderPaymentDetails_currencyCode',
 ];

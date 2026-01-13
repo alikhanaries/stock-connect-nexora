@@ -118,7 +118,21 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const { status, sortOrder = 'asc', sortBy = 'returnId', page = 1, size = 10 } = query;
+    const {
+      status,
+      platform,
+      channelId,
+      returnId,
+      orderID,
+      sellerId,
+      search,
+      dateFrom,
+      dateTo,
+      sortOrder = 'asc',
+      sortBy = 'placedOn',
+      page = 1,
+      size = 10,
+    } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -160,6 +174,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
           email: '$orderInfo.orderCustomer.email',
           phoneNumber: '$orderInfo.orderCustomer.phone',
           orderTotalPrice: '$orderInfo.totalInclVat',
+          placedOn: { $ifNull: ['$placedOn', '$createdAt'] },
         },
       },
       {
@@ -186,8 +201,8 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
     // Handle sorting - map orderID to the actual field name
     let actualSortBy = sortBy;
-    if (sortBy === 'orderID') {
-      actualSortBy = 'orderID'; // This field is created in $addFields above
+    if (sortBy === 'placedOn') {
+      actualSortBy = 'placedOn';
     }
 
     if (sortBy === 'returnId') {

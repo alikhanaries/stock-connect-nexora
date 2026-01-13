@@ -1,5 +1,6 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { MIN_STOCK } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
@@ -47,7 +48,6 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
     brand: 'kip',
     categoryTrail: product.category_path,
     vatRateType: 'STANDARD',
-    status: product.active === '1' ? 'active' : 'inactive',
     ...processed, // Process only when isImageUpdate = true and new sku come
     volumetricWeightCm: 0.3,
     hsCodeAE: product.code,
@@ -69,6 +69,8 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
     const uploadBaseImages = shouldUploadImages(grandParentSku, existingSkus, isImageUpdate);
     const base = await formatBaseProduct(product, sellerId, subproductImages, uploadBaseImages);
     if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
+    const totalStock = subproducts.reduce((s, v) => s + Number(v.stock || 0), 0);
+
     formatted.push({
       ...base,
       productSkuCode: grandParentSku,
@@ -76,7 +78,8 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
       grandParentProductSkuCode: null,
       productType: 'configurable',
       price: await priceConverter('USD', parseFloat(product.price_special) || 0),
-      currentStockCount: subproducts.reduce((s, v) => s + Number(v.stock || 0), 0),
+      currentStockCount: totalStock,
+      status: totalStock < MIN_STOCK ? 'inactive' : 'active',
       color: '',
       size: '',
       ean: '',
@@ -92,6 +95,8 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
     for (const [color, variants] of Object.entries(groupedByColor)) {
       const safeColor = color.replace(/\s+/g, '_').toUpperCase();
       const parentSku = `${grandParentSku}-${safeColor}`;
+      const parentStock = variants.reduce((s, v) => s + Number(v.stock || 0), 0);
+
       formatted.push({
         ...base,
         productSkuCode: parentSku,
@@ -102,7 +107,8 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
         size: '',
         ean: '',
         price: await priceConverter('USD', parseFloat(product.price_special)),
-        currentStockCount: variants.reduce((s, v) => s + Number(v.stock || 0), 0),
+        currentStockCount: parentStock,
+        status: parentStock < MIN_STOCK ? 'inactive' : 'active',
       });
 
       for (const variant of variants) {
@@ -154,7 +160,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
           size,
           ean: variant.barcode || '',
           currentStockCount: Number(variant.stock || 0),
-          status: variant.active === '1' ? 'active' : 'inactive',
+          status: Number(variant.stock) < MIN_STOCK ? 'inactive' : 'active',
         });
       }
     }
