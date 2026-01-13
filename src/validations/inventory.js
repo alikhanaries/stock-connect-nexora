@@ -33,7 +33,7 @@ export const updateSingleInventoryValidator = validate(async (req) => {
 });
 
 /* SYNC STOCK TO CHANNELS VALIDATOR */
-export const syncInventoryToChannelsValidator = validate(async (req) => {
+export const syncStockToChannelEngineValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
   const querySchema = z.object({

@@ -333,7 +333,7 @@ async function sendStockBatch(stockUpdates, retries = MAX_RETRIES) {
   }
 }
 
-export const syncProductStock = async (sellerId) => {
+export const syncStockToChannelEngine = async (sellerId) => {
   try {
     if (!ObjectId.isValid(sellerId)) {
       throw new Error('Invalid sellerId');
@@ -434,5 +434,5 @@ export default {
   importInventoryFromGoogleSheet,
   importInventoryFromCsvFile,
   updateSingleInventory,
-  syncProductStock,
+  syncStockToChannelEngine,
 };

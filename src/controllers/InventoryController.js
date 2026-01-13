@@ -110,7 +110,7 @@ export const updateSingleInventory = async (req, res) => {
   }
 };
 
-export const syncStockToChannelsController = async (req, res) => {
+export const syncStockToChannelEngine = async (req, res) => {
   try {
     const sellerId = req.sellerId;
 
@@ -119,7 +119,7 @@ export const syncStockToChannelsController = async (req, res) => {
 
     // Background execution (NO await)
     inventoryService
-      .syncProductStock(sellerId)
+      .syncStockToChannelEngine(sellerId)
       .then((result) => {
         console.log('Inventory sync completed:', result);
       })
@@ -136,5 +136,5 @@ export default {
   importInventoryFromGoogleSheet,
   importInventoryFromCsvFile,
   updateSingleInventory,
-  syncStockToChannelsController,
+  syncStockToChannelEngine,
 };
