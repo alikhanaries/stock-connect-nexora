@@ -488,39 +488,10 @@ export const getOrganizedOrderRowData = (flattenedOrder, organizedHeaders) => {
   });
 };
 
-export const getDateRange = (period) => {
-  const ALLOWED_PERIODS = new Set(['today', 'weekly', 'monthly']);
-  if (!ALLOWED_PERIODS.has(period)) return null;
-
-  const now = new Date();
-  let start, end;
-
-  switch (period) {
-    case 'today':
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      end = new Date(now);
-      break;
-
-    case 'weekly':
-      end = new Date(now);
-      start = new Date(now);
-      start.setDate(end.getDate() - 6);
-      break;
-
-    case 'monthly':
-      start = new Date(now.getFullYear(), now.getMonth(), 1);
-      end = new Date(now);
-      break;
-  }
-
-  return { start, end };
-};
-
 export default {
   sanitizeOrdersData,
   getPeriodDate,
   flattenAggregatedOrder,
   getAggregatedOrderHeaders,
   getOrganizedOrderRowData,
-  getDateRange,
 };

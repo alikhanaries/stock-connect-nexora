@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
-import { ORDER_FLOW_STATUS_CONFIG } from '#constants/common.js';
+import { ORDER_FLOW_STATUS_CONFIG } from '#constants/dashboard.js';
 import Order from '#models/Orders.js';
-import { getDateRange } from '../helpers/Order.js';
+import { getDateRange, DAY_MS } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null) => {
   try {
@@ -41,7 +41,7 @@ const getOrderFlowStatus = async (sellerId, period = null) => {
         }
         case 'weekly':
           return {
-            start: new Date(start.getTime() - 7 * 86400000),
+            start: new Date(start.getTime() - 7 * DAY_MS),
             end: new Date(start.getTime() - 1),
           };
         case 'monthly':
