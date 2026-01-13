@@ -298,21 +298,3 @@ export const exportOrders = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
-
-export const getOrderFlow = async (req, res) => {
-  try {
-    const sellerId = req.sellerId;
-    const { period } = req.query;
-
-    const stats = await dashboardService.getOrderFlowStatus(sellerId, period);
-
-    if (!stats) {
-      return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
-    }
-
-    return Responses.successResponse(res, req.locale.ORDER_STATUS_STATS_FETCHED_SUCCESSFULLY, 200, stats);
-  } catch (error) {
-    errorLog(error);
-    return Responses.errorResponse(res, error, 500);
-  }
-};

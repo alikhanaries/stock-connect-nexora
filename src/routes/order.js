@@ -10,7 +10,6 @@ import {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrders,
-  getOrderFlow,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -359,14 +358,5 @@ router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMidd
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
 router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
-
-router.get(
-  '/dashboard/order-flow',
-  getAllOrdersValidator,
-  checkLanguage,
-  authMiddleware,
-  verifySellerAccess,
-  getOrderFlow
-);
 
 export default router;
