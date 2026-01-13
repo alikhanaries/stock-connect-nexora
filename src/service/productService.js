@@ -19,6 +19,7 @@ import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
+import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
 const {
   CHANNEL_ENGINE_BASE_URL,
   CHANNEL_ENGINE_API_KEY,
@@ -191,9 +192,70 @@ export const updateProductStatus = async (ids, status, sellerId) => {
   };
 
   const result = await Product.updateMany(filter, {
-    $set: { status: status },
+    $set: { status: status, updatedAt: new Date() },
   });
   return result.modifiedCount || 0;
+};
+
+export const syncFreezeOrUnfreezeToChannelEngine = async ({ skuCodes, isFrozen }) => {
+  if (!skuCodes?.length) return;
+
+  const payload = skuCodes.map((sku) => ({
+    MerchantProductNo: sku,
+    Reason: isFrozen ? 'Item no more available' : 'Item available again',
+    Action: isFrozen ? 'FREEZE' : 'UNFREEZE',
+  }));
+
+  try {
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/freeze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CE-KEY': CHANNEL_ENGINE_API_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    let result = null;
+    try {
+      result = await response.json();
+    } catch {
+      // Ignore ChannelEngine errors; Stock Connect update already succeeded
+    }
+    if (!response.ok) {
+      return;
+    }
+    return result;
+  } catch (err) {
+    console.warn('ChannelEngine Request failed', err.message);
+    return;
+  }
+};
+
+export const syncfreezeOrUnfreezeToStockConnect = async (ids, isFrozen, sellerId) => {
+  if (!Array.isArray(ids) || !ids.length) {
+    return { skuCodes: [], hasParent: false };
+  }
+  const products = await Product.find(
+    { _id: { $in: ids }, sellerId, isFrozen: { $ne: isFrozen } },
+    { _id: 1, productSkuCode: 1, productType: 1 }
+  ).lean();
+  let hasParent = false;
+  const childIds = [];
+  const skuCodes = [];
+  for (const p of products) {
+    if (p.productType === 'configurable') {
+      hasParent = true;
+    } else {
+      childIds.push(p._id);
+      skuCodes.push(p.productSkuCode);
+    }
+  }
+  if (!childIds.length) {
+    return { skuCodes: [], hasParent };
+  }
+  await Product.updateMany({ _id: { $in: childIds }, sellerId }, { $set: { isFrozen, updatedAt: new Date() } });
+  return { skuCodes, hasParent };
 };
 
 // Retry helper with exponential backoff
@@ -260,8 +322,18 @@ const validateProducts = async (channelId, sellerId) => {
     sellerId,
     productSkuCode: { $in: skuCodes },
     status: 'active',
+    $or: [
+      { syncedAt: null },
+      {
+        $expr: { $gt: ['$updatedAt', '$syncedAt'] }, // only push products updatedAt since last sync
+      },
+    ],
   }).lean();
 
+  // If no updated children → nothing to push
+  if (childProducts.length === 0) {
+    return { validProducts: [] };
+  }
   // Collect parent SKUs from child products
   const parentSkuCodes = new Set();
   for (const p of childProducts) {
@@ -270,11 +342,14 @@ const validateProducts = async (channelId, sellerId) => {
   }
 
   // Fetch parent products
-  const parentProducts = await Product.find({
-    sellerId,
-    productSkuCode: { $in: Array.from(parentSkuCodes) },
-    status: 'active',
-  }).lean();
+  const parentProducts = parentSkuCodes.size
+    ? await Product.find({
+        sellerId,
+        productSkuCode: { $in: [...parentSkuCodes] },
+        status: 'active',
+        $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
+      }).lean()
+    : [];
 
   // Check if those parents have any grandparent
   const grandParentSkuCodes = new Set();
@@ -283,14 +358,14 @@ const validateProducts = async (channelId, sellerId) => {
   }
 
   // Fetch grandparent products (if any)
-  let grandParentProducts = [];
-  if (grandParentSkuCodes.size > 0) {
-    grandParentProducts = await Product.find({
-      sellerId,
-      productSkuCode: { $in: Array.from(grandParentSkuCodes) },
-      status: 'active',
-    }).lean();
-  }
+  const grandParentProducts = grandParentSkuCodes.size
+    ? await Product.find({
+        sellerId,
+        productSkuCode: { $in: [...grandParentSkuCodes] },
+        status: 'active',
+        $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
+      }).lean()
+    : [];
 
   // Combine all (child + parent + grandparent) — remove duplicates
   const allProductsMap = new Map();
@@ -305,7 +380,7 @@ const validateProducts = async (channelId, sellerId) => {
 };
 
 export const pushProductsAsync = async (products, channelId, sellerId) => {
-  const channel = await Channel.findOne({ channelId });
+  const channel = await Channel.findOne({ channelId }).lean();
 
   if (!channel) {
     throw new Error(`Channel with ID ${channelId} not found`);
@@ -335,11 +410,21 @@ export const pushProductsAsync = async (products, channelId, sellerId) => {
     batches.map((batch, idx) =>
       limit(async () => {
         try {
+          let result = null;
           if (channel.channelName === 'OCP') {
-            return await pushBatchToOCP(uploadProducts(batch), idx, sellerId);
+            result = await pushBatchToOCP(uploadProducts(batch), idx, sellerId);
+          } else {
+            result = await pushBatch(batch.map(mapProductToChannelEngine), idx);
           }
 
-          return await pushBatch(batch.map(mapProductToChannelEngine), idx);
+          // ---- UPDATE SYNC DATE ONLY IF SUCCESSFUL ----
+          const skus = batch.map((p) => p.productSkuCode);
+          await Product.updateMany(
+            { sellerId, productSkuCode: { $in: skus } },
+            { $set: { syncedAt: new Date() } },
+            { timestamps: false } // prevents updatedAt from changing
+          );
+          return result;
         } catch (err) {
           console.error(`Batch ${idx} push failed`, err);
 
@@ -499,43 +584,58 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   const productSkuCodes = finalValidProducts.map((p) => p.productSkuCode);
 
   const existingMap = new Map(
-    (
-      await Product.find(
-        { sellerId, productSkuCode: { $in: productSkuCodes } },
-        { productSkuCode: 1, status: 1 }
-      ).lean()
-    ).map((p) => [p.productSkuCode, p])
+    (await Product.find({ sellerId, productSkuCode: { $in: productSkuCodes } }).lean()).map((p) => [
+      p.productSkuCode,
+      p,
+    ])
   );
   // Counters
   let insertedCount = 0;
   let updatedCount = 0;
 
   // Prepare bulk write operations
-  const bulkOps = finalValidProducts.map((product) => {
-    const existing = existingMap.get(product.productSkuCode);
+  const bulkOps = finalValidProducts
+    .map((product) => {
+      const existing = existingMap.get(product.productSkuCode);
 
-    if (existing?.status === 'removed') {
-      product.status = 'active';
-    }
+      if (['removed', undefined, null].includes(existing?.status)) {
+        product.status = 'active';
+      }
 
-    if (existing) updatedCount++;
-    else insertedCount++;
+      const comparableProduct = makeComparableProductFromSchema(product, Product);
 
-    if (product.categoryTrail) {
-      categoryTrailsSet.add(product.categoryTrail);
-    }
+      let updateFields = comparableProduct;
 
-    return {
-      updateOne: {
-        filter: {
-          sellerId,
-          productSkuCode: product.productSkuCode,
+      if (existing) {
+        const existingComparable = makeComparableProductFromSchema(existing, Product);
+
+        // Pick only changed fields
+        updateFields = getChangedFields(comparableProduct, existingComparable);
+
+        if (!Object.keys(updateFields).length) {
+          // Nothing changed → skip update
+          return null;
+        }
+        updateFields.updatedAt = new Date();
+        updatedCount++;
+      } else {
+        updateFields.createdAt = new Date();
+        updateFields.updatedAt = new Date();
+        insertedCount++;
+      }
+
+      if (product.categoryTrail) categoryTrailsSet.add(product.categoryTrail);
+      if (!('syncedAt' in product)) product.syncedAt = null;
+
+      return {
+        updateOne: {
+          filter: { sellerId, productSkuCode: product.productSkuCode },
+          update: { $set: updateFields },
+          upsert: true,
         },
-        update: { $set: product },
-        upsert: true,
-      },
-    };
-  });
+      };
+    })
+    .filter(Boolean);
 
   // Bulk writes in parallel batches
   const bulkTasks = [];
@@ -607,7 +707,7 @@ const deleteProduct = async (id, locale, sellerId) => {
   try {
     const result = await Product.findOneAndUpdate(
       { _id: id, sellerId: sellerId },
-      { $set: { status: 'removed' } },
+      { $set: { status: 'removed', updatedAt: new Date() } },
       { new: true }
     );
 
@@ -700,7 +800,7 @@ const deleteMultipleProducts = async (ids, locale, sellerId) => {
       sellerId: sellerId,
       status: { $ne: 'removed' },
     };
-    const result = await Product.updateMany(filter, { $set: { status: 'removed' } });
+    const result = await Product.updateMany(filter, { $set: { status: 'removed', updatedAt: new Date() } });
 
     if (result.modifiedCount === 0) {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
@@ -891,40 +991,39 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
   const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
 
-  const sortStage = {
-    $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
-  };
-
   pipeline.push({
-    $facet: {
-      paginatedResults: [
-        sortStage, // <-- SORT MOVED HERE ✔
-        { $skip: (currentPage - 1) * limit },
-        { $limit: limit },
-        {
-          $project: {
-            _id: '$productDetails._id',
-            name: '$productDetails.name',
-            productSkuCode: '$productDetails.productSkuCode',
-            price: '$productDetails.price',
-            msrp: '$productDetails.msrp',
-            status: '$productDetails.status',
-            primaryImageUrl: '$productDetails.primaryImageUrl',
-            currentStockCount: '$productDetails.currentStockCount',
-            createdAt: '$productDetails.createdAt',
-          },
-        },
-      ],
-      totalCount: [{ $count: 'count' }],
-    },
+    $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
   });
 
-  const result = await UserChannelProducts.aggregate(pipeline, {
-    allowDiskUse: true,
-    collation: { locale: 'en', strength: 2 },
-  });
-  const total = result[0]?.totalCount[0]?.count || 0;
-  const products = result[0]?.paginatedResults || [];
+  const dataPipeline = [
+    ...pipeline,
+    { $skip: (currentPage - 1) * limit },
+    { $limit: limit + 1 },
+    {
+      $project: {
+        'productDetails._id': 1,
+        'productDetails.name': 1,
+        'productDetails.productSkuCode': 1,
+        'productDetails.price': 1,
+        'productDetails.msrp': 1,
+        'productDetails.status': 1,
+        'productDetails.primaryImageUrl': 1,
+        'productDetails.currentStockCount': 1,
+        'productDetails.createdAt': 1,
+        'productDetails.isFrozen': 1,
+      },
+    },
+    { $replaceRoot: { newRoot: '$productDetails' } },
+  ];
+
+  const countPipeline = [...pipeline, { $count: 'count' }];
+
+  const [products, result] = await Promise.all([
+    UserChannelProducts.aggregate(dataPipeline, { allowDiskUse: true }),
+    UserChannelProducts.aggregate(countPipeline),
+  ]);
+
+  const total = result[0]?.count || 0;
 
   return {
     channel: channelDetails,
@@ -1386,7 +1485,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
       .skip((currentPage - 1) * limit)
       .limit(limit)
       .select(
-        '_id name status productSkuCode productType price msrp primaryImageUrl currentStockCount createdAt sellerId'
+        '_id name status productSkuCode productType price msrp primaryImageUrl currentStockCount createdAt sellerId isFrozen'
       )
       .lean(),
   ]);
@@ -1417,4 +1516,6 @@ export default {
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
+  syncFreezeOrUnfreezeToChannelEngine,
+  syncfreezeOrUnfreezeToStockConnect,
 };

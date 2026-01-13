@@ -128,7 +128,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       dateFrom,
       dateTo,
       sortOrder = 'asc',
-      sortBy = 'returnId',
+      sortBy = 'placedOn',
       page = 1,
       size = 10,
     } = query;
@@ -251,6 +251,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
           email: '$orderInfo.orderCustomer.email',
           phoneNumber: '$orderInfo.orderCustomer.phone',
           orderTotalPrice: '$orderInfo.totalInclVat',
+          placedOn: { $ifNull: ['$placedOn', '$createdAt'] },
         },
       },
       {
@@ -277,8 +278,8 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
     // Handle sorting - map orderID to the actual field name
     let actualSortBy = sortBy;
-    if (sortBy === 'orderID') {
-      actualSortBy = 'orderID'; // This field is created in $addFields above
+    if (sortBy === 'placedOn') {
+      actualSortBy = 'placedOn';
     }
 
     if (sortBy === 'returnId') {

@@ -74,8 +74,8 @@ export const generateDynamicHeaders = (model, excludeFields = []) => {
     headers.push(path);
   });
 
-  // Add _id at the beginning and timestamps at the end
-  const finalHeaders = ['_id', ...headers.filter((h) => !['createdAt', 'updatedAt'].includes(h))];
+  // Filter out timestamps and organize headers
+  const finalHeaders = headers.filter((h) => !['createdAt', 'updatedAt'].includes(h));
 
   // Add timestamps at the end if they exist in schema
   if (paths.createdAt) finalHeaders.push('createdAt');
@@ -92,9 +92,6 @@ export const generateDynamicRowData = (doc, model, excludeFields = []) => {
   // Standard exclusions for internal fields
   const defaultExclusions = ['__v', '_id'];
   const allExclusions = [...defaultExclusions, ...excludeFields];
-
-  // Add _id first
-  row.push(doc._id?.toString() || 'N/A');
 
   Object.keys(paths).forEach((path) => {
     // Skip excluded fields and nested array paths
@@ -150,7 +147,7 @@ export const formatValueForCSV = (value, fieldName = '') => {
 
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    
+
     if (trimmed === '') {
       return 'N/A';
     }
