@@ -253,7 +253,7 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
     const now = new Date();
 
     // 1. Ensure product exists (mandatory for inventory)
-    const product = await Product.findById(productId, { _id: 1, productSkuCode: 1 }).lean();
+    const product = await Product.findOne({ _id: new ObjectId(productId) }, { _id: 1, productSkuCode: 1 }).lean();
 
     if (!product) {
       const error = new Error(locale.NOT_FOUND);
