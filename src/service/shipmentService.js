@@ -286,7 +286,7 @@ export const createPartialShipmentService = async (shipmentData) => {
         sku: item?.merchantProductNo,
         qty: Number(item?.quantity || 0),
         price: Number(item?.lineTotalInclVat || 0),
-        hs_code: item.hsCode || '',
+        hs_code: item.hsCode || '1111111',
       }));
     }
 
@@ -1470,7 +1470,7 @@ export const createManualShipmentService = async (shipmentData) => {
         merchantProductNo: product.merchantProductNo,
         orderLineId: product.orderLineId,
         quantity: product.quantity,
-        hsCode: orderSku.hsCode || '',
+        hsCode: orderSku.hsCode || '1111111',
       });
     }
 
