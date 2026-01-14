@@ -460,7 +460,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   if (!seller?.name) {
     throw new Error('Brand not configured for seller');
   }
-  const fixedBrand = seller.name;
+  const brand = seller.name;
 
   await new Promise((resolve, reject) => {
     stream
@@ -508,7 +508,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       const sku = row.ProductSkuCode;
       const normalizedSku = String(sku).trim();
       const isNewSku = !existingSkuSet.has(normalizedSku);
-      const product = await mapRowToProduct(row, rowNumber, locale, sellerId, isImageUpdate, isNewSku, fixedBrand);
+      const product = await mapRowToProduct(row, rowNumber, locale, sellerId, isImageUpdate, isNewSku, brand);
       if (product?.errorData) {
         errorDetails.push(product);
         invalidRowsCount++;
@@ -1547,7 +1547,6 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
     Product.countDocuments(finalFilter),
 
     Product.find(finalFilter)
-      .collation({ locale: 'en', strength: 2 })
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
