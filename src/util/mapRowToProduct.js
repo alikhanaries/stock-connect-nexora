@@ -6,7 +6,15 @@ import pLimit from 'p-limit';
 import { cleanNumber } from '../helpers/Common.js';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
-export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdate = false, isNewSku = false) => {
+export const mapRowToProduct = async (
+  row,
+  index,
+  locale,
+  sellerId,
+  isImageUpdate = false,
+  isNewSku = false,
+  fixedBrand
+) => {
   if (!row || typeof row !== 'object') return null;
 
   // Normalize keys
@@ -56,7 +64,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     nameAr: r.productnamear || '',
     description: r.description || null,
     descriptionAr: r.descriptionar || null,
-    brand: r.brand || null,
+    brand: fixedBrand,
     ean: r.ean || null,
     price: cleanNumber(r.price),
     minPrice: cleanNumber(r.minprice) || null,
