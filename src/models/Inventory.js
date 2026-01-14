@@ -20,7 +20,7 @@ const InventorySchema = new mongoose.Schema(
 );
 
 // Indexes for performance
-InventorySchema.index({ sellerId: 1, productProductSkuCode: 1 }, { unique: true });
+InventorySchema.index({ sellerId: 1, productSkuCode: 1 }, { unique: true });
 InventorySchema.index({ sellerId: 1, productId: 1 }, { unique: true });
 
 const Inventory = mongoose.model('Inventory', InventorySchema);
