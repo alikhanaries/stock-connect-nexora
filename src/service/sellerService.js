@@ -3,22 +3,57 @@ import { getPagination } from '#helpers/PaginationHandler.js';
 import { PRODUCT_STATUSES, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import PickupAddress from '#models/PickUpAddress.js';
-
+import { formatSellerResponse } from '#helpers/formatSellerResponse.js';
 const createSeller = async (sellerData) => {
-  const { name } = sellerData;
+  try {
+    const { name, ocpSlugId, shopifyConfig } = sellerData;
 
-  const existingSeller = await Seller.findOne({ name });
-  if (existingSeller) {
-    return { isExist: true, data: null };
+    const existingSeller = await Seller.findOne({
+      name: { $regex: `^${name.trim()}$`, $options: 'i' },
+    });
+
+    if (existingSeller && existingSeller.isDeleted === false) {
+      return { isExist: true, data: null };
+    }
+
+    if (existingSeller && existingSeller.isDeleted === true) {
+      const restored = await Seller.findByIdAndUpdate(existingSeller._id, { isDeleted: false, status: 'active' });
+      return { isExist: false, data: restored };
+    }
+
+    const sellerPayload = {
+      isDeleted: false,
+      name: name.trim(),
+      ocpSlugId:
+        ocpSlugId?.trim() ||
+        name
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, '')
+          .replace(/\s+/g, '_'),
+    };
+
+    // Attach Shopify config only when fully present
+    if (shopifyConfig?.url && shopifyConfig?.apiVersion && shopifyConfig?.accessToken) {
+      sellerPayload.shopifyConfig = {
+        url: shopifyConfig.url,
+        apiVersion: shopifyConfig.apiVersion,
+        accessToken: shopifyConfig.accessToken,
+      };
+    }
+
+    const seller = await Seller.create(sellerPayload);
+
+    return {
+      isExist: false,
+      data: seller,
+    };
+  } catch (err) {
+    console.error('createSeller error:', err);
+    throw err;
   }
-
-  const seller = new Seller({ name });
-  await seller.save();
-  return {
-    isExist: false,
-    data: seller,
-  };
 };
+
 const getAllSeller = async (query, creatorId, creatorRole) => {
   const isPaginated = query.page ? true : false;
   const { search, toDate, fromDate, status, sortBy = 'name', sortOrder = 'asc' } = query;
@@ -68,31 +103,82 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
 
     const [totalElements, seller] = await Promise.all([
       Seller.countDocuments(filter),
-      Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).skip(skip).limit(limit).lean(),
+      Seller.find(filter)
+        .select('+shopifyConfig.accessToken')
+        .sort(sort)
+        .collation({ locale: 'en', strength: 2 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
     ]);
 
     return {
-      seller,
+      seller: seller.map(formatSellerResponse),
       pagination: getPagination(totalElements, page, limit),
       appliedFilters,
     };
   } else {
-    const seller = await Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).lean();
+    const seller = await Seller.find(filter)
+      .select('+shopifyConfig.accessToken')
+      .sort(sort)
+      .collation({ locale: 'en', strength: 2 })
+      .lean();
     return {
-      seller,
+      seller: seller.map(formatSellerResponse),
       appliedFilters,
     };
   }
 };
 
-const updateSeller = async (id, name, statusValue) => {
-  const updateData = {};
-  if (name) updateData.name = name;
-  if (statusValue) updateData.status = statusValue;
+const updateSeller = async (id, payload) => {
+  const { name, status, ocpSlugId, shopifyConfig } = payload;
 
-  if (Object.keys(updateData).length === 0) return null;
-  const updatedSeller = await Seller.findOneAndUpdate({ _id: id, isDeleted: false }, updateData, { new: true }).lean();
-  return updatedSeller;
+  // 1️ Find seller first
+  const seller = await Seller.findOne({ _id: id, isDeleted: false });
+  if (!seller) return null; // SELLER NOT FOUND
+
+  let isUpdated = false;
+  const updateData = {};
+
+  if (name !== undefined && name.trim() !== seller.name) {
+    updateData.name = name.trim();
+    isUpdated = true;
+  }
+
+  if (status !== undefined && status !== seller.status) {
+    updateData.status = status;
+    isUpdated = true;
+  }
+
+  if (ocpSlugId !== undefined && ocpSlugId.trim() !== seller.ocpSlugId) {
+    updateData.ocpSlugId = ocpSlugId.trim();
+    isUpdated = true;
+  }
+
+  if (shopifyConfig) {
+    if (
+      shopifyConfig.url !== seller.shopifyConfig?.url ||
+      shopifyConfig.apiVersion !== seller.shopifyConfig?.apiVersion ||
+      shopifyConfig.accessToken !== seller.shopifyConfig?.accessToken
+    ) {
+      updateData.shopifyConfig = {
+        url: shopifyConfig.url,
+        apiVersion: shopifyConfig.apiVersion,
+        accessToken: shopifyConfig.accessToken,
+      };
+      isUpdated = true;
+    }
+  }
+
+  // 2️ Nothing changed
+  if (!isUpdated) {
+    return { isUpdated: false };
+  }
+
+  // 3️ Update
+  const updatedSeller = await Seller.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+
+  return { isUpdated: true, seller: updatedSeller };
 };
 
 const softDeleteSellers = async (ids) => {
@@ -110,38 +196,38 @@ export const updateSellerStatus = async (ids, status) => {
 };
 
 export const getSellerById = async (id) => {
-  const user = await Seller.findById({ _id: id, isDeleted: false }).lean();
-  return user;
+  const seller = await Seller.findOne({
+    _id: id,
+    isDeleted: false,
+  })
+    .select('+shopifyConfig.accessToken')
+    .lean();
+
+  return formatSellerResponse(seller);
 };
 export const saveSellerPickUpAdressDetails = async (payload) => {
   try {
-    const { sellerId, city, address, postcode, country, phone, description, email } = payload;
+    const { city, address, postcode, country, phone, description, email } = payload;
 
     // Check mandatory fields
-    if (!sellerId || !city || !address || !postcode || !country || !phone || !email) {
+    if (!city || !address || !postcode || !country || !phone || !email) {
       throw new Error('Missing required fields');
     }
 
-    // Fetch seller info
-    const seller = await Seller.findById(sellerId);
-    if (!seller) {
-      throw new Error('Seller not found');
-    }
     // Prepare pickup address data
     const pickupData = {
-      sellerId: seller._id,
-      name: seller.name,
-      email: email,
+      email,
       city,
       address,
       postcode,
       country,
       phone,
       description,
+      status: 'active',
     };
 
     // Use sellerId + address as unique key to decide update vs insert
-    const filter = { sellerId: seller._id, address: address };
+    const filter = { address: address };
 
     const savedAddress = await PickupAddress.findOneAndUpdate(
       filter,
@@ -155,8 +241,8 @@ export const saveSellerPickUpAdressDetails = async (payload) => {
   }
 };
 
-export const getAllPickupAddresses = async (sellerId) => {
-  return await PickupAddress.find({ sellerId, status: 'active' }).sort({ createdAt: -1 });
+export const getAllPickupAddresses = async () => {
+  return await PickupAddress.find({ status: 'active' }).sort({ createdAt: -1 });
 };
 
 // Update a pickup address

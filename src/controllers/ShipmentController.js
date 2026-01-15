@@ -1,12 +1,15 @@
 import {
   createPartialShipmentService,
   getAllShipmentsService,
+  getAllShipmentsAdminService,
   ayMakanWebHookService,
   getSingleShipmentService,
   cancelShipmentService,
+  createManualShipmentService,
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
+import { USER_ROLES } from '#constants/common.js';
 
 export const createShipment = async (req, res) => {
   try {
@@ -39,7 +42,7 @@ export const createShipment = async (req, res) => {
 export const getAllShipments = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { page = 1, size = 10, status, search } = req.query;
+    const { page = 1, size = 10, status, search, sortOrder } = req.query;
 
     const { shipments, pagination, appliedFilters } = await getAllShipmentsService({
       page,
@@ -47,6 +50,7 @@ export const getAllShipments = async (req, res) => {
       status,
       sellerId,
       search,
+      sortOrder,
     });
     const responseData = {
       content: shipments || [],
@@ -63,12 +67,45 @@ export const getAllShipments = async (req, res) => {
   }
 };
 
+export const getAllShipmentsAdmin = async (req, res) => {
+  try {
+    if (req.user.role !== USER_ROLES.MASTER_ADMIN) {
+      return errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
+    }
+    const { page = 1, size = 10, status, sellerId, search, sortOrder } = req.query;
+
+    const { shipments, pagination, appliedFilters } = await getAllShipmentsAdminService({
+      page,
+      size,
+      status,
+      sellerId,
+      search,
+      sortOrder,
+    });
+
+    const responseData = {
+      content: shipments || [],
+      appliedFilters: appliedFilters || {},
+
+      ...pagination,
+    };
+    const message = shipments && shipments.length > 0 ? 'Shipments fetched successfully' : 'No shipments found';
+
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Get Shipment Controller Error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error?.message || 'Internal server error', 400);
+  }
+};
+
 export const ayMakanWebHook = async (req, res) => {
   try {
+    console.log('webhook api calling-------------------------------------');
     const payload = req.body;
 
     // Basic validation: check for tracking number & status
-    if (!payload?.tracking_number || !payload?.status) {
+    if (!payload?.tracking || !payload?.status) {
       return errorResponse(res, 'Invalid webhook payload: missing tracking_number or status', 400);
     }
 
@@ -122,5 +159,35 @@ export const cancelShipment = async (req, res) => {
     errorLog(error);
 
     return errorResponse(res, error?.message || 'Shipment could not be cancelled', 500);
+  }
+};
+
+export const createManualShipment = async (req, res) => {
+  try {
+    const shipmentData = req.body;
+    const userId = req.user._id;
+    shipmentData['userId'] = userId;
+
+    // Validate request body
+    if (!shipmentData || Object.keys(shipmentData).length === 0) {
+      return errorResponse(res, 'Shipment data is required', 400);
+    }
+
+    const result = await createManualShipmentService(shipmentData);
+
+    if (!result.success) {
+      return failResponse(res, result?.message || 'Manual shipment could not be created', 400);
+    }
+
+    return successResponse(res, result?.message || 'Manual shipment created successfully', 201, {
+      shipmentId: result?.shipmentId,
+      airWaybillNo: result?.airWaybillNo,
+      merchantShipmentNo: result?.merchantShipmentNo,
+    });
+  } catch (error) {
+    console.error('Create Manual Shipment Controller Error:', error.message, error.stack);
+    errorLog(error);
+
+    return errorResponse(res, error?.message || 'Manual shipment could not be created', 400);
   }
 };

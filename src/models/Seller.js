@@ -4,6 +4,12 @@ const { Schema } = mongoose;
 
 const sellerSchema = new Schema(
   {
+    ocpSlugId: {
+      type: String,
+      unique: true,
+      trim: true,
+      index: true,
+    },
     name: {
       type: String,
       required: [true, 'Seller name is required.'],
@@ -31,6 +37,28 @@ const sellerSchema = new Schema(
       type: String,
       enum: ['active', 'inactive'],
       default: 'active',
+    },
+    shopifyConfig: {
+      type: new Schema(
+        {
+          url: {
+            type: String,
+            trim: true,
+            match: [/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL'],
+          },
+          apiVersion: {
+            type: String,
+            trim: true,
+          },
+          accessToken: {
+            type: String,
+            trim: true,
+            select: false, //  hidden by default
+          },
+        },
+        { _id: false }
+      ),
+      default: undefined, //  prevents empty {}
     },
   },
   {

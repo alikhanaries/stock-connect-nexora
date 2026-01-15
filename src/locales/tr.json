@@ -70,6 +70,8 @@
   "PRODUCT_DELETE_SUCCESS": "Ürün başarıyla silindi",
   "PRODUCT_IMPORT_ERROR": "Yükleme sırasında hata oluştu",
   "PRODUCT_NOT_FOUND": "Ürün bulunamadı",
+  "PRODUCT_FETCH_SUCCESS": "Ürün başarıyla getirildi",
+  "PRODUCT_FETCH_FAILED": "Ürün getirme başarısız oldu",
   "PRODUCT_MARKED_DELETED": "Ürünler başarıyla silindi olarak işaretlendi",
   "FAILED_FETCHING_SHEET": "Dosya alınamadı",
   "GOOGLE_SHEET_URL_REQUIRED": "Google Sheet URL gerekli",
@@ -171,5 +173,11 @@
   "FAILED_TO_UPDATE_RETURN": "İadeyi güncelleme başarısız",
   "RETURN_UPDATED_SUCCESSFULLY": "İade başarıyla güncellendi",
   "INVALID_RETURN_ID_FORMAT": "Geçersiz iade ID formatı",
-  "RETURN_FETCHED_SUCCESSFULLY": "İade başarıyla getirildi"
+  "RETURN_FETCHED_SUCCESSFULLY": "İade başarıyla getirildi",
+
+  "INVENTORY_IMPORTED_PROCESSING": "Envanter içe aktarma işlemi devam ediyor",
+  "CURRENT_STOCK_COUNT_MISSING": "Mevcut stok sayısı eksik",
+  "INVENTORY_SKUCODE_MISSING": "Envanter SKU kodu eksik",
+  "INVALID_STOCK_COUNT": "Geçersiz stok sayımı",
+  "SYNC_STARTED": "Senkronizasyon başarıyla başlatıldı"
 }

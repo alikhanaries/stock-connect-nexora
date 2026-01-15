@@ -141,7 +141,10 @@ export const getAllUsers = async (req, res) => {
     const sortDirection = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
     const sort = { [sortBy]: sortDirection };
 
-    if (ROLES_BASED_USER_FETCHING[user.role]) {
+    if (role) {
+      const requestedRole = role.toLowerCase();
+      filter.role = requestedRole;
+    } else if (ROLES_BASED_USER_FETCHING[user.role]) {
       filter.role = { $in: ROLES_BASED_USER_FETCHING[user.role] };
     }
 
