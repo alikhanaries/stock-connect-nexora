@@ -14,9 +14,10 @@ export const validateFile = async (req, res, next) => {
       return Responses.failResponse(res, 'Only CSV files are allowed!', 400);
     }
 
-    const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+    const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+
     if (req.file.size > MAX_SIZE) {
-      return Responses.failResponse(res, 'CSV file is too large!', 400);
+      return Responses.failResponse(res, `CSV file size is more than ${MAX_SIZE / 1024 / 1024} MB!`, 400);
     }
 
     next();

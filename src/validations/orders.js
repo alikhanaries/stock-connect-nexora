@@ -1,6 +1,6 @@
 import { z } from 'zod';
 // Common language list
-import { VALID_PERIODS } from '#constants/common.js';
+import { VALID_PERIODS, ORDER_STATUS_MAP } from '#constants/common.js';
 import { validate } from './validate.js';
 import { headerSchema } from './headerSchema.js';
 import mongoose from 'mongoose';
@@ -27,8 +27,8 @@ export const getAllOrdersValidator = validate(async (req) => {
     size: z
       .string()
       .optional()
-      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0 && Number(val) <= 100), {
-        message: 'size must be a positive number between 1 and 100',
+      .refine((val) => !val || (!isNaN(Number(val)) && Number(val) > 0 && Number(val) <= 200), {
+        message: 'size must be a positive number between 1 and 200',
       })
       .transform((val) => (val ? Number(val) : 10)),
 
@@ -227,4 +227,32 @@ export const cancelPartialOrderValidator = validate(async (req) => {
   });
 
   bodySchema.parse(req.body);
+});
+
+export const exportOrdersValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  // Query parameters schema for export filters
+  const querySchema = z.object({
+    status: z
+      .string()
+      .optional()
+      .refine(
+        (val) => {
+          if (!val) return true;
+          const validStatuses = Object.values(ORDER_STATUS_MAP);
+          const statusArray = val.split(',').map((s) => s.trim().toUpperCase());
+          return statusArray.every((s) => validStatuses.includes(s));
+        },
+        {
+          message: `Invalid status. Valid statuses are: ${Object.values(ORDER_STATUS_MAP).join(', ')}`,
+        }
+      ),
+
+    platform: z.string().optional(),
+
+    search: z.string().optional(),
+  });
+
+  querySchema.parse(req.query);
 });

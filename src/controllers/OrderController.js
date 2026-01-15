@@ -1,9 +1,11 @@
 import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
-import nebimErpOrderService from '#root/src/integrations/erp/nebim/service/orderService.js';
 import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
-import { VALID_PERIODS } from '#constants/common.js';
+import { VALID_PERIODS, USER_ROLES } from '#constants/common.js';
+import { cancelFullOrderOcp, getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
+import Order from '../models/Orders.js';
+import Seller from '#models/Seller.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -26,6 +28,35 @@ export const getAllOrders = async (req, res) => {
   } catch (error) {
     console.error('Controller Error:', error.message);
     errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export const getAdminOrders = async (req, res) => {
+  try {
+    if (req.user.role !== USER_ROLES.MASTER_ADMIN) {
+      return Responses.errorResponse(res, `User role ${req.user.role} is not authorized to access this route`, 403);
+    }
+
+    const { sellerId, channelId } = req.query;
+
+    const { data, appliedFilters, pagination } = await orderService.getAdminOrders(req.query, sellerId, channelId);
+
+    if (!data.length) {
+      return Responses.successResponse(res, req.locale.NO_ORDERS_FOUND, 200, {
+        content: [],
+        appliedFilters: appliedFilters || {},
+        ...pagination,
+      });
+    }
+
+    return Responses.successResponse(res, req.locale.ORDERS_FETCHED_SUCCESSFULLY, 200, {
+      content: data,
+      appliedFilters: appliedFilters || {},
+      ...pagination,
+    });
+  } catch (error) {
+    console.error('Admin Orders Controller Error:', error.message);
     return Responses.errorResponse(res, error.message, 500);
   }
 };
@@ -70,6 +101,7 @@ export const getOrderStats = async (req, res) => {
 export const getSyncedOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    // TODO : Move this to service layer
     const { success, data } = await orderService.getNewOrders();
     if (!success) {
       return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
@@ -79,17 +111,22 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    // Push orders to Nebim ERP
-    nebimErpOrderService.fetchAndPushOrderInToNebim(data, sellerId);
+    const [dataSavedInDb, response] = await Promise.allSettled([
+      orderService.processOrders(data),
+      getSyncedOrdersOcp(sellerId),
+    ]);
 
-    const dataSavedInDb = await orderService.processOrders(data, sellerId);
-
-    if (!dataSavedInDb.success) {
-      return Responses.errorResponse(res, dataSavedInDb.message, 500);
+    if (!dataSavedInDb.value.success && !response.value.success) {
+      return Responses.errorResponse(res, dataSavedInDb.value.message && response.value.message, 500);
     }
+
+    const newUpdateCount =
+      (dataSavedInDb?.value?.data?.upsertedCount ? dataSavedInDb?.value?.data?.upsertedCount : 0) +
+      (response?.value?.data?.upsertedCount ? response?.value?.data?.upsertedCount : 0);
+
     const message =
-      dataSavedInDb.data.upsertedCount > 0
-        ? `${dataSavedInDb.data.upsertedCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
+      newUpdateCount > 0
+        ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
         : req.locale.NO_NEW_ORDERS_FOUND;
 
     const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW');
@@ -169,7 +206,19 @@ export const cancelFullOrder = async (req, res) => {
       return Responses.failResponse(res, req.locale.INVALID_INPUT, 400);
     }
 
-    const orderResponse = await orderService.cancelFullOrder(orderId, reason);
+    const order = await Order.findById(orderId)
+      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .lean();
+
+    if (!order) return Responses.failResponse(res, 'Order not found', 404);
+
+    let orderResponse;
+
+    if (order.channelName === 'OCP') {
+      orderResponse = await cancelFullOrderOcp(orderId, order, reason);
+    } else {
+      orderResponse = await orderService.cancelFullOrder(orderId, order, reason);
+    }
 
     if (!orderResponse.success) {
       return Responses.failResponse(
@@ -199,5 +248,52 @@ export const cancelPartialOrder = async (req, res) => {
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);
+  }
+};
+
+// Exports orders data as CSV file for a specific seller.
+export const exportOrders = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { status, platform, search } = req.query;
+
+    // Fetch seller name for filename
+    const seller = await Seller.findById(sellerId).select('name').lean();
+    if (!seller) {
+      return Responses.failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    // Build filters only with non-empty values
+    const filters = {};
+    if (status) filters.status = status;
+    if (platform) filters.platform = platform;
+    if (search) filters.search = search;
+
+    // Remove any remaining undefined/empty values
+    Object.keys(filters).forEach((key) => {
+      if (!filters[key]) {
+        delete filters[key];
+      }
+    });
+
+    const result = await orderService.exportOrdersToCSV(sellerId, filters, seller.name);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || req.locale.NO_ORDERS_FOUND, 404);
+    }
+    // Set headers for CSV download with UTF-8 encoding
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    // Add UTF-8 BOM for proper encoding
+    const csvWithBOM = '\uFEFF' + result.data;
+
+    return res.status(200).send(csvWithBOM);
+  } catch (error) {
+    console.error('Controller Error: exportOrders:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
   }
 };

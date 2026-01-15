@@ -17,19 +17,14 @@ export const formatDateTime = (isoString) => {
   return { date, time };
 };
 
-// Helper function for escaping CSV fields
-export const escapeCsv = (row) => {
-  return row
-    .map((f) => {
-      const str = String(f ?? '');
-      return str.includes(',') || str.includes('"') ? `"${str.replace(/"/g, '""')}"` : str;
-    })
-    .join(',');
-};
+// Helper function to format customer name from firstName and lastName
+export const formatCustomerName = (customer) => {
+  if (!customer || typeof customer !== 'object') return '';
 
-export default {
-  formatDateTime,
-  escapeCsv,
+  const firstName = customer.firstName ? String(customer.firstName).trim() : '';
+  const lastName = customer.lastName ? String(customer.lastName).trim() : '';
+
+  return `${firstName} ${lastName}`.trim() || '';
 };
 
 export const convetDateToUTC = (dateTime) => {
@@ -38,4 +33,22 @@ export const convetDateToUTC = (dateTime) => {
   // Convert to UTC ISO string with milliseconds and +00:00
   const utcString = date.toISOString().replace('Z', '+00:00');
   return utcString;
+};
+
+/**
+ * Converts a comma-formatted number string into a float.
+ * Useful for normalizing price values from CSV/Excel/ERP imports.
+ *
+ * Examples:
+ *   cleanNumber("1,234.56") → 1234.56
+ *   cleanNumber("10,000")   → 10000
+ */
+export const cleanNumber = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+
+  return parseFloat(String(value).replace(/,/g, '').trim());
+};
+export default {
+  formatDateTime,
+  formatCustomerName,
 };

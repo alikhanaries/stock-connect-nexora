@@ -1,7 +1,8 @@
 import { defaultMailOptions, transporter, mailBranding } from '../config/emailConfig.js';
-import { importProductConstant, resetPasswordConstants } from '../constants/emailConstants.js';
+import { importProductConstant, resetPasswordConstants, importInventoryConstant } from '../constants/emailConstants.js';
 import { productImportTemplate } from '../emailTemplates/importProductTemplate.js';
 import { resetPasswordTemplate } from '../emailTemplates/resetPasswordTemplate.js';
+import { inventoryUpdateTemplate } from '../emailTemplates/updateInventoryTemplate.js';
 
 const sendEmailNotification = async ({ to, subject, html }) => {
   try {
@@ -88,4 +89,33 @@ const resetPasswordService = async ({ to, userName = 'User', resetUrl }) => {
   }
 };
 
-export default { importProductMailService, resetPasswordService };
+const updateInventoryMailService = async ({ to, updateStatus = 'SUCCESS', errorDetails = [], userName }) => {
+  try {
+    const mailOptions = {
+      to,
+      subject: `${mailBranding.tenantName} - ${importInventoryConstant.SUBJECT}`,
+      html: inventoryUpdateTemplate({
+        updateStatus,
+        errorDetails,
+        ...importInventoryConstant,
+        ...mailBranding,
+        INVENTORY_UPDATE_HELLO: `Hello ${userName}`,
+      }),
+    };
+
+    const { success, messageId } = await sendEmailNotification(mailOptions);
+
+    if (success) {
+      console.log(`Inventory import email sent successfully. Message ID: ${messageId}`);
+    } else {
+      console.warn('Inventory import email failed to send.');
+    }
+
+    return { success, messageId };
+  } catch (error) {
+    console.error('sendImportInventoryEmail error:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+export default { importProductMailService, resetPasswordService, updateInventoryMailService };
