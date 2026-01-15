@@ -12,7 +12,7 @@ import { getPagination } from '#helpers/PaginationHandler.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
-import { ORDER_STATUS_MAP } from '#constants/common.js';
+import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 
@@ -30,7 +30,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
 
     // ---  Helper to safely build delivery/collection info ---
     const buildPartyPayload = (data = {}, prefix) => ({
-      [`${prefix}_name`]: data?.name || '',
+      [`${prefix}_name`]: data?.name || data?.email || '',
       [`${prefix}_email`]: data?.email || '',
       [`${prefix}_city`]: data?.city || '',
       [`${prefix}_address`]: data?.address || '',
@@ -210,7 +210,7 @@ export const updateShipmentDeliveryStateChannelEngine = async (status, deliveryD
 
 export const getPickUpAddress = async (pickUpId) => {
   try {
-    const collectionData = await PickupAddress.findById(pickUpId);
+    const collectionData = await PickupAddress.findById(pickUpId).select('-__v');
 
     return collectionData || false;
   } catch (error) {
@@ -302,8 +302,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     //  Step 4: Build shipped quantity map
     const shippedQtyMap = {};
     for (const shipment of existingShipments || []) {
-      if (!['SHIPMENT_CREATED', 'PICKED', 'DELIVERED'].includes(shipment.status)) continue;
-
+      if (!['SHIPMENT_CREATED', 'DELIVERED', 'SHIPPED'].includes(shipment.status)) continue;
       for (const product of shipment.products || []) {
         const orderLineId = String(product.orderLineId);
         const quantity = product.quantity || 0;
@@ -396,6 +395,7 @@ export const createPartialShipmentService = async (shipmentData) => {
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
       products: validProducts,
+      shipmentMethod: 'AYMAKAN',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
@@ -416,10 +416,11 @@ export const createPartialShipmentService = async (shipmentData) => {
       order.sellerId = sellerId;
     }
 
+    order.status = 'IN_PROGRESS';
     await order.save();
     const logEntry = {
       status: 'SHIPMENT CREATED',
-      description: `Shipment created with AWN -${trackingNumber}`,
+      description: `Shipment created with AWB -${trackingNumber}`,
       createdAt: new Date(),
     };
 
@@ -431,11 +432,12 @@ export const createPartialShipmentService = async (shipmentData) => {
   }
 };
 
-export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, status, search }) => {
+export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, status, search, sortOrder = 'desc' }) => {
   try {
     const currentPage = parseInt(page);
     const perPage = parseInt(size);
     const skip = (currentPage - 1) * perPage;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
 
     const matchStage = {
       sellerId: new mongoose.Types.ObjectId(sellerId),
@@ -496,7 +498,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
           },
         },
       },
-      { $sort: { createdAt: -1 } }, // latest first
+      { $sort: { createdAt: sortDirection } },
       { $skip: skip }, // skip for pagination
       { $limit: perPage } // limit for pagination
     );
@@ -529,136 +531,243 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
   }
 };
 
+export const getAllShipmentsAdminService = async ({
+  page = 1,
+  size = 10,
+  sellerId,
+  status,
+  search,
+  sortOrder = 'desc',
+}) => {
+  const currentPage = Math.max(parseInt(page, 10) || 1, 1);
+  const perPage = Math.min(parseInt(size, 10) || 10, 100);
+  const skip = (currentPage - 1) * perPage;
+  const sortDirection = sortOrder === 'asc' ? 1 : -1;
+
+  const matchStage = {};
+  const appliedFilters = {};
+
+  if (sellerId) {
+    matchStage.sellerId = new mongoose.Types.ObjectId(sellerId);
+    appliedFilters.sellerId = sellerId;
+  }
+
+  if (status) {
+    const statuses = status.split(',').map((s) => s.trim().toUpperCase());
+    matchStage.status = { $in: statuses };
+    appliedFilters.status = status;
+  }
+
+  const pipeline = [
+    { $match: matchStage },
+    {
+      $lookup: {
+        from: 'deliveryaddresses',
+        localField: 'deliveryId',
+        foreignField: '_id',
+        as: 'deliveryInfo',
+      },
+    },
+    { $unwind: { path: '$deliveryInfo', preserveNullAndEmptyArrays: true } },
+  ];
+
+  const trimmedSearch = search?.trim();
+
+  if (trimmedSearch && trimmedSearch.length <= 50) {
+    const safeRegex = new RegExp(trimmedSearch, 'i');
+
+    pipeline.push({
+      $match: {
+        $or: [
+          { airWaybillNo: { $regex: safeRegex } },
+          { status: { $regex: safeRegex } },
+          { 'shipmentMerchantDetails.name': { $regex: safeRegex } },
+          { 'deliveryInfo.name': { $regex: safeRegex } },
+        ],
+      },
+    });
+
+    appliedFilters.search = trimmedSearch;
+  }
+
+  pipeline.push(
+    {
+      $project: {
+        orderId: 1,
+
+        createdAt: 1,
+        status: 1,
+        airWaybillNo: 1,
+        sellerId: 1,
+        shipmentMerchantDetails: 1,
+        deliveryCustomer: {
+          name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
+          email: { $ifNull: ['$deliveryInfo.email', '$shipmentMerchantDetails.email'] },
+        },
+      },
+    },
+    { $sort: { createdAt: sortDirection } },
+    { $skip: skip },
+    { $limit: perPage }
+  );
+
+  const shipmentData = await Shipment.aggregate(pipeline);
+
+  const total = await Shipment.countDocuments(matchStage);
+
+  return {
+    shipments: shipmentData,
+    pagination: getPagination(total, currentPage, perPage),
+    appliedFilters,
+  };
+};
+
 export const ayMakanWebHookService = async (data) => {
   try {
-    if (!data?.tracking_number) {
+    if (!data?.tracking) {
       return { success: false, message: 'Missing tracking_number in webhook payload' };
     }
 
     const shipmentData = await Shipment.findOne(
-      { airWaybillNo: data.tracking_number },
+      { airWaybillNo: data.tracking },
       {
         _id: 1,
         merchantShipmentNo: 1,
         merchantOrderNo: 1,
         products: 1,
         airWaybillNo: 1,
-        status: 1, // needed for duplicate status check
+        status: 1,
         orderId: 1,
       }
     ).lean();
 
     if (!shipmentData) {
-      return { success: false, message: `Shipment not found for AWB: ${data.tracking_number}` };
+      return { success: false, message: `Shipment not found for AWB: ${data.tracking}` };
     }
-    const statusCode = data.status; //AY-0002
 
-    const shipmentStatus = AYMAKAN_STATUS[statusCode]?.status;
+    let shipmentStatus = AYMAKAN_STATUS[data.status]?.status?.toUpperCase();
 
-    // Duplicate check (case-insensitive)
+    // ---------------- DUPLICATE WEBHOOK ----------------
     if ((shipmentData.status || '').toUpperCase() === shipmentStatus) {
       return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
     }
 
-    // 1. When shipment is picked
-    if (shipmentStatus === 'PICKED') {
-      const payload = {
+    // ---------------- CHANNEL ENGINE ----------------
+    if (shipmentStatus === 'SHIPPED') {
+      await createShipmentWithChannelEngine({
         merchantShipmentNo: shipmentData.merchantShipmentNo,
         merchantOrderNo: shipmentData.merchantOrderNo,
         lines: shipmentData.products || [],
-        extraData: {},
         trackTraceNo: shipmentData.airWaybillNo,
-        trackTraceUrl: '',
-        returnTrackTraceNo: '',
         method: 'Aymakan',
         shippedFromCountryCode: data.delivery_country,
         shipmentDate: data.date_time,
-        returnMethod: '',
         isMerchantCreator: true,
         airWaybillNo: shipmentData.airWaybillNo,
-      };
-
-      try {
-        await createShipmentWithChannelEngine(payload);
-      } catch (err) {
-        console.error('Error creating shipment in ChannelEngine:', err.message);
-      }
+      });
     }
 
-    // 2. When shipment is delivered
     if (shipmentStatus === 'DELIVERED') {
-      try {
-        await updateShipmentDeliveryStateChannelEngine('DELIVERED', data.date_time, shipmentData.merchantShipmentNo);
-      } catch (err) {
-        console.error('Error updating delivery state in ChannelEngine:', err.message);
-      }
+      await updateShipmentDeliveryStateChannelEngine('DELIVERED', data.date_time, shipmentData.merchantShipmentNo);
     }
 
-    // 3. Update local shipment record
-    const trackingInfo =
-      Array.isArray(data.tracking_info) && data.tracking_info.length > 0
-        ? data.tracking_info.map((info) => ({
-            statusCode: info.status_code,
-            description: info.description,
-            descriptionAr: info.description_ar,
-            reasonCode: info.reason_code,
-            reasonEn: info.reason_en,
-            reasonAr: info.reason_ar,
-            createdAt: info.created_at,
-          }))
-        : [];
-    // UPDATE SHIPMENT STATUS
+    // ---------------- UPDATE SHIPMENT ----------------
+    await Shipment.findByIdAndUpdate(shipmentData._id, {
+      status: shipmentStatus,
+      trackingInfo: (data.tracking_info || []).map((i) => ({
+        statusCode: i.status_code,
+        description: i.description,
+        createdAt: i.created_at,
+      })),
+    });
 
-    const updatedShipment = await Shipment.findOneAndUpdate(
-      { _id: shipmentData._id },
-      {
-        status: shipmentStatus?.toUpperCase(),
-        trackingInfo,
-      },
-      { new: true }
-    );
-    // UPDATE ORDER STATUS
-    const orderLineIdsToUpdate = shipmentData.products.map((p) => p.orderLineId);
+    const orderLineIds = shipmentData.products.map((p) => p.orderLineId);
 
-    // Step 1: Update the SKU statuses first
-    await Order.findOneAndUpdate(
-      { _id: shipmentData?.orderId },
+    // ---------------- UPDATE SKU STATUS ----------------
+    const skuStatus = shipmentStatus === 'CANCELED' ? 'NEW' : shipmentStatus;
+
+    await Order.updateOne(
+      { _id: shipmentData.orderId },
       {
         $set: {
-          'orderSkuList.skuList.$[sku].status': shipmentStatus?.toUpperCase(),
+          'orderSkuList.skuList.$[sku].status': skuStatus,
         },
       },
       {
         arrayFilters: [
           {
-            'sku.id': { $in: orderLineIdsToUpdate },
-            'sku.status': { $ne: 'PARTIALLY_CANCELED' }, //  skip partially canceled items
+            'sku.id': { $in: orderLineIds },
           },
         ],
-        new: false,
       }
     );
 
-    // Step 2: Fetch the updated order
-    const order = await Order.findById(shipmentData?.orderId).lean();
+    // ---------------- ORDER STATUS DERIVATION ----------------
+    const order = await Order.findById(shipmentData.orderId).lean();
+    const skuList = order.orderSkuList?.skuList || [];
 
-    // Step 3: Check if all SKUs have the same target status
-    const allMatch = order.orderSkuList?.skuList?.every((sku) => sku.status === shipmentStatus.toUpperCase());
+    let hasAnyShipped = false;
+    let allNew = true;
+    let allDelivered = true;
 
-    // Step 4: Update order status if all SKUs match
-    if (allMatch) {
-      await Order.findByIdAndUpdate(shipmentData?.orderId, {
-        $set: { status: shipmentStatus.toUpperCase() },
-      });
+    for (const sku of skuList) {
+      if (sku.status !== 'NEW') allNew = false;
+      if (sku.status !== 'DELIVERED') allDelivered = false;
+      if (sku.status === 'SHIPPED' || sku.status === 'DELIVERED') {
+        hasAnyShipped = true;
+      }
+    }
+
+    let finalOrderStatus = order.status;
+
+    if (allDelivered) {
+      finalOrderStatus = 'DELIVERED';
+    } else if (allNew) {
+      finalOrderStatus = 'NEW'; //  rollback fix
+    } else if (hasAnyShipped) {
+      finalOrderStatus = 'SHIPPED';
+    } else {
+      finalOrderStatus = 'IN_PROGRESS';
+    }
+
+    //  ALLOW DOWNGRADE ONLY FOR NEW
+    const canUpdate =
+      finalOrderStatus === 'NEW'
+        ? order.status !== 'NEW'
+        : ORDER_PRIORITY.indexOf(finalOrderStatus) > ORDER_PRIORITY.indexOf(order.status);
+
+    if (canUpdate) {
+      await Order.findByIdAndUpdate(order._id, { status: finalOrderStatus });
+
+      await OrderLogs.updateOne(
+        { orderId: order._id },
+        {
+          $push: {
+            details: {
+              status: finalOrderStatus,
+              description:
+                finalOrderStatus === 'NEW'
+                  ? 'All shipments canceled, order reset'
+                  : finalOrderStatus === 'DELIVERED'
+                    ? 'All items delivered'
+                    : finalOrderStatus === 'SHIPPED'
+                      ? 'All available items shipped'
+                      : 'Order partially processed',
+              createdAt: convetDateToUTC(new Date()),
+            },
+          },
+        },
+        { upsert: true }
+      );
     }
 
     return {
       success: true,
-      message: `Shipment ${data.tracking_number} updated successfully (${data.status_label})`,
-      shipmentId: updatedShipment._id,
+      message: `Shipment ${data.tracking} updated successfully`,
+      shipmentId: shipmentData._id,
     };
   } catch (error) {
-    console.error(' Error in ayMakanWebHookService:', error.message, error.stack);
+    console.error('ayMakanWebHookService error:', error);
     throw new Error('Failed to process AyMakan webhook: ' + error.message);
   }
 };
@@ -784,6 +893,7 @@ export const getSingleShipmentService = async (id) => {
         deliveryDate: 1,
         createdAt: 1,
         updatedAt: 1,
+        shipmentMethod: 1,
         shipmentMerchantDetails: 1,
         deliveryDetails: 1,
         pickupDetails: 1,
@@ -799,9 +909,9 @@ export const getSingleShipmentService = async (id) => {
 
   const formattedShipmentData = transformShipmentResponse(shipment[0]);
 
-  // Fetch tracking info only if we have an AWB number
+  // Fetch tracking info only if we have an AWB number and it's not a MANUAL shipment
   let trackingData = null;
-  if (formattedShipmentData?.airWaybillNo) {
+  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod !== 'MANUAL') {
     trackingData = await trackAymakanShipment(formattedShipmentData.airWaybillNo);
     formattedShipmentData.trackingInfo = formatShipmentTrackingInfo(trackingData?.trackingInfo);
   }
@@ -819,10 +929,10 @@ const transformShipmentResponse = (response) => {
     city: data.deliveryDetails?.city,
     region: data.deliveryDetails?.country,
     zipCode: data.deliveryDetails?.postcode,
-    name: data.deliveryDetails.name,
-    email: data.deliveryDetails.email,
-    country: data.deliveryDetails.country,
-    phoneNumber: data.deliveryDetails.phone,
+    name: data.deliveryDetails?.name || data.deliveryDetails?.email || 'NA',
+    email: data.deliveryDetails?.email,
+    country: data.deliveryDetails?.country,
+    phoneNumber: data.deliveryDetails?.phone,
   };
   // Pickup Address
   const pickUpDetails = {
@@ -830,10 +940,10 @@ const transformShipmentResponse = (response) => {
     city: data.pickupDetails?.city,
     region: data.pickupDetails?.country,
     zipCode: data.pickupDetails?.postcode,
-    name: data.pickupDetails.name,
-    email: data.pickupDetails.email,
-    country: data.pickupDetails.country,
-    phoneNumber: data.pickupDetails.phone,
+    name: data.pickupDetails?.name || data.pickupDetails?.email || 'NA',
+    email: data.pickupDetails?.email,
+    country: data.pickupDetails?.country,
+    phoneNumber: data.pickupDetails?.phone,
   };
 
   // Payment Info
@@ -885,88 +995,165 @@ export const formatShipmentTrackingInfo = (data) => {
 // CANCEL SHIPMENT STARTS HERE
 export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
   try {
-    // Ensure fallback reason is always non-empty
     const cancelReason = reason?.trim() || 'NA';
 
-    const shipmentData = await Shipment.findOne(
+    // 1️ Only SHIPMENT_CREATED can be canceled
+    const shipment = await Shipment.findOne(
       { _id: shipmentId, status: AYMAKAN_STATUS['AY-0001'].status },
       { _id: 1, airWaybillNo: 1, orderId: 1 }
     );
 
-    if (!shipmentData) {
+    if (!shipment) {
       return {
         success: false,
         message: 'No shipment found',
       };
     }
 
-    const trackingNumber = shipmentData.airWaybillNo;
+    const trackingNumber = shipment.airWaybillNo;
 
-    // Cancel shipment via Aymakan API
+    //2 Cancel shipment via Aymakan API
     await cancelAymakanShipment(trackingNumber);
+    const { orderId, products } = shipment;
 
-    // Get latest tracking info
-    const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
-    const trackingInfo =
-      aymakanTrackingResult?.trackingInfo?.map((info) => ({
-        statusCode: info?.status_code || '',
-        description: info?.description || '',
-        descriptionAr: info?.description_ar || '',
-        reasonCode: info?.reason_code || '',
-        reasonEn: info?.reason_en || '',
-        reasonAr: info?.reason_ar || '',
-        createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
-      })) || [];
+    // 23 Cancel shipment
 
-    // Update shipment status in DB
-    const updatedShipment = await Shipment.findOneAndUpdate(
-      { airWaybillNo: trackingNumber },
+    await Shipment.findByIdAndUpdate(shipment._id, {
+      status: 'CANCELED',
+      cancelReason,
+    });
+
+    // 34 Fetch order
+
+    const order = await Order.findById(orderId).lean();
+    if (!order) throw new Error('Order not found');
+
+    //4️ Recalculate SKU statuses
+
+    for (const p of products || []) {
+      const sku = order.orderSkuList.skuList.find((s) => s.id === p.orderLineId);
+
+      if (!sku) continue;
+
+      const cancelledQty = sku.cancellationRequestedQuantity || 0;
+
+      let finalSkuStatus;
+
+      // SKU STATUS PRIORITY
+
+      if (cancelledQty > 0) {
+        finalSkuStatus = 'PARTIALLY_CANCELED';
+      } else {
+        finalSkuStatus = 'NEW';
+      }
+
+      await Order.updateOne(
+        { _id: orderId },
+        {
+          $set: {
+            'orderSkuList.skuList.$[sku].status': finalSkuStatus,
+          },
+        },
+        {
+          arrayFilters: [{ 'sku.id': p.orderLineId }],
+        }
+      );
+    }
+
+    //5️ Re-fetch updated order for final order status calculation
+
+    const updatedOrder = await Order.findById(orderId).lean();
+
+    // ORDER STATUS RULE
+    // Order is NEW only if ALL SKUs are NEW
+
+    const allSkusAreNew = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === 'NEW');
+
+    const finalOrderStatus = allSkusAreNew ? 'NEW' : 'IN_PROGRESS';
+
+    // 6️ Update order status
+
+    await Order.findByIdAndUpdate(orderId, {
+      status: finalOrderStatus,
+    });
+
+    // 7️ Order logs
+
+    await OrderLogs.updateOne(
+      { orderId },
       {
-        status: 'CANCELED',
-        trackingInfo,
-        cancelReason,
+        $push: {
+          details: {
+            status: finalOrderStatus,
+            description: 'Shipment canceled and order/SKU statuses recalculated',
+            createdAt: new Date(),
+          },
+        },
       },
-      { new: true }
+      { upsert: true }
     );
 
-    if (!updatedShipment) {
-      console.warn(`No shipment found with tracking number: ${trackingNumber}`);
-    }
-    const logEntry = {
-      status: 'SHIPMENT CANCELED',
-      description: `Shipment canceled with AWN -${trackingNumber}`,
-      createdAt: new Date(),
-    };
-
-    await OrderLogs.updateOne({ orderId: shipmentData?.orderId }, { $push: { details: logEntry } }, { upsert: true });
     return {
       success: true,
-      message: 'Shipment cancelled successfully',
-      shipmentId: updatedShipment?._id,
+      message: 'Shipment canceled successfully',
+      shipmentId: shipment._id,
     };
   } catch (error) {
-    console.error('Aymakan Service Error:', error.message, error.stack);
+    console.error('cancelShipmentService error:', error);
     throw error;
   }
 };
 
 export const syncShipmentStatus = async (orderId) => {
   try {
-    // Fetch order
+    // ---------------- FETCH ORDER ----------------
     const order = await Order.findById(orderId).lean();
-    if (!order) return { success: false, message: 'Order not found' };
+    if (!order) {
+      return { success: false, message: 'Order not found' };
+    }
 
-    // Fetch all active shipments
+    // If order already canceled, do nothing
+    if (order.status === 'CANCELED') {
+      return { success: false, syncedShipments: 0 };
+    }
+
+    // ---------------- FETCH SHIPMENTS ----------------
     const shipments = await Shipment.find(
-      { orderId, status: { $ne: 'CANCELED' } },
-      { airWaybillNo: 1, _id: 1, merchantShipmentNo: 1, products: 1, merchantOrderNo: 1, status: 1 }
+      {
+        orderId,
+        status: { $ne: 'CANCELED' },
+      },
+      {
+        airWaybillNo: 1,
+        _id: 1,
+        merchantShipmentNo: 1,
+        products: 1,
+        merchantOrderNo: 1,
+        status: 1,
+        shipmentMethod: 1,
+      }
     ).lean();
 
-    if (!shipments.length) return { success: true, syncedShipments: 0 };
+    if (!shipments.length) {
+      return { success: true, syncedShipments: 0 };
+    }
 
+    // ---------------- PROCESS EACH SHIPMENT ----------------
     for (const shipment of shipments) {
       try {
+        // Skip MANUAL shipments
+        if (shipment.shipmentMethod === 'MANUAL') {
+          continue;
+        }
+
+        if (!shipment.airWaybillNo) {
+          console.log('Missing AWB, skipping shipment:', shipment._id);
+          continue;
+        }
+
+        // ---------------- TRACK AYMAKAN ----------------
         const tracking = await trackAymakanShipment(shipment.airWaybillNo);
+
         const trackingInfo = (tracking?.trackingInfo || []).map((info) => ({
           statusCode: info?.status_code ?? '',
           description: info?.description ?? '',
@@ -977,15 +1164,31 @@ export const syncShipmentStatus = async (orderId) => {
           createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
         }));
 
-        const latest = trackingInfo[0];
-        const shipmentStatus = AYMAKAN_STATUS[latest?.statusCode]?.status?.toUpperCase() || 'UNKNOWN';
-
-        if (shipmentStatus === 'UNKNOWN') {
-          console.warn(`Unknown status for shipment ${shipment._id}: ${latest?.statusCode}`);
+        if (!trackingInfo.length) {
+          console.log('No tracking info for shipment:', shipment._id);
           continue;
         }
 
-        // Handle shipment status actions
+        const latest = trackingInfo[0];
+        let shipmentStatus = AYMAKAN_STATUS[latest?.statusCode]?.status?.toUpperCase() || 'UNKNOWN';
+        // PICKED must behave as SHIPPED
+        if (shipmentStatus === 'PICKED') {
+          shipmentStatus = 'SHIPPED';
+        }
+
+        if (shipmentStatus === 'UNKNOWN') {
+          console.warn(`Unknown status for shipment ${shipment._id}:`, latest?.statusCode);
+          continue;
+        }
+
+        // Avoid duplicate / downgrade updates
+        if (shipment.status && ORDER_PRIORITY.indexOf(shipmentStatus) <= ORDER_PRIORITY.indexOf(shipment.status)) {
+          console.log('Skipping downgrade or duplicate update:', shipment.status, '→', shipmentStatus);
+          continue;
+        }
+
+        // ---------------- APPLY UPDATE ----------------
+
         await handleShipmentStatusUpdate({
           shipment,
           tracking,
@@ -998,7 +1201,10 @@ export const syncShipmentStatus = async (orderId) => {
       }
     }
 
-    return { success: true, syncedShipments: shipments.length };
+    return {
+      success: true,
+      syncedShipments: shipments.length,
+    };
   } catch (err) {
     console.error('Error syncing shipment status:', err.message);
     return { success: false, message: err.message };
@@ -1009,10 +1215,11 @@ export const syncShipmentStatus = async (orderId) => {
  * Handles updates related to a single shipment’s status.
  */
 async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, trackingInfo, orderId }) {
-  // --- 1️ ChannelEngine integrations ---
-  const { airWaybillNo, merchantShipmentNo, merchantOrderNo, products } = shipment;
+  const { airWaybillNo, merchantShipmentNo, merchantOrderNo, products, _id: shipmentId } = shipment;
 
-  if (shipmentStatus === 'PICKED') {
+  /* -------------------- 1️ CHANNEL ENGINE -------------------- */
+
+  if (shipmentStatus === 'SHIPPED') {
     await safeExecute(async () => {
       await createShipmentWithChannelEngine({
         merchantShipmentNo,
@@ -1023,8 +1230,8 @@ async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, 
         trackTraceUrl: '',
         returnTrackTraceNo: '',
         method: 'Aymakan',
-        shippedFromCountryCode: tracking.collection_country,
-        shipmentDate: tracking.pickup_date,
+        shippedFromCountryCode: tracking?.collection_country,
+        shipmentDate: tracking?.pickup_date,
         returnMethod: '',
         isMerchantCreator: true,
         airWaybillNo,
@@ -1036,19 +1243,28 @@ async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, 
     await safeExecute(async () => {
       await updateShipmentDeliveryStateChannelEngine(
         'DELIVERED',
-        tracking.delivery_date || tracking.pickup_date,
+        tracking?.delivery_date || tracking?.pickup_date,
         merchantShipmentNo
       );
     }, 'updating delivery state in ChannelEngine');
   }
 
-  // --- 2️ Update local shipment record ---
-  await Shipment.findByIdAndUpdate(shipment._id, { status: shipmentStatus, trackingInfo }, { new: true });
+  /* -------------------- 2️ UPDATE SHIPMENT -------------------- */
 
-  // --- 3️ Update order SKU statuses ---
+  await Shipment.findByIdAndUpdate(
+    shipmentId,
+    {
+      status: shipmentStatus,
+      trackingInfo,
+    },
+    { new: true }
+  );
+
+  /* -------------------- 3️ UPDATE SKU STATUS -------------------- */
+
   const orderLineIds = (products || []).map((p) => p.orderLineId).filter(Boolean);
   if (orderLineIds.length > 0) {
-    const orderSkuStatus = shipmentStatus === 'CANCELED' ? 'NEW' : shipmentStatus.toUpperCase();
+    const orderSkuStatus = shipmentStatus;
 
     await Order.updateOne(
       { _id: orderId },
@@ -1068,20 +1284,77 @@ async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, 
     );
   }
 
-  // --- 4️ Log updates ---
+  /* -------------------- 4️ ORDER LOG -------------------- */
+
   const logEntry = createLogEntry(shipmentStatus, airWaybillNo, tracking, trackingInfo);
+
   if (logEntry) {
     await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
   }
 
-  // --- 5️ Sync order-level status ---
-  const updatedOrder = await Order.findById(orderId).lean();
-  const allMatch = updatedOrder.orderSkuList?.skuList?.every((sku) => sku.status === shipmentStatus);
+  /* -------------------- 5️ ORDER STATUS DERIVATION -------------------- */
 
-  if (allMatch) {
-    const finalOrderStatus = shipmentStatus === 'NEW' ? 'IN_PROGRESS' : shipmentStatus.toUpperCase();
+  const order = await Order.findById(orderId).lean();
 
-    await Order.findByIdAndUpdate(orderId, { $set: { status: finalOrderStatus } });
+  if (!order || order.status === 'CANCELED') {
+    console.log('Order canceled or missing, skipping order status sync');
+    return;
+  }
+
+  // Fetch all non-canceled shipments
+  const shipments = await Shipment.find({
+    orderId,
+    status: { $in: ['SHIPPED', 'DELIVERED'] },
+  }).lean();
+
+  const fulfilledQtyMap = {};
+  const deliveredQtyMap = {};
+
+  shipments.forEach((s) =>
+    s.products?.forEach((p) => {
+      const id = String(p.orderLineId);
+      const qty = p.quantity || 0;
+
+      fulfilledQtyMap[id] = (fulfilledQtyMap[id] || 0) + qty;
+
+      if (s.status === 'DELIVERED') {
+        deliveredQtyMap[id] = (deliveredQtyMap[id] || 0) + qty;
+      }
+    })
+  );
+
+  let hasAnyFulfilled = false;
+  let allAvailableFulfilled = true;
+  let allAvailableDelivered = true;
+
+  for (const sku of order.orderSkuList.skuList) {
+    const orderedQty = sku.quantity || 0;
+    const cancelledQty = sku.cancellationRequestedQuantity || 0;
+    const availableQty = orderedQty - cancelledQty;
+
+    const fulfilledQty = fulfilledQtyMap[String(sku.id)] || 0;
+    const deliveredQty = deliveredQtyMap[String(sku.id)] || 0;
+
+    if (fulfilledQty > 0) hasAnyFulfilled = true;
+    if (fulfilledQty < availableQty) allAvailableFulfilled = false;
+    if (deliveredQty < availableQty) allAvailableDelivered = false;
+  }
+
+  let finalOrderStatus = order.status;
+
+  if (allAvailableDelivered) {
+    finalOrderStatus = 'DELIVERED';
+  } else if (allAvailableFulfilled) {
+    finalOrderStatus = 'SHIPPED';
+  } else if (hasAnyFulfilled) {
+    finalOrderStatus = 'IN_PROGRESS';
+  }
+
+  // Apply only if moving forward
+  if (ORDER_PRIORITY.indexOf(finalOrderStatus) > ORDER_PRIORITY.indexOf(order.status)) {
+    await Order.findByIdAndUpdate(orderId, {
+      $set: { status: finalOrderStatus },
+    });
 
     const orderLog = createLogEntry(finalOrderStatus, airWaybillNo, tracking, trackingInfo, true);
     await OrderLogs.updateOne({ orderId }, { $push: { details: orderLog } }, { upsert: true });
@@ -1100,19 +1373,19 @@ function createLogEntry(status, awb, tracking, trackingInfo, isOrder = false) {
     case 'DELIVERED':
       return {
         status: 'DELIVERED',
-        description: `${label} delivered${isOrder ? '' : ` with AWN:${awb}`}`,
+        description: `${label} delivered${isOrder ? '' : ` with AWB:${awb}`}`,
         createdAt: tracking?.delivery_date || new Date(),
       };
     case 'PICKED':
       return {
         status: 'PICKED',
-        description: `${label} picked${isOrder ? '' : ` with AWN:${awb}`}`,
+        description: `${label} picked${isOrder ? '' : ` with AWB:${awb}`}`,
         createdAt: tracking?.pickup_date || new Date(),
       };
     case 'CANCELED':
       return {
         status: 'CANCELED',
-        description: `${label} canceled${isOrder ? '' : ` with AWN:${awb}`}`,
+        description: `${label} canceled${isOrder ? '' : ` with AWB:${awb}`}`,
         createdAt: utcTime,
       };
     default:
@@ -1131,9 +1404,227 @@ async function safeExecute(fn, label) {
   }
 }
 
+export const createManualShipmentService = async (shipmentData) => {
+  try {
+    const {
+      orderId,
+      sellerId,
+      userId,
+      pickUpId,
+      airWaybillNo,
+      merchantShipmentNo,
+      method,
+      products = [],
+      trackTraceUrl = '',
+      shippedFromCountryCode = 'SA',
+      description = '',
+    } = shipmentData;
+
+    /* -------------------- VALIDATION -------------------- */
+    const missingFields = [];
+    if (!orderId) missingFields.push('orderId');
+    if (!sellerId) missingFields.push('sellerId');
+    if (!userId) missingFields.push('userId');
+    if (!pickUpId) missingFields.push('pickUpId');
+    if (!airWaybillNo) missingFields.push('airWaybillNo');
+    if (!merchantShipmentNo) missingFields.push('merchantShipmentNo');
+    if (!method) missingFields.push('method');
+    if (!products || products.length === 0) missingFields.push('products');
+
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+    }
+
+    /* -------------------- PARALLEL FETCH -------------------- */
+    const [existingMerchantShipment, existingAwb, order, user] = await Promise.all([
+      Shipment.findOne({ merchantShipmentNo }),
+      Shipment.findOne({ airWaybillNo }),
+      Order.findById(orderId).lean(),
+      User.findById(userId).lean(),
+    ]);
+
+    if (existingMerchantShipment) throw new Error(`Merchant shipment number '${merchantShipmentNo}' already exists`);
+    if (existingAwb) throw new Error(`AWB number '${airWaybillNo}' already exists`);
+    if (!order) throw new Error(`Order with ID ${orderId} not found`);
+    if (!user) throw new Error(`User with ID ${userId} not found`);
+
+    /* -------------------- ORDER SKU MAP -------------------- */
+    const orderSkuMap = new Map();
+    order.orderSkuList?.skuList?.forEach((sku) => {
+      orderSkuMap.set(sku.merchantProductNo.toLowerCase(), sku);
+    });
+
+    /* -------------------- EXISTING SHIPMENTS -------------------- */
+    const productLineIds = products.map((p) => String(p.orderLineId));
+
+    const existingShipments = await Shipment.find({
+      orderId,
+      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'] },
+      'products.orderLineId': { $in: productLineIds },
+    }).lean();
+
+    const shippedQtyMap = {};
+    existingShipments.forEach((shipment) => {
+      shipment.products?.forEach((p) => {
+        const id = String(p.orderLineId);
+        shippedQtyMap[id] = (shippedQtyMap[id] || 0) + (p.quantity || 0);
+      });
+    });
+
+    /* -------------------- PRODUCT VALIDATION -------------------- */
+    const validatedProducts = [];
+
+    for (const product of products) {
+      const orderSku = orderSkuMap.get(product.merchantProductNo.toLowerCase());
+      if (!orderSku) throw new Error(`Product ${product.merchantProductNo} not found in order`);
+
+      if (product.quantity <= 0) throw new Error(`Invalid quantity for ${product.merchantProductNo}`);
+      const orderedQty = orderSku.quantity || 0;
+      const cancelledQty = orderSku.cancellationRequestedQuantity || 0;
+      const availableQty = orderedQty - cancelledQty;
+
+      const alreadyShipped = shippedQtyMap[String(product.orderLineId)] || 0;
+      const remainingQty = availableQty - alreadyShipped;
+
+      if (remainingQty <= 0) throw new Error(`All quantity already shipped for ${product.merchantProductNo}`);
+
+      if (product.quantity > remainingQty)
+        throw new Error(`Cannot ship ${product.quantity}. Only ${remainingQty} remaining`);
+
+      validatedProducts.push({
+        merchantProductNo: product.merchantProductNo,
+        orderLineId: product.orderLineId,
+        quantity: product.quantity,
+        hsCode: orderSku.hsCode || '',
+      });
+    }
+
+    /* -------------------- PICKUP & DELIVERY -------------------- */
+    const pickupData = await getPickUpAddress(pickUpId);
+    if (!pickupData) throw new Error('Invalid pickup address ID');
+
+    let deliveryId;
+    const existingDelivery = await DeliveryAddress.findOne({ orderId }).lean();
+
+    if (existingDelivery) {
+      deliveryId = existingDelivery._id;
+    } else {
+      const savedDelivery = await saveDeliveryAddress({
+        orderId,
+        name: `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim(),
+        email: order.orderCustomer?.email || '',
+        phone: order.orderCustomer?.phone || '',
+        address: order.orderShippingAddress?.streetName || '',
+        city: order.orderShippingAddress?.city || '',
+        country: order.orderShippingAddress?.country || '',
+        postcode: order.orderShippingAddress?.zipCode || '',
+      });
+      deliveryId = savedDelivery._id;
+    }
+
+    /* -------------------- CREATE SHIPMENT -------------------- */
+    const totalPieces = validatedProducts.reduce((s, p) => s + p.quantity, 0);
+
+    const shipment = await new Shipment({
+      orderId,
+      sellerId,
+      userId,
+      deliveryId,
+      pickUpId: pickupData._id,
+      airWaybillNo,
+      merchantShipmentNo,
+      merchantOrderNo: order.merchantOrderNo || order.orderId,
+      method,
+      shippedFromCountryCode,
+      products: validatedProducts,
+      pieces: totalPieces,
+      status: 'SHIPPED',
+      submissionDate: new Date(),
+      shipmentMethod: 'MANUAL',
+      isMerchantCreator: true,
+      ...(description && { description }),
+    }).save();
+
+    /* -------------------- CHANNEL ENGINE -------------------- */
+    await createShipmentWithChannelEngine({
+      merchantShipmentNo,
+      merchantOrderNo: order.merchantOrderNo || order.orderId,
+      lines: validatedProducts,
+      trackTraceNo: airWaybillNo,
+      trackTraceUrl,
+      method,
+      shippedFromCountryCode,
+      shipmentDate: new Date(),
+      isMerchantCreator: true,
+      airWaybillNo,
+    });
+
+    /* -------------------- ORDER STATUS LOGIC -------------------- */
+    const updatedOrder = await Order.findById(orderId).lean();
+
+    const allShipments = await Shipment.find({
+      orderId,
+      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'] },
+    }).lean();
+
+    const totalShippedMap = {};
+    allShipments.forEach((s) =>
+      s.products?.forEach((p) => {
+        const id = String(p.orderLineId);
+        totalShippedMap[id] = (totalShippedMap[id] || 0) + (p.quantity || 0);
+      })
+    );
+
+    const allShipped = updatedOrder.orderSkuList.skuList.every((sku) => {
+      const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+      const shippedQty = totalShippedMap[String(sku.id)] || 0;
+      return availableQty <= 0 || shippedQty >= availableQty;
+    });
+
+    const partiallyShipped = updatedOrder.orderSkuList.skuList.some((sku) => {
+      const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+      const shippedQty = totalShippedMap[String(sku.id)] || 0;
+      return shippedQty > 0 && shippedQty < availableQty;
+    });
+
+    if (allShipped) {
+      await Order.findByIdAndUpdate(orderId, { status: 'SHIPPED' });
+    } else if (partiallyShipped) {
+      await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' });
+    }
+
+    /* -------------------- LOGS -------------------- */
+    await OrderLogs.updateOne(
+      { orderId },
+      {
+        $push: {
+          details: {
+            status: allShipped ? 'SHIPPED' : 'IN_PROGRESS',
+            description: allShipped ? 'All available items shipped' : 'Order partially shipped',
+            createdAt: convetDateToUTC(new Date()),
+          },
+        },
+      },
+      { upsert: true }
+    );
+
+    return {
+      success: true,
+      message: 'MANUAL shipment created successfully',
+      shipmentId: shipment._id,
+      airWaybillNo,
+      merchantShipmentNo,
+    };
+  } catch (error) {
+    console.error('createManualShipmentService error:', error);
+    throw new Error(error.message || 'Failed to create MANUAL shipment');
+  }
+};
+
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
+  getAllShipmentsAdminService,
   createPartialShipmentService,
   saveDeliveryAddress,
   getPickUpAddress,
@@ -1145,4 +1636,5 @@ export default {
   cancelShipmentService,
   transformShipmentResponse,
   formatShipmentTrackingInfo,
+  createManualShipmentService,
 };

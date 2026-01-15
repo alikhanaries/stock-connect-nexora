@@ -4,9 +4,10 @@ import productService from '#service/productService.js';
 import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
-import { PRODUCT_STATUSES } from '#constants/common.js';
+import { PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
+import Seller from '#models/Seller.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -49,19 +50,20 @@ export const getTopSellingProduct = async (req, res) => {
 export const importProductsFromGoogleSheet = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     const { url } = req.body;
     if (!req.body.url) {
-      return failResponse(res, req.locale.GOOGLE_SHEET_URL_REQUIRED, 400);
+      return failResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
     const exportUrl = await convertGoogleSheetUrlToExport(url);
     if (!exportUrl) {
-      return failResponse(res, req.locale.INVALID_URL, 500);
+      return failResponse(res, req?.locale?.INVALID_URL, 500);
     }
     // Send immediate response to client
-    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+    successResponse(res, req?.locale?.PRODUCT_IMPORTED_PROCESSING, 200);
     // Process file in background (async, no await here)
     productService
-      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId)
+      .importProductsFromGoogleSheet(exportUrl, req.locale, sellerId, isImageUpdate)
       .then((result) => {
         console.log('CSV processing completed:', result);
         // Send email notification after processing
@@ -88,13 +90,13 @@ export const importProductsFromGoogleSheet = async (req, res) => {
 export const importProductsFromCsvFile = async (req, res) => {
   try {
     // Send immediate response to client
-    successResponse(res, req.locale.PRODUCT_IMPORTED_PROCESSING, 200);
+    successResponse(res, req?.locale?.PRODUCT_IMPORTED_PROCESSING, 200);
     // Call service
     const sellerId = req.sellerId;
-
+    const isImageUpdate = req.query.isImageUpdate === 'true';
     // Process file in background (async, no await here)
     productService
-      .importProductsFromCsvFile(req.file.path, req.locale, sellerId)
+      .importProductsFromCsvFile(req.file.path, req.locale, sellerId, isImageUpdate)
       .then((result) => {
         console.log('CSV processing completed:', result.errorDetails);
         // Send email notification after processing
@@ -122,14 +124,12 @@ export const pushProductToChannelEngine = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const { validProducts = [] } = await productService.validateProducts(channelId, sellerId);
-    if (validProducts?.length) {
-      (async () => {
-        try {
-          await productService.pushProductsAsync(validProducts);
-        } catch (err) {
-          console.error('Async push failed:', err);
-        }
-      })();
+
+    if (validProducts.length > 0) {
+      // Fire-and-forget (non-blocking)
+      productService
+        .pushProductsAsync(validProducts, channelId, sellerId)
+        .catch((err) => console.error('Async push failed:', err));
     }
     return successResponse(res, req.locale.ALL_PRODUCTS_PUSH_SUCCESS, 200, null);
   } catch (err) {
@@ -170,6 +170,40 @@ export const updateProductStatus = async (req, res) => {
     return errorResponse(res, err, 500);
   }
 };
+
+export const freezeOrUnfreezeProducts = async (req, res) => {
+  try {
+    const { ids, isFrozen } = req.body;
+    const sellerId = req.sellerId;
+
+    if (!Array.isArray(ids) || !ids.length) {
+      return failResponse(res, req.locale.PRODUCT_IDS_REQUIRED, 400);
+    }
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return failResponse(res, `${req.locale.INVALID_PRODUCT_IDS} ${invalidIds.join(', ')}`, 400);
+    }
+    const { skuCodes, hasParent } = await productService.syncfreezeOrUnfreezeToStockConnect(ids, isFrozen, sellerId);
+    if (hasParent) {
+      return failResponse(res, 'Parent products are not supported and were skipped', 400);
+    }
+    if (!skuCodes.length) {
+      return failResponse(res, req.locale.NO_MATCHING_PRODUCTS_FOUND_TO_UPDATE, 404);
+    }
+    await productService.syncFreezeOrUnfreezeToChannelEngine({
+      skuCodes,
+      isFrozen,
+    });
+
+    const statusMessage = isFrozen === true ? 'Products frozen successfully' : 'Products unfrozen successfully';
+    return successResponse(res, statusMessage, 200);
+  } catch (err) {
+    console.error('Error updating product freeze status:', err);
+    errorLog(err);
+    return errorResponse(res, err, 500);
+  }
+};
+
 /* DELETE PRODUCT BY ID*/
 export const deleteProduct = async (req, res) => {
   try {
@@ -182,6 +216,30 @@ export const deleteProduct = async (req, res) => {
     }
 
     return successResponse(res, result.message || req.locale.PRODUCT_DELETE_SUCCESS, 200);
+  } catch (error) {
+    console.error('Error:', error);
+    errorLog(error);
+    return errorResponse(res, error);
+  }
+};
+
+// GET PRODUCT BY ID
+export const getProductById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const locale = req.locale;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return failResponse(res, locale?.INVALID_PRODUCT_ID, 400);
+    }
+
+    const result = await productService.getProductById(id, locale);
+
+    if (!result.success) {
+      return failResponse(res, result?.message || locale?.PRODUCT_FETCH_FAILED, 400);
+    }
+
+    return successResponse(res, locale?.PRODUCT_FETCH_SUCCESS, 200, result.data);
   } catch (error) {
     console.error('Error:', error);
     errorLog(error);
@@ -269,7 +327,7 @@ export const getUserChannelProducts = async (req, res) => {
     const sellerId = req.sellerId;
     const { channelId } = req.params;
     if (!channelId) {
-      return errorResponse(res, req.locale.CHANNEL_ID_REQUIRED, 400);
+      return errorResponse(res, req?.locale?.CHANNEL_ID_REQUIRED, 400);
     }
     const { channel, products, pagination, appliedFilters } = await productService.getUserChannelProducts(
       sellerId,
@@ -283,13 +341,13 @@ export const getUserChannelProducts = async (req, res) => {
       ...pagination,
     };
     const message = products?.length
-      ? req.locale.USER_CHANNEL_PRODUCTS_FETCHED_SUCCESSFULLY
-      : req.locale.NO_USER_CHANNEL_PRODUCTS_FOUND;
-    return successResponse(res, message, 200, responseData);
+      ? req?.locale?.USER_CHANNEL_PRODUCTS_FETCHED_SUCCESSFULLY
+      : req?.locale?.NO_USER_CHANNEL_PRODUCTS_FOUND;
+    return successResponse(res, message || 'User channel products fetched successfully', 200, responseData);
   } catch (error) {
     console.error('Error fetching user channel products:', error);
     errorLog(error);
-    return errorResponse(res, error, 500);
+    return errorResponse(res, error?.message || 'Internal server error', 500);
   }
 };
 
@@ -300,10 +358,15 @@ export const getUserUnassignedProducts = async (req, res) => {
     if (!channelId) {
       return errorResponse(res, { message: req.locale.CHANNEL_ID_REQUIRED }, 400);
     }
-    const { products, pagination } = await productService.getUserUnassignedProducts(sellerId, channelId, req.query);
+    const { products, pagination, appliedFilters } = await productService.getUserUnassignedProducts(
+      sellerId,
+      channelId,
+      req.query
+    );
 
     const responseData = {
       content: products || [],
+      appliedFilters: appliedFilters || {},
       ...pagination,
     };
     const message = products.length ? req.locale.AVAILABLE_PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
@@ -338,6 +401,87 @@ export const unlinkProductFromChannel = async (req, res) => {
   }
 };
 
+// Exports products data as CSV file for a specific seller.
+export const exportProducts = async (req, res) => {
+  try {
+    const sellerId = req.params.sellerId || req.sellerId;
+
+    // Fetch seller name for filename
+    const seller = await Seller.findById(sellerId).select('name').lean();
+    if (!seller) {
+      return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    // Parse filter from query params
+    let filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
+
+    // Split comma-separated filters into individual filter strings
+    filters = filters.flatMap((f) => (f.includes(',') ? f.split(',') : f));
+
+    // Validate data exists BEFORE setting headers
+    const validation = await productService.validateProductExportData(filters, sellerId);
+
+    if (!validation.success) {
+      return failResponse(
+        res,
+        req.locale?.NO_PRODUCTS_FOUND || validation.message || 'No products found to export',
+        404
+      );
+    }
+
+    const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const filename = `${sellerName}_ProductExport_${exportDate}.csv`;
+
+    // Set headers for CSV download with UTF-8 encoding
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    // Add UTF-8 BOM for proper encoding
+    res.write('\uFEFF');
+
+    // Write CSV headers
+    res.write(PRODUCT_EXPORT_HEADERS.join(',') + '\n');
+
+    // Stream data using cursor
+    await productService.exportProductsToCSV(filters, sellerId, req.query, res);
+
+    return res.end();
+  } catch (error) {
+    console.error('Controller Error: exportProducts:', error.message);
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+export const searchProducts = async (req, res) => {
+  try {
+    const sellerId = req.params.sellerId;
+    const { channelId, search } = req.query;
+    const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
+
+    const { products, pagination, channel } = await productService.searchProuctsByFilter(
+      filters,
+      req.query,
+      sellerId,
+      channelId,
+      search
+    );
+
+    const responseData = channelId
+      ? { channel, content: products || [], ...pagination }
+      : { content: products || [], ...pagination };
+    const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    errorLog(error);
+    return errorResponse(res, error, 500);
+  }
+};
+
 export default {
   getProducts,
   getTopSellingProduct,
@@ -346,9 +490,13 @@ export default {
   pushProductToChannelEngine,
   updateProductStatus,
   deleteProduct,
+  getProductById,
   deleteMultipleProducts,
   getUserChannelProducts,
   getUserUnassignedProducts,
   addProductsToUserChannel,
   unlinkProductFromChannel,
+  exportProducts,
+  searchProducts,
+  freezeOrUnfreezeProducts,
 };

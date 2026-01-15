@@ -16,7 +16,6 @@ const fetchReturnsCron = () => {
   } catch (error) {
     console.error('Error scheduling cron:', error.message);
   }
-
 };
 
 export default {

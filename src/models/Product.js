@@ -162,8 +162,53 @@ const ProductSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    apparelSizeBodyType: {
+      type: String,
+      trim: true,
+      default: 'Regular',
+    },
+    specialSize: {
+      type: String,
+      trim: true,
+      default: 'Standard',
+    },
+    material: {
+      type: String,
+      trim: true,
+    },
+    closureType: {
+      type: String,
+      trim: true,
+      default: 'Pull On',
+    },
+    fitType: {
+      type: String,
+      trim: true,
+      default: 'Regular',
+    },
+    bottomsHeightType: {
+      type: String,
+      trim: true,
+      default: 'Regular',
+      enum: ['Regular', 'Short', 'Tall', 'Extra Tall', 'Petite', 'Big & Tall'],
+    },
+    source: {
+      type: String,
+      enum: ['SHOPIFY', 'MANUAL', 'AMAZON', 'NOON', 'TRENDYOL'],
+      default: 'MANUAL',
+      uppercase: true,
+      trim: true,
+      index: true,
+    },
+    updatedAt: {
+      type: Date,
+    },
+    createdAt: {
+      type: Date,
+    },
+    syncedAt: { type: Date, default: null },
   },
-  { timestamps: true }
+  { timestamps: false }
 );
 
 // Indexes for performance
@@ -178,6 +223,7 @@ ProductSchema.index({
   brand: 'text',
   description: 'text',
 });
-
+ProductSchema.index({ sellerId: 1, status: 1, createdAt: 1 });
+ProductSchema.index({ sellerId: 1, syncedAt: 1, updatedAt: 1 });
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;

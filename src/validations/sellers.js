@@ -11,11 +11,43 @@ const objectIdSchema = z.string().refine((val) => mongoose.Types.ObjectId.isVali
 export const createSellerValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 
-  const bodySchema = z.object({
-    name: z
-      .string({ required_error: 'Name is required' })
-      .min(1, { message: 'Name must be at least 1 characters long' }),
-  });
+  const emptyToUndefined = (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val);
+
+  const bodySchema = z
+    .object({
+      name: z
+        .string({ required_error: 'Name is required' })
+        .min(1, { message: 'Name must be at least 1 character long' }),
+
+      shopifyStoreUrl: z.preprocess(
+        emptyToUndefined,
+        z
+          .string()
+          .url({ message: 'shopifyStoreUrl must be a valid URL' })
+          .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
+          .optional()
+      ),
+
+      shopifyApiVersion: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'apiVersion is required' }).optional()
+      ),
+
+      shopifyAccessToken: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'accessToken is required' }).optional()
+      ),
+    })
+    .refine(
+      (data) =>
+        // either all 3 are present or none
+        (!data.shopifyStoreUrl && !data.shopifyApiVersion && !data.shopifyAccessToken) ||
+        (data.shopifyStoreUrl && data.shopifyApiVersion && data.shopifyAccessToken),
+      {
+        message: 'shopifyStoreUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
+        path: ['shopifyStoreUrl'],
+      }
+    );
 
   await bodySchema.parseAsync(req.body);
 });
@@ -40,9 +72,45 @@ export const updateSellerValidator = validate(async (req) => {
   });
   await paramsSchema.parseAsync(req.params);
 
-  const bodySchema = z.object({
-    name: z.string().min(1).optional(),
-  });
+  const emptyToUndefined = (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val);
+
+  const bodySchema = z
+    .object({
+      name: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'Name must be at least 1 character long' }).optional()
+      ),
+
+      shopifyStoreUrl: z.preprocess(
+        emptyToUndefined,
+        z
+          .string()
+          .url({ message: 'shopifyStoreUrl must be a valid URL' })
+          .regex(/^https:\/\/.+\.myshopify\.com$/, 'Invalid Shopify store URL')
+          .optional()
+      ),
+
+      shopifyApiVersion: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'apiVersion is required' }).optional()
+      ),
+
+      shopifyAccessToken: z.preprocess(
+        emptyToUndefined,
+        z.string().min(1, { message: 'accessToken is required' }).optional()
+      ),
+    })
+    .refine(
+      (data) =>
+        // either all 3 provided or none
+        (!data.shopifyStoreUrl && !data.shopifyApiVersion && !data.shopifyAccessToken) ||
+        (data.shopifyStoreUrl && data.shopifyApiVersion && data.shopifyAccessToken),
+      {
+        message: 'shopifyStoreUrl, shopifyApiVersion and shopifyAccessToken must be provided together',
+        path: ['shopifyStoreUrl'],
+      }
+    );
+
   await bodySchema.parseAsync(req.body);
 });
 
@@ -80,19 +148,12 @@ export const getSellerByIdValidator = validate(async (req) => {
 
 export const getAllPickupAddressesValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
-  const paramsSchema = z.object({
-    id: objectIdSchema,
-  });
-  await paramsSchema.parseAsync(req.params);
 });
 
 export const savePickupAddressValidator = validate(async (req) => {
   await headerSchema.parseAsync(req.headers);
 
   const bodySchema = z.object({
-    sellerId: z.string({ required_error: 'sellerId is required' }).refine((val) => /^[0-9a-fA-F]{24}$/.test(val), {
-      message: 'sellerId must be a valid MongoDB ObjectId',
-    }),
     email: z.string({ required_error: 'email is required' }).email({ message: 'Invalid email address' }),
     city: z.string().optional(),
     address: z.string().optional(),

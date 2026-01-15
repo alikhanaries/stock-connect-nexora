@@ -1,6 +1,7 @@
 import Product from '#models/Product.js';
 import { entegraConfig } from '#root/src/integrations/erp/entegra/config/config.js';
 import { mapProductToDB } from '../helpers/formatter.js';
+import { fetchCategories } from './categoryService.js';
 const BASE_URL = `${entegraConfig?.ENTEGRA_BASE_URL}product/page=`;
 const AUTH_TOKEN = `JWT ${entegraConfig?.ENTEGRA_AUTH_TOKEN}`;
 
@@ -12,7 +13,6 @@ const MAX_RETRIES = 5; // more reliable for large imports
 
 export const fetchProductsPage = async (page = 1) => {
   const url = `${BASE_URL}${page}/`;
-  console.log(`Fetching URL: ${url}`);
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -54,7 +54,7 @@ export const fetchProductsPage = async (page = 1) => {
 
       return json; // SUCCESS
     } catch (err) {
-      console.error(`Fetch failed (Attempt ${attempt}/${MAX_RETRIES}): ${err.message}`);
+      console.error(` Fetch failed (Attempt ${attempt}/${MAX_RETRIES}): ${err.message}`);
 
       if (attempt >= MAX_RETRIES) {
         throw new Error(`fetchProductsPage(${page}) failed after ${MAX_RETRIES} attempts`);
@@ -62,7 +62,7 @@ export const fetchProductsPage = async (page = 1) => {
 
       // Exponential retry wait
       const wait = attempt * 1000;
-      console.log(`↻ Retrying in ${wait}ms...`);
+      console.log(`Retrying in ${wait}ms...`);
       await new Promise((r) => setTimeout(r, wait));
     }
   }
@@ -74,48 +74,43 @@ export const fetchProductsPage = async (page = 1) => {
 export const importAllProducts = async (sellerId) => {
   let page = 1;
   let totalImported = 0;
+  const categories = await fetchCategories();
 
   while (true) {
-    console.log(`Fetching page ${page}...`);
-
     let result;
 
     try {
       result = await fetchProductsPage(page);
     } catch (err) {
-      console.error(`Failed to fetch page ${page}:`, err.message);
+      console.error(` Failed to fetch page ${page}:`, err.message);
       break;
     }
 
     // Validate response format
     const list = result?.productList;
     if (!Array.isArray(list) || list.length === 0) {
-      console.log('No more products. Import completed.');
+      console.log(' No more products. Import completed.');
       break;
     }
 
-    console.log(`Page ${page} contains ${list.length} products.`);
-
     let importedThisPage = 0;
 
-    // Process products sequentially (safe for DB writes)
     for (const product of list) {
       try {
-        await createOrUpdateProduct(sellerId, product);
+        await createOrUpdateProduct(sellerId, product, categories);
         importedThisPage++;
         totalImported++;
       } catch (err) {
-        console.error(`Error saving product ${product.productCode ?? 'unknown'}:`, err.message);
+        console.error(` Error saving product ${product.productCode ?? 'unknown'}:`, err.message);
       }
     }
-
-    console.log(`Successfully imported ${importedThisPage} products from page ${page}`);
+    console.log(` Successfully imported ${importedThisPage} products from page ${page}`);
 
     // Go to next page
     page++;
   }
 
-  console.log(`Total products imported: ${totalImported}`);
+  console.log(` Total products imported: ${totalImported}`);
   return totalImported;
 };
 
@@ -123,19 +118,28 @@ export const importAllProducts = async (sellerId) => {
  * Create Product + Variants (configurable or simple)
  */
 
-export const createOrUpdateProduct = async (sellerId, p) => {
-  const { parent, variants } = mapProductToDB(sellerId, p);
+export const createOrUpdateProduct = async (sellerId, product, categories) => {
+  const categoryId = product.group; // e.g., '4'
+  const categoryTrail = categoryId ? categories.find((cat) => cat.id == categoryId).name : '';
 
-  const parentDoc = await Product.findOneAndUpdate({ productSkuCode: parent.productSkuCode }, parent, {
+  // Map product to DB structure
+
+  const { grandParent, parents, children } = await mapProductToDB(sellerId, product, categoryTrail);
+
+  // Upsert grandparent
+
+  const grandParentDoc = await Product.findOneAndUpdate({ productSkuCode: grandParent.productSkuCode }, grandParent, {
     upsert: true,
     new: true,
     setDefaultsOnInsert: true,
   });
 
-  if (variants.length > 0) {
+  // Upsert parents
+
+  if (parents.length > 0) {
     await Promise.all(
-      variants.map((v) =>
-        Product.findOneAndUpdate({ productSkuCode: v.productSkuCode }, v, {
+      parents.map((p) =>
+        Product.findOneAndUpdate({ productSkuCode: p.productSkuCode }, p, {
           upsert: true,
           new: true,
           setDefaultsOnInsert: true,
@@ -144,11 +148,19 @@ export const createOrUpdateProduct = async (sellerId, p) => {
     );
   }
 
-  return parentDoc;
-};
+  // Upsert children
 
-export default {
-  fetchProductsPage,
-  importAllProducts,
-  createOrUpdateProduct,
+  if (children.length > 0) {
+    await Promise.all(
+      children.map((c) =>
+        Product.findOneAndUpdate({ productSkuCode: c.productSkuCode }, c, {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true,
+        })
+      )
+    );
+  }
+
+  return grandParentDoc;
 };

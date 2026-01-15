@@ -11,6 +11,7 @@ const shipmentSchema = new mongoose.Schema(
       enum: [
         'SHIPMENT_CREATED',
         'PICKED',
+        'SHIPPED',
         'OUT_FOR_DELIVERY',
         'RETURNED',
         'RETURN REQUESTED',
@@ -30,7 +31,7 @@ const shipmentSchema = new mongoose.Schema(
 
     // Delivery & collection references
     deliveryId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryAdress', required: true },
-    pickUpId: { type: mongoose.Schema.Types.ObjectId, ref: 'PickupAddress', required: true },
+    pickUpId: { type: mongoose.Schema.Types.ObjectId, ref: 'PickupAddress' },
 
     // ChannelEngine / Shipment info
     merchantShipmentNo: { type: String, index: true },
@@ -40,6 +41,8 @@ const shipmentSchema = new mongoose.Schema(
     shippedFromStockLocationId: { type: Number, default: 0 },
     method: { type: String, index: true },
     isMerchantCreator: { type: Boolean, default: true },
+    shipmentMethod: { type: String, enum: ['AYMAKAN', 'MANUAL'], index: true },
+    description: { type: String },
 
     // products array
     products: [LineSchema],
