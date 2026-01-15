@@ -142,7 +142,7 @@ export const insertCategoryTrail = async (categoryTrailArray, sellerId) => {
       for (const part of trailParts) {
         const categoryName = part.toLowerCase();
         const categorySlug = slugify(categoryName, { lower: true });
-        const platformCategoryId = await generatePlatformCategoryId(categoryName, categorySlug, parent);
+        const platformCategoryId = await generatePlatformCategoryId(categoryName, categorySlug, parent, sellerId);
 
         trailDocs.push(part);
 

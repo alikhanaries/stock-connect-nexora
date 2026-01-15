@@ -4,15 +4,15 @@ export const AYMAKAN_STATUS = {
     description: 'Shipment is created at collection point',
   },
   'AY-0002': {
-    status: 'PICKED',
+    status: 'SHIPPED',
     description: 'Shipment was collected from collection point',
   },
   'AY-0003': {
-    status: 'PICKED',
+    status: 'SHIPPED',
     description: 'Shipment is received at hub',
   },
   'AY-0026': {
-    status: 'PICKED',
+    status: 'SHIPPED',
     description: 'Received at Riyadh Warehouse',
   },
   'AY-0004': {
@@ -34,6 +34,10 @@ export const AYMAKAN_STATUS = {
   'AY-0032': {
     status: 'SHIPMENT_REPROCESSING',
     description: 'Shipment is pending - Future Delivery',
+  },
+  'AY-0011': {
+    status: 'CANCELED',
+    description: 'Shipment is canceled',
   },
 };
 

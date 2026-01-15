@@ -90,6 +90,29 @@ export const getProductsValidator = validate(async (req) => {
         })
         .optional(),
 
+      productType: z
+        .string()
+        .toLowerCase()
+        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
+        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
+          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+        })
+        .optional(),
+
+      minStockCount: z
+        .string()
+        .regex(/^\d+$/, 'minStockCount must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'minStockCount cannot be negative' })
+        .optional(),
+
+      maxStockCount: z
+        .string()
+        .regex(/^\d+$/, 'maxStockCount must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'maxStockCount cannot be negative' })
+        .optional(),
+
       minPrice: z
         .string()
         .regex(/^\d+$/, 'minPrice must be a number string')
@@ -137,11 +160,11 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
     })
     .strict()
     .refine((data) => data.url !== undefined && data.url !== null, {
-      message: 'url is required',
+      message: 'The URL field is mandatory and cannot be left empty.',
       path: ['url'],
     })
     .refine((data) => typeof data.url === 'string', {
-      message: 'url must be a string',
+      message: 'The URL value must be provided as a valid string.',
       path: ['url'],
     })
     .refine(
@@ -154,7 +177,7 @@ export const importProductsFromGoogleSheetValidator = validate(async (req) => {
         }
       },
       {
-        message: 'url must be a valid URL',
+        message: 'Please provide a valid URL to proceed.',
         path: ['url'],
       }
     );
@@ -276,6 +299,47 @@ export const updateProductStatusValidator = validate(async (req) => {
   bodySchema.parse(req.body);
 });
 
+// /* FREEZE / UNFREEZE PRODUCTS VALIDATOR */
+export const freezeOrUnfreezeProductsValidator = validate(async (req) => {
+  // validate headers
+  headerSchema.parse(req.headers);
+  // validate body
+  const bodySchema = z
+    .object({
+      ids: z
+        .array(
+          z
+            .string()
+            .length(24, 'Each productId must be exactly 24 characters')
+            .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format')
+        )
+        .nonempty('Product IDs cannot be empty')
+        .refine((ids) => new Set(ids).size === ids.length, {
+          message: 'Duplicate productIds are not allowed',
+        }),
+
+      isFrozen: z.boolean({
+        required_error: 'isFrozen is required',
+        invalid_type_error: 'isFrozen must be a boolean',
+      }),
+    })
+    .strict();
+
+  // validate query (optional sellerId)
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]{24}$/, 'sellerId must be a valid ObjectId')
+        .optional(),
+    })
+    .passthrough();
+
+  bodySchema.parse(req.body);
+  querySchema.parse(req.query);
+});
+
 // /* GET TOP SELLING PRODUCT VALIDATOR */
 export const getTopSellingProductValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
@@ -308,6 +372,34 @@ export const deleteProductValidator = validate(async (req) => {
       })
       .length(24, 'id must be exactly 24 characters') // ObjectId length
       .regex(/^[0-9a-fA-F]{24}$/, 'id must be a valid hex string'), // ObjectId format
+  });
+
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+    })
+    .passthrough();
+
+  querySchema.parse(req.query);
+  paramsSchema.parse(req.params);
+});
+
+// GET PRODUCT BY ID VALIDATOR
+export const getProductByIdValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    id: z
+      .string({
+        required_error: 'id is required',
+        invalid_type_error: 'id must be a string',
+      })
+      .length(24, 'id must be exactly 24 characters')
+      .regex(/^[0-9a-fA-F]{24}$/, 'id must be a valid hex string'),
   });
 
   const querySchema = z
@@ -388,6 +480,15 @@ export const getUserChannelProductsValidator = validate(async (req) => {
         .refine((val) => !val || ['active', 'inactive'].includes(val), {
           message: "status must be either 'active' or 'inactive'",
         }),
+
+      productType: z
+        .string()
+        .toLowerCase()
+        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
+        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
+          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+        })
+        .optional(),
 
       minPrice: z
         .string()
@@ -490,6 +591,15 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
           message: "status must be either 'active' or 'inactive'",
         }),
 
+      productType: z
+        .string()
+        .toLowerCase()
+        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
+        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
+          message: "Product Type must be 'simple', 'configurable' or comma-separated list of them",
+        })
+        .optional(),
+
       minPrice: z
         .string()
         .regex(/^\d+(\.\d+)?$/, 'minPrice must be a number string')
@@ -522,6 +632,85 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
         .optional(),
     })
     .passthrough();
+
+  querySchema.parse(req.query);
+});
+
+// /* EXPORT PRODUCTS VALIDATOR */
+export const exportProductsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    sellerId: z
+      .string({
+        required_error: 'sellerId is required',
+        invalid_type_error: 'sellerId must be a string',
+      })
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string'),
+  });
+
+  paramsSchema.parse(req.params);
+  headerSchema.parse(req.headers);
+
+  const querySchema = z
+    .object({
+      status: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['active', 'inactive'].includes(val), {
+          message: "status must be either 'active' or 'inactive'",
+        })
+        .optional(),
+
+      minPrice: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'minPrice must be a valid number')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'minPrice cannot be negative' })
+        .optional(),
+
+      maxPrice: z
+        .string()
+        .regex(/^\d+(\.\d+)?$/, 'maxPrice must be a valid number')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
+        .optional(),
+
+      search: z.string().optional(),
+
+      productSkuCode: z.string().optional(),
+
+      sortBy: z.string().optional(),
+
+      sortOrder: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['asc', 'desc'].includes(val), {
+          message: "sortOrder must be either 'asc' or 'desc'",
+        })
+        .optional(),
+
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
+
+      filter: z.union([z.string(), z.array(z.string())]).optional(),
+    })
+    .passthrough()
+    .refine(
+      (data) => {
+        if (data.minPrice && data.maxPrice) {
+          return parseFloat(data.minPrice) <= parseFloat(data.maxPrice);
+        }
+        return true;
+      },
+      {
+        message: 'minPrice must be less than or equal to maxPrice',
+      }
+    );
 
   querySchema.parse(req.query);
 });

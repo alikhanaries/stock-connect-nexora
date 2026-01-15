@@ -1,18 +1,28 @@
 import { config } from '#config/config.js';
-import Return from '#models/Return.js';
-import Order from '#models/Orders.js';
+import Order from '../models/Orders.js';
+import Return from '../models/Return.js';
+import Shipment from '../models/Shipment/Shipment.js';
+import PickupAddress from '../models/PickUpAddress.js';
+import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 import mongoose from 'mongoose';
 import {
   sanitizeReturnData,
   getOrderDataByOrderLineIds,
   isNameOrEmailSearch,
   buildReturnAggregationPipeline,
+  buildReturnMatchAndPipeline,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
-import { formatDateTime, escapeCsv } from '#helpers/Common.js';
+import {
+  escapeCsv,
+  generateCSVFilename,
+  createCSVExportResponse,
+  validateExportData,
+  generateDynamicHeaders,
+  generateDynamicRowData,
+} from '#helpers/export.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
-
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 //Fetches returns from ChannelEngine and saves them to the database.
@@ -108,37 +118,11 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const {
-      status,
-      platform,
-      channelId,
-      returnId,
-      orderID,
-      sellerId,
-      search,
-      dateFrom,
-      dateTo,
-      sortOrder = 'asc',
-      sortBy = 'returnId',
-      page = 1,
-      size = 10,
-    } = query;
+    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10 } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
-    const matchConditions = {};
-
-    // ====== Filters ======
-    const addFilter = (key, value, transform = (v) => v, includeInApplied = false) => {
-      if (value !== undefined && value !== null && value !== '') {
-        matchConditions[key] = transform(value);
-        if (includeInApplied) {
-          appliedFilters[key] = value;
-        }
-      }
-    };
-
     // Validate status if provided
     if (status) {
       const statusArray = status
@@ -154,79 +138,13 @@ export const getReturnsFromDatabase = async (query = {}) => {
           `Invalid status: ${invalid.join(', ')}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`
         );
       }
+
+      appliedFilters.status = status;
     }
 
-    // Add filter (case-insensitive)
-    addFilter(
-      'status',
-      status,
-      (v) => {
-        const arr = v.split(',').map((s) => s.trim());
-
-        return {
-          $in: arr.map((s) => new RegExp(`^${s}$`, 'i')),
-        };
-      },
-      true
-    );
-
-    addFilter('platform', platform, (v) => ({ $regex: new RegExp(v, 'i') }), true);
-    addFilter('channelId', channelId, (v) => parseInt(v, 10));
-    addFilter('returnId', returnId);
-    addFilter('orderId', orderID);
-    addFilter('orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
-
-    // ====== Search Filter ======
-    if (search) {
-      const searchRegex = new RegExp(search, 'i');
-      const searchConditions = [
-        { returnId: { $regex: searchRegex } },
-        { orderId: { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
-      ];
-
-      // Handle full name searches
-      const searchTerms = search.trim().split(/\s+/);
-      if (searchTerms.length > 1) {
-        const [firstTerm, ...rest] = searchTerms;
-        const lastTerm = rest.join(' ');
-        const firstRegex = new RegExp(firstTerm, 'i');
-        const lastRegex = new RegExp(lastTerm, 'i');
-
-        searchConditions.push(
-          {
-            $and: [
-              { 'orderInfo.orderCustomer.firstName': firstRegex },
-              { 'orderInfo.orderCustomer.lastName': lastRegex },
-            ],
-          },
-          {
-            $and: [
-              { 'orderInfo.orderCustomer.lastName': firstRegex },
-              { 'orderInfo.orderCustomer.firstName': lastRegex },
-            ],
-          }
-        );
-      }
-
-      matchConditions.$or = searchConditions;
-    }
-
-    // ====== Date Range Filter ======
-    if (dateFrom || dateTo) {
-      matchConditions.createdAt = {};
-      if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
-      if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
-    }
-
-    // ====== Build Aggregation Pipeline ======
-    const pipeline = buildReturnAggregationPipeline();
-
-    if (Object.keys(matchConditions).length > 0) {
-      pipeline.push({ $match: matchConditions });
-    }
+    const { pipeline } = buildReturnMatchAndPipeline(query, {
+      includeSearchNameSplit: true,
+    });
 
     pipeline.push(
       {
@@ -242,6 +160,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
           email: '$orderInfo.orderCustomer.email',
           phoneNumber: '$orderInfo.orderCustomer.phone',
           orderTotalPrice: '$orderInfo.totalInclVat',
+          placedOn: { $ifNull: ['$placedOn', '$createdAt'] },
         },
       },
       {
@@ -255,7 +174,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       }
     );
 
-    if (search && isNameOrEmailSearch(search)) {
+    if (query.search && isNameOrEmailSearch(query.search)) {
       pipeline.push({
         $match: {
           $or: [{ customer: { $ne: null } }, { email: { $ne: null } }, { orderID: { $ne: null } }],
@@ -268,8 +187,17 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
     // Handle sorting - map orderID to the actual field name
     let actualSortBy = sortBy;
-    if (sortBy === 'orderID') {
-      actualSortBy = 'orderID'; // This field is created in $addFields above
+    if (sortBy === 'placedOn') {
+      actualSortBy = 'placedOn';
+    }
+
+    if (sortBy === 'returnId') {
+      pipeline.push({
+        $addFields: {
+          returnIdNumeric: { $toInt: '$returnId' },
+        },
+      });
+      actualSortBy = 'returnIdNumeric';
     }
 
     pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
@@ -289,6 +217,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       phoneNumber: r.phoneNumber || null,
       status: r.status,
       platform: r.platform,
+      returnId: r.returnId,
     }));
 
     return {
@@ -303,28 +232,18 @@ export const getReturnsFromDatabase = async (query = {}) => {
   }
 };
 
-export const getReturnStats = async (sellerId = null) => {
+export const getReturnStats = async (query = {}) => {
   try {
-    // Build base pipeline without status manipulation
-    const basePipeline = buildReturnAggregationPipeline();
+    const { pipeline } = buildReturnMatchAndPipeline(query);
 
-    if (sellerId) {
-      basePipeline.push({
-        $match: {
-          'orderInfo.sellerId': sellerId,
-        },
-      });
-    }
+    pipeline.push({
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+      },
+    });
 
-    // Get total quantity grouped by return status (raw status from DB)
-    const statusPipeline = [
-      ...basePipeline,
-      { $unwind: '$products' },
-      { $group: { _id: '$status', totalQuantity: { $sum: '$products.quantity' } } },
-      { $sort: { _id: 1 } },
-    ];
-
-    const statusStats = await Return.aggregate(statusPipeline);
+    const statusStats = await Return.aggregate(pipeline);
 
     // Initialize stats with all return statuses set to 0
     const stats = Object.values(RETURN_STATUS).reduce((acc, status) => {
@@ -333,9 +252,9 @@ export const getReturnStats = async (sellerId = null) => {
     }, {});
 
     // Update stats with actual counts from database
-    statusStats.forEach(({ _id, totalQuantity }) => {
-      if (_id && Object.values(RETURN_STATUS).includes(_id)) {
-        stats[_id] = totalQuantity;
+    statusStats.forEach(({ _id, count }) => {
+      if (_id && stats[_id] !== undefined) {
+        stats[_id] = count;
       }
     });
 
@@ -512,146 +431,248 @@ export const getReturnById = async (id) => {
   }
 };
 
-export const exportReturnsToCSV = async (sellerId = null, filters = {}) => {
+export const exportReturnsToCSV = async (sellerId, filters = {}) => {
   try {
-    const query = { ...filters, sellerId, size: 1000, page: 1, sortBy: 'createdAt', sortOrder: 'desc' };
-    const basicResult = await getReturnsFromDatabase(query);
-
-    if (!basicResult.success || !basicResult.data?.length) {
-      return { success: false, message: 'No returns found for export' };
+    if (!sellerId) {
+      return { success: false, message: 'Seller ID is required for export' };
     }
 
-    const returnIds = basicResult.data.map((item) => new mongoose.Types.ObjectId(item._id));
-    const pipeline = buildReturnAggregationPipeline();
+    const {
+      status,
+      platform,
+      search,
+      size = 100000,
+      sortBy = 'CreatedAt',
+      sortOrder = 'desc',
+      dateFrom,
+      dateTo,
+      page = 1,
+    } = filters;
 
-    pipeline.push(
-      { $match: { _id: { $in: returnIds } } },
-      {
-        $addFields: {
-          customerName: {
-            $trim: {
-              input: {
-                $concat: [
-                  { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
-                  ' ',
-                  { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
+    const queryObj = { sellerId, status, platform, search, dateFrom, dateTo, sortBy, sortOrder, size, page };
+
+    const basicResult = await (typeof getReturnsFromDatabase === 'function'
+      ? getReturnsFromDatabase(queryObj)
+      : Promise.resolve({ data: [] }));
+    const validation = validateExportData(basicResult.data, 'returns');
+    if (!validation.success) return validation;
+
+    const returnIds = basicResult.data
+      .map((r) => {
+        try {
+          return new mongoose.Types.ObjectId(r._id);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+
+    const pickupModelFields = Array.isArray(generateDynamicHeaders(PickupAddress))
+      ? generateDynamicHeaders(PickupAddress).filter((h) => h !== '_id')
+      : [];
+    const deliveryModelFields = Array.isArray(generateDynamicHeaders(DeliveryAddress))
+      ? generateDynamicHeaders(DeliveryAddress).filter((h) => h !== '_id')
+      : [];
+
+    // When no return IDs found → show message
+    if (!returnIds.length) {
+      return {
+        success: false,
+        message: 'No return records found to export.',
+        data: [],
+      };
+    }
+
+    const pipeline = typeof buildReturnAggregationPipeline === 'function' ? buildReturnAggregationPipeline() : [];
+    pipeline.push({ $match: { _id: { $in: returnIds } } });
+
+    pipeline.push({
+      $lookup: {
+        from: Shipment.collection?.collectionName || 'shipments',
+        let: { orderIdFromOrderInfo: '$orderInfo._id', orderIdFromReturn: '$orderId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $ne: ['$status', 'CANCELED'] },
+                  {
+                    $or: [
+                      { $eq: ['$orderId', '$$orderIdFromOrderInfo'] },
+                      { $eq: ['$orderId', { $toString: '$$orderIdFromOrderInfo' }] },
+                      { $eq: ['$orderId', '$$orderIdFromReturn'] },
+                      { $eq: ['$_id', '$$orderIdFromReturn'] },
+                    ],
+                  },
                 ],
               },
             },
           },
-        },
+          { $limit: 1 },
+        ],
+        as: 'shipments',
       },
-      {
-        $project: {
-          returnId: 1,
-          orderId: 1,
-          platform: 1,
-          status: 1,
-          placedOn: 1,
-          createdAt: 1,
-          products: 1,
-          customerName: 1,
-          'orderInfo.orderId': 1,
-          'orderInfo.orderCustomer.email': 1,
-          'orderInfo.orderCustomer.phone': 1,
-          'orderInfo.orderShippingAddress': 1,
-          'orderInfo.orderSkuList.skuList': 1,
-        },
-      }
-    );
-
-    const detailedResults = await Return.aggregate(pipeline);
-    if (!detailedResults?.length) return { success: false, message: 'No detailed return data found for export' };
-
-    const headers = [
-      'Return ID',
-      'Order ID',
-      'Platform',
-      'Status',
-      'Placed On',
-      'Returned At',
-      'Product SKU',
-      'Product Name',
-      'Product ID',
-      'Quantity',
-      'Accepted Quantity',
-      'Rejected Quantity',
-      'Unit Price',
-      'Total Price',
-      'Customer Name',
-      'Customer Email',
-      'Customer Phone',
-      'Shipping Address Line 1',
-      'Shipping Address Line 2',
-      'Shipping City',
-      'Shipping State',
-      'Shipping Postal Code',
-      'Shipping Country',
-    ];
-    const csvRows = [headers.join(',')];
-
-    detailedResults.forEach((item) => {
-      const { returnId, orderId, platform, status, placedOn, createdAt, products, orderInfo, customerName } = item;
-      const customer = orderInfo?.orderCustomer || {};
-      const shipping = orderInfo?.orderShippingAddress || {};
-      const orderSkus = orderInfo?.orderSkuList?.skuList || [];
-
-      const baseRow = [
-        returnId || '',
-        orderId || orderInfo?.orderId || '',
-        platform || '',
-        status || '',
-        formatDateTime(placedOn)?.date || '',
-        formatDateTime(createdAt)?.date || '',
-      ];
-
-      const addressRow = [
-        customerName?.trim() || '',
-        customer.email || '',
-        customer.phone || '',
-        shipping.line1 || '',
-        shipping.line2 || '',
-        shipping.city || '',
-        shipping.region || '',
-        shipping.zipCode || '',
-        shipping.countryIso || '',
-      ];
-
-      if (!products?.length) {
-        csvRows.push(escapeCsv([...baseRow, '', '', '', 0, 0, 0, 0, 0, ...addressRow]));
-      } else {
-        products.forEach((product) => {
-          const sku = orderSkus.find((s) => s.id === product.orderLineId);
-          const unitPrice = sku?.unitPriceInclVat || 0;
-          const quantity = product.quantity || 0;
-          const productRow = [
-            ...baseRow,
-            product.productSkuCode || sku?.merchantProductNo || '',
-            sku?.description || 'Product',
-            product.orderLineId || '',
-            quantity,
-            product.acceptedQuantity || 0,
-            product.rejectedQuantity || 0,
-            unitPrice,
-            unitPrice * quantity,
-            ...addressRow,
-          ];
-          csvRows.push(escapeCsv(productRow));
-        });
-      }
     });
 
-    return {
-      success: true,
-      data: csvRows.join('\n'),
-      filename: `returns-export-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.csv`,
-      count: detailedResults.length,
+    pipeline.push({ $addFields: { shipment: { $arrayElemAt: ['$shipments', 0] } } });
+
+    pipeline.push({
+      $addFields: {
+        shipment: {
+          $cond: [
+            { $ifNull: ['$shipment', false] },
+            { pickUpId: '$shipment.pickUpId', deliveryId: '$shipment.deliveryId' },
+            null,
+          ],
+        },
+      },
+    });
+
+    const pickupCollectionName = PickupAddress?.collection?.collectionName || 'pickupaddresses';
+    const deliveryCollectionName = DeliveryAddress?.collection?.collectionName || 'deliveryaddresses';
+
+    // lookup pickup
+    pipeline.push({
+      $lookup: {
+        from: pickupCollectionName,
+        let: { pickupId: '$shipment.pickUpId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $ne: ['$$pickupId', null] },
+                  {
+                    $or: [{ $eq: ['$_id', '$$pickupId'] }, { $eq: [{ $toString: '$_id' }, '$$pickupId'] }],
+                  },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
+        as: 'pickupAddress',
+      },
+    });
+
+    // lookup delivery
+    pipeline.push({
+      $lookup: {
+        from: deliveryCollectionName,
+        let: { deliveryId: '$shipment.deliveryId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $ne: ['$$deliveryId', null] },
+                  {
+                    $or: [{ $eq: ['$_id', '$$deliveryId'] }, { $eq: [{ $toString: '$_id' }, '$$deliveryId'] }],
+                  },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
+        as: 'deliveryAddress',
+      },
+    });
+
+    pipeline.push({
+      $addFields: {
+        'shipment.pickupAddress': { $arrayElemAt: ['$pickupAddress', 0] },
+        'shipment.deliveryAddress': { $arrayElemAt: ['$deliveryAddress', 0] },
+      },
+    });
+
+    pipeline.push({ $project: { shipments: 0, pickupAddress: 0, deliveryAddress: 0 } });
+
+    const aggregated = await Return.aggregate(pipeline).allowDiskUse(true);
+
+    const detailedValidation = validateExportData(aggregated, 'detailed return data');
+    if (!detailedValidation.success) return detailedValidation;
+
+    const returnHeaders = generateDynamicHeaders(Return);
+    const shipmentSingleHeader = ['pickUpId', 'deliveryId'];
+    const pickupPrefixedHeaders = pickupModelFields.map((h) => `pickup_${h}`);
+    const deliveryPrefixedHeaders = deliveryModelFields.map((h) => `delivery_${h}`);
+    const csvHeaders = [
+      ...returnHeaders,
+      ...shipmentSingleHeader,
+      ...pickupPrefixedHeaders,
+      ...deliveryPrefixedHeaders,
+    ];
+
+    const simpleFormat = (v) => {
+      if (v === undefined || v === null) return '';
+      if (v instanceof Date) return v.toISOString();
+      if (typeof v === 'object') {
+        try {
+          return JSON.stringify(v);
+        } catch {
+          return String(v);
+        }
+      }
+      return String(v);
     };
-  } catch (error) {
-    console.error('Error exporting returns to CSV:', error.message);
-    return { success: false, message: 'Error generating CSV export', error: error.message };
+
+    const mapModelFields = (doc, fields) => {
+      if (!doc) return fields.map(() => '');
+      return fields.map((f) => {
+        const parts = String(f).split('.');
+        let cur = doc;
+        for (const p of parts) {
+          if (cur == null) {
+            cur = null;
+            break;
+          }
+          cur = cur[p];
+        }
+        return simpleFormat(cur);
+      });
+    };
+
+    const csvRows = [csvHeaders.join(',')];
+
+    for (const doc of aggregated) {
+      const baseRow = generateDynamicRowData(doc, Return);
+
+      const pickUpIdValue = doc?.shipment?.pickUpId ? String(doc.shipment.pickUpId) : '';
+      const deliveryIdValue = doc?.shipment?.deliveryId ? String(doc.shipment.deliveryId) : '';
+      const shipmentRow = [simpleFormat(pickUpIdValue), simpleFormat(deliveryIdValue)];
+
+      const pickupDoc = doc?.shipment?.pickupAddress ?? null;
+      const deliveryDoc = doc?.shipment?.deliveryAddress ?? null;
+
+      const pickupRow = mapModelFields(pickupDoc, pickupModelFields);
+      const deliveryRow = mapModelFields(deliveryDoc, deliveryModelFields);
+
+      const fullRowArray = [...baseRow, ...shipmentRow, ...pickupRow, ...deliveryRow];
+
+      const csvLine =
+        typeof escapeCsv === 'function'
+          ? escapeCsv(fullRowArray)
+          : fullRowArray
+              .map((v) => {
+                const s = simpleFormat(v);
+                if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+                return s;
+              })
+              .join(',');
+
+      csvRows.push(csvLine);
+    }
+
+    const filename =
+      typeof generateCSVFilename === 'function' ? generateCSVFilename('returns') : `returns-${Date.now()}.csv`;
+    return createCSVExportResponse(csvRows, filename, aggregated.length);
+  } catch (err) {
+    console.error('Error exporting returns :', err?.message, err?.stack);
+    throw err;
   }
 };
+
 export const getReturnsForWebhook = async (queryParams = {}) => {
   try {
     const params = new URLSearchParams({
