@@ -47,7 +47,7 @@ const fetchProducts = async (query, sellerId) => {
     minPrice,
     maxPrice,
     search,
-    sortBy = 'createdAt',
+    sortBy = 'name',
     sortOrder = 'asc',
     productType,
     minStockCount,
