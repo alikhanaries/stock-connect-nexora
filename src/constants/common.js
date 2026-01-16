@@ -1,6 +1,6 @@
 // Define valid statuses for channels
 export const VALID_STATUSES = ['active', 'inactive', 'removed'];
-export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED'];
+export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED', 'PAYMENT_FAILED'];
 // Map status to display messages
 export const STATUS_MESSAGES = { active: 'activated', inactive: 'inactivated', removed: 'removed' };
 
@@ -15,6 +15,24 @@ export const ORDER_STATUS_MATCH = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'CLOSED'];
 export const SELLER_TYPE = {
   BASE: 'base',
   NORMAL: 'normal',
+};
+
+export const OCP_STATUS_MAP = {
+  CREATED: 'NEW',
+  PENDING: 'NEW',
+  PAYMENT_INITIATED: 'NEW',
+  PAYMENT_PENDING: 'NEW',
+  AWAITING_SHIPMENT: 'IN_PROGRESS',
+  SHIPMENT_CREATED: 'IN_PROGRESS',
+  PICKED: 'IN_PROGRESS',
+  PACKED: 'IN_PROGRESS',
+  OUT_FOR_DELIVERY: 'SHIPPED',
+  DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELED',
+  PAYMENT_CANCELLED: 'CANCELED',
+  RETURNED: 'CANCELED',
+  NOT_DELIVERED: 'CANCELED',
+  PAYMENT_FAILED: 'PAYMENT_FAILED',
 };
 
 export const USER_ROLES = {
