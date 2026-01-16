@@ -136,7 +136,7 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
     const productBulkOps = [];
 
     const buildSet = (data) => {
-      const set = { lastSyncedAt: now };
+      const set = { updatedAt: now };
 
       if (data.price !== undefined) set.price = data.price;
       if (data.minPrice !== undefined) set.minPrice = data.minPrice;
