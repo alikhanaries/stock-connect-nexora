@@ -167,10 +167,23 @@ export const cancelPartialOrderOcp = async (orderId, order, reason = 'NA', produ
   try {
     const sellerId = order.sellerId;
     const sellerData = await Seller.findOne({ _id: sellerId, isDeleted: false }).lean();
+
+    if (!sellerData) {
+      return {
+        success: false,
+        error: { message: 'Seller not found', status: 404 },
+      };
+    }
     const ocpBrandSlug = sellerData.ocpSlugId;
 
     if (!ocpBrandSlug) {
-      return { success: false, message: 'This seller is not yet integrated with Ocp' };
+      return {
+        success: false,
+        error: {
+          message: 'This seller is not yet integrated with Ocp',
+          status: 400,
+        },
+      };
     }
 
     // Collect shipped (DELIVERED) product IDs
@@ -192,6 +205,10 @@ export const cancelPartialOrderOcp = async (orderId, order, reason = 'NA', produ
       quantity: p.quantity,
     }));
 
+    if (cancelItems.quantity <= 0) {
+      throw new Error('Cancel quantity must be greater than zero');
+    }
+
     // Order-level cancel (no shipment yet)
     if (typeof BLOCKED_STATUSES === 'object' && BLOCKED_STATUSES[order.status]) {
       return { success: false, error: { message: BLOCKED_STATUSES[order.status], status: 400 } };
@@ -205,10 +222,16 @@ export const cancelPartialOrderOcp = async (orderId, order, reason = 'NA', produ
     const orderBeforeUpdate = await Order.findById(orderId).lean();
 
     const updatedSkuList = orderBeforeUpdate.orderSkuList.skuList.map((sku) => {
-      const cancelItem = products.find((p) => p.orderLineId.toString() === sku.id.toString());
+      const productMap = new Map(products.map((p) => [p.orderLineId.toString(), p]));
+      const cancelItem = productMap.get(sku.id.toString());
+
       if (!cancelItem) return sku;
 
       const cancelQty = cancelItem.quantity + sku.cancellationRequestedQuantity;
+
+      if (cancelQty > sku.quantity) {
+        throw new Error('Cancel quantity exceeds ordered quantity');
+      }
 
       // Partial cancel
       return {
@@ -236,7 +259,7 @@ export const cancelPartialOrderOcp = async (orderId, order, reason = 'NA', produ
       .join('; ');
 
     const logEntry = {
-      status: 'PARTIALLY CANCELED',
+      status: ORDER_STATUS_MAP.PARTIALLY_CANCELED,
       description: `Order partially canceled — ${canceledItemsDescription}`,
       createdAt: new Date(),
     };
