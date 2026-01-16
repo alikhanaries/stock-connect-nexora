@@ -6,18 +6,16 @@ const PriceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Seller',
       required: true,
-      index: true,
     },
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Product',
       required: true,
-      index: true,
     },
     productSkuCode: {
       type: String,
+      required: true,
       trim: true,
-      index: true,
     },
     price: {
       type: Number,
@@ -42,7 +40,8 @@ const PriceSchema = new mongoose.Schema(
 );
 
 // Indexes for performance
-PriceSchema.index({ sellerId: 1, productId: 1 }, { unique: true });
+PriceSchema.index({ sellerId: 1, productId: 1 });
+PriceSchema.index({ sellerId: 1, productSkuCode: 1 }, { unique: true });
 
 const Price = mongoose.model('Price', PriceSchema);
 export default Price;
