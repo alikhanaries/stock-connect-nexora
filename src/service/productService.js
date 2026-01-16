@@ -8,6 +8,7 @@ import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
 import Inventory from '#models/Inventory.js';
+import Price from '#models/Price.js';
 import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
@@ -657,13 +658,32 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   }
   await Promise.all(bulkTasks);
 
+  const warnings = [];
   // insert inventories for products imported/updated
-  await upsertInventoriesForProducts({
-    sellerId,
-    productSkuCodes,
-    batchSize,
-    writeLimit,
-  });
+  const [inventoryResult, priceResult] = await Promise.allSettled([
+    upsertInventoriesForProducts({
+      sellerId,
+      productSkuCodes,
+      batchSize,
+      writeLimit,
+    }),
+    upsertPricesForProducts({
+      sellerId,
+      productSkuCodes,
+      batchSize,
+      writeLimit,
+    }),
+  ]);
+
+  if (inventoryResult.status === 'rejected') {
+    console.error('Inventory upsert failed:', inventoryResult.reason);
+    warnings.push('Inventory update failed');
+  }
+
+  if (priceResult.status === 'rejected') {
+    console.error('Price upsert failed:', priceResult.reason);
+    warnings.push('Price update failed');
+  }
 
   // Delete file async (non-blocking)
   if (deleteAfter && filePath) {
@@ -689,6 +709,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     updatedCount,
     invalidRowsCount,
     errorDetails,
+    warnings,
   };
 };
 
@@ -739,6 +760,66 @@ export const upsertInventoriesForProducts = async ({ sellerId, productSkuCodes, 
     const batch = inventoryBulkOps.slice(i, i + batchSize);
 
     bulkTasks.push(writeLimit(() => Inventory.bulkWrite(batch, { ordered: false })));
+  }
+
+  await Promise.all(bulkTasks);
+};
+
+export const upsertPricesForProducts = async ({ sellerId, productSkuCodes, batchSize, writeLimit }) => {
+  if (!productSkuCodes?.length) return;
+
+  const now = new Date();
+
+  // 1. Fetch required product data
+  const products = await Product.find(
+    {
+      sellerId,
+      productSkuCode: { $in: productSkuCodes },
+    },
+    {
+      _id: 1,
+      sellerId: 1,
+      productSkuCode: 1,
+      price: 1,
+      minPrice: 1,
+      maxPrice: 1,
+      msrp: 1,
+      purchasePrice: 1,
+    }
+  ).lean();
+
+  if (!products.length) return;
+
+  // 2. Build bulk operations
+  const priceBulkOps = products.map((product) => ({
+    updateOne: {
+      filter: {
+        sellerId: product.sellerId,
+        productId: product._id,
+      },
+      update: {
+        $setOnInsert: {
+          productSkuCode: product.productSkuCode,
+        },
+        $set: {
+          price: product.price,
+          minPrice: product.minPrice ?? undefined,
+          maxPrice: product.maxPrice ?? undefined,
+          msrp: product.msrp ?? undefined,
+          purchasePrice: product.purchasePrice ?? undefined,
+          lastSyncedAt: now,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  // 3. Execute in batches with concurrency control
+  const bulkTasks = [];
+  for (let i = 0; i < priceBulkOps.length; i += batchSize) {
+    const batch = priceBulkOps.slice(i, i + batchSize);
+
+    bulkTasks.push(writeLimit(() => Price.bulkWrite(batch, { ordered: false })));
   }
 
   await Promise.all(bulkTasks);
