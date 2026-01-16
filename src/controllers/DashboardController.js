@@ -33,3 +33,17 @@ export const getorderOverview = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const getAnalytics = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { period, metric } = req.query;
+
+    const data = await dashboardService.getAnalyticsTimeSeries(sellerId, period, metric);
+
+    return Responses.successResponse(res, req.locale.DASHBOARD_STATS_FETCHED_SUCCESSFULLY, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};

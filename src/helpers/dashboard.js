@@ -57,7 +57,97 @@ export const getPreviousRange = (period, currentRange) => {
   }
 };
 
+export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range }) => {
+  const isMonthly = period === 'monthly';
+
+  const groupId = isMonthly
+    ? {
+        week: {
+          $ceil: { $divide: [{ $dayOfMonth: '$orderDate' }, 7] },
+        },
+      }
+    : {
+        date: {
+          $dateToString: { format: '%Y-%m-%d', date: '$orderDate' },
+        },
+      };
+
+  const valueExpression =
+    metric === 'sales'
+      ? {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
+          },
+        }
+      : { $sum: 1 };
+
+  return [
+    {
+      $match: {
+        sellerId: sellerObjectId,
+        orderDate: { $gte: range.start, $lte: range.end },
+      },
+    },
+    {
+      $group: {
+        _id: groupId,
+        value: valueExpression,
+      },
+    },
+    {
+      $sort: isMonthly ? { '_id.week': 1 } : { '_id.date': 1 },
+    },
+  ];
+};
+
+const toISODate = (d) => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const buildDayBuckets = (start, end) => {
+  const out = [];
+  const cur = new Date(start);
+  cur.setHours(0, 0, 0, 0);
+
+  const last = new Date(end);
+  last.setHours(0, 0, 0, 0);
+
+  while (cur <= last) {
+    out.push(toISODate(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+};
+
+const normalizeMonthlyWeeks = (raw) => {
+  const map = new Map(raw.map((r) => [r._id.week, r.value]));
+
+  return [1, 2, 3, 4].map((w) => ({
+    label: `Week ${w}`,
+    value: map.get(w) || 0,
+  }));
+};
+
+export const normalizeSeries = (period, raw, range) => {
+  if (period === 'monthly') {
+    return normalizeMonthlyWeeks(raw);
+  }
+
+  const map = new Map(raw.map((r) => [r._id.date, r.value]));
+  const days = buildDayBuckets(range.start, range.end);
+
+  return days.map((d) => ({
+    label: d,
+    value: map.get(d) || 0,
+  }));
+};
+
 export default {
   getDateRange,
   getPreviousRange,
+  normalizeSeries,
+  buildAggregationPipeline,
 };
