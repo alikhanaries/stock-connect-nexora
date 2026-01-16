@@ -59,6 +59,7 @@ export const getPreviousRange = (period, currentRange) => {
 
 export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range }) => {
   const isMonthly = period === 'monthly';
+  const isToday = period === 'today';
 
   const groupId = isMonthly
     ? {
@@ -66,11 +67,22 @@ export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range
           $ceil: { $divide: [{ $dayOfMonth: '$orderDate' }, 7] },
         },
       }
-    : {
-        date: {
-          $dateToString: { format: '%Y-%m-%d', date: '$orderDate' },
-        },
-      };
+    : isToday
+      ? {
+          hour: {
+            $dateToString: {
+              format: '%H:00',
+              date: {
+                $dateTrunc: { date: '$orderDate', unit: 'hour', binSize: 3 },
+              },
+            },
+          },
+        }
+      : {
+          date: {
+            $dateToString: { format: '%Y-%m-%d', date: '$orderDate' },
+          },
+        };
 
   const valueExpression =
     metric === 'sales'
@@ -88,14 +100,9 @@ export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range
         orderDate: { $gte: range.start, $lte: range.end },
       },
     },
+    { $group: { _id: groupId, value: valueExpression } },
     {
-      $group: {
-        _id: groupId,
-        value: valueExpression,
-      },
-    },
-    {
-      $sort: isMonthly ? { '_id.week': 1 } : { '_id.date': 1 },
+      $sort: isMonthly ? { '_id.week': 1 } : isToday ? { '_id.hour': 1 } : { '_id.date': 1 },
     },
   ];
 };
@@ -131,9 +138,24 @@ const normalizeMonthlyWeeks = (raw) => {
   }));
 };
 
+const normalizeTodayHours = (raw) => {
+  const map = new Map(raw.map((r) => [r._id.hour, r.value]));
+
+  const labels = ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', '21:00'];
+
+  return labels.map((label) => ({
+    label,
+    value: map.get(label) || 0,
+  }));
+};
+
 export const normalizeSeries = (period, raw, range) => {
   if (period === 'monthly') {
     return normalizeMonthlyWeeks(raw);
+  }
+
+  if (period === 'today') {
+    return normalizeTodayHours(raw);
   }
 
   const map = new Map(raw.map((r) => [r._id.date, r.value]));
