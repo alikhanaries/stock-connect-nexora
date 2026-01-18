@@ -37,6 +37,7 @@ query getProducts($cursor: String) {
         images(first: 10) {
           edges {
             node {
+              id
               url
               width
               height
@@ -51,7 +52,7 @@ query getProducts($cursor: String) {
               id
               title
               sku
-              barcode      #  EAN / UPC / GTIN
+              barcode
               price
               compareAtPrice
               taxable
@@ -60,6 +61,12 @@ query getProducts($cursor: String) {
               selectedOptions {
                 name
                 value
+              }
+
+              image {
+                id
+                url
+                altText
               }
 
               inventoryItem {
@@ -144,6 +151,14 @@ export const fetchProducts = async (sellerData) => {
               size,
               options: variant.selectedOptions,
               barcode: variant.barcode,
+
+              //  GRAPHQL-SUPPORTED VARIANT IMAGE (CHILD ONLY)
+              image: variant.image
+                ? {
+                    url: variant.image.url,
+                    altText: variant.image.altText || '',
+                  }
+                : null,
             };
           })
         );
@@ -157,7 +172,7 @@ export const fetchProducts = async (sellerData) => {
           vendor: node.vendor,
           productType: node.productType,
           tags: node.tags,
-          status: node.status,
+          status: mapShopifyStatus(node.status),
           createdAt: node.createdAt,
           updatedAt: node.updatedAt,
           publishedAt: node.publishedAt,
@@ -207,4 +222,10 @@ export const fetchShopifyCredentials = async (sellerId) => {
     console.error('fetchShopifyCredentials error:', error);
     throw error;
   }
+};
+
+const mapShopifyStatus = (status) => {
+  if (status === 'ARCHIVED') return 'removed';
+  if (status === 'ACTIVE') return 'active';
+  return 'inactive'; // DRAFT or anything else
 };
