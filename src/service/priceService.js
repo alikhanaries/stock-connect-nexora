@@ -216,7 +216,9 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
 
   // ---------- Cleanup ----------
   if (deleteAfter && filePath) {
-    await fs.unlink(filePath).catch(() => {});
+    fs.unlink(filePath, (err) => {
+      if (err) console.error('File cleanup failed:', err.message);
+    });
   }
 
   return {
@@ -242,6 +244,18 @@ export const importPriceFromGoogleSheet = async (url, locale, sellerId) => {
   }
 };
 
+/* CSV File Import */
+export const importPriceFromCsvFile = async (filePath, locale, sellerId) => {
+  try {
+    const stream = fs.createReadStream(filePath);
+    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId });
+  } catch (err) {
+    console.error('Error in importPriceFromCsvFile:', err);
+    throw new Error(err.message); // force the catch block
+  }
+};
+
 export default {
   importPriceFromGoogleSheet,
+  importPriceFromCsvFile,
 };
