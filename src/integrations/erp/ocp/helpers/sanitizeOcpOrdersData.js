@@ -1,6 +1,6 @@
-import { OCP_STATUS_MAP } from '#root/src/constants/common.js';
 import Channel from '#root/src/models/Channel.js';
 import Order from '#root/src/models/Orders.js';
+import { OCP_STATUS_MAP } from '../constants/common.js';
 
 export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const orderIds = orders.map((data) => String(data.id));
