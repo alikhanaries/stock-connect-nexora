@@ -25,6 +25,7 @@ export const createShipmentValidator = validate(async (req) => {
           merchantProductNo: notNullString('merchantProductNo', undefined, { required: true }),
           orderLineId: safeNumber('orderLineId', 0, { required: true }),
           quantity: safeNumber('quantity', 0, { required: true }),
+          hsCode: notNullString('hsCode', undefined, { required: true }),
         })
       )
       .nonempty({ message: 'products must contain at least one item' }),
