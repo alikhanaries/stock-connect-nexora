@@ -19,3 +19,17 @@ export const getOrderFlow = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const getorderOverview = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { period } = req.query;
+
+    const status = await dashboardService.getorderOverviewStatus(sellerId, period);
+
+    return Responses.successResponse(res, req.locale.DASHBOARD_STATS_FETCHED_SUCCESSFULLY, 200, status);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
