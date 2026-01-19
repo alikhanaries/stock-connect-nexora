@@ -84,7 +84,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
     try {
       result = await fetchProductsPage(page);
     } catch (err) {
-      console.error(`❌ Failed to fetch page ${page}:`, err.message);
+      console.error(` Failed to fetch page ${page}:`, err.message);
       break;
     }
 
@@ -113,7 +113,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
     page++;
   }
 
-  console.log(`🎉 Total products imported: ${totalImported}`);
+  console.log(` Total products imported: ${totalImported}`);
   return totalImported;
 };
 
