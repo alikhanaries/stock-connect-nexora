@@ -625,9 +625,10 @@ export const getAllShipmentsAdminService = async ({
 export const ayMakanWebHookService = async (data) => {
   try {
     if (!data?.tracking) {
-      return { success: false, message: 'Missing tracking_number in webhook payload' };
+      return { success: false, message: 'Missing tracking in webhook payload' };
     }
 
+    // ---------------- FIND SHIPMENT ----------------
     const shipmentData = await Shipment.findOne(
       { airWaybillNo: data.tracking },
       {
@@ -645,11 +646,20 @@ export const ayMakanWebHookService = async (data) => {
       return { success: false, message: `Shipment not found for AWB: ${data.tracking}` };
     }
 
-    let shipmentStatus = AYMAKAN_STATUS[data.status]?.status?.toUpperCase();
+    // ---------------- MAP STATUS ----------------
+    const shipmentStatus = AYMAKAN_STATUS[data.status]?.status?.toUpperCase();
+
+    if (!shipmentStatus) {
+      return { success: false, message: `Unknown Aymakan status: ${data.status}` };
+    }
 
     // ---------------- DUPLICATE WEBHOOK ----------------
     if ((shipmentData.status || '').toUpperCase() === shipmentStatus) {
-      return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
+      return {
+        success: true,
+        message: 'Duplicate webhook ignored',
+        shipmentId: shipmentData._id,
+      };
     }
 
     // ---------------- CHANNEL ENGINE ----------------
@@ -681,9 +691,9 @@ export const ayMakanWebHookService = async (data) => {
       })),
     });
 
+    // ---------------- UPDATE SKU STATUS ----------------
     const orderLineIds = shipmentData.products.map((p) => p.orderLineId);
 
-    // ---------------- UPDATE SKU STATUS ----------------
     const skuStatus = shipmentStatus === 'CANCELED' ? 'NEW' : shipmentStatus;
 
     await Order.updateOne(
@@ -694,11 +704,7 @@ export const ayMakanWebHookService = async (data) => {
         },
       },
       {
-        arrayFilters: [
-          {
-            'sku.id': { $in: orderLineIds },
-          },
-        ],
+        arrayFilters: [{ 'sku.id': { $in: orderLineIds } }],
       }
     );
 
@@ -706,31 +712,39 @@ export const ayMakanWebHookService = async (data) => {
     const order = await Order.findById(shipmentData.orderId).lean();
     const skuList = order.orderSkuList?.skuList || [];
 
-    let hasAnyShipped = false;
-    let allNew = true;
+    // SKU-based flags
     let allDelivered = true;
+    let hasAnyShipped = false;
 
     for (const sku of skuList) {
-      if (sku.status !== 'NEW') allNew = false;
       if (sku.status !== 'DELIVERED') allDelivered = false;
       if (sku.status === 'SHIPPED' || sku.status === 'DELIVERED') {
         hasAnyShipped = true;
       }
     }
 
-    let finalOrderStatus = order.status;
+    // SHIPMENT-based truth (CRITICAL FIX)
+    const activeShipmentsCount = await Shipment.countDocuments({
+      orderId: shipmentData.orderId,
+      status: { $ne: 'CANCELED' },
+    });
 
-    if (allDelivered) {
+    const allShipmentsCanceled = activeShipmentsCount === 0;
+
+    let finalOrderStatus;
+
+    if (allShipmentsCanceled) {
+      // ONLY case where order can go back to NEW
+      finalOrderStatus = 'NEW';
+    } else if (allDelivered) {
       finalOrderStatus = 'DELIVERED';
-    } else if (allNew) {
-      finalOrderStatus = 'NEW'; //  rollback fix
     } else if (hasAnyShipped) {
       finalOrderStatus = 'SHIPPED';
     } else {
       finalOrderStatus = 'IN_PROGRESS';
     }
 
-    //  ALLOW DOWNGRADE ONLY FOR NEW
+    // ---------------- STATUS PRIORITY GUARD ----------------
     const canUpdate =
       finalOrderStatus === 'NEW'
         ? order.status !== 'NEW'
@@ -751,8 +765,8 @@ export const ayMakanWebHookService = async (data) => {
                   : finalOrderStatus === 'DELIVERED'
                     ? 'All items delivered'
                     : finalOrderStatus === 'SHIPPED'
-                      ? 'All available items shipped'
-                      : 'Order partially processed',
+                      ? 'One or more items shipped'
+                      : 'Order in progress',
               createdAt: convetDateToUTC(new Date()),
             },
           },
