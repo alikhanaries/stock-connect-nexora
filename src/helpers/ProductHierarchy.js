@@ -131,3 +131,69 @@ export async function resolveProductTypes(sellerId) {
     { $set: { productType: 'simple' } }
   );
 }
+
+/**
+ * Resolves product `status` based on stock and hierarchy.
+ *
+ * Rules:
+ * - Simple products → ACTIVE if stock > 0, else INACTIVE
+ * - Parent / Grandparent → ACTIVE if any child is active
+ * - Status always propagates upward (child → parent → grandparent)
+ */
+export async function resolveHierarchyStatus(sellerId) {
+  const products = await Product.find(
+    { sellerId },
+    {
+      productSkuCode: 1,
+      parentProductSkuCode: 1,
+      grandParentProductSkuCode: 1,
+      currentStockCount: 1,
+      productType: 1,
+      status: 1,
+    }
+  ).lean();
+
+  const bySku = new Map(products.map((p) => [p.productSkuCode, p]));
+
+  const mustBeActive = new Set();
+
+  // STEP 1: simple products → stock based
+  for (const p of products) {
+    if (p.productType === 'simple') {
+      if (p.currentStockCount > 0) {
+        mustBeActive.add(p.productSkuCode);
+      }
+    }
+  }
+
+  // STEP 2: propagate ACTIVE upward
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const sku of [...mustBeActive]) {
+      const p = bySku.get(sku);
+
+      if (p?.parentProductSkuCode && !mustBeActive.has(p.parentProductSkuCode)) {
+        mustBeActive.add(p.parentProductSkuCode);
+        changed = true;
+      }
+
+      if (p?.grandParentProductSkuCode && !mustBeActive.has(p.grandParentProductSkuCode)) {
+        mustBeActive.add(p.grandParentProductSkuCode);
+        changed = true;
+      }
+    }
+  }
+
+  // STEP 3: bulk status updates
+  await Product.updateMany({ sellerId, productSkuCode: { $in: [...mustBeActive] } }, { $set: { status: 'active' } });
+
+  await Product.updateMany(
+    {
+      sellerId,
+      productSkuCode: { $nin: [...mustBeActive] },
+    },
+    { $set: { status: 'inactive' } }
+  );
+}
