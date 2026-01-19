@@ -95,7 +95,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
       break;
     }
 
-    console.log(`📦 Page ${page} contains ${list.length} products.`);
+    console.log(` Page ${page} contains ${list.length} products.`);
 
     let importedThisPage = 0;
     for (const product of list) {
