@@ -2,7 +2,7 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
   if (!row || typeof row !== 'object') {
     return {
       rowNumber,
-      errorData: [locale.INVALID_ROW_DATA || 'Invalid row data'],
+      errorData: [locale.INVALID_INPUT || 'Invalid row data'],
     };
   }
 
@@ -18,12 +18,12 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
 
   // SKU (mandatory)
   if (!normalized.productskucode) {
-    errors.push(locale.PRODUCT_SKU_MISSING || 'Product SKU missing');
+    errors.push(locale.PRODUCT_SKUCODE_MISSING || 'Product SKU missing');
   }
 
   // Price (mandatory)
   if (normalized.price === '') {
-    errors.push(locale.PRICE_MISSING || `Price missing for ${normalized.productskucode}`);
+    errors.push(locale.PRODUCT_PRICE_MISSING || `Price missing for ${normalized.productskucode}`);
   }
 
   const price = Number(normalized.price);
