@@ -5,9 +5,7 @@ import { translateCategoriesBatch } from '#root/src/integrations/erp/entegra/hel
 export const fetchCategories = async () => {
   const categories = [];
   let page = 1;
-
   // FETCH PAGINATED CATEGORIES
-
   while (true) {
     const url = `${BASE_URL}${page}/`;
     const response = await fetch(url, {
@@ -35,7 +33,6 @@ export const fetchCategories = async () => {
   if (!categories.length) return [];
 
   // MAP categoryId → name
-
   const categoryIdMap = {};
   categories.forEach((c) => {
     if (c.name?.trim()) categoryIdMap[c.id] = c.name.trim();

@@ -62,7 +62,7 @@ export const fetchProductsPage = async (page = 1) => {
 
       // Exponential retry wait
       const wait = attempt * 1000;
-      console.log(`Retrying in ${wait}ms...`);
+      console.log(`↻ Retrying in ${wait}ms...`);
       await new Promise((r) => setTimeout(r, wait));
     }
   }
@@ -71,18 +71,20 @@ export const fetchProductsPage = async (page = 1) => {
 /**
  * Fetch all pages & save products
  */
-export const importAllProducts = async (sellerId) => {
+export const importAllProducts = async (sellerId, isImageUpdate = false) => {
   let page = 1;
   let totalImported = 0;
   const categories = await fetchCategories();
-
+  //('result---------------1', categories);
   while (true) {
+    console.log(` Fetching page ${page}...`);
+
     let result;
 
     try {
       result = await fetchProductsPage(page);
     } catch (err) {
-      console.error(` Failed to fetch page ${page}:`, err.message);
+      console.error(`❌ Failed to fetch page ${page}:`, err.message);
       break;
     }
 
@@ -93,11 +95,12 @@ export const importAllProducts = async (sellerId) => {
       break;
     }
 
-    let importedThisPage = 0;
+    console.log(`📦 Page ${page} contains ${list.length} products.`);
 
+    let importedThisPage = 0;
     for (const product of list) {
       try {
-        await createOrUpdateProduct(sellerId, product, categories);
+        await createOrUpdateProduct(sellerId, product, categories, isImageUpdate);
         importedThisPage++;
         totalImported++;
       } catch (err) {
@@ -110,7 +113,7 @@ export const importAllProducts = async (sellerId) => {
     page++;
   }
 
-  console.log(` Total products imported: ${totalImported}`);
+  console.log(`🎉 Total products imported: ${totalImported}`);
   return totalImported;
 };
 
@@ -118,16 +121,14 @@ export const importAllProducts = async (sellerId) => {
  * Create Product + Variants (configurable or simple)
  */
 
-export const createOrUpdateProduct = async (sellerId, product, categories) => {
+export const createOrUpdateProduct = async (sellerId, product, categories, isImageUpdate = false) => {
   const categoryId = product.group; // e.g., '4'
   const categoryTrail = categoryId ? categories.find((cat) => cat.id == categoryId).name : '';
 
   // Map product to DB structure
-
-  const { grandParent, parents, children } = await mapProductToDB(sellerId, product, categoryTrail);
+  const { grandParent, parents, children } = await mapProductToDB(sellerId, product, categoryTrail, isImageUpdate);
 
   // Upsert grandparent
-
   const grandParentDoc = await Product.findOneAndUpdate({ productSkuCode: grandParent.productSkuCode }, grandParent, {
     upsert: true,
     new: true,
@@ -135,7 +136,6 @@ export const createOrUpdateProduct = async (sellerId, product, categories) => {
   });
 
   // Upsert parents
-
   if (parents.length > 0) {
     await Promise.all(
       parents.map((p) =>
@@ -149,7 +149,6 @@ export const createOrUpdateProduct = async (sellerId, product, categories) => {
   }
 
   // Upsert children
-
   if (children.length > 0) {
     await Promise.all(
       children.map((c) =>
