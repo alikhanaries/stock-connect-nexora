@@ -217,7 +217,9 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
 
   // ---------- Cleanup ----------
   if (deleteAfter && filePath) {
-    await fs.unlink(filePath).catch(() => {});
+    fs.unlink(filePath, (err) => {
+      if (err) console.error('File cleanup failed:', err.message);
+    });
   }
 
   return {
