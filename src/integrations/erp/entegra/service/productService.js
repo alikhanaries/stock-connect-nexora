@@ -75,7 +75,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
   let page = 1;
   let totalImported = 0;
   const categories = await fetchCategories();
-  //('result---------------1', categories);
+
   while (true) {
     console.log(` Fetching page ${page}...`);
 
