@@ -5,6 +5,7 @@ import {
   ayMakanWebHookService,
   getSingleShipmentService,
   cancelShipmentService,
+  createReverseShipmentService,
   createManualShipmentService,
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
@@ -159,6 +160,33 @@ export const cancelShipment = async (req, res) => {
     errorLog(error);
 
     return errorResponse(res, error?.message || 'Shipment could not be cancelled', 500);
+  }
+};
+
+//CREATE REVERSE SHIPMENT
+export const createReverseShipment = async (req, res) => {
+  try {
+    const shipmentData = req.body;
+    const userId = req.user._id;
+    shipmentData['userId'] = userId;
+    // Validate request body early
+    if (!shipmentData || Object.keys(shipmentData).length === 0) {
+      return errorResponse(res, 'Return shipment data is required', 400);
+    }
+
+    const result = await createReverseShipmentService(shipmentData);
+
+    if (!result.success) {
+      return failResponse(res, result.message || 'Failed to approve return', result?.statusCode || 500);
+    }
+
+    return successResponse(res, result.message || 'Return request is approved', 201, {
+      shipmentId: result?.shipmentId,
+    });
+  } catch (error) {
+    console.error('Controller Error: createMerchantReturn:', error.message);
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
   }
 };
 

@@ -159,12 +159,12 @@ export const getReturnById = async (req, res) => {
 
     const returnData = await returnService.getReturnById(id);
     if (!returnData) {
-      return Responses.failResponse(res, req.locale.NO_RETURNS_FOUND || 'Return not found', 404);
+      return Responses.failResponse(res, req?.locale?.NO_RETURNS_FOUND || 'Return not found', 404);
     }
 
     return Responses.successResponse(
       res,
-      req.locale.RETURN_FETCHED_SUCCESSFULLY || 'Return fetched successfully',
+      req?.locale?.RETURN_FETCHED_SUCCESSFULLY || 'Return fetched successfully',
       200,
       returnData
     );
