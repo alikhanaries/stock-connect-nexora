@@ -1,6 +1,6 @@
 // Define valid statuses for channels
 export const VALID_STATUSES = ['active', 'inactive', 'removed'];
-export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED', 'PAYMENT_FAILED'];
+export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED', 'PAYMENT_FAILED', 'PENDING'];
 // Map status to display messages
 export const STATUS_MESSAGES = { active: 'activated', inactive: 'inactivated', removed: 'removed' };
 
