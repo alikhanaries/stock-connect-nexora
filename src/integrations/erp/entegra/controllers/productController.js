@@ -5,11 +5,20 @@ export const syncEntegraProducts = (req, res) => {
   try {
     const sellerId = req.sellerId;
 
-    process.nextTick(() => {
-      importAllProducts(sellerId).catch((err) => console.error('Entrega products background sync failed:', err));
+    const isImageUpdate = Object.prototype.hasOwnProperty.call(req.query, 'isImageUpdate')
+      ? req.query.isImageUpdate === 'true' || req.query.isImageUpdate === true
+      : false;
+
+    setImmediate(async () => {
+      try {
+        await importAllProducts(sellerId, isImageUpdate);
+        console.info(`Entegra sync completed | sellerId=${sellerId} | imageUpdate=${isImageUpdate}`);
+      } catch (err) {
+        console.error(`Entegra sync failed | sellerId=${sellerId}`, err);
+      }
     });
 
-    return successResponse(res, 'Entrega product sync started in background', 202);
+    return successResponse(res, `Entegra product sync started (imageUpdate=${isImageUpdate})`, 202);
   } catch (error) {
     console.error('Failed to start Entrega sync:', error);
     return errorResponse(res, error.message);
