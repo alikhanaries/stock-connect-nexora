@@ -27,15 +27,17 @@ Turkish names: ${JSON.stringify(categoryNames)}
 
   let text = response.choices[0].message.content.trim();
 
+  // ===============================
   // CLEAN MARKDOWN / CODE BLOCKS
-
+  // ===============================
   text = text
     .replace(/```json/i, '')
     .replace(/```/g, '')
     .trim();
 
+  // ===============================
   // PARSE JSON SAFELY
-
+  // ===============================
   try {
     const map = JSON.parse(text);
     return map;

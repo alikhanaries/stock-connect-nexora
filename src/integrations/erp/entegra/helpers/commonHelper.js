@@ -25,8 +25,9 @@ const cleanName = (value = '') =>
     .replace(/\u00A0/g, ' ') // non-breaking space
     .toUpperCase();
 
+// ============================================
 // UNIVERSAL NORMALIZATION
-
+// ============================================
 const normalizeKey = (value = '') =>
   value
     .toString()
@@ -69,8 +70,9 @@ const extractVariantSpec = (varationspec = []) => {
   };
 };
 
+// ============================================
 // NORMALIZE VARIANTS
-
+// ============================================
 export const normalizeAndTranslateVariants = async (variations = []) => {
   if (!Array.isArray(variations)) return [];
 
