@@ -5,6 +5,7 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
+import { ObjectId } from 'mongodb';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -242,6 +243,97 @@ export const importPriceFromGoogleSheet = async (url, locale, sellerId) => {
   }
 };
 
+export const updateSingleProductPrice = async (
+  pricePayload, // { price, minPrice?, maxPrice?, msrp?, purchasePrice? }
+  locale,
+  sellerId
+) => {
+  try {
+    const { productId } = pricePayload;
+
+    const priceValue = Number(pricePayload.price);
+    const now = new Date();
+
+    // 1. Ensure product exists
+    const product = await Product.findOne({ _id: new ObjectId(productId) }, { _id: 1, productSkuCode: 1 }).lean();
+
+    if (!product) {
+      const error = new Error(locale.NOT_FOUND || 'Product not found');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    // 2. Build $set dynamically (ONLY provided fields)
+    const setData = {
+      price: priceValue,
+      updatedAt: now,
+    };
+
+    const addOptionalNumber = (key) => {
+      if (pricePayload[key] !== undefined) {
+        const num = Number(pricePayload[key]);
+        if (Number.isNaN(num) || num < 0) {
+          const error = new Error(
+            locale.INVALID_NUMBER ? `${locale.INVALID_NUMBER} (${key})` : `Invalid number (${key})`
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+        setData[key] = num;
+      }
+    };
+
+    addOptionalNumber('minPrice');
+    addOptionalNumber('maxPrice');
+    addOptionalNumber('msrp');
+    addOptionalNumber('purchasePrice');
+
+    // 3. Upsert price document
+    const priceDoc = await Price.findOneAndUpdate(
+      { sellerId, productId },
+      {
+        $set: setData,
+        $setOnInsert: {
+          sellerId,
+          productId,
+          productSkuCode: product.productSkuCode,
+          createdAt: now,
+        },
+      },
+      {
+        new: true,
+        upsert: true,
+        lean: true,
+      }
+    );
+
+    // 4. Update product price only (optional fields stay in Price)
+    const productSet = {
+      price: priceValue,
+      updatedAt: now,
+    };
+
+    if (pricePayload.minPrice !== undefined) productSet.minPrice = pricePayload.minPrice;
+    if (pricePayload.maxPrice !== undefined) productSet.maxPrice = pricePayload.maxPrice;
+    if (pricePayload.msrp !== undefined) productSet.msrp = pricePayload.msrp;
+    if (pricePayload.purchasePrice !== undefined) productSet.purchasePrice = pricePayload.purchasePrice;
+
+    // Update Product
+    await Product.updateOne({ _id: productId }, { $set: productSet });
+
+    return {
+      productId,
+      priceId: priceDoc._id,
+      price: priceDoc.price,
+      updatedAt: priceDoc.updatedAt,
+    };
+  } catch (err) {
+    console.error('Service updateSingleProductPrice error:', err);
+    throw err;
+  }
+};
+
 export default {
   importPriceFromGoogleSheet,
+  updateSingleProductPrice,
 };

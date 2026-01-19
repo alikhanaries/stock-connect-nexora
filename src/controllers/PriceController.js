@@ -34,6 +34,38 @@ export const importPriceFromGoogleSheet = async (req, res) => {
   }
 };
 
+export const updateSingleProductPrice = async (req, res) => {
+  try {
+    const sellerId = req.sellerId; // from auth middleware
+    const { productId, price, minPrice, maxPrice, msrp, purchasePrice } = req.body;
+
+    // ---- Mandatory validation ----
+    if (!productId || typeof price !== 'number' || price < 0) {
+      return failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+
+    // ---- Build payload with optional fields ----
+    const pricePayload = {
+      productId,
+      price,
+    };
+
+    if (minPrice !== undefined) pricePayload.minPrice = minPrice;
+    if (maxPrice !== undefined) pricePayload.maxPrice = maxPrice;
+    if (msrp !== undefined) pricePayload.msrp = msrp;
+    if (purchasePrice !== undefined) pricePayload.purchasePrice = purchasePrice;
+
+    const result = await priceService.updateSingleProductPrice(pricePayload, req.locale, sellerId);
+
+    return successResponse(res, req.locale.SUCCESS, 200, result);
+  } catch (error) {
+    console.error('updateSingleProductPrice error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+};
+
 export default {
   importPriceFromGoogleSheet,
+  updateSingleProductPrice,
 };
