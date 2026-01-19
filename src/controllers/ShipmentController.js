@@ -105,7 +105,7 @@ export const ayMakanWebHook = async (req, res) => {
     const payload = req.body;
 
     // Basic validation: check for tracking number & status
-    if (!payload?.tracking_number || !payload?.status) {
+    if (!payload?.tracking || !payload?.status) {
       return errorResponse(res, 'Invalid webhook payload: missing tracking_number or status', 400);
     }
 
