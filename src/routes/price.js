@@ -1,8 +1,8 @@
 import express from 'express';
-import { importPriceFromGoogleSheet, importPriceFromCsvFile } from '#controllers/PriceController.js';
-import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
-import { importProductsFromGoogleSheetValidator, importProductsFromCsvFileValidator } from '#validations/products.js';
-import upload from '#helpers/FileHandler.js'; // the above multer setup
+import { importPriceFromGoogleSheet, updateSingleProductPrice } from '#controllers/PriceController.js';
+import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
+import { importProductsFromGoogleSheetValidator } from '#validations/products.js';
+import { updateSingleProductPriceValidator } from '#validations/price.js';
 const priceRouter = express.Router();
 
 /* UPLOAD PRICE FROM GOOGLE SHEET */
@@ -38,39 +38,65 @@ priceRouter.post(
   importPriceFromGoogleSheet
 );
 
-/* UPLOAD PRICE FROM CSV FILE */
+/* UPDATE SINGLE PRICE */
 /**
  * @openapi
- * /price/importPriceFromCsvFile:
- *   post:
+ * /price/single:
+ *   patch:
  *     tags: [Price]
- *     summary: Import price from CSV file
+ *     summary: Update price for a single product
  *     parameters:
  *       - in: header
  *         name: Accept-Language
- *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
  *     requestBody:
  *       required: true
  *       content:
- *         multipart/form-data:
+ *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - productId
+ *               - price
  *             properties:
- *               file: { type: string, format: binary }
- *             required: [file]
+ *               productId:
+ *                 type: string
+ *                 example: "64d2f9c8e4b0c8b1f8a7c123"
+ *               price:
+ *                 type: number
+ *                 minimum: 0
+ *                 example: 199
+ *               minPrice:
+ *                 type: number
+ *                 minimum: 0
+ *                 example: 150
+ *               maxPrice:
+ *                 type: number
+ *                 minimum: 0
+ *                 example: 250
+ *               msrp:
+ *                 type: number
+ *                 minimum: 0
+ *                 example: 299
+ *               purchasePrice:
+ *                 type: number
+ *                 minimum: 0
+ *                 example: 120
+ *             required: [productId, price]
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
+ *       404: { $ref: "#/components/schemas/FailResponse" }
  */
-priceRouter.post(
-  '/importPriceFromCsvFile',
-  importProductsFromCsvFileValidator,
+priceRouter.patch(
+  '/single',
+  updateSingleProductPriceValidator,
   checkLanguage,
   authMiddleware,
   verifySellerAccess,
-  upload.single('file'),
-  validateFile,
-  importPriceFromCsvFile
+  updateSingleProductPrice
 );
 
 export default priceRouter;

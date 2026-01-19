@@ -34,42 +34,38 @@ export const importPriceFromGoogleSheet = async (req, res) => {
   }
 };
 
-/* UPLOAD INVENTORY FROM CSV FILE */
-export const importPriceFromCsvFile = async (req, res) => {
+export const updateSingleProductPrice = async (req, res) => {
   try {
-    // Send immediate response to client
-    successResponse(res, req?.locale?.PRICE_UPDATE_PROCESSING, 200);
-    // Call service
-    const sellerId = req.sellerId;
-    const isImageUpdate = req.query.isImageUpdate === 'true';
-    // Process file in background (async, no await here)
-    priceService
-      .importPriceFromCsvFile(req.file.path, req.locale, sellerId, isImageUpdate)
-      .then((result) => {
-        console.log('CSV processing completed', {
-          success: result.success,
-          message: result.message,
-          updatedCount: result.updatedCount || 0,
-          invalidRowsCount: result.invalidRowsCount || 0,
-          errors: result.errorDetails?.length || 0,
-        });
+    const sellerId = req.sellerId; // from auth middleware
+    const { productId, price, minPrice, maxPrice, msrp, purchasePrice } = req.body;
 
-        if (result.errorDetails?.length) {
-          console.error('CSV processing errors:', result.errorDetails);
-        }
-      })
-      .catch((error) => {
-        console.error('Error in background CSV processing:', error.message);
-        // Optionally store error in DB for tracking
-      });
+    // ---- Mandatory validation ----
+    if (!productId || typeof price !== 'number' || price < 0) {
+      return failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+
+    // ---- Build payload with optional fields ----
+    const pricePayload = {
+      productId,
+      price,
+    };
+
+    if (minPrice !== undefined) pricePayload.minPrice = minPrice;
+    if (maxPrice !== undefined) pricePayload.maxPrice = maxPrice;
+    if (msrp !== undefined) pricePayload.msrp = msrp;
+    if (purchasePrice !== undefined) pricePayload.purchasePrice = purchasePrice;
+
+    const result = await priceService.updateSingleProductPrice(pricePayload, req.locale, sellerId);
+
+    return successResponse(res, req.locale.SUCCESS, 200, result);
   } catch (error) {
-    console.error('Controller error:', error.message, error.stack);
+    console.error('updateSingleProductPrice error:', error.message, error.stack);
     errorLog(error);
-    return errorResponse(res, error.message);
+    return errorResponse(res, error.message, error.statusCode || 500);
   }
 };
 
 export default {
   importPriceFromGoogleSheet,
-  importPriceFromCsvFile,
+  updateSingleProductPrice,
 };
