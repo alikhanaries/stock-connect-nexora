@@ -1062,17 +1062,24 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     //5️ Re-fetch updated order for final order status calculation
 
-    const updatedOrder = await Order.findById(orderId).lean();
+    const updatedOrder = await Order.findById(orderId).select('orderSkuList.skuList.status').lean();
 
-    // ORDER STATUS RULE
-    // Order is NEW only if ALL SKUs are NEW
+    if (!updatedOrder?.orderSkuList?.skuList?.length) {
+      throw new Error('Order SKU list not found');
+    }
 
+    // Rule 1: Order is NEW only if ALL SKUs are NEW
     const allSkusAreNew = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === 'NEW');
 
-    const finalOrderStatus = allSkusAreNew ? 'NEW' : 'IN_PROGRESS';
+    // Rule 2: Any active shipment forces IN_PROGRESS
+    const hasActiveShipment = await Shipment.exists({
+      orderId,
+      status: { $ne: 'CANCELED' },
+    });
 
-    // 6️ Update order status
+    const finalOrderStatus = allSkusAreNew && !hasActiveShipment ? 'NEW' : 'IN_PROGRESS';
 
+    // Update order status
     await Order.findByIdAndUpdate(orderId, {
       status: finalOrderStatus,
     });
