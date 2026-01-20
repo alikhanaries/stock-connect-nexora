@@ -73,14 +73,24 @@ export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range
             $dateToString: {
               format: '%H:00',
               date: {
-                $dateTrunc: { date: '$orderDate', unit: 'hour', binSize: 3 },
+                $dateTrunc: {
+                  date: '$orderDate',
+                  unit: 'hour',
+                  binSize: 3,
+                  timezone: 'UTC',
+                },
               },
+              timezone: 'UTC',
             },
           },
         }
       : {
           date: {
-            $dateToString: { format: '%Y-%m-%d', date: '$orderDate' },
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$orderDate',
+              timezone: 'UTC',
+            },
           },
         };
 
@@ -130,12 +140,23 @@ const buildDayBuckets = (start, end) => {
 };
 
 const normalizeMonthlyWeeks = (raw = []) => {
-  const map = new Map(raw.map((r) => [r._id.week, r.value]));
+  if (!raw.length) {
+    return Array.from({ length: 5 }, (_, i) => ({
+      label: `Week ${i + 1}`,
+      value: 0,
+    }));
+  }
 
-  return [1, 2, 3, 4].map((w) => ({
-    label: `Week ${w}`,
-    value: map.get(w) || 0,
-  }));
+  const map = new Map(raw.map((r) => [r._id.week, r.value]));
+  const maxWeek = Math.max(...map.keys());
+
+  return Array.from({ length: maxWeek }, (_, i) => {
+    const week = i + 1;
+    return {
+      label: `Week ${week}`,
+      value: map.get(week) || 0,
+    };
+  });
 };
 
 const normalizeTodayHours = (raw) => {
