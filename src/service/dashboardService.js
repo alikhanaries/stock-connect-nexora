@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import { ORDER_FLOW_STATUS_CONFIG } from '#constants/dashboard.js';
 import Order from '#models/Orders.js';
-import { getDateRange, getPreviousRange } from '../helpers/dashboard.js';
+import { getDateRange, getPreviousRange, buildAggregationPipeline, normalizeSeries } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null) => {
   try {
@@ -148,4 +148,19 @@ const getorderOverviewStatus = async (sellerId, period) => {
   ];
 };
 
-export default { getOrderFlowStatus, getorderOverviewStatus };
+const getAnalyticsTimeSeries = async (sellerId, period, metric) => {
+  if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
+  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+    throw new Error('Invalid sellerId');
+  }
+  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+  const range = getDateRange(period);
+  if (!range) throw new Error(`Invalid period "${period}"`);
+
+  const pipeline = buildAggregationPipeline({ sellerObjectId, period, metric, range });
+  const rawData = await Order.aggregate(pipeline);
+
+  return { metric, data: normalizeSeries(period, rawData, range) };
+};
+
+export default { getOrderFlowStatus, getorderOverviewStatus, getAnalyticsTimeSeries };
