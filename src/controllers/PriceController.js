@@ -76,7 +76,73 @@ export const updateSingleProductPrice = async (req, res) => {
   }
 };
 
+/* UPLOAD PRICE FROM CSV FILE */
+export const importPriceFromCsvFile = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const filePath = req.file?.path;
+
+    if (!filePath) {
+      return failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+
+    // 1. Send response immediately (DO NOT await background task)
+    successResponse(res, req.locale.PRICE_UPDATE_PROCESSING, 200);
+
+    // 2. Run background task asynchronously
+    (async () => {
+      try {
+        const result = await priceService.importPriceFromCsvFile(filePath, req.locale, sellerId);
+
+        console.log('CSV processing completed', {
+          success: result.success,
+          message: result.message,
+          updatedCount: result.updatedCount || 0,
+          invalidRowsCount: result.invalidRowsCount || 0,
+          errors: result.errorDetails?.length || 0,
+        });
+
+        if (result.errorDetails?.length) {
+          console.error('CSV processing errors:', result.errorDetails);
+        }
+      } catch (err) {
+        console.error('Error in background CSV processing:', err.message);
+        errorLog(err);
+        // Optional: save failure status in DB / job table
+      }
+    })();
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error.message);
+  }
+};
+
+export const syncPriceToChannelEngine = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+
+    // Immediate response (non-blocking)
+    successResponse(res, req.locale.SYNC_STARTED, 202);
+
+    // Background execution (NO await)
+    priceService
+      .syncPriceToChannelEngine(sellerId)
+      .then((result) => {
+        console.log('Price sync completed:', result);
+      })
+      .catch((err) => {
+        console.error('Price sync failed:', err.message);
+      });
+  } catch (err) {
+    console.error('Controller syncPrice error:', err);
+    return errorResponse(res, err.message);
+  }
+};
+
 export default {
   importPriceFromGoogleSheet,
   updateSingleProductPrice,
+  importPriceFromCsvFile,
+  syncPriceToChannelEngine,
 };
