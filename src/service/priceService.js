@@ -1,6 +1,7 @@
 import Price from '#models/Price.js';
 import Product from '#models/Product.js';
 import { mapRowToPrice } from '#utils/mapRowToPrice.js';
+import { config } from '../config/config.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import pLimit from 'p-limit';
@@ -14,6 +15,9 @@ const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
 const BATCH_SIZE = Number(process.env.BATCH_SIZE) || 500;
 const MAX_ERRORS = 1000;
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE } = config;
+const MAX_RETRIES = 3;
+const MAX_TASK_BUFFER = 1000;
 
 export const processImportStream = async (stream, { deleteAfter = false, filePath, locale, sellerId } = {}) => {
   if (!stream || !sellerId || !locale) {
@@ -335,7 +339,151 @@ export const updateSingleProductPrice = async (
   }
 };
 
+/* CSV File Import */
+export const importPriceFromCsvFile = async (filePath, locale, sellerId) => {
+  try {
+    const stream = fs.createReadStream(filePath);
+    return await processImportStream(stream, { deleteAfter: true, filePath, locale, sellerId });
+  } catch (err) {
+    console.error('Error in importPriceFromCsvFile:', err);
+    throw new Error(err.message); // force the catch block
+  }
+};
+
+async function sendPriceBatch(priceUpdates, retries = MAX_RETRIES) {
+  try {
+    console.log({ priceUpdates });
+    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}offer?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(priceUpdates),
+    });
+
+    const rawText = await response.text();
+
+    // Do not retry client errors
+    if (!response.ok) {
+      if (response.status >= 400 && response.status < 500) {
+        throw new Error(`Non-retryable HTTP ${response.status}: ${rawText}`);
+      }
+      throw new Error(`HTTP ${response.status}: ${rawText}`);
+    }
+
+    if (!rawText) return { success: true };
+
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      return { success: true };
+    }
+  } catch (err) {
+    if (retries > 0) {
+      await new Promise((r) => setTimeout(r, (MAX_RETRIES - retries + 1) * 1000));
+      return sendPriceBatch(priceUpdates, retries - 1);
+    }
+    throw err;
+  }
+}
+
+export const syncPriceToChannelEngine = async (sellerId) => {
+  try {
+    if (!ObjectId.isValid(sellerId)) {
+      throw new Error('Invalid sellerId');
+    }
+
+    const allowedMarketplaces = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
+
+    const marketplaceRegex = new RegExp(
+      allowedMarketplaces.map((m) => `\\b${m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).join('|'),
+      'i'
+    );
+
+    const cursor = Product.find(
+      {
+        sellerId: new ObjectId(sellerId),
+        marketPlace: {
+          $exists: true,
+          $ne: null,
+          $regex: marketplaceRegex,
+        },
+        price: { $type: 'number', $gte: 0 },
+      },
+      { productSkuCode: 1, price: 1 }
+    )
+      .lean()
+      .cursor();
+
+    let batch = [];
+    let totalSynced = 0;
+    let failedBatches = 0;
+    const tasks = [];
+
+    for await (const product of cursor) {
+      if (!product.productSkuCode) continue;
+
+      batch.push({
+        MerchantProductNo: product.productSkuCode,
+        Price: product.price,
+      });
+      if (batch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
+        const payload = batch;
+        batch = [];
+        tasks.push(
+          limit(() =>
+            sendPriceBatch(payload)
+              .then(() => {
+                totalSynced += payload.length;
+              })
+              .catch((err) => {
+                failedBatches++;
+                console.error(`Batch failed (${payload.length} items):`, err.message);
+              })
+          )
+        );
+      }
+
+      if (tasks.length >= MAX_TASK_BUFFER) {
+        await Promise.all(tasks);
+        tasks.length = 0;
+      }
+    }
+
+    // Send remaining batch
+    if (batch.length) {
+      tasks.push(
+        limit(() =>
+          sendPriceBatch(batch)
+            .then(() => {
+              totalSynced += batch.length;
+            })
+            .catch((err) => {
+              failedBatches++;
+              console.error(`Final batch failed (${batch.length} items):`, err.message);
+            })
+        )
+      );
+    }
+
+    // Await remaining tasks
+    if (tasks.length) {
+      await Promise.all(tasks);
+    }
+
+    return {
+      success: true,
+      message: 'Price sync completed',
+      totalSynced,
+      failedBatches,
+    };
+  } catch (err) {
+    console.error('Service syncProductPrice error:', err);
+    throw err;
+  }
+};
+
 export default {
   importPriceFromGoogleSheet,
   updateSingleProductPrice,
+  importPriceFromCsvFile,
+  syncPriceToChannelEngine,
 };

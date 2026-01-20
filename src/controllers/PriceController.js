@@ -65,7 +65,66 @@ export const updateSingleProductPrice = async (req, res) => {
   }
 };
 
+/* UPLOAD PRICE FROM CSV FILE */
+export const importPriceFromCsvFile = async (req, res) => {
+  try {
+    // Send immediate response to client
+    successResponse(res, req?.locale?.PRICE_UPDATE_PROCESSING, 200);
+    // Call service
+    const sellerId = req.sellerId;
+    const isImageUpdate = req.query.isImageUpdate === 'true';
+    // Process file in background (async, no await here)
+    priceService
+      .importPriceFromCsvFile(req.file.path, req.locale, sellerId, isImageUpdate)
+      .then((result) => {
+        console.log('CSV processing completed', {
+          success: result.success,
+          message: result.message,
+          updatedCount: result.updatedCount || 0,
+          invalidRowsCount: result.invalidRowsCount || 0,
+          errors: result.errorDetails?.length || 0,
+        });
+
+        if (result.errorDetails?.length) {
+          console.error('CSV processing errors:', result.errorDetails);
+        }
+      })
+      .catch((error) => {
+        console.error('Error in background CSV processing:', error.message);
+        // Optionally store error in DB for tracking
+      });
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error.message);
+  }
+};
+
+export const syncPriceToChannelEngine = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+
+    // Immediate response (non-blocking)
+    successResponse(res, req.locale.SYNC_STARTED, 202);
+
+    // Background execution (NO await)
+    priceService
+      .syncPriceToChannelEngine(sellerId)
+      .then((result) => {
+        console.log('Price sync completed:', result);
+      })
+      .catch((err) => {
+        console.error('Price sync failed:', err.message);
+      });
+  } catch (err) {
+    console.error('Controller syncPrice error:', err);
+    return errorResponse(res, err.message);
+  }
+};
+
 export default {
   importPriceFromGoogleSheet,
   updateSingleProductPrice,
+  importPriceFromCsvFile,
+  syncPriceToChannelEngine,
 };
