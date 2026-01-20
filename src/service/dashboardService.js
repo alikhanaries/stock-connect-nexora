@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import { ORDER_FLOW_STATUS_CONFIG } from '#constants/dashboard.js';
+import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS } from '#constants/dashboard.js';
+import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
 import { getDateRange, getPreviousRange } from '../helpers/dashboard.js';
 
@@ -148,4 +149,30 @@ const getorderOverviewStatus = async (sellerId, period) => {
   ];
 };
 
-export default { getOrderFlowStatus, getorderOverviewStatus };
+const getShipmentAnalytics = async (sellerId, period) => {
+  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+  const range = getDateRange(period);
+  const pipeline = [
+    {
+      $match: {
+        sellerId: sellerObjectId,
+        updatedAt: { $gte: range.start, $lte: range.end },
+        status: { $in: SHIPMENT_STATUS.map((s) => s.key) },
+      },
+    },
+    {
+      $group: {
+        _id: '$status',
+        value: { $sum: 1 },
+      },
+    },
+  ];
+  const raw = await Shipment.aggregate(pipeline);
+  const map = new Map(raw.map((r) => [r._id, r.value]));
+  return SHIPMENT_STATUS.map((s) => ({
+    label: s.label,
+    value: map.get(s.key) || 0,
+  }));
+};
+
+export default { getOrderFlowStatus, getorderOverviewStatus, getShipmentAnalytics };
