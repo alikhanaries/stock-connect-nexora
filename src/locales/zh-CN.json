@@ -185,5 +185,10 @@
   "CURRENT_STOCK_COUNT_MISSING": "当前库存数量缺失",
   "INVENTORY_SKUCODE_MISSING": "库存 SKU 代码缺失",
   "INVALID_STOCK_COUNT": "库存数量无效",
-  "SYNC_STARTED": "同步开始成功"
+  "SYNC_STARTED": "同步开始成功",
+
+  "PRICE_UPDATE_PROCESSING": "价格导入正在处理",
+  "PRICE_MISSING": "价格缺失",
+  "INVALID_ROW_DATA": "行数据无效",
+  "INVALID_PRICE": "价格无效"
 }

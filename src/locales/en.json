@@ -181,5 +181,10 @@
   "CURRENT_STOCK_COUNT_MISSING": "Current stock count is missing",
   "INVENTORY_SKUCODE_MISSING": "Inventory skucode is missing",
   "INVALID_STOCK_COUNT": "Invalid stock count",
-  "SYNC_STARTED": "Sync started successfully"
+  "SYNC_STARTED": "Sync started successfully",
+
+  "PRICE_UPDATE_PROCESSING": "Price import is processing",
+  "PRICE_MISSING": "Price is missing",
+  "INVALID_ROW_DATA": "Invalid row data",
+  "INVALID_PRICE": "Invalid price"
 }
