@@ -150,7 +150,9 @@ const getorderOverviewStatus = async (sellerId, period) => {
 
 const getAnalyticsTimeSeries = async (sellerId, period, metric) => {
   if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
-
+  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+    throw new Error('Invalid sellerId');
+  }
   const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
   const range = getDateRange(period);
   if (!range) throw new Error(`Invalid period "${period}"`);
