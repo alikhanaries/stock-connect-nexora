@@ -145,3 +145,5 @@ export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
   'orderCustomer_languageCode',
   'orderPaymentDetails_currencyCode',
 ];
+
+export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
