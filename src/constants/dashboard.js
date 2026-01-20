@@ -11,5 +11,5 @@ export const SHIPMENT_STATUS = [
   { key: 'SHIPMENT_CREATED', label: 'Ready to ship' },
   { key: 'SHIPPED', label: 'In transit' },
   { key: 'DELIVERED', label: 'Delivered' },
-  { key: 'CANCELED', label: 'Delayed' },
+  { key: 'CANCELED', label: 'Canceled' },
 ];

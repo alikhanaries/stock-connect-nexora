@@ -1,7 +1,7 @@
 import express from 'express';
 import { getOrderFlow, getorderOverview, getShipmentAnalytics } from '#controllers/DashboardController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
-import { orderFlowStatusValidator } from '#validations/dashboard.js';
+import { orderFlowStatusValidator, statusValidator } from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
 
 dashboardRoutes.get(
@@ -24,7 +24,7 @@ dashboardRoutes.get(
 
 dashboardRoutes.get(
   '/shipment-status',
-  orderFlowStatusValidator,
+  statusValidator,
   checkLanguage,
   authMiddleware,
   verifySellerAccess,
