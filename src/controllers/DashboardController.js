@@ -40,8 +40,10 @@ export const getAnalytics = async (req, res) => {
     const { period, metric } = req.query;
 
     const data = await dashboardService.getAnalyticsTimeSeries(sellerId, period, metric);
-
-    return Responses.successResponse(res, req.locale.DASHBOARD_STATS_FETCHED_SUCCESSFULLY, 200, data);
+    if (!data) {
+      return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
+    }
+    return Responses.successResponse(res, req.locale.ORDER_STATUS_STATS_FETCHED_SUCCESSFULLY, 200, data);
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);

@@ -129,7 +129,7 @@ const buildDayBuckets = (start, end) => {
   return out;
 };
 
-const normalizeMonthlyWeeks = (raw) => {
+const normalizeMonthlyWeeks = (raw = []) => {
   const map = new Map(raw.map((r) => [r._id.week, r.value]));
 
   return [1, 2, 3, 4].map((w) => ({
@@ -149,7 +149,9 @@ const normalizeTodayHours = (raw) => {
   }));
 };
 
-export const normalizeSeries = (period, raw, range) => {
+export const normalizeSeries = (period, raw = [], range) => {
+  if (!range?.start || !range?.end) return [];
+
   if (period === 'monthly') {
     return normalizeMonthlyWeeks(raw);
   }
