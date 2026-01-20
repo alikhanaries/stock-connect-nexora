@@ -68,14 +68,21 @@ export const updateSingleProductPrice = async (req, res) => {
 /* UPLOAD PRICE FROM CSV FILE */
 export const importPriceFromCsvFile = async (req, res) => {
   try {
-    // Send immediate response to client
-    successResponse(res, req?.locale?.PRICE_UPDATE_PROCESSING, 200);
-    // Call service
     const sellerId = req.sellerId;
-    // Process file in background (async, no await here)
-    priceService
-      .importPriceFromCsvFile(req.file.path, req.locale, sellerId)
-      .then((result) => {
+    const filePath = req.file?.path;
+
+    if (!filePath) {
+      return failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+
+    // 1. Send response immediately (DO NOT await background task)
+    successResponse(res, req.locale.PRICE_UPDATE_PROCESSING, 200);
+
+    // 2. Run background task asynchronously
+    (async () => {
+      try {
+        const result = await priceService.importPriceFromCsvFile(filePath, req.locale, sellerId);
+
         console.log('CSV processing completed', {
           success: result.success,
           message: result.message,
@@ -87,11 +94,12 @@ export const importPriceFromCsvFile = async (req, res) => {
         if (result.errorDetails?.length) {
           console.error('CSV processing errors:', result.errorDetails);
         }
-      })
-      .catch((error) => {
-        console.error('Error in background CSV processing:', error.message);
-        // Optionally store error in DB for tracking
-      });
+      } catch (err) {
+        console.error('Error in background CSV processing:', err.message);
+        errorLog(err);
+        // Optional: save failure status in DB / job table
+      }
+    })();
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     errorLog(error);
