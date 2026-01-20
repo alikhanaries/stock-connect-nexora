@@ -1,5 +1,10 @@
 import express from 'express';
-import { getOrderFlow, getorderOverview, getShipmentAnalytics } from '#controllers/DashboardController.js';
+import {
+  getOrderFlow,
+  getorderOverview,
+  getAnalytics,
+  getShipmentAnalytics,
+} from '#controllers/DashboardController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import { orderFlowStatusValidator, statusValidator } from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
@@ -20,6 +25,15 @@ dashboardRoutes.get(
   authMiddleware,
   verifySellerAccess,
   getorderOverview
+);
+
+dashboardRoutes.get(
+  '/order-analytics',
+  orderFlowStatusValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getAnalytics
 );
 
 dashboardRoutes.get(
