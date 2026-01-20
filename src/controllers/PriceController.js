@@ -105,6 +105,16 @@ export const importPriceFromCsvFile = async (req, res) => {
         if (result.errorDetails?.length) {
           console.error('CSV processing errors:', result.errorDetails);
         }
+        // Send email notification after processing
+        if ((result.updatedCount || 0) > 0 || (result.invalidRowsCount || 0) > 0) {
+          emailService.updateInventoryMailService({
+            to: req.user.email,
+            userName: req.user.firstName,
+            updateStatus: result.success ? 'SUCCESS' : 'FAILED',
+            errorDetails: result.errorDetails || [],
+          });
+        }
+        // Optionally update DB with processing status
       } catch (err) {
         console.error('Error in background CSV processing:', err.message);
         errorLog(err);
