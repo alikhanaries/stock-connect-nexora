@@ -72,10 +72,9 @@ export const importPriceFromCsvFile = async (req, res) => {
     successResponse(res, req?.locale?.PRICE_UPDATE_PROCESSING, 200);
     // Call service
     const sellerId = req.sellerId;
-    const isImageUpdate = req.query.isImageUpdate === 'true';
     // Process file in background (async, no await here)
     priceService
-      .importPriceFromCsvFile(req.file.path, req.locale, sellerId, isImageUpdate)
+      .importPriceFromCsvFile(req.file.path, req.locale, sellerId)
       .then((result) => {
         console.log('CSV processing completed', {
           success: result.success,

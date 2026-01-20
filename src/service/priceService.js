@@ -352,7 +352,6 @@ export const importPriceFromCsvFile = async (filePath, locale, sellerId) => {
 
 async function sendPriceBatch(priceUpdates, retries = MAX_RETRIES) {
   try {
-    console.log({ priceUpdates });
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}offer?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -390,8 +389,10 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     if (!ObjectId.isValid(sellerId)) {
       throw new Error('Invalid sellerId');
     }
-
-    const allowedMarketplaces = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
+    let allowedMarketplaces = [];
+    if (process.env.ALLOWEDMARKETPLACES) {
+      allowedMarketplaces = JSON.parse(process.env.ALLOWEDMARKETPLACES);
+    }
 
     const marketplaceRegex = new RegExp(
       allowedMarketplaces.map((m) => `\\b${m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).join('|'),
@@ -470,7 +471,7 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     }
 
     return {
-      success: true,
+      success: failedBatches === 0,
       message: 'Price sync completed',
       totalSynced,
       failedBatches,
