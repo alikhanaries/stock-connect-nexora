@@ -394,10 +394,8 @@ export const syncPriceToChannelEngine = async (sellerId) => {
       allowedMarketplaces = JSON.parse(process.env.ALLOWEDMARKETPLACES);
     }
 
-    const marketplaceRegex = new RegExp(
-      allowedMarketplaces.map((m) => `\\b${m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).join('|'),
-      'i'
-    );
+    const escaped = allowedMarketplaces.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const marketplaceRegex = new RegExp(`(^|,\\s*)(${escaped.join('|')})(?=\\s*,|$)`, 'i');
 
     const cursor = Product.find(
       {
