@@ -7,6 +7,7 @@ import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
+import { ALLOWEDMARKETPLACES } from '#constants/common.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -346,12 +347,8 @@ export const syncStockToChannelEngine = async (sellerId) => {
       throw new Error('Invalid sellerId');
     }
 
-    const allowedMarketplaces = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
-
-    const marketplaceRegex = new RegExp(
-      allowedMarketplaces.map((m) => `\\b${m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).join('|'),
-      'i'
-    );
+    const escaped = ALLOWEDMARKETPLACES.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const marketplaceRegex = new RegExp(`(^|,\\s*)(${escaped.join('|')})(?=\\s*,|$)`, 'i');
 
     const cursor = Product.find(
       {
