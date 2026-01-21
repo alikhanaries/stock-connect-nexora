@@ -200,12 +200,27 @@ const sanitizeOrdersData = async (orders) => {
     };
   });
 };
+
 const resolveStatus = ({ existingStatus, incomingStatus }) => {
-  if (existingStatus) {
-    return incomingStatus === ORDER_STATUS_MAP.MANCO ? ORDER_STATUS_MAP.CANCELED : existingStatus;
+ 
+
+  // Highest priority
+  if (incomingStatus === ORDER_STATUS_MAP.MANCO) {
+    return ORDER_STATUS_MAP.CANCELED;
   }
 
-  return incomingStatus === ORDER_STATUS_MAP.MANCO ? ORDER_STATUS_MAP.CANCELED : incomingStatus;
+  // Allow explicit close
+  if (incomingStatus === ORDER_STATUS_MAP.CLOSED) {
+    return ORDER_STATUS_MAP.CLOSED;
+  }
+
+  // IN_COMBI always moves to IN_PROGRESS
+  if (incomingStatus === ORDER_STATUS_MAP.IN_COMBI) {
+    return ORDER_STATUS_MAP.IN_PROGRESS;
+  }
+
+  // Default behavior
+  return existingStatus ?? incomingStatus;
 };
 
 const getPeriodDate = (lowercasedPeriod) => {
