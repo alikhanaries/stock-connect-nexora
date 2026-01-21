@@ -190,9 +190,98 @@ export const normalizeSeries = (period, raw = [], range) => {
   }));
 };
 
+export const growthWithTrend = (curr, prev) => {
+  const c = +curr || 0;
+  const p = +prev || 0;
+
+  if (p <= 0) return { growth: c > 0 ? 100 : 0, trend: c > 0 ? 'up' : '' };
+
+  const delta = ((c - p) / p) * 100;
+  const growth = Math.round(Math.abs(delta) * 10) / 10;
+
+  return delta > 0 ? { growth, trend: 'up' } : delta < 0 ? { growth, trend: 'down' } : { growth: 0, trend: '' };
+};
+
+export const extractCategoryLabel = (trail = '') => {
+  if (typeof trail !== 'string') return '';
+  const parts = trail
+    .split('>')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts[parts.length - 1] || '';
+};
+
+export const topFacetPipeline = (sellerObjectId, range, type) => {
+  const isCategory = type === 'category';
+
+  return [
+    { $match: { sellerId: sellerObjectId, orderDate: { $gte: range.start, $lte: range.end } } },
+    { $unwind: '$orderSkuList.skuList' },
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'orderSkuList.skuList.merchantProductNo',
+        foreignField: 'productSkuCode',
+        as: 'productMatch',
+      },
+    },
+    { $match: { productMatch: { $ne: [] } } },
+    {
+      $facet: {
+        items: [
+          {
+            $group: {
+              _id: '$orderSkuList.skuList.merchantProductNo',
+              product: {
+                $first: isCategory
+                  ? { $ifNull: [{ $arrayElemAt: ['$productMatch.categoryTrail', 0] }, 'Uncategorized'] }
+                  : '$orderSkuList.skuList.description',
+              },
+              ordered: { $sum: '$orderSkuList.skuList.quantity' },
+              revenue: { $sum: '$orderSkuList.skuList.lineTotalInclVat' },
+            },
+          },
+          { $sort: { ordered: -1, revenue: -1, product: 1 } },
+          { $limit: 5 },
+        ],
+        meta: [{ $group: { _id: '$orderSkuList.skuList.merchantProductNo' } }, { $count: 'total' }],
+      },
+    },
+  ];
+};
+
+export const prevRevenuePipeline = (sellerObjectId, prevRange, keys) => [
+  { $match: { sellerId: sellerObjectId, orderDate: { $gte: prevRange.start, $lte: prevRange.end } } },
+  { $unwind: '$orderSkuList.skuList' },
+  {
+    $lookup: {
+      from: 'products',
+      localField: 'orderSkuList.skuList.merchantProductNo',
+      foreignField: 'productSkuCode',
+      as: 'productMatch',
+    },
+  },
+  { $match: { productMatch: { $ne: [] } } },
+  {
+    $match: {
+      'orderSkuList.skuList.merchantProductNo': { $in: keys },
+    },
+  },
+  {
+    $group: {
+      _id: '$orderSkuList.skuList.merchantProductNo',
+      prevRevenue: { $sum: '$orderSkuList.skuList.lineTotalInclVat' },
+    },
+  },
+];
+
 export default {
   getDateRange,
   getPreviousRange,
   normalizeSeries,
   buildAggregationPipeline,
+  growthWithTrend,
+  extractCategoryLabel,
+  topFacetPipeline,
+  prevRevenuePipeline,
 };

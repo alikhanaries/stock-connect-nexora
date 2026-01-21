@@ -2,7 +2,16 @@ import mongoose from 'mongoose';
 import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS } from '#constants/dashboard.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
-import { getDateRange, getPreviousRange, buildAggregationPipeline, normalizeSeries } from '../helpers/dashboard.js';
+import {
+  getDateRange,
+  getPreviousRange,
+  buildAggregationPipeline,
+  normalizeSeries,
+  growthWithTrend,
+  extractCategoryLabel,
+  topFacetPipeline,
+  prevRevenuePipeline,
+} from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null) => {
   try {
@@ -190,4 +199,77 @@ const getAnalyticsTimeSeries = async (sellerId, period, metric) => {
   return { metric, data: normalizeSeries(period, rawData, range) };
 };
 
-export default { getOrderFlowStatus, getorderOverviewStatus, getAnalyticsTimeSeries, getShipmentAnalytics };
+export const getTopPerformersProducts = async (sellerId, period, type) => {
+  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+    throw new Error('Invalid sellerId');
+  }
+
+  if (!['product', 'category'].includes(type)) {
+    throw new Error(`Invalid type "${type}". Allowed: product, category`);
+  }
+
+  const range = getDateRange(period);
+  if (!range?.start || !range?.end) {
+    throw new Error(`Invalid period "${period}"`);
+  }
+
+  const prevRange = getPreviousRange(period, range);
+  if (!prevRange?.start || !prevRange?.end) {
+    throw new Error(`Failed to compute previous range for period "${period}"`);
+  }
+
+  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+
+  const [agg] = await Order.aggregate(topFacetPipeline(sellerObjectId, range, type));
+  const top = Array.isArray(agg?.items) ? agg.items : [];
+  const total = agg?.meta?.[0]?.total ?? 0;
+
+  if (!top.length) return { type, items: [], meta: { shown: 0, total: 0 } };
+
+  const items = [];
+  const keys = [];
+
+  for (let i = 0; i < top.length; i++) {
+    const x = top[i];
+    const key = x?._id;
+    if (!key) continue;
+
+    keys.push(key);
+    items.push({
+      rank: items.length + 1,
+      description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
+      ordered: +x?.ordered || 0,
+      revenue: +x?.revenue || 0,
+      growth: 0,
+      trend: 'neutral',
+      _key: key,
+    });
+  }
+
+  if (!keys.length) return { type, items: [], meta: { shown: 0, total: 0 } };
+
+  const prevAgg = await Order.aggregate(prevRevenuePipeline(sellerObjectId, prevRange, keys));
+  const prevMap = new Map((Array.isArray(prevAgg) ? prevAgg : []).map((r) => [String(r._id), +r?.prevRevenue || 0]));
+
+  for (const item of items) {
+    const prev = prevMap.get(String(item._key)) || 0;
+    const { growth, trend } = growthWithTrend(item.revenue, prev);
+    item.growth = growth;
+    item.trend = trend;
+    delete item._key;
+  }
+
+  return {
+    type,
+    items,
+    meta: { shown: items.length, total: +total || 0 },
+  };
+};
+
+export default {
+  getOrderFlowStatus,
+  getorderOverviewStatus,
+  getAnalyticsTimeSeries,
+  getShipmentAnalytics,
+  getTopPerformersProducts,
+};

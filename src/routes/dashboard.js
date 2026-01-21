@@ -4,6 +4,7 @@ import {
   getorderOverview,
   getAnalytics,
   getShipmentAnalytics,
+  getTopPerformersProducts,
 } from '#controllers/DashboardController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import { orderFlowStatusValidator, statusValidator } from '#validations/dashboard.js';
@@ -43,6 +44,15 @@ dashboardRoutes.get(
   authMiddleware,
   verifySellerAccess,
   getShipmentAnalytics
+);
+
+dashboardRoutes.get(
+  '/top-orders',
+  orderFlowStatusValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getTopPerformersProducts
 );
 
 export default dashboardRoutes;
