@@ -188,7 +188,7 @@
   "SYNC_STARTED": "同步开始成功",
 
   "PRICE_UPDATE_PROCESSING": "价格导入正在处理",
-  "PRICE_MISSING": "价格缺失",
+  "PRICE_MISSING": "缺少价格",
   "INVALID_ROW_DATA": "行数据无效",
-  "INVALID_PRICE": "价格无效"
+  "INVALID_PRICE": "无效价格"
 }

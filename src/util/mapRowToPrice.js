@@ -23,12 +23,12 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
 
   // Price (mandatory)
   if (normalized.price === '') {
-    errors.push(locale.PRICE_MISSING || `Price missing for ${normalized.productskucode}`);
+    errors.push(`${locale.PRICE_MISSING} ${normalized.productskucode}`);
   }
 
   const price = Number(normalized.price);
   if (normalized.price !== '' && (Number.isNaN(price) || price < 0)) {
-    errors.push(locale.INVALID_PRICE || `Invalid price for ${normalized.productskucode}`);
+    errors.push(`${locale.INVALID_PRICE} ${normalized.productskucode}`);
   }
 
   if (errors.length) {
@@ -45,8 +45,8 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
     if (Number.isNaN(num) || num < 0) {
       errors.push(
         locale.INVALID_PRICE
-          ? `${locale.INVALID_PRICE} (${fieldName})`
-          : `Invalid number (${fieldName}) for ${normalized.productskucode}`
+          ? `${locale.INVALID_PRICE} ${normalized.productskucode} (${fieldName})`
+          : `Invalid price (${fieldName}) for ${normalized.productskucode}`
       );
       return undefined;
     }
