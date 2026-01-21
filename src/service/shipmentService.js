@@ -697,7 +697,13 @@ export const ayMakanWebHookService = async (data) => {
     }
 
     if (shipmentStatus === 'DELIVERED') {
-      await updateShipmentDeliveryStateChannelEngine('DELIVERED', data.date_time, shipmentData.merchantShipmentNo);
+      await safeExecute(async () => {
+        await updateShipmentDeliveryStateChannelEngine(
+          'DELIVERED',
+          data?.tracking?.delivery_date || new Date(),
+          shipmentData.merchantShipmentNo
+        );
+      }, 'updating delivery state in ChannelEngine');
     }
 
     // ---------------- UPDATE SHIPMENT ----------------
@@ -1316,7 +1322,7 @@ async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, 
     await safeExecute(async () => {
       await updateShipmentDeliveryStateChannelEngine(
         'DELIVERED',
-        tracking?.delivery_date || tracking?.pickup_date,
+        tracking?.delivery_date || tracking?.pickup_date || new Date(),
         merchantShipmentNo
       );
     }, 'updating delivery state in ChannelEngine');
