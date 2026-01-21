@@ -3,6 +3,7 @@ const { AYMAKAN_API_KEY, AYMAKAN_API_URL } = config;
 
 export const createAymakanShipment = async (payload) => {
   try {
+    payload.fulfilment_customer_name = payload.delivery_name; // <-- ADD THIS
     // Call Aymakan API
     const response = await fetch(`${AYMAKAN_API_URL}shipping/create`, {
       method: 'POST',
@@ -182,5 +183,41 @@ export const cancelAymakanShipment = async (trackingNumber) => {
   } catch (error) {
     console.error('Error cancelling Aymakan shipment:', error.message);
     throw new Error(error.message || 'Unexpected error occurred while cancelling Aymakan shipment');
+  }
+};
+
+export const createAymakanReverseShipment = async (payload) => {
+  try {
+    // Call Aymakan API
+    const response = await fetch(`${AYMAKAN_API_URL}shipping/create/reverse_pickup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: AYMAKAN_API_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData?.message);
+    }
+
+    //  Parse JSON body
+    const result = await response.json().catch(async () => {
+      const errorData = await response.json();
+      throw new Error(errorData?.message);
+    });
+
+    // Validate response
+    if (!result?.shipping?.tracking_number) {
+      throw new Error('Invalid response from Aymakan API: Missing tracking number');
+    }
+
+    return result;
+  } catch (error) {
+    console.log(error);
+    console.error('Aymakan Service Error:', error.message, error.stack);
+    throw error;
   }
 };

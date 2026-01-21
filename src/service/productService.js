@@ -1,7 +1,12 @@
 import { config } from '#config/config.js';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import { resolveProductTypes, validateHierarchy, validateHierarchyExistenceBatch } from '#helpers/ProductHierarchy.js';
+import {
+  resolveHierarchyStatus,
+  resolveProductTypes,
+  validateHierarchy,
+  validateHierarchyExistenceBatch,
+} from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import { escapeCsv, validateExportData } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
@@ -572,10 +577,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       if (typeof product.price !== 'number' || product.price <= 0) {
         rowErrors.push('Price must be greater than 0 for simple products.');
       }
-
-      if (typeof product.currentStockCount !== 'number' || product.currentStockCount <= 0) {
-        rowErrors.push('Stock must be greater than 0 for simple products.');
-      }
     }
 
     if (rowErrors.length) {
@@ -702,6 +703,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   // Resolve product types (non-critical)
   await resolveProductTypes(sellerId);
+  await resolveHierarchyStatus(sellerId);
 
   return {
     success: true,

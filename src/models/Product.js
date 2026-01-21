@@ -42,7 +42,6 @@ const ProductSchema = new mongoose.Schema(
     categoryTrail: { type: String },
     categoryTrailAmazon: { type: String, default: null },
     categoryTrailNoon: { type: String, default: null },
-    categoryTrailTrendyol: { type: String, default: null },
     marketPlace: { type: String, trim: true },
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },

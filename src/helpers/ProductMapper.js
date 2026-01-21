@@ -17,13 +17,6 @@ export const mapProductToChannelEngine = (product) => {
       LanguageIsoCode: 'en',
     },
     {
-      Key: 'categoryTrailTrendyol',
-      Value: product.categoryTrailTrendyol || null,
-      Type: 'TEXT',
-      IsPublic: true,
-      LanguageIsoCode: 'en',
-    },
-    {
       Key: 'riseStyle',
       Value: product.riseStyle || null,
       Type: 'TEXT',

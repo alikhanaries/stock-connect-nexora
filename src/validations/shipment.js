@@ -25,7 +25,6 @@ export const createShipmentValidator = validate(async (req) => {
           merchantProductNo: notNullString('merchantProductNo', undefined, { required: true }),
           orderLineId: safeNumber('orderLineId', 0, { required: true }),
           quantity: safeNumber('quantity', 0, { required: true }),
-          hsCode: notNullString('hsCode', undefined, { required: true }),
         })
       )
       .nonempty({ message: 'products must contain at least one item' }),
@@ -124,4 +123,20 @@ export const createManualShipmentValidator = validate(async (req) => {
   });
 
   return bodySchema.parse(req.body);
+});
+
+// REVERSE SHIPMENT VALIDATOR
+export const createReverseShipmentValidator = validate(async (req) => {
+  //  Validate headers
+  headerSchema.parse(req.headers);
+
+  //  Define updated body schema
+  const bodySchema = z.object({
+    deliverId: z.string().nonempty({ message: 'deliverId is required' }),
+    orderId: z.string().nonempty({ message: 'orderId is required' }),
+    returnId: z.string().nonempty({ message: 'returnId is required' }),
+  });
+
+  // Validate body
+  bodySchema.parse(req.body);
 });

@@ -5,6 +5,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 import mongoose from 'mongoose';
+import { formatDateTime } from '#root/src/helpers/Common.js';
 import {
   sanitizeReturnData,
   getOrderDataByOrderLineIds,
@@ -23,6 +24,7 @@ import {
 } from '#helpers/export.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
+import { syncReturnShipmentStatus } from '#service/shipmentService.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 //Fetches returns from ChannelEngine and saves them to the database.
@@ -92,7 +94,7 @@ export const getReturns = async (queryParams = {}) => {
 //Saves return data to the database with simplified structure.
 export const saveReturnToDatabase = async (returnData) => {
   try {
-    // Sanitize return data using helper
+    // --- Step 1: Sanitize data ---
     const sanitizationResult = await sanitizeReturnData(returnData, Order);
     if (!sanitizationResult.success) {
       return sanitizationResult;
@@ -100,13 +102,34 @@ export const saveReturnToDatabase = async (returnData) => {
 
     const simplifiedReturnDocument = sanitizationResult.data;
 
-    // Use upsert to create or update the document based on returnId
-    await Return.findOneAndUpdate({ returnId: simplifiedReturnDocument.returnId }, simplifiedReturnDocument, {
-      upsert: true,
-      new: true,
-      setDefaultsOnInsert: true,
-    });
+    // --- Step 2: Check if return already exists ---
+    const existingReturn = await Return.findOne({ returnId: simplifiedReturnDocument.returnId }).lean();
+    // --- Step 3: Add logs only if new or logs don't exist ---
+    if (!existingReturn || !existingReturn.logs || existingReturn.logs.length === 0) {
+      simplifiedReturnDocument.logs = [
+        {
+          status: 'CREATED',
+          description: 'Return Placed',
+          createdAt: new Date(
+            simplifiedReturnDocument?.ReturnDate || simplifiedReturnDocument?.returnDate || Date.now()
+          ),
+        },
+      ];
+    } else {
+      // Keep existing logs as-is (don’t overwrite)
+      delete simplifiedReturnDocument.logs;
+    }
 
+    // --- Step 4: Upsert (create/update) the document ---
+    await Return.findOneAndUpdate(
+      { returnId: simplifiedReturnDocument.returnId },
+      { $set: simplifiedReturnDocument },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    );
     return { success: true };
   } catch (error) {
     console.error('Error in saveReturnToDatabase:', error.message);
@@ -390,17 +413,60 @@ export const acceptOrRejectReturn = async (returnData) => {
 
 export const getReturnById = async (id) => {
   try {
-    const returnData = await Return.findById(id).lean();
-    if (!returnData) {
+    const returnDataCheck = await Return.findById(id).lean();
+    if (!returnDataCheck) {
       return null;
     }
+
+    // --- Step 1: Sync shipment status before fetching ---
+    await syncReturnShipmentStatus(id);
+
+    // --- Step 2: Aggregate Return + Latest Shipment ---
+    const [returnData] = await Return.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(id) } },
+      {
+        $lookup: {
+          from: 'shipments',
+          let: { shipment_ids: '$shipmentId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] }],
+                },
+              },
+            },
+            { $sort: { createdAt: -1 } }, // get the latest
+            { $limit: 1 },
+            {
+              $project: {
+                airWaybillNo: 1,
+                merchantShipmentNo: 1,
+                status: 1,
+                createdAt: 1,
+                _id: 0,
+              },
+            },
+          ],
+          as: 'shipmentData',
+        },
+      },
+      {
+        $unwind: {
+          path: '$shipmentData',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+    ]);
+
+    if (!returnData) return null;
 
     // Extract orderLineIds from products
     const orderLineIds = returnData.products?.map((p) => p.orderLineId).filter(Boolean) || [];
 
     let orderInfo = null;
 
-    // Get order data
+    // --- Step 4: Fetch order data if applicable ---
     if (orderLineIds.length > 0) {
       orderInfo = await getOrderDataByOrderLineIds(orderLineIds, Order, {
         orderId: 1,
@@ -414,14 +480,17 @@ export const getReturnById = async (id) => {
         orderShippingAddress: 1,
         orderPaymentDetails: 1,
         'orderSkuList.skuList': 1,
+        _id: 1,
       });
     }
 
-    // Create aggregated result format for formatReturnDetails
+    // Format the log details safely
+    const returnLogsData = returnData?.logs?.length ? formatReturnTrackingInf(returnData.logs) : [];
     const aggregatedResult = {
       ...returnData,
       totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
-      orderInfo: orderInfo,
+      orderInfo,
+      returnLogsData,
     };
 
     return formatReturnDetails(aggregatedResult);
@@ -430,7 +499,19 @@ export const getReturnById = async (id) => {
     throw error;
   }
 };
+export const formatReturnTrackingInf = (data) => {
+  if (!Array.isArray(data) || data.length === 0) return [];
 
+  return data.map((item) => {
+    const formatted = formatDateTime(item?.createdAt);
+
+    return {
+      status: item?.description || '',
+      date: formatted?.date || '',
+      time: formatted?.time || '',
+    };
+  });
+};
 export const exportReturnsToCSV = async (sellerId, filters = {}) => {
   try {
     if (!sellerId) {
