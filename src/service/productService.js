@@ -8,7 +8,6 @@ import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
 import Inventory from '#models/Inventory.js';
-import Price from '#models/Price.js';
 import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
@@ -22,6 +21,8 @@ import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
 import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
+import { upsertPricesForProducts } from '../service/priceService.js';
+
 const {
   CHANNEL_ENGINE_BASE_URL,
   CHANNEL_ENGINE_API_KEY,
@@ -760,66 +761,6 @@ export const upsertInventoriesForProducts = async ({ sellerId, productSkuCodes, 
     const batch = inventoryBulkOps.slice(i, i + batchSize);
 
     bulkTasks.push(writeLimit(() => Inventory.bulkWrite(batch, { ordered: false })));
-  }
-
-  await Promise.all(bulkTasks);
-};
-
-export const upsertPricesForProducts = async ({ sellerId, productSkuCodes, batchSize, writeLimit }) => {
-  if (!productSkuCodes?.length) return;
-
-  const now = new Date();
-
-  // 1. Fetch required product data
-  const products = await Product.find(
-    {
-      sellerId,
-      productSkuCode: { $in: productSkuCodes },
-    },
-    {
-      _id: 1,
-      sellerId: 1,
-      productSkuCode: 1,
-      price: 1,
-      minPrice: 1,
-      maxPrice: 1,
-      msrp: 1,
-      purchasePrice: 1,
-    }
-  ).lean();
-
-  if (!products.length) return;
-
-  // 2. Build bulk operations
-  const priceBulkOps = products.map((product) => ({
-    updateOne: {
-      filter: {
-        sellerId: product.sellerId,
-        productId: product._id,
-      },
-      update: {
-        $setOnInsert: {
-          productSkuCode: product.productSkuCode,
-        },
-        $set: {
-          price: product.price,
-          minPrice: product.minPrice ?? undefined,
-          maxPrice: product.maxPrice ?? undefined,
-          msrp: product.msrp ?? undefined,
-          purchasePrice: product.purchasePrice ?? undefined,
-          lastSyncedAt: now,
-        },
-      },
-      upsert: true,
-    },
-  }));
-
-  // 3. Execute in batches with concurrency control
-  const bulkTasks = [];
-  for (let i = 0; i < priceBulkOps.length; i += batchSize) {
-    const batch = priceBulkOps.slice(i, i + batchSize);
-
-    bulkTasks.push(writeLimit(() => Price.bulkWrite(batch, { ordered: false })));
   }
 
   await Promise.all(bulkTasks);

@@ -7,6 +7,7 @@ import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
+import { ALLOWEDMARKETPLACES } from '#constants/common.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -389,12 +390,8 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     if (!ObjectId.isValid(sellerId)) {
       throw new Error('Invalid sellerId');
     }
-    let allowedMarketplaces = [];
-    if (process.env.ALLOWEDMARKETPLACES) {
-      allowedMarketplaces = JSON.parse(process.env.ALLOWEDMARKETPLACES);
-    }
 
-    const escaped = allowedMarketplaces.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const escaped = ALLOWEDMARKETPLACES.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const marketplaceRegex = new RegExp(`(^|,\\s*)(${escaped.join('|')})(?=\\s*,|$)`, 'i');
 
     const cursor = Product.find(
@@ -480,9 +477,70 @@ export const syncPriceToChannelEngine = async (sellerId) => {
   }
 };
 
+export const upsertPricesForProducts = async ({ sellerId, productSkuCodes, batchSize, writeLimit }) => {
+  if (!productSkuCodes?.length) return;
+
+  const now = new Date();
+
+  // 1. Fetch required product data
+  const products = await Product.find(
+    {
+      sellerId,
+      productSkuCode: { $in: productSkuCodes },
+    },
+    {
+      _id: 1,
+      sellerId: 1,
+      productSkuCode: 1,
+      price: 1,
+      minPrice: 1,
+      maxPrice: 1,
+      msrp: 1,
+      purchasePrice: 1,
+    }
+  ).lean();
+
+  if (!products.length) return;
+
+  // 2. Build bulk operations
+  const priceBulkOps = products.map((product) => ({
+    updateOne: {
+      filter: {
+        sellerId: product.sellerId,
+        productId: product._id,
+      },
+      update: {
+        $setOnInsert: {
+          productSkuCode: product.productSkuCode,
+        },
+        $set: {
+          price: product.price,
+          minPrice: product.minPrice ?? undefined,
+          maxPrice: product.maxPrice ?? undefined,
+          msrp: product.msrp ?? undefined,
+          purchasePrice: product.purchasePrice ?? undefined,
+          lastSyncedAt: now,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  // 3. Execute in batches with concurrency control
+  const bulkTasks = [];
+  for (let i = 0; i < priceBulkOps.length; i += batchSize) {
+    const batch = priceBulkOps.slice(i, i + batchSize);
+
+    bulkTasks.push(writeLimit(() => Price.bulkWrite(batch, { ordered: false })));
+  }
+
+  await Promise.all(bulkTasks);
+};
+
 export default {
   importPriceFromGoogleSheet,
   updateSingleProductPrice,
   importPriceFromCsvFile,
   syncPriceToChannelEngine,
+  upsertPricesForProducts,
 };
