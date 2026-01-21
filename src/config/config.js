@@ -24,9 +24,11 @@ export const config = {
   FRONTEND_URL: process.env.FRONTEND_URL,
   AYMAKAN_API_URL: process.env.AYMAKAN_API_URL,
   AYMAKAN_API_KEY: process.env.AYMAKAN_API_KEY,
+  AYMAKAN_API_PROD_KEY: process.env.AYMAKAN_API_PROD_KEY,
+  AYMAKAN_API_PROD_URL: process.env.AYMAKAN_API_PROD_URL,
   AYMAKAN_WEBHOOK_SECRET: process.env.AYMAKAN_WEBHOOK_SECRET,
   AYMAKAN_WEBHOOK_HEADER: process.env.AYMAKAN_WEBHOOK_HEADER,
   OCP_URL: process.env.OCP_URL,
   OCP_API_KEY: process.env.OCP_API_KEY,
-  BASE_URL: process.env.BASE_URL
+  BASE_URL: process.env.BASE_URL,
 };
