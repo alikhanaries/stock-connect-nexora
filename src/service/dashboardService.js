@@ -212,7 +212,9 @@ const getInventoryStatus = async (sellerId, period) => {
   if (!Array.isArray(pipeline) || pipeline.length === 0) {
     throw new Error('Invalid aggregation pipeline');
   }
-  const [agg] = await Inventory.aggregate(pipeline).allowDiskUse(true);
+  const result = await Inventory.aggregate(pipeline).allowDiskUse(true);
+  const agg = result?.[0] ?? {};
+
   const statusCounts = Array.isArray(agg?.statusCounts) ? agg.statusCounts : [];
   const freezeCounts = Array.isArray(agg?.freezeCounts) ? agg.freezeCounts : [];
   const statusMap = new Map(statusCounts.map((r) => [r.status, r.count]));
