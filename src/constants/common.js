@@ -147,3 +147,7 @@ export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
 ];
 
 export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
+
+export const LOW_STOCK_THRESHOLD_SELLERS = ['kip', 'remsy'];
+
+export const LOW_STOCK_THRESHOLD = 3;
