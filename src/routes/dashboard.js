@@ -4,6 +4,7 @@ import {
   getorderOverview,
   getAnalytics,
   getShipmentAnalytics,
+  getInventoryStatus,
 } from '#controllers/DashboardController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import { orderFlowStatusValidator, statusValidator } from '#validations/dashboard.js';
@@ -43,6 +44,15 @@ dashboardRoutes.get(
   authMiddleware,
   verifySellerAccess,
   getShipmentAnalytics
+);
+
+dashboardRoutes.get(
+  '/inventory-status',
+  statusValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getInventoryStatus
 );
 
 export default dashboardRoutes;
