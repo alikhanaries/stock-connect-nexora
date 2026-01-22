@@ -222,7 +222,7 @@ const getInventoryStatus = async (sellerId, period) => {
 
   const activeCount = statusMap.get('active') ?? 0;
   const total = agg?.totalCount?.[0]?.count ?? 0;
-  const activePercentage = total === 0 ? 0 : Math.round((activeCount / total) * 1000) / 10;
+  const activePercentage = total === 0 ? 0 : Number(((activeCount / total) * 100).toFixed(1));
 
   return {
     total,
