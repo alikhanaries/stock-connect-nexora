@@ -220,13 +220,21 @@ const getInventoryStatus = async (sellerId, period) => {
   const statusMap = new Map(statusCounts.map((r) => [r.status, r.count]));
   const freezeMap = new Map(freezeCounts.map((r) => [r.status, r.count]));
 
-  return [
-    { status: 'active', count: statusMap.get('active') ?? 0 },
-    { status: 'inactive', count: statusMap.get('inactive') ?? 0 },
-    { status: 'other', count: statusMap.get('other') ?? 0 },
-    { status: 'unfreeze', count: freezeMap.get('unfreeze') ?? 0 },
-    { status: 'freeze', count: freezeMap.get('freeze') ?? 0 },
-  ];
+  const activeCount = statusMap.get('active') ?? 0;
+  const total = agg?.totalCount?.[0]?.count ?? 0;
+  const activePercentage = total === 0 ? 0 : Math.round((activeCount / total) * 1000) / 10;
+
+  return {
+    total,
+    activePercentage,
+    breakdown: [
+      { status: 'active', count: statusMap.get('active') ?? 0 },
+      { status: 'inactive', count: statusMap.get('inactive') ?? 0 },
+      { status: 'other', count: statusMap.get('other') ?? 0 },
+      { status: 'unfreeze', count: freezeMap.get('unfreeze') ?? 0 },
+      { status: 'freeze', count: freezeMap.get('freeze') ?? 0 },
+    ],
+  };
 };
 
 export default {

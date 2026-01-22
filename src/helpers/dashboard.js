@@ -261,6 +261,7 @@ export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
     },
     {
       $facet: {
+        totalCount: [{ $count: 'count' }],
         statusCounts: [
           { $group: { _id: '$finalStatus', count: { $sum: 1 } } },
           { $project: { _id: 0, status: '$_id', count: 1 } },
