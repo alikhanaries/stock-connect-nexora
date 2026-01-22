@@ -45,6 +45,7 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
           quantity: line.Quantity || 0,
           acceptedQuantity: line.AcceptedQuantity || 0,
           rejectedQuantity: line.RejectedQuantity || 0,
+          price: line.OrderLine?.UnitPriceInclVat || 0,
         }))
       : [];
 
@@ -66,6 +67,7 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
       status: returnData.Status,
       platform: returnData.ChannelName,
       products: products,
+      returnDate: returnData?.ReturnDate || null,
     };
 
     return { success: true, data: sanitizedData };
@@ -96,7 +98,7 @@ export const buildReturnAggregationPipeline = () => {
                         {
                           $filter: {
                             input: '$orderSkuList.skuList',
-                            cond: { $in: ['$$this.id', '$$orderLineIds'] },
+                            cond: { $in: ['$$this.id', { $ifNull: ['$$orderLineIds', []] }] },
                           },
                         },
                         [],
@@ -125,6 +127,39 @@ export const buildReturnAggregationPipeline = () => {
       },
     },
     {
+      $lookup: {
+        from: 'shipments',
+        let: { shipment_ids: '$shipmentId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [{ $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] }],
+              },
+            },
+          },
+          { $sort: { createdAt: -1 } },
+          { $limit: 1 }, // only get last shipment
+          {
+            $project: {
+              airWaybillNo: 1,
+              merchantShipmentNo: 1,
+              status: 1,
+              createdAt: 1,
+              _id: 0,
+            },
+          },
+        ],
+        as: 'shipmentData',
+      },
+    },
+    {
+      $unwind: {
+        path: '$shipmentData',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
       $project: {
         _id: 1,
         returnId: 1,
@@ -144,6 +179,7 @@ export const buildReturnAggregationPipeline = () => {
         createdAt: 1,
         updatedAt: 1,
         orderInfo: 1,
+        shipmentData: 1,
       },
     },
   ];
@@ -440,6 +476,7 @@ export const formatReturnDetails = (aggregatedResult) => {
     _id: returnData._id,
     returnId: returnData.returnId || null,
     orderId: orderInfo.orderId || null,
+    orderDbId: orderInfo._id || null,
     paymentInfo: {
       channelName: returnData.platform || orderInfo.channelName || null,
       paymentMethod: orderInfo.orderPaymentDetails?.paymentMethod || null,
@@ -459,6 +496,10 @@ export const formatReturnDetails = (aggregatedResult) => {
     tax: parseFloat(tax.toFixed(2)),
     total: parseFloat(total.toFixed(2)),
     shippingFee: parseFloat(shippingFee.toFixed(2)),
+    trackingNumber: returnData?.shipmentData?.airWaybillNo || null,
+    shipmentStatus: returnData?.shipmentData?.status,
+    logsDetails: returnData?.returnLogsData,
+    orderLogsData: returnData?.returnLogsData,
   };
 };
 

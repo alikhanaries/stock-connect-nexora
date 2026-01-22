@@ -1,6 +1,6 @@
 // Define valid statuses for channels
 export const VALID_STATUSES = ['active', 'inactive', 'removed'];
-export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED'];
+export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED', 'PAYMENT_FAILED', 'PENDING'];
 // Map status to display messages
 export const STATUS_MESSAGES = { active: 'activated', inactive: 'inactivated', removed: 'removed' };
 
@@ -145,3 +145,5 @@ export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
   'orderCustomer_languageCode',
   'orderPaymentDetails_currencyCode',
 ];
+
+export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];

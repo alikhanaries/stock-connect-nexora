@@ -79,7 +79,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     attributes: r.attributes || null,
     categories: [],
     marketPlace: r.marketplace || null,
-    currentStockCount: parseInt(r.stock, 10) || null,
+    currentStockCount: parseInt(r.stock, 10) || 0,
     createdAt: new Date(),
     updatedAt: new Date(),
     size: r.size || null,

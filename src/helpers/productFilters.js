@@ -1,5 +1,5 @@
 export function buildCondition(field, operator, value) {
-  const BOOLEAN_FIELDS = ['liquidContents', 'heatSensitive'];
+  const BOOLEAN_FIELDS = ['liquidContents', 'heatSensitive', 'isFrozen'];
 
   // Boolean fields (only equal / not equal )
   if (BOOLEAN_FIELDS.includes(field)) {

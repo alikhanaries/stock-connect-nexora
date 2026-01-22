@@ -67,6 +67,12 @@ const shipmentSchema = new mongoose.Schema(
       },
     },
     cancelReason: { type: String },
+    type: {
+      type: String,
+      enum: ['FORWARD', 'REVERSE'],
+      default: 'FORWARD',
+      index: true,
+    },
   },
   {
     timestamps: true,

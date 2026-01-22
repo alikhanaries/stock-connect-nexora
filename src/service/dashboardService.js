@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
-import { ORDER_FLOW_STATUS_CONFIG } from '#constants/dashboard.js';
+import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS } from '#constants/dashboard.js';
+import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
-import { getDateRange, getPreviousRange } from '../helpers/dashboard.js';
+import { getDateRange, getPreviousRange, buildAggregationPipeline, normalizeSeries } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null) => {
   try {
@@ -63,4 +64,130 @@ const getOrderFlowStatus = async (sellerId, period = null) => {
   }
 };
 
-export default { getOrderFlowStatus };
+const getorderOverviewStatus = async (sellerId, period) => {
+  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+
+  const currentRange = getDateRange(period);
+  if (!currentRange) throw new Error(`Invalid period "${period}"`);
+
+  const previousRange = getPreviousRange(period, currentRange);
+
+  const aggregateMetrics = async ({ start, end }) => {
+    const [data] = await Order.aggregate([
+      {
+        $match: {
+          sellerId: sellerObjectId,
+          orderDate: { $gte: start, $lte: end },
+        },
+      },
+      { $unwind: '$orderSkuList.skuList' },
+      {
+        $group: {
+          _id: '$_id',
+          totalOrderValue: { $first: '$totalInclVat' },
+          deliveredTotal: {
+            $first: {
+              $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
+            },
+          },
+          totalProducts: {
+            $sum: '$orderSkuList.skuList.quantity',
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalDeliveredSales: { $sum: '$deliveredTotal' },
+          totalOrderValue: { $sum: '$totalOrderValue' },
+          avgProductsPerOrder: { $avg: '$totalProducts' },
+        },
+      },
+    ]);
+
+    return (
+      data ?? {
+        totalOrders: 0,
+        totalDeliveredSales: 0,
+        totalOrderValue: 0,
+        avgProductsPerOrder: 0,
+      }
+    );
+  };
+
+  const [current, previous] = await Promise.all([aggregateMetrics(currentRange), aggregateMetrics(previousRange)]);
+
+  const calcChange = (curr, prev) =>
+    prev > 0 ? Number((((curr - prev) / prev) * 100).toFixed(1)) : curr > 0 ? 100 : 0;
+
+  const buildMetric = (key, label, curr, prev) => {
+    const change = calcChange(curr, prev);
+    return {
+      key,
+      label,
+      value: Number(curr.toFixed(2)),
+      changePercent: Math.abs(change),
+      trend: change > 0 ? 'up' : change < 0 ? 'down' : '',
+    };
+  };
+
+  const currAvgOrderValue = current.totalOrders > 0 ? current.totalOrderValue / current.totalOrders : 0;
+
+  const prevAvgOrderValue = previous.totalOrders > 0 ? previous.totalOrderValue / previous.totalOrders : 0;
+
+  return [
+    buildMetric('totalSales', 'Total Sales', current.totalDeliveredSales, previous.totalDeliveredSales),
+    buildMetric('orders', 'Orders', current.totalOrders, previous.totalOrders),
+    buildMetric('avgOrderValue', 'Avg Order Value', currAvgOrderValue, prevAvgOrderValue),
+    buildMetric(
+      'avgProductsPerOrder',
+      'Avg Products per Order',
+      current.avgProductsPerOrder,
+      previous.avgProductsPerOrder
+    ),
+  ];
+};
+
+const getShipmentAnalytics = async (sellerId, period) => {
+  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+  const range = getDateRange(period);
+  const pipeline = [
+    {
+      $match: {
+        sellerId: sellerObjectId,
+        updatedAt: { $gte: range.start, $lte: range.end },
+        status: { $in: SHIPMENT_STATUS.map((s) => s.key) },
+      },
+    },
+    {
+      $group: {
+        _id: '$status',
+        value: { $sum: 1 },
+      },
+    },
+  ];
+  const raw = await Shipment.aggregate(pipeline);
+  const map = new Map(raw.map((r) => [r._id, r.value]));
+  return SHIPMENT_STATUS.map((s) => ({
+    label: s.label,
+    value: map.get(s.key) || 0,
+  }));
+};
+
+const getAnalyticsTimeSeries = async (sellerId, period, metric) => {
+  if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
+  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+    throw new Error('Invalid sellerId');
+  }
+  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+  const range = getDateRange(period);
+  if (!range) throw new Error(`Invalid period "${period}"`);
+
+  const pipeline = buildAggregationPipeline({ sellerObjectId, period, metric, range });
+  const rawData = await Order.aggregate(pipeline);
+
+  return { metric, data: normalizeSeries(period, rawData, range) };
+};
+
+export default { getOrderFlowStatus, getorderOverviewStatus, getAnalyticsTimeSeries, getShipmentAnalytics };

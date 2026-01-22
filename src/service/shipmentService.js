@@ -3,7 +3,13 @@ import Shipment from '../models/Shipment/Shipment.js';
 import User from '../models/User.js';
 import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
-import { createAymakanShipment, trackAymakanShipment, cancelAymakanShipment } from './aymakanService.js';
+import Return from '#models/Return.js';
+import {
+  createAymakanShipment,
+  trackAymakanShipment,
+  cancelAymakanShipment,
+  createAymakanReverseShipment,
+} from './aymakanService.js';
 import { formatShipmentDeliveryAddress } from '../helpers/formatShipmentDeliveryAddress.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
@@ -15,6 +21,7 @@ import { parseInvoiceData } from '#helpers/ParseInvoice.js';
 import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
+import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
@@ -220,21 +227,32 @@ export const getPickUpAddress = async (pickUpId) => {
 };
 export const saveDeliveryAddress = async (data) => {
   try {
-    const deliveryData = {
-      ...data,
+    // Define the unique criteria for checking duplicates
+    // (Adjust these fields as per your schema uniqueness)
+    const filter = {
+      name: data.name,
+      phone: data.phone,
+      address: data.city,
+      city: data.city,
+      postcode: data.postalCode,
+      country: data.country,
     };
 
-    // Save shipment in MongoDB
-    const delivery = new DeliveryAddress(deliveryData);
+    const update = { $set: data };
 
-    const result = await delivery.save();
+    const options = {
+      new: true, // return the updated document
+      upsert: true, // insert if not found
+      setDefaultsOnInsert: true,
+    };
+
+    const result = await DeliveryAddress.findOneAndUpdate(filter, update, options);
     return result;
   } catch (error) {
     console.error('Error in saveDeliveryAddress:', error.message);
     throw new Error(error.message);
   }
 };
-
 export const createPartialShipmentService = async (shipmentData) => {
   try {
     const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
@@ -402,6 +420,7 @@ export const createPartialShipmentService = async (shipmentData) => {
         email: AYMAKAN_INFO.EMAIL,
       },
       pieces,
+      type: 'FORWARD',
     });
 
     await shipmentDocument.save();
@@ -625,9 +644,10 @@ export const getAllShipmentsAdminService = async ({
 export const ayMakanWebHookService = async (data) => {
   try {
     if (!data?.tracking) {
-      return { success: false, message: 'Missing tracking_number in webhook payload' };
+      return { success: false, message: 'Missing tracking in webhook payload' };
     }
 
+    // ---------------- FIND SHIPMENT ----------------
     const shipmentData = await Shipment.findOne(
       { airWaybillNo: data.tracking },
       {
@@ -645,11 +665,20 @@ export const ayMakanWebHookService = async (data) => {
       return { success: false, message: `Shipment not found for AWB: ${data.tracking}` };
     }
 
-    let shipmentStatus = AYMAKAN_STATUS[data.status]?.status?.toUpperCase();
+    // ---------------- MAP STATUS ----------------
+    const shipmentStatus = AYMAKAN_STATUS[data.status]?.status?.toUpperCase();
+
+    if (!shipmentStatus) {
+      return { success: false, message: `Unknown Aymakan status: ${data.status}` };
+    }
 
     // ---------------- DUPLICATE WEBHOOK ----------------
     if ((shipmentData.status || '').toUpperCase() === shipmentStatus) {
-      return { success: true, message: 'Duplicate webhook ignored', shipmentId: shipmentData._id };
+      return {
+        success: true,
+        message: 'Duplicate webhook ignored',
+        shipmentId: shipmentData._id,
+      };
     }
 
     // ---------------- CHANNEL ENGINE ----------------
@@ -668,7 +697,13 @@ export const ayMakanWebHookService = async (data) => {
     }
 
     if (shipmentStatus === 'DELIVERED') {
-      await updateShipmentDeliveryStateChannelEngine('DELIVERED', data.date_time, shipmentData.merchantShipmentNo);
+      await safeExecute(async () => {
+        await updateShipmentDeliveryStateChannelEngine(
+          'DELIVERED',
+          data?.tracking?.delivery_date || new Date(),
+          shipmentData.merchantShipmentNo
+        );
+      }, 'updating delivery state in ChannelEngine');
     }
 
     // ---------------- UPDATE SHIPMENT ----------------
@@ -681,9 +716,9 @@ export const ayMakanWebHookService = async (data) => {
       })),
     });
 
+    // ---------------- UPDATE SKU STATUS ----------------
     const orderLineIds = shipmentData.products.map((p) => p.orderLineId);
 
-    // ---------------- UPDATE SKU STATUS ----------------
     const skuStatus = shipmentStatus === 'CANCELED' ? 'NEW' : shipmentStatus;
 
     await Order.updateOne(
@@ -694,11 +729,7 @@ export const ayMakanWebHookService = async (data) => {
         },
       },
       {
-        arrayFilters: [
-          {
-            'sku.id': { $in: orderLineIds },
-          },
-        ],
+        arrayFilters: [{ 'sku.id': { $in: orderLineIds } }],
       }
     );
 
@@ -706,31 +737,39 @@ export const ayMakanWebHookService = async (data) => {
     const order = await Order.findById(shipmentData.orderId).lean();
     const skuList = order.orderSkuList?.skuList || [];
 
-    let hasAnyShipped = false;
-    let allNew = true;
+    // SKU-based flags
     let allDelivered = true;
+    let hasAnyShipped = false;
 
     for (const sku of skuList) {
-      if (sku.status !== 'NEW') allNew = false;
       if (sku.status !== 'DELIVERED') allDelivered = false;
       if (sku.status === 'SHIPPED' || sku.status === 'DELIVERED') {
         hasAnyShipped = true;
       }
     }
 
-    let finalOrderStatus = order.status;
+    // SHIPMENT-based truth (CRITICAL FIX)
+    const activeShipmentsCount = await Shipment.countDocuments({
+      orderId: shipmentData.orderId,
+      status: { $ne: 'CANCELED' },
+    });
 
-    if (allDelivered) {
+    const allShipmentsCanceled = activeShipmentsCount === 0;
+
+    let finalOrderStatus;
+
+    if (allShipmentsCanceled) {
+      // ONLY case where order can go back to NEW
+      finalOrderStatus = 'NEW';
+    } else if (allDelivered) {
       finalOrderStatus = 'DELIVERED';
-    } else if (allNew) {
-      finalOrderStatus = 'NEW'; //  rollback fix
     } else if (hasAnyShipped) {
       finalOrderStatus = 'SHIPPED';
     } else {
       finalOrderStatus = 'IN_PROGRESS';
     }
 
-    //  ALLOW DOWNGRADE ONLY FOR NEW
+    // ---------------- STATUS PRIORITY GUARD ----------------
     const canUpdate =
       finalOrderStatus === 'NEW'
         ? order.status !== 'NEW'
@@ -751,8 +790,8 @@ export const ayMakanWebHookService = async (data) => {
                   : finalOrderStatus === 'DELIVERED'
                     ? 'All items delivered'
                     : finalOrderStatus === 'SHIPPED'
-                      ? 'All available items shipped'
-                      : 'Order partially processed',
+                      ? 'One or more items shipped'
+                      : 'Order in progress',
               createdAt: convetDateToUTC(new Date()),
             },
           },
@@ -776,32 +815,63 @@ export const getSingleShipmentService = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new Error('Invalid shipment ID');
   }
+  const shipmentData = await Shipment.findOne({ _id: id }, { type: 1, _id: 1 });
 
-  const shipment = await Shipment.aggregate([
-    { $match: { _id: new mongoose.Types.ObjectId(id) } },
+  if (!shipmentData) {
+    throw new Error('Shipment not found');
+  }
+  const shipmentType = shipmentData?.type;
+  const pipeLine = [{ $match: { _id: new mongoose.Types.ObjectId(id) } }];
 
-    // Lookup delivery address
-    {
-      $lookup: {
-        from: 'deliveryaddresses',
-        localField: 'deliveryId',
-        foreignField: '_id',
-        as: 'deliveryDetails',
+  // --- Add address lookups early, based on shipmentType ---
+  if (shipmentType === 'FORWARD') {
+    pipeLine.push(
+      {
+        $lookup: {
+          from: 'deliveryaddresses',
+          localField: 'deliveryId',
+          foreignField: '_id',
+          as: 'deliveryDetails',
+        },
       },
-    },
-    { $unwind: { path: '$deliveryDetails', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$deliveryDetails', preserveNullAndEmptyArrays: true } },
 
-    // Lookup pickup address
-    {
-      $lookup: {
-        from: 'pickupaddresses',
-        localField: 'pickUpId',
-        foreignField: '_id',
-        as: 'pickupDetails',
+      // Lookup pickup address
+      {
+        $lookup: {
+          from: 'pickupaddresses',
+          localField: 'pickUpId',
+          foreignField: '_id',
+          as: 'pickupDetails',
+        },
       },
-    },
-    { $unwind: { path: '$pickupDetails', preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: '$pickupDetails', preserveNullAndEmptyArrays: true } }
+    );
+  } else if (shipmentType === 'REVERSE') {
+    pipeLine.push(
+      {
+        $lookup: {
+          from: 'deliveryaddresses',
+          localField: 'pickUpId',
+          foreignField: '_id',
+          as: 'deliveryDetails',
+        },
+      },
+      { $unwind: { path: '$deliveryDetails', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'pickupaddresses',
+          localField: 'deliveryId',
+          foreignField: '_id',
+          as: 'pickupDetails',
+        },
+      },
+      { $unwind: { path: '$pickupDetails', preserveNullAndEmptyArrays: true } }
+    );
+  }
 
+  // --- Then continue with rest of lookups (common for both types) ---
+  pipeLine.push(
     // Lookup order details
     {
       $lookup: {
@@ -900,8 +970,10 @@ export const getSingleShipmentService = async (id) => {
         customerInfo: '$orderDetails.orderCustomer',
         paymentInfo: '$orderDetails.orderPaymentDetails',
       },
-    },
-  ]);
+    }
+  );
+
+  const shipment = await Shipment.aggregate(pipeLine);
 
   if (!shipment || shipment.length === 0) {
     throw new Error('Shipment not found');
@@ -1062,17 +1134,24 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     //5️ Re-fetch updated order for final order status calculation
 
-    const updatedOrder = await Order.findById(orderId).lean();
+    const updatedOrder = await Order.findById(orderId).select('orderSkuList.skuList.status').lean();
 
-    // ORDER STATUS RULE
-    // Order is NEW only if ALL SKUs are NEW
+    if (!updatedOrder?.orderSkuList?.skuList?.length) {
+      throw new Error('Order SKU list not found');
+    }
 
+    // Rule 1: Order is NEW only if ALL SKUs are NEW
     const allSkusAreNew = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === 'NEW');
 
-    const finalOrderStatus = allSkusAreNew ? 'NEW' : 'IN_PROGRESS';
+    // Rule 2: Any active shipment forces IN_PROGRESS
+    const hasActiveShipment = await Shipment.exists({
+      orderId,
+      status: { $ne: 'CANCELED' },
+    });
 
-    // 6️ Update order status
+    const finalOrderStatus = allSkusAreNew && !hasActiveShipment ? 'NEW' : 'IN_PROGRESS';
 
+    // Update order status
     await Order.findByIdAndUpdate(orderId, {
       status: finalOrderStatus,
     });
@@ -1243,7 +1322,7 @@ async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, 
     await safeExecute(async () => {
       await updateShipmentDeliveryStateChannelEngine(
         'DELIVERED',
-        tracking?.delivery_date || tracking?.pickup_date,
+        tracking?.delivery_date || tracking?.pickup_date || new Date(),
         merchantShipmentNo
       );
     }, 'updating delivery state in ChannelEngine');
@@ -1403,7 +1482,243 @@ async function safeExecute(fn, label) {
     console.error(`Error ${label}:`, err.message);
   }
 }
+export const createReverseShipmentWithAymakan = async (shipmentData) => {
+  try {
+    const {
+      userId,
+      declaredValue,
+      deliveryData = {},
+      collectionData = {},
+      pieces,
+      formatedProducts = [],
+      currency = 'SAR',
+      codAmount = 0,
+      isCod = false,
+      weight,
+    } = shipmentData;
 
+    // Resolve requested_by
+
+    let requestedBy = 'Unknown';
+    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+      const user = await User.findById(userId).lean();
+      if (!user) throw new Error('User not found for requested_by');
+      requestedBy = user.firstName || user.username || 'Unknown';
+    }
+
+    // Format products
+
+    const products = formatedProducts.map((item) => ({
+      sku: item?.merchantProductNo,
+      qty: Number(item?.quantity) || 1,
+      price: Number(item?.price) || 0,
+    }));
+
+    if (!products.length) {
+      throw new Error('At least one product is required for reverse shipment');
+    }
+
+    // Calculate declared value
+
+    const calculatedDeclaredValue = declaredValue ?? products.reduce((sum, p) => sum + p.price * p.qty, 0);
+
+    const finalDeclaredValue = calculatedDeclaredValue > 0 ? calculatedDeclaredValue : 1;
+
+    // Final Aymakan Payload
+
+    const payload = {
+      requested_by: requestedBy.trim(),
+
+      declared_value: finalDeclaredValue,
+      declared_value_currency: 'SAR',
+      currency,
+
+      is_cod: isCod ? 1 : 0,
+      cod_amount: isCod ? Number(codAmount) || 0 : 0,
+
+      ...buildDeliveryPayload(deliveryData),
+      ...buildCollectionPayload(collectionData),
+
+      weight: Number(weight) > 0 ? Number(weight) : 1,
+      pieces: Number(pieces) > 0 ? Number(pieces) : 1,
+      items_count: products.length,
+
+      products: products,
+    };
+
+    const result = await createAymakanReverseShipment(payload);
+
+    // ---  Validate Aymakan response ---
+    if (!result?.success || !result?.shipping?.tracking_number) {
+      throw new Error('Aymakan reverse shipment creation failed');
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Aymakan Service Error:', error.message);
+    throw error;
+  }
+};
+
+export const createReverseShipmentService = async (shipmentData) => {
+  try {
+    const { orderId, userId, deliverId, pieces = 0, returnId } = shipmentData;
+
+    //  Step 1: Validate required fields
+    const missingFields = [];
+    if (!orderId) missingFields.push('orderId');
+    if (!userId) missingFields.push('userId');
+    if (!deliverId) missingFields.push('deliverId');
+    if (!returnId) missingFields.push('returnId');
+
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required shipment fields: ${missingFields.join(', ')}`);
+    }
+
+    //  Step 2: Fetch order as a Mongoose document (no .lean())
+    const order = await Order.findById(orderId);
+
+    if (!order) return { success: false, message: 'Order not found.' };
+
+    const returnData = await Return.findById(returnId);
+
+    if (!returnData) return { success: false, message: 'Return data not found.' };
+
+    const returnProducts = returnData?.products;
+    const { merchantOrderNo, orderSkuList, sellerId } = order;
+
+    // Validate SKU list
+    if (!returnProducts || returnProducts.length === 0) {
+      return { success: false, message: 'Retrun has empty line items.' };
+    }
+
+    // Filter products to valid SKUs
+    const validProducts = returnProducts.filter((product) =>
+      orderSkuList.skuList.some((s) => s.merchantProductNo === product.productSkuCode)
+    );
+    if (validProducts.length === 0) {
+      return { success: false, message: 'No valid SKUs found in order for shipment.' };
+    }
+
+    //  Step 3: Find existing shipments for given SKUs
+    const productLineIds = returnProducts.map((p) => p.productSkuCode);
+
+    const existingShipments = await Shipment.find({
+      orderId,
+      type: 'REVERSE',
+      status: { $ne: 'CANCELED' },
+      'products.merchantProductNo': { $in: productLineIds },
+    }).lean();
+    if (existingShipments && existingShipments?.length !== 0) {
+      return { success: false, message: `Shipment already created` };
+    }
+    //  Step 6: Prepare delivery & pickup details
+    const pickUpData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
+    if (!pickUpData) throw new Error('Invalid pickup information');
+    const collectionData = await saveDeliveryAddress(pickUpData);
+
+    const deliveryData = await getPickUpAddress(deliverId);
+    if (!deliveryData) throw new Error('Invalid delivery information');
+    const formatedProducts = returnProducts?.map((pro) => {
+      const plain = JSON.parse(JSON.stringify(pro));
+
+      return {
+        orderLineId: plain.orderLineId,
+        quantity: plain.quantity,
+        merchantProductNo: plain.productSkuCode,
+        price: plain.price,
+      };
+    });
+
+    // //  Step 7: Create shipment in Aymakan
+    const aymakanResult = await createReverseShipmentWithAymakan({
+      ...shipmentData,
+      deliveryData,
+      collectionData,
+      pieces,
+      formatedProducts,
+    });
+
+    if (!aymakanResult?.success) {
+      return { success: false, message: 'Shipment by Aymakan encountered an error.' };
+    }
+
+    const trackingNumber = aymakanResult.shipping.tracking_number;
+
+    const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
+
+    //  Step 8: Track shipment for initial status info
+    const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
+    const trackingInfo = Array.isArray(aymakanTrackingResult?.trackingInfo)
+      ? aymakanTrackingResult.trackingInfo.map((info) => ({
+          statusCode: info?.status_code ?? '',
+          description: info?.description ?? '',
+          descriptionAr: info?.description_ar ?? '',
+          reasonCode: info?.reason_code ?? '',
+          reasonEn: info?.reason_en ?? '',
+          reasonAr: info?.reason_ar ?? '',
+          createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
+        }))
+      : [];
+
+    //  Step 9: Prepare & save shipment document
+    const shipmentDocument = new Shipment({
+      orderId: new mongoose.Types.ObjectId(orderId),
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      userId: new mongoose.Types.ObjectId(userId),
+      deliveryId: deliveryData?._id,
+      pickUpId: collectionData?._id,
+      airWaybillNo: trackingNumber,
+      merchantShipmentNo,
+      merchantOrderNo,
+      status: AYMAKAN_STATUS['AY-0001'].status,
+      trackingInfo,
+      products: formatedProducts,
+      extraData: { aymakan: aymakanResult },
+      shipmentMerchantDetails: {
+        name: AYMAKAN_INFO.NAME,
+        email: AYMAKAN_INFO.EMAIL,
+      },
+      pieces,
+      type: 'REVERSE',
+    });
+
+    const newShipmentData = await shipmentDocument.save();
+
+    // ACKNOWLDGE CHANNEL ENGINE ABOUT APPROVAL
+    const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
+    await fetch(ceUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ReturnId: returnData?.returnId,
+        MerchantReturnNo: returnData?.merchantReturnNo,
+      }),
+    });
+
+    // UPDATE RETURN STATUS AS APPROVED
+    await Return.findByIdAndUpdate(
+      returnId,
+      {
+        $set: { status: 'SHIPMENT_CREATED' },
+        $push: {
+          shipmentId: newShipmentData?._id,
+          logs: {
+            status: 'SHIPMENT_CREATED',
+            description: 'Shipment Created',
+            createdAt: new Date(),
+          },
+        },
+      },
+      { new: true } // optional: returns the updated document
+    );
+
+    return { success: true, shipmentId: shipmentDocument._id };
+  } catch (error) {
+    console.error('Error in createPartialShipmentService:', error);
+    throw error;
+  }
+};
 export const createManualShipmentService = async (shipmentData) => {
   try {
     const {
@@ -1620,7 +1935,87 @@ export const createManualShipmentService = async (shipmentData) => {
     throw new Error(error.message || 'Failed to create MANUAL shipment');
   }
 };
+export const syncReturnShipmentStatus = async (returnId) => {
+  try {
+    // Fetch Return Data
+    const returnData = await Return.findById(returnId).lean();
+    if (!returnData) return { success: false, message: 'Return not found' };
 
+    const shipmentIds = returnData.shipmentId || []; // ensure it's an array
+
+    // Fetch all active shipments whose IDs are in the return data
+    const shipments = await Shipment.find(
+      {
+        _id: { $in: shipmentIds },
+        status: { $ne: 'CANCELED' },
+      },
+      {
+        airWaybillNo: 1,
+        _id: 1,
+        merchantShipmentNo: 1,
+        products: 1,
+        merchantOrderNo: 1,
+        status: 1,
+      }
+    ).lean();
+
+    if (!shipments.length) return { success: true, syncedShipments: 0 };
+
+    for (const shipment of shipments) {
+      try {
+        const tracking = await trackAymakanShipment(shipment.airWaybillNo);
+        const trackingInfo = (tracking?.trackingInfo || []).map((info) => ({
+          statusCode: info?.status_code ?? '',
+          description: info?.description ?? '',
+          descriptionAr: info?.description_ar ?? '',
+          reasonCode: info?.reason_code ?? '',
+          reasonEn: info?.reason_en ?? '',
+          reasonAr: info?.reason_ar ?? '',
+          createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
+        }));
+
+        const latest = trackingInfo[0];
+        const shipmentStatus = AYMAKAN_STATUS[latest?.statusCode]?.status?.toUpperCase() || 'UNKNOWN';
+
+        if (shipmentStatus === 'UNKNOWN') {
+          console.warn(`Unknown status for shipment ${shipment._id}: ${latest?.statusCode}`);
+          continue;
+        }
+
+        // Handle shipment status actions
+        await handleShipmentReturnStatusUpdate({
+          shipment,
+          shipmentStatus,
+          trackingInfo,
+          returnId,
+        });
+      } catch (shipmentErr) {
+        console.error(`Error processing shipment ${shipment._id}:`, shipmentErr.message);
+      }
+    }
+
+    return { success: true, syncedShipments: shipments.length };
+  } catch (err) {
+    console.error('Error syncing shipment status:', err.message);
+    return { success: false, message: err.message };
+  }
+};
+
+async function handleShipmentReturnStatusUpdate({ shipment, shipmentStatus, trackingInfo, returnId }) {
+  // --- 1 Update local shipment record ---
+  await Shipment.findByIdAndUpdate(shipment._id, { status: shipmentStatus, trackingInfo }, { new: true });
+
+  // --- 2 Update Return Status
+
+  await Return.updateOne(
+    { _id: returnId },
+    {
+      $set: {
+        status: shipmentStatus.toUpperCase(),
+      },
+    }
+  );
+}
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -1636,5 +2031,7 @@ export default {
   cancelShipmentService,
   transformShipmentResponse,
   formatShipmentTrackingInfo,
+  createReverseShipmentService,
+  syncReturnShipmentStatus,
   createManualShipmentService,
 };
