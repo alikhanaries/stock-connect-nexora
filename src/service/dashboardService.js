@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS } from '#constants/dashboard.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
+import Inventory from '#models/Inventory.js';
 import {
   getDateRange,
   getPreviousRange,
@@ -11,6 +12,7 @@ import {
   extractCategoryLabel,
   topFacetPipeline,
   prevRevenuePipeline,
+  buildInventoryStatusPipeline,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null) => {
@@ -257,10 +259,51 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
   };
 };
 
+const getInventoryStatus = async (sellerId, period) => {
+  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+    throw new Error('Invalid sellerId');
+  }
+  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+  const range = period ? getDateRange(period) : null;
+
+  if (period && !range) {
+    throw new Error(`Invalid period "${period}"`);
+  }
+
+  const pipeline = buildInventoryStatusPipeline(sellerObjectId, range);
+  if (!Array.isArray(pipeline) || pipeline.length === 0) {
+    throw new Error('Invalid aggregation pipeline');
+  }
+  const result = await Inventory.aggregate(pipeline).allowDiskUse(true);
+  const agg = result?.[0] ?? {};
+
+  const statusCounts = Array.isArray(agg?.statusCounts) ? agg.statusCounts : [];
+  const freezeCounts = Array.isArray(agg?.freezeCounts) ? agg.freezeCounts : [];
+  const statusMap = new Map(statusCounts.map((r) => [r.status, r.count]));
+  const freezeMap = new Map(freezeCounts.map((r) => [r.status, r.count]));
+
+  const activeCount = statusMap.get('active') ?? 0;
+  const total = agg?.totalCount?.[0]?.count ?? 0;
+  const activePercentage = total === 0 ? 0 : Number(((activeCount / total) * 100).toFixed(1));
+
+  return {
+    total,
+    activePercentage,
+    breakdown: [
+      { status: 'active', count: statusMap.get('active') ?? 0 },
+      { status: 'inactive', count: statusMap.get('inactive') ?? 0 },
+      { status: 'other', count: statusMap.get('other') ?? 0 },
+      { status: 'unfreeze', count: freezeMap.get('unfreeze') ?? 0 },
+      { status: 'freeze', count: freezeMap.get('freeze') ?? 0 },
+    ],
+  };
+};
+
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,
   getAnalyticsTimeSeries,
   getShipmentAnalytics,
   getTopPerformersProducts,
+  getInventoryStatus,
 };

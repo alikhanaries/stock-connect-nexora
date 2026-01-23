@@ -70,6 +70,22 @@ export const getAnalytics = async (req, res) => {
   }
 };
 
+export const getInventoryStatus = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { period } = req.query;
+
+    const data = await dashboardService.getInventoryStatus(sellerId, period);
+    if (!data) {
+      return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
+    }
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
 export const getTopPerformersProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;

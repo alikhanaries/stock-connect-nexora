@@ -83,6 +83,8 @@ export const BLOCKED_STATUSES = {
   RETURNED: 'Order has been returned, cannot cancel',
   SHIPPED: 'Order has been shipped, cannot cancel now',
   CANCELED: 'Order has already been cancelled',
+  PENDING: 'Order is pending it cannot be cancelled',
+  PAYMENT_FAILED: 'Payment failed orders cannot be cancelled',
 };
 
 export const RETURN_STATUS = {

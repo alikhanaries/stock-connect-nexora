@@ -37,6 +37,21 @@ export const statusValidator = validate(async (req) => {
   querySchema.parse(req.query);
 });
 
+export const inventoryStatusValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z.object({
+    period: z
+      .string()
+      .optional()
+      .refine((val) => !val || ['today', 'weekly', 'monthly'].includes(val), {
+        message: 'period must be one of today, weekly, or monthly',
+      }),
+  });
+
+  querySchema.parse(req.query);
+});
+
 export const topOrdersValidator = validate(async (req) => {
   // Validate headers
   headerSchema.parse(req.headers);

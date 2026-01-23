@@ -26,6 +26,8 @@ import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
 import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
+import { upsertPricesForProducts } from '../service/priceService.js';
+
 const {
   CHANNEL_ENGINE_BASE_URL,
   CHANNEL_ENGINE_API_KEY,
@@ -658,13 +660,32 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   }
   await Promise.all(bulkTasks);
 
+  const warnings = [];
   // insert inventories for products imported/updated
-  await upsertInventoriesForProducts({
-    sellerId,
-    productSkuCodes,
-    batchSize,
-    writeLimit,
-  });
+  const [inventoryResult, priceResult] = await Promise.allSettled([
+    upsertInventoriesForProducts({
+      sellerId,
+      productSkuCodes,
+      batchSize,
+      writeLimit,
+    }),
+    upsertPricesForProducts({
+      sellerId,
+      productSkuCodes,
+      batchSize,
+      writeLimit,
+    }),
+  ]);
+
+  if (inventoryResult.status === 'rejected') {
+    console.error('Inventory upsert failed:', inventoryResult.reason);
+    warnings.push('Inventory update failed');
+  }
+
+  if (priceResult.status === 'rejected') {
+    console.error('Price upsert failed:', priceResult.reason);
+    warnings.push('Price update failed');
+  }
 
   // Delete file async (non-blocking)
   if (deleteAfter && filePath) {
@@ -691,6 +712,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     updatedCount,
     invalidRowsCount,
     errorDetails,
+    warnings,
   };
 };
 
