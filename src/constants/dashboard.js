@@ -1,5 +1,6 @@
 export const ORDER_FLOW_STATUS_CONFIG = [
-  { key: 'placed', label: 'Orders Placed', statuses: ['NEW'] },
+  { key: 'placed', label: 'New Orders', statuses: ['NEW'] },
+  { key: 'inProgress', label: 'In Progress', statuses: ['IN_PROGRESS'] },
   { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'] },
   { key: 'shipped', label: 'Shipped', statuses: ['SHIPPED'] },
   { key: 'delivered', label: 'Delivered', statuses: ['DELIVERED'] },
