@@ -36,3 +36,26 @@ export const statusValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+
+export const topOrdersValidator = validate(async (req) => {
+  // Validate headers
+  headerSchema.parse(req.headers);
+
+  // Validate query params
+  const querySchema = z.object({
+    period: z
+      .string()
+      .optional()
+      .refine((val) => !val || ['today', 'weekly', 'monthly'].includes(val), {
+        message: 'period must be one of today, weekly, or monthly',
+      }),
+    type: z
+      .string()
+      .optional()
+      .refine((val) => !val || ['product', 'category'].includes(val), {
+        message: 'type must be one of product, category',
+      }),
+  });
+
+  querySchema.parse(req.query);
+});

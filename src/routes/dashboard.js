@@ -7,7 +7,7 @@ import {
   getTopPerformersProducts,
 } from '#controllers/DashboardController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
-import { orderFlowStatusValidator, statusValidator } from '#validations/dashboard.js';
+import { orderFlowStatusValidator, statusValidator, topOrdersValidator } from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
 
 dashboardRoutes.get(
@@ -48,7 +48,7 @@ dashboardRoutes.get(
 
 dashboardRoutes.get(
   '/top-orders',
-  orderFlowStatusValidator,
+  topOrdersValidator,
   checkLanguage,
   authMiddleware,
   verifySellerAccess,

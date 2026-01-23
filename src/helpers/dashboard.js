@@ -191,15 +191,22 @@ export const normalizeSeries = (period, raw = [], range) => {
 };
 
 export const growthWithTrend = (curr, prev) => {
-  const c = +curr || 0;
-  const p = +prev || 0;
+  const c = Number(curr) || 0;
+  const p = Number(prev) || 0;
 
-  if (p <= 0) return { growth: c > 0 ? 100 : 0, trend: c > 0 ? 'up' : '' };
+  if (p === 0) {
+    if (c === 0) return { growth: 0, trend: '' };
+    return { growth: null, trend: 'up' };
+  }
+
+  if (p < 0) return { growth: null, trend: c >= 0 ? 'up' : 'down' };
 
   const delta = ((c - p) / p) * 100;
   const growth = Math.round(Math.abs(delta) * 10) / 10;
 
-  return delta > 0 ? { growth, trend: 'up' } : delta < 0 ? { growth, trend: 'down' } : { growth: 0, trend: '' };
+  if (delta > 0) return { growth, trend: 'up' };
+  if (delta < 0) return { growth, trend: 'down' };
+  return { growth: 0, trend: '' };
 };
 
 export const extractCategoryLabel = (trail = '') => {
@@ -217,15 +224,21 @@ export const topFacetPipeline = (sellerObjectId, range, type) => {
   return [
     { $match: { sellerId: sellerObjectId, orderDate: { $gte: range.start, $lte: range.end } } },
     { $unwind: '$orderSkuList.skuList' },
+    { $match: { 'orderSkuList.skuList.merchantProductNo': { $type: 'string', $ne: '' } } },
     {
       $lookup: {
         from: 'products',
-        localField: 'orderSkuList.skuList.merchantProductNo',
-        foreignField: 'productSkuCode',
+        let: { sku: '$orderSkuList.skuList.merchantProductNo' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$productSkuCode', '$$sku'] } } },
+          { $project: { _id: 0, categoryTrail: 1 } },
+          { $limit: 1 },
+        ],
         as: 'productMatch',
       },
     },
-    { $match: { productMatch: { $ne: [] } } },
+    { $match: { $expr: { $gt: [{ $size: '$productMatch' }, 0] } } },
+
     {
       $facet: {
         items: [
@@ -235,10 +248,10 @@ export const topFacetPipeline = (sellerObjectId, range, type) => {
               product: {
                 $first: isCategory
                   ? { $ifNull: [{ $arrayElemAt: ['$productMatch.categoryTrail', 0] }, 'Uncategorized'] }
-                  : '$orderSkuList.skuList.description',
+                  : { $ifNull: ['$orderSkuList.skuList.description', ''] },
               },
-              ordered: { $sum: '$orderSkuList.skuList.quantity' },
-              revenue: { $sum: '$orderSkuList.skuList.lineTotalInclVat' },
+              ordered: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.quantity', 0] } } },
+              revenue: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] } } },
             },
           },
           { $sort: { ordered: -1, revenue: -1, product: 1 } },
@@ -250,27 +263,26 @@ export const topFacetPipeline = (sellerObjectId, range, type) => {
   ];
 };
 
-export const prevRevenuePipeline = (sellerObjectId, prevRange, keys) => [
+export const prevRevenuePipeline = (sellerObjectId, prevRange, keys = []) => [
   { $match: { sellerId: sellerObjectId, orderDate: { $gte: prevRange.start, $lte: prevRange.end } } },
   { $unwind: '$orderSkuList.skuList' },
+
+  { $match: { 'orderSkuList.skuList.merchantProductNo': { $in: keys } } },
+
   {
     $lookup: {
       from: 'products',
-      localField: 'orderSkuList.skuList.merchantProductNo',
-      foreignField: 'productSkuCode',
+      let: { sku: '$orderSkuList.skuList.merchantProductNo' },
+      pipeline: [{ $match: { $expr: { $eq: ['$productSkuCode', '$$sku'] } } }, { $project: { _id: 0 } }, { $limit: 1 }],
       as: 'productMatch',
     },
   },
-  { $match: { productMatch: { $ne: [] } } },
-  {
-    $match: {
-      'orderSkuList.skuList.merchantProductNo': { $in: keys },
-    },
-  },
+  { $match: { $expr: { $gt: [{ $size: '$productMatch' }, 0] } } },
+
   {
     $group: {
       _id: '$orderSkuList.skuList.merchantProductNo',
-      prevRevenue: { $sum: '$orderSkuList.skuList.lineTotalInclVat' },
+      prevRevenue: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] } } },
     },
   },
 ];

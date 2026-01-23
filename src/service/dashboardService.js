@@ -203,20 +203,11 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
   if (!mongoose.Types.ObjectId.isValid(sellerId)) {
     throw new Error('Invalid sellerId');
   }
-
-  if (!['product', 'category'].includes(type)) {
-    throw new Error(`Invalid type "${type}". Allowed: product, category`);
-  }
-
   const range = getDateRange(period);
-  if (!range?.start || !range?.end) {
-    throw new Error(`Invalid period "${period}"`);
-  }
+  if (!range) throw new Error(`Invalid period "${period}"`);
 
   const prevRange = getPreviousRange(period, range);
-  if (!prevRange?.start || !prevRange?.end) {
-    throw new Error(`Failed to compute previous range for period "${period}"`);
-  }
+  if (!prevRange?.start || !prevRange?.end) throw new Error(`Invalid period "${period}"`);
 
   const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
 
