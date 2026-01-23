@@ -1307,14 +1307,12 @@ const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
           .map((s) => s.trim())
           .filter((name) => name && name !== channelName);
 
-        const updateData = {
-          marketPlace: updatedList.length ? updatedList.join(', ') : null,
-          updatedAt: new Date(),
-        };
         return {
           updateOne: {
             filter: { _id: p._id, sellerId: new mongoose.Types.ObjectId(sellerId) },
-            update: { $set: updateData },
+            update: updatedList.length
+              ? { $set: { marketPlace: updatedList.join(', ') } }
+              : { $set: { marketPlace: null } },
           },
         };
       })
