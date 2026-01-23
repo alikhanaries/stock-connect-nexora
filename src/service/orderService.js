@@ -23,6 +23,7 @@ import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamic
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
+import { updateSyncDate } from '#helpers/updateSyncDate.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
@@ -292,9 +293,7 @@ export const getOrderById = async (id) => {
       const status = product.status?.toUpperCase() || '';
 
       // Cancelled items
-      if (
-        product.cancellationRequestedQuantity > 0
-      ) {
+      if (product.cancellationRequestedQuantity > 0) {
         cancelledItems.push({
           id: product.id,
           merchantProductNo: product.merchantProductNo,
@@ -429,7 +428,7 @@ export const processOrders = async (orders, sellerId) => {
     } else {
       console.log('No new orders created — skipping log insertion');
     }
-
+    await updateSyncDate(sellerId, 'ORDER', result.upsertedCount);
     return {
       success: true,
       data: {

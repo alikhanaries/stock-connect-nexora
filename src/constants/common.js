@@ -61,6 +61,13 @@ export const ORDER_STATUS_MAP = {
   SHIPMENT_CREATED: 'SHIPMENT_CREATED',
 };
 
+export const syncFunctions = {
+  ORDER: 'lastOrderSync',
+  PRODUCT: 'lastProductSync',
+  INVENTORY: 'lastInventorySync',
+  PRICE: 'lastPriceSync',
+};
+
 export const SELECTED_FIELDS = [
   '_id',
   'orderId',

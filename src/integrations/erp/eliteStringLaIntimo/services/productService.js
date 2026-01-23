@@ -1,3 +1,4 @@
+import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import Product from '#root/src/models/Product.js';
@@ -7,6 +8,7 @@ const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
 export const getEliteStringLaIntimoStock = async (sellerId) => {
   try {
+    let upsertCount = 0;
     const adapter = createEliteStringLaIntimoAdapter();
     const products = await adapter.fetchProducts();
     const handleBatch = async (batch) => {
@@ -18,10 +20,12 @@ export const getEliteStringLaIntimoStock = async (sellerId) => {
         },
       }));
 
-      await Product.bulkWrite(bulkOps, { ordered: false });
+      const data = await Product.bulkWrite(bulkOps, { ordered: false });
+      upsertCount = upsertCount + Number(data.upsertedCount);
       return true;
     };
     await processInBatches(products, MAX_BATCH_SIZE, handleBatch, BATCH_CONCURRENCY);
+    await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
     /**
      * TODO (Debugging): This log is intentionally kept for debugging purposes.
      * Do NOT remove at this stage.

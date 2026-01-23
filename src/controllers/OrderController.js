@@ -117,7 +117,7 @@ export const getSyncedOrders = async (req, res) => {
     }
 
     const [dataSavedInDb, response] = await Promise.allSettled([
-      orderService.processOrders(data),
+      orderService.processOrders(data, sellerId),
       getSyncedOrdersOcp(sellerId),
     ]);
 

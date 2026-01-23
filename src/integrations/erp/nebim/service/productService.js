@@ -4,6 +4,7 @@ import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { createERPAdapter } from '#root/src/integrations/erp/base/ERPFactory.js';
 import { formatNebimProducts } from '#root/src/integrations/erp/nebim/helpers/formatter.js';
 import { handleNebimError } from '#root/src/integrations/erp/nebim/util/handleError.js';
+import { updateSyncDate } from '#helpers/updateSyncDate.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 const adapter = createERPAdapter('nebim');
 export const fetchAndStoreNebimProducts = async (sellerId) => {
@@ -91,6 +92,8 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
     if (categoryTrails.size > 0) {
       insertCategoryTrail([...categoryTrails], sellerId);
     }
+
+    await updateSyncDate(sellerId, 'PRODUCT', canonicalProducts.length);
 
     console.log('Products saved successfully.');
   } catch (err) {
