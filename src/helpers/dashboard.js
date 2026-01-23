@@ -190,9 +190,96 @@ export const normalizeSeries = (period, raw = [], range) => {
   }));
 };
 
+export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
+  const match = {
+    sellerId: sellerObjectId,
+    productSkuCode: { $type: 'string', $ne: '' },
+    ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
+  };
+
+  return [
+    { $match: match },
+    { $group: { _id: '$productSkuCode' } },
+    {
+      $lookup: {
+        from: 'products',
+        localField: '_id',
+        foreignField: 'productSkuCode',
+        as: 'product',
+        pipeline: [{ $project: { _id: 0, status: 1, isFrozen: 1 } }],
+      },
+    },
+    {
+      $addFields: {
+        finalStatus: {
+          $cond: [
+            { $eq: [{ $size: '$product' }, 0] },
+            'other',
+            {
+              $let: {
+                vars: {
+                  s: {
+                    $toLower: {
+                      $trim: {
+                        input: {
+                          $toString: { $first: '$product.status' },
+                        },
+                      },
+                    },
+                  },
+                },
+                in: {
+                  $cond: [
+                    { $eq: ['$$s', 'active'] },
+                    'active',
+                    {
+                      $cond: [{ $eq: ['$$s', 'inactive'] }, 'inactive', 'other'],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+
+        freezeStatus: {
+          $cond: [
+            { $gt: [{ $size: '$product' }, 0] },
+            {
+              $cond: [
+                { $eq: [{ $type: { $first: '$product.isFrozen' } }, 'bool'] },
+                {
+                  $cond: [{ $eq: [{ $first: '$product.isFrozen' }, true] }, 'freeze', 'unfreeze'],
+                },
+                '$$REMOVE',
+              ],
+            },
+            '$$REMOVE',
+          ],
+        },
+      },
+    },
+    {
+      $facet: {
+        totalCount: [{ $count: 'count' }],
+        statusCounts: [
+          { $group: { _id: '$finalStatus', count: { $sum: 1 } } },
+          { $project: { _id: 0, status: '$_id', count: 1 } },
+        ],
+        freezeCounts: [
+          { $match: { freezeStatus: { $in: ['freeze', 'unfreeze'] } } },
+          { $group: { _id: '$freezeStatus', count: { $sum: 1 } } },
+          { $project: { _id: 0, status: '$_id', count: 1 } },
+        ],
+      },
+    },
+  ];
+};
+
 export default {
   getDateRange,
   getPreviousRange,
   normalizeSeries,
   buildAggregationPipeline,
+  buildInventoryStatusPipeline,
 };
