@@ -1185,67 +1185,34 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     appliedFilters,
   };
 };
-
-async function existProductsFromChannelEngine() {
-  const page = 1;
-  const batchSize = 500;
-
-  try {
-    const response = await fetch(
-      `${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&size=${batchSize}`,
-      { method: 'GET', headers: { 'Content-Type': 'application/json' } }
-    );
-
-    if (!response.ok) {
-      throw new Error(`ChannelEngine GET failed with status ${response.status}`);
-    }
-
-    const data = await response.json();
-    if (!data.Content) return [];
-
-    return data.Content.map((p) => p.MerchantProductNo?.trim().toUpperCase()).filter(Boolean);
-  } catch (err) {
-    console.error('Error fetching from ChannelEngine:', err);
-    return [];
+export async function syncProductExtraDataToMarketplace(bulkPayload = []) {
+  if (!bulkPayload.length) return [];
+  const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bulkPayload),
+  });
+  if (!response.ok) {
+    throw new Error(`Marketplace PATCH failed: ${response.status}`);
   }
+  return response.json();
 }
 
-async function removeProductsFromChannelEngine(skuCodes) {
-  if (!skuCodes?.length) return { success: true, message: 'No SKUs provided' };
-
-  try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(skuCodes),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('ChannelEngine bulkdelete failed:', errorText);
-      return { success: false, message: errorText };
-    }
-
-    return { success: true };
-  } catch (err) {
-    console.error('Error calling ChannelEngine:', err);
-    return { success: false, message: err.message };
-  }
-}
+const buildExtraDataPayload = (products = []) =>
+  products
+    .filter((p) => p.productSkuCode)
+    .map((p) => ({
+      MerchantProductNo: p.productSkuCode,
+      Operations: [
+        {
+          Op: 'replace',
+          Key: 'MarketPlace',
+          Value: p.marketPlace ?? null,
+        },
+      ],
+    }));
 
 const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
-  /**
-   * TODO [TEMPORARY EXCLUSION - CE/NOON]:
-   * These SKUs are temporarily restricted from unlinking/removal.
-   * Reason: Avoid accidental deletion during ongoing ChannelEngine and Noon integrations.
-   * Remove this list and all related conditions once integrations are fully completed.
-   */
-  const EXCLUDED_SKUS = new Set([
-    'SKU-BLAZER-010-BLU',
-    'SKU-BLAZER-011-BRN',
-    'SKU-BLAZER-012-GRN',
-    'SKU-BLAZER-011-PINK',
-  ]);
   try {
     const products = await Product.find(
       { _id: { $in: ids }, sellerId: new mongoose.Types.ObjectId(sellerId) },
@@ -1253,38 +1220,12 @@ const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
     ).lean();
     if (!products.length) return 0;
     const skuCodes = products.map((p) => p.productSkuCode);
-    const existProductFromCE = await existProductsFromChannelEngine();
-    /**
-     * TODO [TEMPORARY FILTER - CE/NOON]:
-     * Filtering out temporarily restricted SKUs before CE unlinking.
-     */
-    const commonSkuCodes = skuCodes.filter((sku) => existProductFromCE.includes(sku) && !EXCLUDED_SKUS.has(sku));
-    if (commonSkuCodes.length > 0) {
-      const ceResult = await removeProductsFromChannelEngine(commonSkuCodes);
-      if (!ceResult.success) {
-        return {
-          success: false,
-          message: 'ChannelEngine deletion failed',
-          ceError: ceResult.message,
-        };
-      }
-    } else {
-      console.log('No valid SKUs to remove from ChannelEngine');
-    }
-    /**
-     * TODO [TEMPORARY FILTER - CE/NOON]:
-     * Excluding temporary SKUs from DB update operations.
-     */
-    const validSkuCodes = skuCodes.filter((sku) => !EXCLUDED_SKUS.has(sku));
-    if (!validSkuCodes.length) {
-      return { success: true, message: 'No valid SKUs to process' };
-    }
     const result = await UserChannelProducts.updateMany(
       {
         sellerId: new mongoose.Types.ObjectId(sellerId),
         channelId: Number(channelId),
       },
-      { $pull: { skuList: { skuCode: { $in: validSkuCodes } } } }
+      { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
     );
 
     const channel = await Channel.findOne({ channelId }).select('channelName').lean();
@@ -1293,28 +1234,39 @@ const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
     }
     const channelName = channel.channelName;
 
-    const bulkOps = products
-      .map((p) => {
-        if (!p.marketPlace) return null;
+    const bulkOps = products.reduce((ops, p) => {
+      if (!p.marketPlace) return ops;
 
-        const updatedList = p.marketPlace
-          .split(',')
-          .map((s) => s.trim())
-          .filter((name) => name && name !== channelName);
+      const updatedMarketplaces = p.marketPlace
+        .split(',')
+        .map((s) => s.trim())
+        .filter((name) => name && name !== channelName);
 
-        return {
-          updateOne: {
-            filter: { _id: p._id, sellerId: new mongoose.Types.ObjectId(sellerId) },
-            update: updatedList.length
-              ? { $set: { marketPlace: updatedList.join(', ') } }
-              : { $set: { marketPlace: null } },
+      ops.push({
+        updateOne: {
+          filter: { _id: p._id, sellerId: new mongoose.Types.ObjectId(sellerId) },
+          update: {
+            $set: {
+              marketPlace: updatedMarketplaces.length ? updatedMarketplaces.join(', ') : null,
+              updatedAt: new Date(),
+            },
           },
-        };
-      })
-      .filter(Boolean);
+        },
+      });
+      return ops;
+    }, []);
 
     if (bulkOps.length) {
       await Product.bulkWrite(bulkOps);
+    }
+    const updatedProducts = await Product.find(
+      { _id: { $in: ids }, sellerId: new mongoose.Types.ObjectId(sellerId) },
+      { productSkuCode: 1, marketPlace: 1, _id: 0 }
+    ).lean();
+
+    const payload = buildExtraDataPayload(updatedProducts);
+    if (payload.length) {
+      await syncProductExtraDataToMarketplace(payload);
     }
     return result.modifiedCount || 0;
   } catch (err) {
