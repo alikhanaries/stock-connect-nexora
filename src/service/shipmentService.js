@@ -716,23 +716,6 @@ export const ayMakanWebHookService = async (data) => {
       })),
     });
 
-    // ---------------- UPDATE SKU STATUS ----------------
-    const orderLineIds = shipmentData.products.map((p) => p.orderLineId);
-
-    const skuStatus = shipmentStatus === 'CANCELED' ? 'NEW' : shipmentStatus;
-
-    await Order.updateOne(
-      { _id: shipmentData.orderId },
-      {
-        $set: {
-          'orderSkuList.skuList.$[sku].status': skuStatus,
-        },
-      },
-      {
-        arrayFilters: [{ 'sku.id': { $in: orderLineIds } }],
-      }
-    );
-
     // ---------------- ORDER STATUS DERIVATION ----------------
     const order = await Order.findById(shipmentData.orderId).lean();
     const skuList = order.orderSkuList?.skuList || [];
@@ -1879,9 +1862,10 @@ export const createManualShipmentService = async (shipmentData) => {
 
     const allShipments = await Shipment.find({
       orderId,
-      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'] },
+      status: { $ne: 'CANCELED' }, //  ignore cancelled shipments
     }).lean();
 
+    /* --------- TOTAL SHIPPED QTY PER LINE --------- */
     const totalShippedMap = {};
     allShipments.forEach((s) =>
       s.products?.forEach((p) => {
@@ -1889,18 +1873,28 @@ export const createManualShipmentService = async (shipmentData) => {
         totalShippedMap[id] = (totalShippedMap[id] || 0) + (p.quantity || 0);
       })
     );
+    /* --------- CHECK IF ANY SHIPMENT IS NOT SHIPPED --------- */
+    const FINAL_SHIPMENT_STATUSES = ['SHIPPED', 'DELIVERED'];
 
-    const allShipped = updatedOrder.orderSkuList.skuList.every((sku) => {
+    const hasUnshippedShipment = allShipments.some((s) => !FINAL_SHIPMENT_STATUSES.includes(s.status));
+
+    /* --------- QUANTITY BASED CHECK --------- */
+    const allQtyShipped = updatedOrder.orderSkuList.skuList.every((sku) => {
       const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
       const shippedQty = totalShippedMap[String(sku.id)] || 0;
       return availableQty <= 0 || shippedQty >= availableQty;
     });
 
-    const partiallyShipped = updatedOrder.orderSkuList.skuList.some((sku) => {
-      const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
-      const shippedQty = totalShippedMap[String(sku.id)] || 0;
-      return shippedQty > 0 && shippedQty < availableQty;
-    });
+    /* --------- FINAL DECISION --------- */
+    const allShipped = allQtyShipped && !hasUnshippedShipment;
+
+    const partiallyShipped =
+      !allShipped &&
+      updatedOrder.orderSkuList.skuList.some((sku) => {
+        const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+        const shippedQty = totalShippedMap[String(sku.id)] || 0;
+        return shippedQty > 0 && shippedQty < availableQty;
+      });
 
     if (allShipped) {
       await Order.findByIdAndUpdate(orderId, { status: 'SHIPPED' });
