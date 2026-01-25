@@ -1575,7 +1575,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
       .skip((currentPage - 1) * limit)
       .limit(limit)
       .select(
-        '_id name status productSkuCode productType price msrp primaryImageUrl currentStockCount createdAt sellerId isFrozen'
+        '_id name status productSkuCode productType price msrp primaryImageUrl currentStockCount createdAt sellerId isFrozen countryOfOrigin gender'
       )
       .lean(),
   ]);
