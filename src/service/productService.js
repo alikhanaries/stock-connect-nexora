@@ -960,7 +960,12 @@ const addProductsToUserChannel = async (sellerId, channelId, productIds, locale)
       return {
         updateOne: {
           filter: { _id: p._id, sellerId },
-          update: { $set: { marketPlace: existing.join(', ') } },
+          update: {
+            $set: {
+              marketPlace: existing.join(', '),
+              updatedAt: new Date(),
+            },
+          },
         },
       };
     });
