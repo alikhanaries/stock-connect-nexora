@@ -276,10 +276,111 @@ export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
   ];
 };
 
+export const growthWithTrend = (curr, prev) => {
+  const c = Number(curr) || 0;
+  const p = Number(prev) || 0;
+
+  if (p === 0) {
+    if (c === 0) return { growth: 0, trend: 'neutral' };
+    return { growth: null, trend: 'up' };
+  }
+
+  if (p < 0) return { growth: null, trend: c >= 0 ? 'up' : 'down' };
+
+  const delta = ((c - p) / p) * 100;
+  const growth = Math.round(Math.abs(delta) * 10) / 10;
+
+  if (delta > 0) return { growth, trend: 'up' };
+  if (delta < 0) return { growth, trend: 'down' };
+  return { growth: 0, trend: 'neutral' };
+};
+
+export const extractCategoryLabel = (trail = '') => {
+  if (typeof trail !== 'string') return '';
+  const parts = trail
+    .split('>')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts[parts.length - 1] || '';
+};
+
+export const topFacetPipeline = (sellerObjectId, range, type) => {
+  const isCategory = type === 'category';
+
+  return [
+    { $match: { sellerId: sellerObjectId, orderDate: { $gte: range.start, $lte: range.end } } },
+    { $unwind: '$orderSkuList.skuList' },
+    { $match: { 'orderSkuList.skuList.merchantProductNo': { $type: 'string', $ne: '' } } },
+    {
+      $lookup: {
+        from: 'products',
+        let: { sku: '$orderSkuList.skuList.merchantProductNo' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$productSkuCode', '$$sku'] } } },
+          { $project: { _id: 0, categoryTrail: 1 } },
+          { $limit: 1 },
+        ],
+        as: 'productMatch',
+      },
+    },
+    { $match: { $expr: { $gt: [{ $size: '$productMatch' }, 0] } } },
+
+    {
+      $facet: {
+        items: [
+          {
+            $group: {
+              _id: '$orderSkuList.skuList.merchantProductNo',
+              product: {
+                $first: isCategory
+                  ? { $ifNull: [{ $arrayElemAt: ['$productMatch.categoryTrail', 0] }, 'Uncategorized'] }
+                  : { $ifNull: ['$orderSkuList.skuList.description', ''] },
+              },
+              ordered: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.quantity', 0] } } },
+              revenue: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] } } },
+            },
+          },
+          { $sort: { ordered: -1, revenue: -1, product: 1 } },
+          { $limit: 5 },
+        ],
+        meta: [{ $group: { _id: '$orderSkuList.skuList.merchantProductNo' } }, { $count: 'total' }],
+      },
+    },
+  ];
+};
+
+export const prevRevenuePipeline = (sellerObjectId, prevRange, keys = []) => [
+  { $match: { sellerId: sellerObjectId, orderDate: { $gte: prevRange.start, $lte: prevRange.end } } },
+  { $unwind: '$orderSkuList.skuList' },
+
+  { $match: { 'orderSkuList.skuList.merchantProductNo': { $in: keys } } },
+
+  {
+    $lookup: {
+      from: 'products',
+      let: { sku: '$orderSkuList.skuList.merchantProductNo' },
+      pipeline: [{ $match: { $expr: { $eq: ['$productSkuCode', '$$sku'] } } }, { $project: { _id: 0 } }, { $limit: 1 }],
+      as: 'productMatch',
+    },
+  },
+  { $match: { $expr: { $gt: [{ $size: '$productMatch' }, 0] } } },
+
+  {
+    $group: {
+      _id: '$orderSkuList.skuList.merchantProductNo',
+      prevRevenue: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] } } },
+    },
+  },
+];
+
 export default {
   getDateRange,
   getPreviousRange,
   normalizeSeries,
   buildAggregationPipeline,
   buildInventoryStatusPipeline,
+  growthWithTrend,
+  extractCategoryLabel,
+  topFacetPipeline,
+  prevRevenuePipeline,
 };

@@ -202,8 +202,6 @@ const sanitizeOrdersData = async (orders) => {
 };
 
 const resolveStatus = ({ existingStatus, incomingStatus }) => {
- 
-
   // Highest priority
   if (incomingStatus === ORDER_STATUS_MAP.MANCO) {
     return ORDER_STATUS_MAP.CANCELED;
