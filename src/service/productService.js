@@ -17,7 +17,7 @@ import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
-import { buildFilter } from '#utils/buildFilter.js';
+import { buildFilter, castFilter } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -989,6 +989,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
     sellerId,
     buildCondition,
   });
+  const castedBaseFilter = castFilter(baseFilter);
 
   const {
     page = 1,
@@ -1030,14 +1031,14 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   ];
   const productLevelFilter = {};
 
-  for (const key in baseFilter) {
+  for (const key in castedBaseFilter) {
     if (key === '$or' || key === '$and') {
-      productLevelFilter[key] = baseFilter[key].map((cond) => {
+      productLevelFilter[key] = castedBaseFilter[key].map((cond) => {
         const field = Object.keys(cond)[0];
         return { [`productDetails.${field}`]: cond[field] };
       });
     } else if (!['sellerId', 'channelId'].includes(key)) {
-      productLevelFilter[`productDetails.${key}`] = baseFilter[key];
+      productLevelFilter[`productDetails.${key}`] = castedBaseFilter[key];
     }
   }
 
