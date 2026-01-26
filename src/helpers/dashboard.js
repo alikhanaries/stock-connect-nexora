@@ -281,7 +281,7 @@ export const growthWithTrend = (curr, prev) => {
   const p = Number(prev) || 0;
 
   if (p === 0) {
-    if (c === 0) return { growth: 0, trend: '' };
+    if (c === 0) return { growth: 0, trend: 'neutral' };
     return { growth: null, trend: 'up' };
   }
 
@@ -292,7 +292,7 @@ export const growthWithTrend = (curr, prev) => {
 
   if (delta > 0) return { growth, trend: 'up' };
   if (delta < 0) return { growth, trend: 'down' };
-  return { growth: 0, trend: '' };
+  return { growth: 0, trend: 'neutral' };
 };
 
 export const extractCategoryLabel = (trail = '') => {

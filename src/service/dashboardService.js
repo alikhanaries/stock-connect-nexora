@@ -231,8 +231,8 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
     items.push({
       rank: items.length + 1,
       description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
-      ordered: +x?.ordered || 0,
-      revenue: +x?.revenue || 0,
+      ordered: Number(x?.ordered) || 0,
+      revenue: Number(x?.revenue) || 0,
       growth: 0,
       trend: 'neutral',
       _key: key,
