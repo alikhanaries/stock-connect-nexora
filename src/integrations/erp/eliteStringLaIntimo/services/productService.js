@@ -1,4 +1,5 @@
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
+import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import Product from '#root/src/models/Product.js';
@@ -21,7 +22,7 @@ export const getEliteStringLaIntimoStock = async (sellerId) => {
       }));
 
       const data = await Product.bulkWrite(bulkOps, { ordered: false });
-      upsertCount = upsertCount + Number(data.upsertedCount);
+      upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
       return true;
     };
     await processInBatches(products, MAX_BATCH_SIZE, handleBatch, BATCH_CONCURRENCY);

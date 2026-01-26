@@ -1,4 +1,5 @@
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
+import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
@@ -106,7 +107,7 @@ export const getGurmanProducts = async (sellerId, isImageUpdate) => {
             }));
 
             const data = await Product.bulkWrite(bulkOps, { ordered: false });
-            upsertCount = upsertCount + Number(data.upsertedCount);
+            upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
           }
           /**
            * Insert category trails WITHOUT blocking the batch loop

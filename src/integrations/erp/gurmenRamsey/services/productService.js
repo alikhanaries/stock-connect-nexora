@@ -1,4 +1,5 @@
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
+import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
@@ -108,7 +109,7 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
 
             const data = await Product.bulkWrite(bulkOps, { ordered: false });
             console.log(`[Batch ${batchId}] Upserted Products: ${canonical.length}`);
-            upsertCount = upsertCount + Number(data.upsertedCount);
+            upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
           }
 
           /**

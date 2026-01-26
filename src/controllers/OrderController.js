@@ -11,6 +11,7 @@ import {
 
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
+import { updateSyncDate } from '../helpers/updateSyncDate.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -128,6 +129,8 @@ export const getSyncedOrders = async (req, res) => {
     const newUpdateCount =
       (dataSavedInDb?.value?.data?.upsertedCount ? dataSavedInDb?.value?.data?.upsertedCount : 0) +
       (response?.value?.data?.upsertedCount ? response?.value?.data?.upsertedCount : 0);
+
+    await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
 
     const message =
       newUpdateCount > 0
