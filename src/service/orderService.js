@@ -429,7 +429,7 @@ export const processOrders = async (orders, sellerId) => {
     } else {
       console.log('No new orders created — skipping log insertion');
     }
-    
+
     return {
       success: true,
       data: {
