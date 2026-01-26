@@ -292,7 +292,9 @@ export const getOrderById = async (id) => {
       const status = product.status?.toUpperCase() || '';
 
       // Cancelled items
-      if (product.cancellationRequestedQuantity > 0) {
+      if (
+        product.cancellationRequestedQuantity > 0
+      ) {
         cancelledItems.push({
           id: product.id,
           merchantProductNo: product.merchantProductNo,
@@ -427,6 +429,7 @@ export const processOrders = async (orders, sellerId) => {
     } else {
       console.log('No new orders created — skipping log insertion');
     }
+    
     return {
       success: true,
       data: {
