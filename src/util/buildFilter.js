@@ -72,8 +72,9 @@ export const castFilter = (obj) => {
   if (Array.isArray(obj)) return obj.map(castFilter);
   const out = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (k === '$or' || k === '$and') out[k] = v.map(castFilter);
-    else if (v && typeof v === 'object' && !Array.isArray(v)) {
+    if ((k === '$or' || k === '$and') && Array.isArray(v)) {
+      out[k] = v.map(castFilter);
+    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
       const ops = {};
       for (const [op, ov] of Object.entries(v)) ops[op] = castNumeric(k, ov);
       out[k] = ops;
