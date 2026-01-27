@@ -5,9 +5,15 @@ import {
   getAnalytics,
   getShipmentAnalytics,
   getInventoryStatus,
+  getTopPerformersProducts,
 } from '#controllers/DashboardController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
-import { orderFlowStatusValidator, statusValidator, inventoryStatusValidator } from '#validations/dashboard.js';
+import {
+  orderFlowStatusValidator,
+  statusValidator,
+  inventoryStatusValidator,
+  topOrdersValidator,
+} from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
 
 dashboardRoutes.get(
@@ -44,6 +50,15 @@ dashboardRoutes.get(
   authMiddleware,
   verifySellerAccess,
   getShipmentAnalytics
+);
+
+dashboardRoutes.get(
+  '/top-orders',
+  topOrdersValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getTopPerformersProducts
 );
 
 dashboardRoutes.get(
