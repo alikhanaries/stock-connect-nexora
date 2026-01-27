@@ -299,6 +299,48 @@ const getInventoryStatus = async (sellerId, period) => {
   };
 };
 
+const getSalesByChannel = async (sellerId, period) => {
+  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+    throw new Error('Invalid sellerId');
+  }
+
+  const range = getDateRange(period);
+  if (!range?.start || !range?.end) {
+    throw new Error(`Invalid period "${period}"`);
+  }
+  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+  const data = await Order.aggregate([
+    {
+      $match: {
+        sellerId: sellerObjectId,
+        orderDate: { $gte: range.start, $lte: range.end },
+        channelName: { $type: 'string', $ne: '' },
+        totalInclVat: { $type: 'number' },
+      },
+    },
+    {
+      $group: {
+        _id: '$channelName',
+        value: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        key: '$_id',
+        value: { $round: ['$value', 2] },
+      },
+    },
+    { $sort: { value: -1 } },
+  ]).allowDiskUse(true);
+
+  return Array.isArray(data) ? data : [];
+};
+
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,
@@ -306,4 +348,5 @@ export default {
   getShipmentAnalytics,
   getTopPerformersProducts,
   getInventoryStatus,
+  getSalesByChannel,
 };

@@ -100,3 +100,19 @@ export const getTopPerformersProducts = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const getSalesByChannel = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { period } = req.query;
+
+    const data = await dashboardService.getSalesByChannel(sellerId, period);
+    if (!data) {
+      return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
+    }
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
