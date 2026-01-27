@@ -17,7 +17,7 @@ import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
-import { buildFilter } from '#utils/buildFilter.js';
+import { buildFilter, castFilter } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -989,6 +989,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
     sellerId,
     buildCondition,
   });
+  const castedBaseFilter = castFilter(baseFilter);
 
   const {
     page = 1,
@@ -1030,14 +1031,14 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   ];
   const productLevelFilter = {};
 
-  for (const key in baseFilter) {
+  for (const key in castedBaseFilter) {
     if (key === '$or' || key === '$and') {
-      productLevelFilter[key] = baseFilter[key].map((cond) => {
+      productLevelFilter[key] = castedBaseFilter[key].map((cond) => {
         const field = Object.keys(cond)[0];
         return { [`productDetails.${field}`]: cond[field] };
       });
     } else if (!['sellerId', 'channelId'].includes(key)) {
-      productLevelFilter[`productDetails.${key}`] = baseFilter[key];
+      productLevelFilter[`productDetails.${key}`] = castedBaseFilter[key];
     }
   }
 
@@ -1422,11 +1423,23 @@ export const validateProductExportData = async (filters, sellerId) => {
     if (orQueries.length === 1) finalFilter = orQueries[0];
     else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-    finalFilter = {
-      ...finalFilter,
-      sellerId: new mongoose.Types.ObjectId(sellerId),
-      status: { $ne: 'removed' },
-    };
+    // Check if user already has a status filter
+    const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
+
+    if (hasStatusFilter) {
+      // Merge user's status filter with 'not removed' check using $and
+      finalFilter = {
+        $and: [finalFilter, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      };
+    } else {
+      // No user status filter, just add the default
+      finalFilter = {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
+    }
 
     const products = await Product.find(finalFilter).select('_id').limit(1).lean();
 
@@ -1485,11 +1498,23 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
     if (orQueries.length === 1) finalFilter = orQueries[0];
     else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-    finalFilter = {
-      ...finalFilter,
-      sellerId: new mongoose.Types.ObjectId(sellerId),
-      status: { $ne: 'removed' },
-    };
+    // Check if user already has a status filter
+    const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
+
+    if (hasStatusFilter) {
+      // Merge user's status filter with 'not removed' check using $and
+      finalFilter = {
+        $and: [finalFilter, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      };
+    } else {
+      // No user status filter, just add the default
+      finalFilter = {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
+    }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
