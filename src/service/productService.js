@@ -133,7 +133,7 @@ const fetchProducts = async (query, sellerId) => {
     pagination: getPagination(total, currentPage, limit),
     latestProductSyncDate: sellerSync.lastProductSync || null,
     latestInventorySync: sellerSync.lastInventorySync || null,
-    lastPriceSync: sellerSync.lastPriceSync || null,
+    latestPriceSync: sellerSync.lastPriceSync || null,
     appliedFilters,
   };
 };
@@ -1597,7 +1597,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
     pagination: getPagination(total, currentPage, limit),
     latestProductSyncDate: sellerSync.lastProductSync || null,
     latestInventorySync: sellerSync.lastInventorySync || null,
-    lastPriceSync: sellerSync.lastPriceSync || null,
+    latestPriceSync: sellerSync.lastPriceSync || null,
     channel,
   };
 };
