@@ -57,3 +57,30 @@ export const buildFilter = ({ rawFilters = [], sellerId, search, channelName, bu
 
   return finalFilter;
 };
+
+const NUMERIC_FIELDS = new Set(['price', 'msrp', 'currentStockCount', 'numberOfItems', 'shippingCost']);
+
+const castNumeric = (field, val) => {
+  if (!NUMERIC_FIELDS.has(field)) return val;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : val;
+};
+
+//Filter casting to handle numeric fields
+export const castFilter = (obj) => {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(castFilter);
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if ((k === '$or' || k === '$and') && Array.isArray(v)) {
+      out[k] = v.map(castFilter);
+    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const ops = {};
+      for (const [op, ov] of Object.entries(v)) ops[op] = castNumeric(k, ov);
+      out[k] = ops;
+    } else {
+      out[k] = castNumeric(k, v);
+    }
+  }
+  return out;
+};
