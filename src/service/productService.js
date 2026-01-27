@@ -116,7 +116,7 @@ const fetchProducts = async (query, sellerId) => {
   // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1, _id: 1 };
   // Fetch total and products in parallel
-  const [total, products] = await Promise.all([
+  const [total, products, sellerSync] = await Promise.all([
     Product.countDocuments(filter),
     Product.find(filter)
       .sort(sort)
@@ -124,11 +124,16 @@ const fetchProducts = async (query, sellerId) => {
       .limit(limit)
       .select('_id name status productSkuCode price msrp primaryImageUrl currentStockCount createdAt sellerId')
       .lean(),
+
+    Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync'),
   ]);
 
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
+    latestProductSyncDate: sellerSync.lastProductSync || null,
+    latestInventorySync: sellerSync.lastInventorySync || null,
+    lastPriceSync: sellerSync.lastPriceSync || null,
     appliedFilters,
   };
 };
@@ -1572,7 +1577,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-  const [total, products] = await Promise.all([
+  const [total, products, sellerSync] = await Promise.all([
     Product.countDocuments(finalFilter),
 
     Product.find(finalFilter)
@@ -1583,11 +1588,16 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
         '_id name status productSkuCode productType price msrp primaryImageUrl currentStockCount createdAt sellerId isFrozen countryOfOrigin gender'
       )
       .lean(),
+
+    Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync'),
   ]);
 
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
+    latestProductSyncDate: sellerSync.lastProductSync || null,
+    latestInventorySync: sellerSync.lastInventorySync || null,
+    lastPriceSync: sellerSync.lastPriceSync || null,
     channel,
   };
 };

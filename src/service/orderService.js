@@ -23,6 +23,7 @@ import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamic
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
+import Seller from '../models/Seller.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
@@ -118,7 +119,7 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.status = status; // or original string if you prefer
     }
 
-    const [totalOrders, orders, allChannels] = await Promise.all([
+    const [totalOrders, orders, allChannels, sellerSync] = await Promise.all([
       Order.countDocuments(filter),
       Order.find(filter)
         .skip(skip)
@@ -129,6 +130,7 @@ const getAllOrders = async (query, sellerId) => {
         .lean(),
 
       Channel.find().select('_id channelId channelImageUrl'),
+      Seller.findById(sellerId).select('-_id lastOrderSync'),
     ]);
 
     const channelMap = {};
@@ -142,6 +144,7 @@ const getAllOrders = async (query, sellerId) => {
         return formatOrder(order, matchingChannel);
       }),
       appliedFilters: appliedFilters,
+      latestOrderSyncDate: sellerSync.lastOrderSync || null,
       pagination: getPagination(totalOrders, page, size),
     };
   } catch (err) {
@@ -292,9 +295,7 @@ export const getOrderById = async (id) => {
       const status = product.status?.toUpperCase() || '';
 
       // Cancelled items
-      if (
-        product.cancellationRequestedQuantity > 0
-      ) {
+      if (product.cancellationRequestedQuantity > 0) {
         cancelledItems.push({
           id: product.id,
           merchantProductNo: product.merchantProductNo,

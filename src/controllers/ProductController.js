@@ -12,10 +12,14 @@ import Seller from '#models/Seller.js';
 export const getProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query, sellerId);
+    const { products, pagination, appliedFilters, latestProductSyncDate, latestInventorySync, lastPriceSync } =
+      await productService.fetchProducts(req.query, sellerId);
     const responseData = {
       content: products || [],
       appliedFilters: appliedFilters || {},
+      latestProductSyncDate,
+      latestInventorySync,
+      lastPriceSync,
       ...pagination,
     };
     const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
@@ -462,17 +466,13 @@ export const searchProducts = async (req, res) => {
     const { channelId, search } = req.query;
     const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
 
-    const { products, pagination, channel } = await productService.searchProuctsByFilter(
-      filters,
-      req.query,
-      sellerId,
-      channelId,
-      search
-    );
+    const { products, pagination, channel, latestProductSyncDate, latestInventorySync, lastPriceSync } =
+      await productService.searchProuctsByFilter(filters, req.query, sellerId, channelId, search);
 
     const responseData = channelId
-      ? { channel, content: products || [], ...pagination }
-      : { content: products || [], ...pagination };
+      ? { channel, content: products || [], latestProductSyncDate, latestInventorySync, lastPriceSync, ...pagination }
+      : { content: products || [], latestProductSyncDate, latestInventorySync, lastPriceSync, ...pagination };
+
     const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
     return successResponse(res, message, 200, responseData);
   } catch (error) {
