@@ -1422,11 +1422,23 @@ export const validateProductExportData = async (filters, sellerId) => {
     if (orQueries.length === 1) finalFilter = orQueries[0];
     else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-    finalFilter = {
-      ...finalFilter,
-      sellerId: new mongoose.Types.ObjectId(sellerId),
-      status: { $ne: 'removed' },
-    };
+    // Check if user already has a status filter
+    const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
+
+    if (hasStatusFilter) {
+      // Merge user's status filter with 'not removed' check using $and
+      finalFilter = {
+        $and: [finalFilter, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      };
+    } else {
+      // No user status filter, just add the default
+      finalFilter = {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
+    }
 
     const products = await Product.find(finalFilter).select('_id').limit(1).lean();
 
@@ -1485,11 +1497,23 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
     if (orQueries.length === 1) finalFilter = orQueries[0];
     else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-    finalFilter = {
-      ...finalFilter,
-      sellerId: new mongoose.Types.ObjectId(sellerId),
-      status: { $ne: 'removed' },
-    };
+    // Check if user already has a status filter
+    const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
+
+    if (hasStatusFilter) {
+      // Merge user's status filter with 'not removed' check using $and
+      finalFilter = {
+        $and: [finalFilter, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      };
+    } else {
+      // No user status filter, just add the default
+      finalFilter = {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
+    }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
