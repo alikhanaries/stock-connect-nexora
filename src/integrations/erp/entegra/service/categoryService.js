@@ -1,8 +1,7 @@
 import { entegraConfig } from '#root/src/integrations/erp/entegra/config/config.js';
 const BASE_URL = `${entegraConfig?.ENTEGRA_BASE_URL}category/page=`;
-const AUTH_TOKEN = `JWT ${entegraConfig?.ENTEGRA_AUTH_TOKEN}`;
 
-export const fetchCategories = async () => {
+export const fetchCategories = async (AUTH_TOKEN) => {
   const categories = [];
   let page = 1;
 
