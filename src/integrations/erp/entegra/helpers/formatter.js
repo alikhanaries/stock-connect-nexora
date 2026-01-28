@@ -60,7 +60,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   const gender = /Kadın/i.test(p.name) ? 'Female' : /Erkek/i.test(p.name) ? 'Male' : 'Unisex';
 
   // ================= GRAND PARENT =================
-  const gpPrice = await priceConverter(currency, parseFloat(p.site_fiyat) || 0);
+  const gpPrice = await priceConverter(currency, parseFloat(p.namshi_fiyat) || 0);
   const gpSpecial = await priceConverter(currency, parseFloat(p.site_indirimli_fiyat) || 0);
 
   const grandParentObject = {
@@ -75,7 +75,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     descriptionAr: p.descriptionAr || '',
     brand: p.brand || '',
 
-    price: gpSpecial || gpPrice,
+    price: gpPrice,
     minPrice: gpSpecial,
     maxPrice: gpPrice,
     msrp: gpPrice,
@@ -97,7 +97,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
   let grandParentImages = [];
 
-  if (isImageUpdate && hasApiImages) {
+  if (isImageUpdate === true && hasApiImages === true) {
     grandParentImages = await safeProcessImages(baseImages, sellerId);
     attachImages(grandParentObject, grandParentImages);
   }
@@ -126,7 +126,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   for (const [color, colorVariants] of Object.entries(variantsByColor)) {
     const parentSku = `${grandParentSku}_${color.replace(/\s+/g, '_')}`.slice(0, 64);
 
-    const parentPrice = await priceConverter(currency, parseFloat(colorVariants[0]?.site_fiyat) || 0);
+    const parentPrice = await priceConverter(currency, parseFloat(colorVariants[0]?.namshi_fiyat) || 0);
     const parentSpecial = await priceConverter(currency, parseFloat(colorVariants[0]?.site_indirimli_fiyat) || 0);
 
     const parentObject = {
@@ -140,7 +140,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       descriptionAr: p.descriptionAr || '',
       brand: p.brand || '',
 
-      price: parentSpecial || parentPrice,
+      price: parentPrice,
       minPrice: parentSpecial,
       maxPrice: parentPrice,
       msrp: parentPrice,
@@ -164,7 +164,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
     let parentImages = [];
 
-    if (isImageUpdate && hasParentApiImages) {
+    if (isImageUpdate === true && hasParentApiImages === true) {
       parentImages = await safeProcessImages(rawParentImages, sellerId);
     }
 
@@ -183,7 +183,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
       const childSku = `${v.productCode}_${safeColor}`.slice(0, 64);
 
-      const childPrice = await priceConverter(currency, parseFloat(v.site_fiyat) || 0);
+      const childPrice = await priceConverter(currency, parseFloat(v.namshi_fiyat) || 0);
       const childSpecial = await priceConverter(currency, parseFloat(v.site_indirimli_fiyat) || 0);
 
       const childObject = {
@@ -198,7 +198,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         brand: p.brand || '',
         ean: v.barcode || v.gtin || '',
 
-        price: childSpecial || childPrice,
+        price: childPrice,
         minPrice: childSpecial,
         maxPrice: childPrice,
         msrp: childPrice,
