@@ -13,9 +13,10 @@ import {
   topFacetPipeline,
   prevRevenuePipeline,
   buildInventoryStatusPipeline,
+  isComparablePeriod,
 } from '../helpers/dashboard.js';
 
-const getOrderFlowStatus = async (sellerId, period = null) => {
+const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month } = {}) => {
   try {
     const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
 
@@ -36,11 +37,11 @@ const getOrderFlowStatus = async (sellerId, period = null) => {
       }));
     }
 
-    const currentRange = getDateRange(period);
+    const currentRange = getDateRange({ period, startDate, endDate, month });
     if (!currentRange) throw new Error(`Invalid period "${period}". Allowed: today, weekly, monthly`);
 
     // Calculate previous range
-    const previousRange = getPreviousRange(period, currentRange);
+    const previousRange = getPreviousRange({ period }, currentRange);
 
     // Aggregate current & previous
     const [currentAgg, previousAgg] = await Promise.all(
@@ -62,9 +63,10 @@ const getOrderFlowStatus = async (sellerId, period = null) => {
 
       let changePercent =
         previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : currentValue > 0 ? 100 : 0;
-
       changePercent = Number(changePercent.toFixed(1));
-      const trend = changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : '';
+      const comparable = isComparablePeriod(period);
+      if (!comparable) return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
+      const trend = changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'neutral';
       const finalChangePercent = trend === 'down' ? Math.abs(changePercent) : changePercent;
 
       return { key, label, value: currentValue, changePercent: finalChangePercent, trend };
@@ -75,13 +77,13 @@ const getOrderFlowStatus = async (sellerId, period = null) => {
   }
 };
 
-const getorderOverviewStatus = async (sellerId, period) => {
+const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, month } = {}) => {
   const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
 
-  const currentRange = getDateRange(period);
+  const currentRange = getDateRange({ period, startDate, endDate, month });
   if (!currentRange) throw new Error(`Invalid period "${period}"`);
 
-  const previousRange = getPreviousRange(period, currentRange);
+  const previousRange = getPreviousRange({ period }, currentRange);
 
   const aggregateMetrics = async ({ start, end }) => {
     const [data] = await Order.aggregate([
@@ -134,12 +136,13 @@ const getorderOverviewStatus = async (sellerId, period) => {
 
   const buildMetric = (key, label, curr, prev) => {
     const change = calcChange(curr, prev);
+    const comparable = isComparablePeriod(period);
     return {
       key,
       label,
       value: Number(curr.toFixed(2)),
-      changePercent: Math.abs(change),
-      trend: change > 0 ? 'up' : change < 0 ? 'down' : '',
+      changePercent: comparable ? Math.abs(change) : 0,
+      trend: comparable ? (change > 0 ? 'up' : change < 0 ? 'down' : 'neutral') : 'neutral',
     };
   };
 
@@ -186,13 +189,13 @@ const getShipmentAnalytics = async (sellerId, period) => {
   }));
 };
 
-const getAnalyticsTimeSeries = async (sellerId, period, metric) => {
+const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month } = {}) => {
   if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
   if (!mongoose.Types.ObjectId.isValid(sellerId)) {
     throw new Error('Invalid sellerId');
   }
   const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-  const range = getDateRange(period);
+  const range = getDateRange({ period, startDate, endDate, month });
   if (!range) throw new Error(`Invalid period "${period}"`);
 
   const pipeline = buildAggregationPipeline({ sellerObjectId, period, metric, range });

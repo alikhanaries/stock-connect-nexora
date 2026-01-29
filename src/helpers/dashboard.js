@@ -4,21 +4,92 @@ const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 const endOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 
-export const getDateRange = (period, offset = 0) => {
-  if (!['today', 'weekly', 'monthly'].includes(period)) return null;
+const isValidDate = (d) => d instanceof Date && !Number.isNaN(d.getTime());
 
+export const parseDateParam = (s) => {
+  if (!s || typeof s !== 'string') return null;
+
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (iso) {
+    const y = Number(iso[1]);
+    const m = Number(iso[2]);
+    const d = Number(iso[3]);
+    const dt = new Date(y, m - 1, d);
+    return isValidDate(dt) && dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d ? dt : null;
+  }
+
+  const dmY = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+  if (dmY) {
+    const d = Number(dmY[1]);
+    const m = Number(dmY[2]);
+    const y = Number(dmY[3]);
+    const dt = new Date(y, m - 1, d);
+    return isValidDate(dt) && dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d ? dt : null;
+  }
+
+  return null;
+};
+
+export const parseMonthParam = (s) => {
+  if (!s || typeof s !== 'string') return null;
+  const m = /^(\d{4})-(\d{2})$/.exec(s); // YYYY-MM
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  if (month < 1 || month > 12) return null;
+  return { year, monthIndex: month - 1 };
+};
+
+export const getDateRange = (input, offset = 0) => {
   const now = new Date();
+
+  const period = typeof input === 'string' ? input : input?.period;
+  const month = typeof input === 'string' ? null : input?.month;
+  const startDate = typeof input === 'string' ? null : input?.startDate;
+  const endDate = typeof input === 'string' ? null : input?.endDate;
+
+  // Custom overrides period (if both provided)
+  if (startDate || endDate) {
+    const s = parseDateParam(startDate);
+    const e = parseDateParam(endDate);
+    if (!s || !e) throw new Error('Invalid startDate/endDate. Use YYYY-MM-DD or DD/MM/YYYY.');
+    if (s.getTime() > e.getTime()) throw new Error('startDate must be <= endDate.');
+
+    return { start: startOfDay(s), end: endOfDay(e), kind: 'custom', days: null };
+  }
+
+  if (!period) return null;
+
+  // Rolling last_N_days
+  const rolling = /^last_(\d+)_days$/.exec(period);
+  if (rolling) {
+    const n = Number(rolling[1]);
+    if (!Number.isFinite(n) || n <= 0) return null;
+
+    const end = endOfDay(now);
+    const start = new Date(startOfDay(now).getTime() - (n - 1) * DAY_MS);
+    return { start, end, kind: 'rolling', days: n };
+  }
+
+  if (period === 'all') {
+    return { start: new Date(0), end: endOfDay(now), kind: 'all', days: null };
+  }
+
+  if (!['today', 'weekly', 'monthly', 'month'].includes(period)) return null;
+
   let start, end;
 
   if (period === 'today') {
     start = new Date(startOfDay(now).getTime() + offset * DAY_MS);
     end = endOfDay(start);
+    return { start, end, kind: 'today', days: 1 };
   }
 
   if (period === 'weekly') {
     const endDate = new Date(startOfDay(now).getTime() + offset * 7 * DAY_MS);
     start = new Date(endDate.getTime() - 6 * DAY_MS);
     end = endOfDay(endDate);
+    return { start, end, kind: 'weekly', days: 7 };
   }
 
   if (period === 'monthly') {
@@ -27,12 +98,44 @@ export const getDateRange = (period, offset = 0) => {
 
     start = new Date(year, month, 1);
     end = endOfDay(new Date(year, month + 1, 0));
+    return { start, end, kind: 'monthly', days: null };
   }
 
-  return { start, end };
+  if (period === 'month') {
+    const parsed = parseMonthParam(month);
+    if (!parsed) throw new Error('Invalid month. Use "YYYY-MM" (e.g., 2026-05).');
+    start = new Date(parsed.year, parsed.monthIndex, 1);
+    end = endOfDay(new Date(parsed.year, parsed.monthIndex + 1, 0));
+    return { start, end, kind: 'month', days: null };
+  }
+
+  return null;
 };
 
-export const getPreviousRange = (period, currentRange) => {
+export const getPreviousRange = (input, currentRange) => {
+  const period = typeof input === 'string' ? input : input?.period;
+
+  if (currentRange?.kind === 'custom') {
+    const start = currentRange.start;
+    const end = currentRange.end;
+    const spanMs = end.getTime() - start.getTime() + 1;
+    const prevEnd = new Date(start.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - spanMs + 1);
+    return { start: startOfDay(prevStart), end: endOfDay(prevEnd) };
+  }
+
+  // Rolling last_N_days
+  if (currentRange?.kind === 'rolling' && currentRange.days) {
+    const n = currentRange.days;
+    const prevEnd = new Date(currentRange.start.getTime() - 1);
+    const prevStart = new Date(startOfDay(prevEnd).getTime() - (n - 1) * DAY_MS);
+    return { start: prevStart, end: endOfDay(prevEnd) };
+  }
+
+  if (period === 'all') {
+    return { start: new Date(0), end: new Date(0) };
+  }
+
   const { start } = currentRange;
 
   switch (period) {
@@ -50,12 +153,23 @@ export const getPreviousRange = (period, currentRange) => {
         end: new Date(start.getTime() - 1),
       };
     case 'monthly':
+    case 'month':
       return {
         start: new Date(start.getFullYear(), start.getMonth() - 1, 1),
         end: new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999),
       };
+    default:
+      // fallback: try to infer from currentRange.days if present
+      if (currentRange?.days) {
+        const prevEnd = new Date(start.getTime() - 1);
+        const prevStart = new Date(startOfDay(prevEnd).getTime() - (currentRange.days - 1) * DAY_MS);
+        return { start: prevStart, end: endOfDay(prevEnd) };
+      }
+      return { start: new Date(0), end: new Date(0) };
   }
 };
+
+export const isComparablePeriod = (period) => ['today', 'weekly', 'monthly'].includes(period);
 
 export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range }) => {
   const isMonthly = period === 'monthly';
