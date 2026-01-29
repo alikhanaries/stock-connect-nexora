@@ -609,8 +609,11 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     const isNewSku = !existingSkuSet.has(product.productSkuCode);
 
     if (isNewSku && isSimple) {
-      if (typeof product.price !== 'number' || product.price <= 0) {
-        rowErrors.push('Price must be greater than 0 for simple products.');
+      if (typeof product.noonPrice !== 'number' || product.noonPrice <= 0) {
+        rowErrors.push('Noon Price must be greater than 0 for simple products.');
+      }
+      if (typeof product.namshiPrice !== 'number' || product.namshiPrice <= 0) {
+        rowErrors.push('Namshi Price must be greater than 0 for simple products.');
       }
     }
 
@@ -641,6 +644,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   // Prepare bulk write operations
   const bulkOps = finalValidProducts
     .map((product) => {
+      // console.log({ product });
       const existing = existingMap.get(product.productSkuCode);
 
       if (['removed', undefined, null].includes(existing?.status)) {

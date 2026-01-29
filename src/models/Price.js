@@ -17,7 +17,12 @@ const PriceSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    price: {
+    noonPrice: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    namshiPrice: {
       type: Number,
       required: true,
       min: 0,
