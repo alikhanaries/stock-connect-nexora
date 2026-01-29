@@ -4,7 +4,6 @@ import { config } from '#config/config.js';
 import { failResponse, errorResponse } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
 
 export const unicommerceAuthMiddleware = async (req, res, next) => {
-  console.time('authMiddleware');
   try {
     let token;
 
@@ -21,7 +20,6 @@ export const unicommerceAuthMiddleware = async (req, res, next) => {
       if (!user || user.isDeleted) {
         failResponse(res, 403, { message: 'User unauthorized' });
       }
-      console.timeEnd('authMiddleware');
       req.user = user;
       req.sellerIds = decoded.sellerIds;
       next();
