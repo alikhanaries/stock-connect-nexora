@@ -703,7 +703,7 @@ export const ayMakanWebHookService = async (data) => {
           data?.tracking?.delivery_date || new Date(),
           shipmentData.merchantShipmentNo
         );
-      }, 'updating delivery state in ChannelEngine');
+      }, 'Updating delivery state in ChannelEngine');
     }
 
     // ---------------- UPDATE SHIPMENT ----------------
@@ -718,45 +718,72 @@ export const ayMakanWebHookService = async (data) => {
 
     // ---------------- ORDER STATUS DERIVATION ----------------
     const order = await Order.findById(shipmentData.orderId).lean();
-    const skuList = order.orderSkuList?.skuList || [];
+    if (!order) throw new Error('Order not found for shipment');
 
-    // SKU-based flags
-    let allDelivered = true;
-    let hasAnyShipped = false;
+    const allShipments = await Shipment.find({
+      orderId: shipmentData.orderId,
+      status: { $ne: 'CANCELED' },
+    }).lean();
 
-    for (const sku of skuList) {
-      if (sku.status !== 'DELIVERED') allDelivered = false;
-      if (sku.status === 'SHIPPED' || sku.status === 'DELIVERED') {
-        hasAnyShipped = true;
+    // 8. BUILD SHIPPED/DELIVERED QTY MAPS
+
+    const shippedQtyBySku = {};
+    const deliveredQtyBySku = {};
+
+    for (const shipment of allShipments) {
+      for (const p of shipment.products || []) {
+        const key = p.orderLineId; // Number, matches sku.id
+
+        if (shipment.status === 'SHIPPED') {
+          shippedQtyBySku[key] = (shippedQtyBySku[key] || 0) + (p.quantity || 0);
+        }
+
+        if (shipment.status === 'DELIVERED') {
+          deliveredQtyBySku[key] = (deliveredQtyBySku[key] || 0) + (p.quantity || 0);
+        }
       }
     }
 
-    // SHIPMENT-based truth (CRITICAL FIX)
-    const activeShipmentsCount = await Shipment.countDocuments({
-      orderId: shipmentData.orderId,
-      status: { $ne: 'CANCELED' },
-    });
+    // 9. DERIVE ORDER STATUS
 
-    const allShipmentsCanceled = activeShipmentsCount === 0;
+    const skuList = order.orderSkuList?.skuList || [];
+    let totalEffectiveQty = 0;
+    let allDelivered = true;
+    let allFullyShipped = true;
+    const hasAnyShipment = allShipments.length > 0;
+
+    for (const sku of skuList) {
+      const key = sku.id; // Number
+      const orderedQty = sku.quantity || 0;
+      const cancelledQty = sku.cancellationRequestedQuantity || 0;
+      const effectiveQty = Math.max(orderedQty - cancelledQty, 0);
+
+      totalEffectiveQty += effectiveQty;
+
+      const shippedQty = shippedQtyBySku[key] || 0;
+      const deliveredQty = deliveredQtyBySku[key] || 0;
+
+      if (deliveredQty < effectiveQty) allDelivered = false;
+      if (shippedQty < effectiveQty || deliveredQty > 0) allFullyShipped = false;
+    }
 
     let finalOrderStatus;
 
-    if (allShipmentsCanceled) {
-      // ONLY case where order can go back to NEW
-      finalOrderStatus = 'NEW';
-    } else if (allDelivered) {
-      finalOrderStatus = 'DELIVERED';
-    } else if (hasAnyShipped) {
-      finalOrderStatus = 'SHIPPED';
-    } else {
-      finalOrderStatus = 'IN_PROGRESS';
-    }
+    if (totalEffectiveQty === 0) finalOrderStatus = 'NEW';
+    else if (allDelivered) finalOrderStatus = 'DELIVERED';
+    else if (allFullyShipped) finalOrderStatus = 'SHIPPED';
+    else if (hasAnyShipment) finalOrderStatus = 'IN_PROGRESS';
+    else finalOrderStatus = 'NEW';
 
-    // ---------------- STATUS PRIORITY GUARD ----------------
+    // 10. ORDER STATUS PRIORITY GUARD
+
+    const currentStatus = (order.status || '').toUpperCase().trim();
+    const newStatus = finalOrderStatus.toUpperCase().trim();
+
     const canUpdate =
-      finalOrderStatus === 'NEW'
-        ? order.status !== 'NEW'
-        : ORDER_PRIORITY.indexOf(finalOrderStatus) > ORDER_PRIORITY.indexOf(order.status);
+      newStatus === 'NEW'
+        ? currentStatus !== 'NEW'
+        : ORDER_PRIORITY.indexOf(newStatus) > ORDER_PRIORITY.indexOf(currentStatus);
 
     if (canUpdate) {
       await Order.findByIdAndUpdate(order._id, { status: finalOrderStatus });
@@ -768,13 +795,13 @@ export const ayMakanWebHookService = async (data) => {
             details: {
               status: finalOrderStatus,
               description:
-                finalOrderStatus === 'NEW'
-                  ? 'All shipments canceled, order reset'
-                  : finalOrderStatus === 'DELIVERED'
-                    ? 'All items delivered'
-                    : finalOrderStatus === 'SHIPPED'
-                      ? 'One or more items shipped'
-                      : 'Order in progress',
+                finalOrderStatus === 'DELIVERED'
+                  ? 'All items delivered'
+                  : finalOrderStatus === 'SHIPPED'
+                    ? 'All items shipped'
+                    : finalOrderStatus === 'IN_PROGRESS'
+                      ? 'Order in progress'
+                      : 'All items cancelled',
               createdAt: convetDateToUTC(new Date()),
             },
           },
@@ -787,6 +814,7 @@ export const ayMakanWebHookService = async (data) => {
       success: true,
       message: `Shipment ${data.tracking} updated successfully`,
       shipmentId: shipmentData._id,
+      orderStatus: finalOrderStatus,
     };
   } catch (error) {
     console.error('ayMakanWebHookService error:', error);
