@@ -33,7 +33,7 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
         label,
         value: statuses.reduce((sum, s) => sum + (statusMap[s.toUpperCase()] || 0), 0),
         changePercent: 0,
-        trend: '',
+        trend: 'neutral',
       }));
     }
 
