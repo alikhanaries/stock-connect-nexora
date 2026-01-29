@@ -1,6 +1,7 @@
 import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
 import mongoose from 'mongoose';
 import Seller from '#models/Seller.js';
+import { failResponse, errorResponse } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
 
 export const verifyUnicommerceSellerAccess = async (req, res, next) => {
   try {
@@ -16,7 +17,7 @@ export const verifyUnicommerceSellerAccess = async (req, res, next) => {
     }
     if (!Array.isArray(connectedSellerIds)) {
       console.error('Authorization Error: req.sellerIds was not an array. Check preceding middleware.');
-      return res.status(500).send({ message: 'Server configuration error' });
+      errorResponse(res, 500, { message: 'Server configuration error' });
     }
 
     if (ROLES_BASED_USER_FETCHING[user.role]) {
@@ -24,11 +25,11 @@ export const verifyUnicommerceSellerAccess = async (req, res, next) => {
         req.sellerId = new mongoose.Types.ObjectId(sellerId);
         return next();
       } else {
-        return res.status(400).send({ message: 'You do not have access to this seller' });
+        failResponse(res, 400, { message: 'You do not have access to this seller' });
       }
     }
   } catch (error) {
     console.error('Error in verifySellerAccess middleware:', error.message);
-    return res.status(500).send({ message: 'An internal server error occurred during authorization.' });
+    errorResponse(res, 500, { message: 'An internal server error occurred during authorization.' });
   }
 };

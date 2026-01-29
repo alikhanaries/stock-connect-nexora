@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '#models/User.js';
 import { config } from '#config/config.js';
+import { failResponse, errorResponse } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
 
 export const unicommerceAuthMiddleware = async (req, res, next) => {
   console.time('authMiddleware');
@@ -11,14 +12,14 @@ export const unicommerceAuthMiddleware = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
     }
     if (!token) {
-      return res.status(401).send({ message: 'Authentication token is required' });
+      failResponse(res, 401, { message: 'Authentication token is required' });
     }
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
 
       const user = await User.findById(decoded.id).lean();
       if (!user || user.isDeleted) {
-        return res.status(403).send({ message: 'User unauthorized' });
+        failResponse(res, 403, { message: 'User unauthorized' });
       }
       console.timeEnd('authMiddleware');
       req.user = user;
@@ -26,10 +27,10 @@ export const unicommerceAuthMiddleware = async (req, res, next) => {
       next();
     } catch (error) {
       console.log('JWT verification error:', error.message);
-      return res.status(401).send({ message: 'User unauthorized' });
+      failResponse(res, 401, { message: 'User unauthorized' });
     }
   } catch (error) {
     console.log('authMiddleware error:', error.message);
-    return res.status(500).send({ message: 'Server error' });
+    errorResponse(res, 500, { message: 'Server error' });
   }
 };
