@@ -39,9 +39,10 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
 
     const currentRange = getDateRange({ period, startDate, endDate, month });
     if (!currentRange) throw new Error(`Invalid period "${period}". Allowed: today, weekly, monthly`);
+    const comparable = isComparablePeriod(period);
 
     // Calculate previous range
-    const previousRange = getPreviousRange({ period }, currentRange);
+    const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
 
     // Aggregate current & previous
     const [currentAgg, previousAgg] = await Promise.all(
@@ -64,7 +65,6 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
       let changePercent =
         previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : currentValue > 0 ? 100 : 0;
       changePercent = Number(changePercent.toFixed(1));
-      const comparable = isComparablePeriod(period);
       if (!comparable) return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
       const trend = changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'neutral';
       const finalChangePercent = trend === 'down' ? Math.abs(changePercent) : changePercent;
@@ -83,7 +83,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
   const currentRange = getDateRange({ period, startDate, endDate, month });
   if (!currentRange) throw new Error(`Invalid period "${period}"`);
 
-  const previousRange = getPreviousRange({ period }, currentRange);
+  const comparable = isComparablePeriod(period);
+  const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
 
   const aggregateMetrics = async ({ start, end }) => {
     const [data] = await Order.aggregate([
@@ -136,7 +137,6 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const buildMetric = (key, label, curr, prev) => {
     const change = calcChange(curr, prev);
-    const comparable = isComparablePeriod(period);
     return {
       key,
       label,

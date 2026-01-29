@@ -72,7 +72,15 @@ export const getDateRange = (input, offset = 0) => {
   }
 
   if (period === 'all') {
-    return { start: new Date(0), end: endOfDay(now), kind: 'all', days: null };
+    const start = new Date(2024, 0, 1);
+    start.setHours(0, 0, 0, 0);
+
+    return {
+      start,
+      end: endOfDay(now),
+      kind: 'all',
+      days: null,
+    };
   }
 
   if (!['today', 'weekly', 'monthly', 'month'].includes(period)) return null;
@@ -112,30 +120,7 @@ export const getDateRange = (input, offset = 0) => {
   return null;
 };
 
-export const getPreviousRange = (input, currentRange) => {
-  const period = typeof input === 'string' ? input : input?.period;
-
-  if (currentRange?.kind === 'custom') {
-    const start = currentRange.start;
-    const end = currentRange.end;
-    const spanMs = end.getTime() - start.getTime() + 1;
-    const prevEnd = new Date(start.getTime() - 1);
-    const prevStart = new Date(prevEnd.getTime() - spanMs + 1);
-    return { start: startOfDay(prevStart), end: endOfDay(prevEnd) };
-  }
-
-  // Rolling last_N_days
-  if (currentRange?.kind === 'rolling' && currentRange.days) {
-    const n = currentRange.days;
-    const prevEnd = new Date(currentRange.start.getTime() - 1);
-    const prevStart = new Date(startOfDay(prevEnd).getTime() - (n - 1) * DAY_MS);
-    return { start: prevStart, end: endOfDay(prevEnd) };
-  }
-
-  if (period === 'all') {
-    return { start: new Date(0), end: new Date(0) };
-  }
-
+export const getPreviousRange = (period, currentRange) => {
   const { start } = currentRange;
 
   switch (period) {
@@ -153,19 +138,10 @@ export const getPreviousRange = (input, currentRange) => {
         end: new Date(start.getTime() - 1),
       };
     case 'monthly':
-    case 'month':
       return {
         start: new Date(start.getFullYear(), start.getMonth() - 1, 1),
         end: new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999),
       };
-    default:
-      // fallback: try to infer from currentRange.days if present
-      if (currentRange?.days) {
-        const prevEnd = new Date(start.getTime() - 1);
-        const prevStart = new Date(startOfDay(prevEnd).getTime() - (currentRange.days - 1) * DAY_MS);
-        return { start: prevStart, end: endOfDay(prevEnd) };
-      }
-      return { start: new Date(0), end: new Date(0) };
   }
 };
 
@@ -174,6 +150,7 @@ export const isComparablePeriod = (period) => ['today', 'weekly', 'monthly'].inc
 export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range }) => {
   const isMonthly = period === 'monthly';
   const isToday = period === 'today';
+  const isAll = period === 'all';
 
   const groupId = isMonthly
     ? {
@@ -181,32 +158,42 @@ export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range
           $ceil: { $divide: [{ $dayOfMonth: '$orderDate' }, 7] },
         },
       }
-    : isToday
+    : isAll
       ? {
-          hour: {
+          month: {
             $dateToString: {
-              format: '%H:00',
-              date: {
-                $dateTrunc: {
-                  date: '$orderDate',
-                  unit: 'hour',
-                  binSize: 3,
-                  timezone: 'UTC',
-                },
-              },
-              timezone: 'UTC',
-            },
-          },
-        }
-      : {
-          date: {
-            $dateToString: {
-              format: '%Y-%m-%d',
+              format: '%Y-%m',
               date: '$orderDate',
               timezone: 'UTC',
             },
           },
-        };
+        }
+      : isToday
+        ? {
+            hour: {
+              $dateToString: {
+                format: '%H:00',
+                date: {
+                  $dateTrunc: {
+                    date: '$orderDate',
+                    unit: 'hour',
+                    binSize: 3,
+                    timezone: 'UTC',
+                  },
+                },
+                timezone: 'UTC',
+              },
+            },
+          }
+        : {
+            date: {
+              $dateToString: {
+                format: '%Y-%m-%d',
+                date: '$orderDate',
+                timezone: 'UTC',
+              },
+            },
+          };
 
   const valueExpression =
     metric === 'sales'
@@ -226,7 +213,13 @@ export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range
     },
     { $group: { _id: groupId, value: valueExpression } },
     {
-      $sort: isMonthly ? { '_id.week': 1 } : isToday ? { '_id.hour': 1 } : { '_id.date': 1 },
+      $sort: isMonthly
+        ? { '_id.week': 1 }
+        : isAll
+          ? { '_id.month': 1 }
+          : isToday
+            ? { '_id.hour': 1 }
+            : { '_id.date': 1 },
     },
   ];
 };
@@ -236,6 +229,12 @@ const toISODate = (d) => {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+};
+
+const toISOMonth = (d) => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${yyyy}-${mm}`;
 };
 
 const buildDayBuckets = (start, end) => {
@@ -249,6 +248,18 @@ const buildDayBuckets = (start, end) => {
   while (cur <= last) {
     out.push(toISODate(cur));
     cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+};
+
+const buildMonthBuckets = (start, end) => {
+  const out = [];
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+  const last = new Date(end.getFullYear(), end.getMonth(), 1);
+
+  while (cur <= last) {
+    out.push(toISOMonth(cur));
+    cur.setMonth(cur.getMonth() + 1);
   }
   return out;
 };
@@ -293,6 +304,16 @@ export const normalizeSeries = (period, raw = [], range) => {
 
   if (period === 'today') {
     return normalizeTodayHours(raw);
+  }
+
+  if (period === 'all') {
+    const map = new Map(raw.map((r) => [r._id.month, r.value]));
+    const months = buildMonthBuckets(range.start, range.end);
+
+    return months.map((m) => ({
+      label: m,
+      value: map.get(m) || 0,
+    }));
   }
 
   const map = new Map(raw.map((r) => [r._id.date, r.value]));
