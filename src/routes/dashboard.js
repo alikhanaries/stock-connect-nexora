@@ -11,6 +11,8 @@ import {
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
   orderFlowStatusValidator,
+  orderOverviewValidator,
+  orderAnalyticsValidator,
   statusValidator,
   inventoryStatusValidator,
   topOrdersValidator,
@@ -29,7 +31,7 @@ dashboardRoutes.get(
 
 dashboardRoutes.get(
   '/order-overview',
-  orderFlowStatusValidator,
+  orderOverviewValidator,
   checkLanguage,
   authMiddleware,
   verifySellerAccess,
@@ -38,7 +40,7 @@ dashboardRoutes.get(
 
 dashboardRoutes.get(
   '/order-analytics',
-  orderFlowStatusValidator,
+  orderAnalyticsValidator,
   checkLanguage,
   authMiddleware,
   verifySellerAccess,
