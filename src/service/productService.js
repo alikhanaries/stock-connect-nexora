@@ -644,7 +644,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   // Prepare bulk write operations
   const bulkOps = finalValidProducts
     .map((product) => {
-      // console.log({ product });
       const existing = existingMap.get(product.productSkuCode);
 
       if (['removed', undefined, null].includes(existing?.status)) {
