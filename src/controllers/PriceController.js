@@ -48,10 +48,14 @@ export const importPriceFromGoogleSheet = async (req, res) => {
 export const updateSingleProductPrice = async (req, res) => {
   try {
     const sellerId = req.sellerId; // from auth middleware
-    const { productId, namshiPrice, noonPrice, minPrice, maxPrice, msrp, purchasePrice } = req.body;
+    const { productId, price, namshiPrice, noonPrice, minPrice, maxPrice, msrp, purchasePrice } = req.body;
 
     // ---- Mandatory validation ----
-    if (!productId || typeof namshiPrice !== 'number' || namshiPrice < 0) {
+    if (!productId || typeof price !== 'number' || price < 0) {
+      return failResponse(res, req.locale.INVALID_INPUT, 400);
+    }
+
+    if (typeof namshiPrice !== 'number' || namshiPrice < 0) {
       return failResponse(res, req.locale.INVALID_INPUT, 400);
     }
 
@@ -62,6 +66,7 @@ export const updateSingleProductPrice = async (req, res) => {
     // ---- Build payload with optional fields ----
     const pricePayload = {
       productId,
+      price,
       namshiPrice,
       noonPrice,
     };

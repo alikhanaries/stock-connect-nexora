@@ -14,6 +14,7 @@ export const updateSingleProductPriceValidator = validate(async (req) => {
         .regex(/^[0-9a-fA-F]+$/, 'productId must be a hex string'),
 
       // Mandatory
+      price: z.number().min(0, 'price must be 0 or greater'),
       namshiPrice: z.number().min(0, 'namshiPrice must be 0 or greater'),
       noonPrice: z.number().min(0, 'noonPrice must be 0 or greater'),
 

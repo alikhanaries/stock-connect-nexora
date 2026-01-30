@@ -145,6 +145,7 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
     const buildSet = (data) => {
       const set = { updatedAt: now };
 
+      if (data.price !== undefined) set.price = data.price;
       if (data.namshiPrice !== undefined) set.namshiPrice = data.namshiPrice;
       if (data.noonPrice !== undefined) set.noonPrice = data.noonPrice;
       if (data.minPrice !== undefined) set.minPrice = data.minPrice;
@@ -260,6 +261,7 @@ export const updateSingleProductPrice = async (
   try {
     const { productId } = pricePayload;
 
+    const priceValue = Number(pricePayload.price);
     const namshiPriceValue = Number(pricePayload.namshiPrice);
     const noonPriceValue = Number(pricePayload.noonPrice);
     const now = new Date();
@@ -275,6 +277,7 @@ export const updateSingleProductPrice = async (
 
     // 2. Build $set dynamically (ONLY provided fields)
     const setData = {
+      price: priceValue,
       namshiPrice: namshiPriceValue,
       noonPrice: noonPriceValue,
       updatedAt: now,
@@ -320,6 +323,7 @@ export const updateSingleProductPrice = async (
 
     // 4. Update product price only (optional fields stay in Price)
     const productSet = {
+      price: priceValue,
       namshiPrice: namshiPriceValue,
       noonPrice: noonPriceValue,
       updatedAt: now,
@@ -336,6 +340,7 @@ export const updateSingleProductPrice = async (
     return {
       productId,
       priceId: priceDoc._id,
+      price: priceDoc.price,
       namshiPrice: priceDoc.namshiPrice,
       noonPrice: priceDoc.noonPrice,
       updatedAt: priceDoc.updatedAt,

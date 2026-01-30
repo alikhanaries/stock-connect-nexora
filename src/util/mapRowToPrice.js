@@ -22,8 +22,13 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
   }
 
   // Price (mandatory)
-  if (normalized.namshiprice === '' || normalized.noonprice === '') {
+  if (normalized.price === '' || normalized.namshiprice === '' || normalized.noonprice === '') {
     errors.push(`${locale.PRICE_MISSING} ${normalized.productskucode}`);
+  }
+
+  const price = Number(normalized.price);
+  if (normalized.price !== '' && (Number.isNaN(price) || price < 0)) {
+    errors.push(`${locale.INVALID_PRICE} ${normalized.productskucode}`);
   }
 
   const namshiPrice = Number(normalized.namshiprice);
@@ -75,6 +80,7 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
   const priceData = {
     rowNumber,
     productSkuCode: normalized.productskucode,
+    price,
     namshiPrice,
     noonPrice,
   };
