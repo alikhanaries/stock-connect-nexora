@@ -609,6 +609,9 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     const isNewSku = !existingSkuSet.has(product.productSkuCode);
 
     if (isNewSku && isSimple) {
+      if (typeof product.price !== 'number' || product.price <= 0) {
+        rowErrors.push('Price must be greater than 0 for simple products.');
+      }
       if (typeof product.noonPrice !== 'number' || product.noonPrice <= 0) {
         rowErrors.push('Noon Price must be greater than 0 for simple products.');
       }

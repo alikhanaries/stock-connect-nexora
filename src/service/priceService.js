@@ -495,6 +495,7 @@ export const upsertPricesForProducts = async ({ sellerId, productSkuCodes, batch
       _id: 1,
       sellerId: 1,
       productSkuCode: 1,
+      price: 1,
       noonPrice: 1,
       namshiPrice: 1,
       minPrice: 1,
@@ -518,6 +519,7 @@ export const upsertPricesForProducts = async ({ sellerId, productSkuCodes, batch
           productSkuCode: product.productSkuCode,
         },
         $set: {
+          price: product.price,
           noonPrice: product.noonPrice,
           namshiPrice: product.namshiPrice,
           minPrice: product.minPrice ?? undefined,

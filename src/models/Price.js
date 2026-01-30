@@ -17,6 +17,11 @@ const PriceSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
     noonPrice: {
       type: Number,
       required: true,

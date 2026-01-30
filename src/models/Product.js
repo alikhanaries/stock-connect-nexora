@@ -21,6 +21,7 @@ const ProductSchema = new mongoose.Schema(
     brand: { type: String, trim: true },
     attributes: { type: String, trim: true },
     ean: { type: String, trim: true, unique: false },
+    price: { type: Number, required: true },
     noonPrice: { type: Number, required: true },
     namshiPrice: { type: Number, required: true },
     minPrice: { type: Number },
