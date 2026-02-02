@@ -27,6 +27,7 @@ import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
 import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
 import { upsertPricesForProducts } from '../service/priceService.js';
+import { chunkArray, getExistingProductsBySkuFromCE, removeProductsFromCE } from './channel/ceService.js';
 
 const {
   CHANNEL_ENGINE_BASE_URL,
@@ -42,6 +43,7 @@ const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
 const MAX_RETRIES = 3;
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
+const SKU_BATCH_SIZE = 50;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 
@@ -328,71 +330,61 @@ const validateProducts = async (channelId, sellerId) => {
   ).lean();
 
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
-  if (!skuCodes.length) return { validProducts: [] };
+  if (!skuCodes.length) {
+    return { activeProducts: [], inactiveProducts: [] };
+  }
 
-  // Get products for those SKUs (child products)
-  const childProducts = await Product.find({
+  // Get products for those SKUs
+  const products = await Product.find({
     sellerId,
     productSkuCode: { $in: skuCodes },
-    status: 'active',
-    $or: [
-      { syncedAt: null },
-      {
-        $expr: { $gt: ['$updatedAt', '$syncedAt'] }, // only push products updatedAt since last sync
-      },
-    ],
+    $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
   }).lean();
 
-  // If no updated children → nothing to push
-  if (childProducts.length === 0) {
-    return { validProducts: [] };
+  if (!products.length) {
+    return { activeProducts: [], inactiveProducts: [] };
   }
-  // Collect parent SKUs from child products
-  const parentSkuCodes = new Set();
-  for (const p of childProducts) {
-    if (p.parentProductSkuCode) parentSkuCodes.add(p.parentProductSkuCode);
-    if (p.grandParentProductSkuCode) parentSkuCodes.add(p.grandParentProductSkuCode);
+  //  Split by status
+  const activeProducts = [];
+  const inactiveProducts = [];
+  for (const product of products) {
+    if (product.status === 'active') {
+      activeProducts.push(product);
+    } else if (product.status === 'inactive') {
+      inactiveProducts.push(product);
+    }
+  }
+  //  Collect parent & grandparent SKUs (only from ACTIVE products)
+  const hierarchySkuSet = new Set();
+  for (const p of activeProducts) {
+    if (p.parentProductSkuCode) hierarchySkuSet.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) hierarchySkuSet.add(p.grandParentProductSkuCode);
   }
 
-  // Fetch parent products
-  const parentProducts = parentSkuCodes.size
+  //  Fetch parent / grandparent products
+  const hierarchyProducts = hierarchySkuSet.size
     ? await Product.find({
         sellerId,
-        productSkuCode: { $in: [...parentSkuCodes] },
-        status: 'active',
+        productSkuCode: { $in: [...hierarchySkuSet] },
         $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
       }).lean()
     : [];
 
-  // Check if those parents have any grandparent
-  const grandParentSkuCodes = new Set();
-  for (const p of parentProducts) {
-    if (p.grandParentProductSkuCode) grandParentSkuCodes.add(p.grandParentProductSkuCode);
-  }
-
-  // Fetch grandparent products (if any)
-  const grandParentProducts = grandParentSkuCodes.size
-    ? await Product.find({
-        sellerId,
-        productSkuCode: { $in: [...grandParentSkuCodes] },
-        status: 'active',
-        $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
-      }).lean()
-    : [];
-
-  // Combine all (child + parent + grandparent) — remove duplicates
-  const allProductsMap = new Map();
-  [...childProducts, ...parentProducts, ...grandParentProducts].forEach((p) => {
-    allProductsMap.set(p.productSkuCode, p);
+  //  Merge ACTIVE hierarchy (dedupe by SKU)
+  const activeProductMap = new Map();
+  [...activeProducts, ...hierarchyProducts].forEach((p) => {
+    if (p.status === 'active') {
+      activeProductMap.set(p.productSkuCode, p);
+    }
   });
-  const validatedProducts = Array.from(allProductsMap.values());
 
   return {
-    validProducts: validatedProducts,
+    activeProducts: Array.from(activeProductMap.values()),
+    inactiveProducts,
   };
 };
 
-export const pushProductsAsync = async (products, channelId, sellerId) => {
+export const pushActiveProductsToChannel = async (products, channelId, sellerId) => {
   const channel = await Channel.findOne({ channelId }).lean();
 
   if (!channel) {
@@ -456,6 +448,34 @@ export const pushProductsAsync = async (products, channelId, sellerId) => {
     )
   );
 };
+
+export const pushInActiveProductsToChannel = async (inactiveSkuList = []) => {
+  if (!inactiveSkuList.length) return;
+  const skuBatches = chunkArray(
+    inactiveSkuList.map((sku) => sku.trim().toUpperCase()),
+    SKU_BATCH_SIZE
+  );
+  const skusToRemove = [];
+  for (const batch of skuBatches) {
+    const existingProducts = await getExistingProductsBySkuFromCE(batch);
+    const existingSkuSet = new Set(existingProducts.map((p) => p.MerchantProductNo?.toUpperCase()));
+    batch.forEach((sku) => {
+      if (existingSkuSet.has(sku)) {
+        skusToRemove.push(sku);
+      }
+    });
+  }
+  if (!skusToRemove.length) {
+    return;
+  }
+  //  delete only existing SKUs
+  const result = await removeProductsFromCE(skusToRemove);
+  if (!result?.success) {
+    throw new Error(result?.message || 'Failed to remove inactive products from ChannelEngine');
+  }
+  return result;
+};
+
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
@@ -1593,7 +1613,8 @@ export default {
   getAllProductIdsBySellerId,
   unlinkProductFromChannel,
   validateProducts,
-  pushProductsAsync,
+  pushActiveProductsToChannel,
+  pushInActiveProductsToChannel,
   validateProductExportData,
   exportProductsToCSV,
   getProductById,
