@@ -5,9 +5,9 @@ import { errorLog } from '#middleware/index.js';
 export const getOrderFlow = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { period } = req.query;
+    const { period, startDate, endDate, month } = req.query;
 
-    const stats = await dashboardService.getOrderFlowStatus(sellerId, period);
+    const stats = await dashboardService.getOrderFlowStatus(sellerId, period, { startDate, endDate, month });
 
     if (!stats) {
       return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
@@ -23,9 +23,9 @@ export const getOrderFlow = async (req, res) => {
 export const getorderOverview = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { period } = req.query;
+    const { period, startDate, endDate, month } = req.query;
 
-    const status = await dashboardService.getorderOverviewStatus(sellerId, period);
+    const status = await dashboardService.getorderOverviewStatus(sellerId, period, { startDate, endDate, month });
     if (!status) {
       return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
     }
@@ -57,13 +57,60 @@ export const getShipmentAnalytics = async (req, res) => {
 export const getAnalytics = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { period, metric } = req.query;
+    const { period, metric, startDate, endDate, month } = req.query;
 
-    const data = await dashboardService.getAnalyticsTimeSeries(sellerId, period, metric);
+    const data = await dashboardService.getAnalyticsTimeSeries(sellerId, period, metric, { startDate, endDate, month });
     if (!data) {
       return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
     }
     return Responses.successResponse(res, req.locale.ORDER_STATUS_STATS_FETCHED_SUCCESSFULLY, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const getInventoryStatus = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { period } = req.query;
+
+    const data = await dashboardService.getInventoryStatus(sellerId, period);
+    if (!data) {
+      return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
+    }
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const getTopPerformersProducts = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { period, type } = req.query;
+    const data = await dashboardService.getTopPerformersProducts(sellerId, period, type);
+    if (!data) {
+      return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
+    }
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const getSalesByChannel = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { period } = req.query;
+
+    const data = await dashboardService.getSalesByChannel(sellerId, period);
+    if (!data) {
+      return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
+    }
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);

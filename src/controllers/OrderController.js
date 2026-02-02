@@ -11,16 +11,21 @@ import {
 
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
+import { updateSyncDate } from '../helpers/updateSyncDate.js';
 
 export const getAllOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { data, appliedFilters, pagination } = await orderService.getAllOrders(req.query, sellerId);
+    const { data, appliedFilters, pagination, latestOrderSyncDate } = await orderService.getAllOrders(
+      req.query,
+      sellerId
+    );
 
     if (!data.length) {
       return Responses.successResponse(res, req.locale.NO_ORDERS_FOUND, 200, {
         content: [],
         appliedFilters: appliedFilters || {},
+        latestOrderSyncDate,
         ...pagination,
       });
     }
@@ -28,6 +33,7 @@ export const getAllOrders = async (req, res) => {
     return Responses.successResponse(res, req?.locale?.ORDERS_FETCHED_SUCCESSFULLY, 200, {
       content: data,
       appliedFilters: appliedFilters || {},
+      latestOrderSyncDate,
       ...pagination,
     });
   } catch (error) {
@@ -117,7 +123,7 @@ export const getSyncedOrders = async (req, res) => {
     }
 
     const [dataSavedInDb, response] = await Promise.allSettled([
-      orderService.processOrders(data),
+      orderService.processOrders(data, sellerId),
       getSyncedOrdersOcp(sellerId),
     ]);
 
@@ -128,6 +134,8 @@ export const getSyncedOrders = async (req, res) => {
     const newUpdateCount =
       (dataSavedInDb?.value?.data?.upsertedCount ? dataSavedInDb?.value?.data?.upsertedCount : 0) +
       (response?.value?.data?.upsertedCount ? response?.value?.data?.upsertedCount : 0);
+
+    await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
 
     const message =
       newUpdateCount > 0

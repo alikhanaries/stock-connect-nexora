@@ -1,6 +1,6 @@
 import Inventory from '#models/Inventory.js';
 import Product from '#models/Product.js';
-import { mapRowToInventory } from '#utils/mapRowToInventory.js';
+import { mapRowToInventory, getSellerNameById, getProductStatus } from '#utils/mapRowToInventory.js';
 import { config } from '../config/config.js';
 import csv from 'csv-parser';
 import fs from 'fs';
@@ -8,6 +8,7 @@ import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
 import { ALLOWEDMARKETPLACES } from '#constants/common.js';
+import { updateSyncDate } from '#helpers/updateSyncDate.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -85,6 +86,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       errorDetails,
     };
   }
+  const sellerName = await getSellerNameById(sellerId);
 
   //2. Fetch products
   const products = await Product.find(
@@ -157,6 +159,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         },
       });
     }
+    const prodStatus = getProductStatus(sellerName, currentStockCount);
 
     // Always update product stock (if product exists)
     productBulkOps.push({
@@ -165,6 +168,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         update: {
           $set: {
             currentStockCount,
+            status: prodStatus,
             updatedAt: now,
           },
         },
@@ -252,6 +256,7 @@ export const importInventoryFromCsvFile = async (filePath, locale, sellerId) => 
 export const updateSingleInventory = async (productId, currentStockCount, locale, sellerId) => {
   try {
     const now = new Date();
+    const sellerName = await getSellerNameById(sellerId);
 
     // 1. Ensure product exists (mandatory for inventory)
     const product = await Product.findOne({ _id: new ObjectId(productId) }, { _id: 1, productSkuCode: 1 }).lean();
@@ -283,6 +288,7 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
         lean: true,
       }
     );
+    const prodStatus = getProductStatus(sellerName, currentStockCount);
 
     // 3. Update product stock count
     await Product.updateOne(
@@ -290,6 +296,7 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
       {
         $set: {
           currentStockCount,
+          status: prodStatus,
           updatedAt: now,
         },
       }
@@ -421,6 +428,7 @@ export const syncStockToChannelEngine = async (sellerId) => {
     if (tasks.length) {
       await Promise.all(tasks);
     }
+    await updateSyncDate(sellerId, 'INVENTORY', totalSynced);
 
     return {
       success: true,

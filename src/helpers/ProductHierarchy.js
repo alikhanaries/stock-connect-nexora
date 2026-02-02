@@ -1,4 +1,6 @@
 import Product from '#models/Product.js';
+import { LOW_STOCK_THRESHOLD, LOW_STOCK_THRESHOLD_SELLERS } from '#constants/common.js';
+import Seller from '#models/Seller.js';
 
 /**
  * Performs basic structure checks:
@@ -141,6 +143,13 @@ export async function resolveProductTypes(sellerId) {
  * - Status always propagates upward (child → parent → grandparent)
  */
 export async function resolveHierarchyStatus(sellerId) {
+  // fetch seller
+  const seller = await Seller.findById(sellerId, { name: 1 }).lean();
+  const sellerName = seller?.name?.toLowerCase();
+  if (!sellerName) throw new Error('Seller not found');
+  // special rule sellers
+  const isLowStockThresholdSeller = LOW_STOCK_THRESHOLD_SELLERS.includes(sellerName);
+
   const products = await Product.find(
     { sellerId },
     {
@@ -157,10 +166,16 @@ export async function resolveHierarchyStatus(sellerId) {
 
   const mustBeActive = new Set();
 
-  // STEP 1: simple products → stock based
+  // STEP 1: simple products → stock based rule
   for (const p of products) {
     if (p.productType === 'simple') {
-      if (p.currentStockCount > 0) {
+      const stock = p.currentStockCount || 0;
+
+      const isActive = isLowStockThresholdSeller
+        ? stock >= LOW_STOCK_THRESHOLD // KIP / REMSY rule
+        : stock > 0; // default rule
+
+      if (isActive) {
         mustBeActive.add(p.productSkuCode);
       }
     }
