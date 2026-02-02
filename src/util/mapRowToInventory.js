@@ -1,3 +1,7 @@
+import { LOW_STOCK_THRESHOLD, LOW_STOCK_THRESHOLD_SELLERS, PRODUCT_STATUSES } from '#constants/common.js';
+const [ACTIVE, INACTIVE] = PRODUCT_STATUSES;
+import Seller from '#models/Seller.js';
+
 export const mapRowToInventory = async (row, index, locale) => {
   if (!row || typeof row !== 'object') return null;
 
@@ -33,4 +37,22 @@ export const mapRowToInventory = async (row, index, locale) => {
   }
 
   return inventory;
+};
+
+export const getSellerNameById = async (sellerId) => {
+  const seller = await Seller.findById(sellerId, { name: 1 }).lean();
+
+  if (!seller?.name) {
+    throw new Error('Seller not found');
+  }
+
+  return seller.name.toLowerCase();
+};
+
+export const getProductStatus = (sellerName, currentStockCount) => {
+  const isLowStockThresholdSeller = LOW_STOCK_THRESHOLD_SELLERS.includes(sellerName);
+
+  return (isLowStockThresholdSeller ? currentStockCount >= LOW_STOCK_THRESHOLD : currentStockCount > 0)
+    ? ACTIVE
+    : INACTIVE;
 };

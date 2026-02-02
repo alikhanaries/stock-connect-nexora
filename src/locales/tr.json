@@ -179,5 +179,10 @@
   "CURRENT_STOCK_COUNT_MISSING": "Mevcut stok sayısı eksik",
   "INVENTORY_SKUCODE_MISSING": "Envanter SKU kodu eksik",
   "INVALID_STOCK_COUNT": "Geçersiz stok sayımı",
-  "SYNC_STARTED": "Senkronizasyon başarıyla başlatıldı"
+  "SYNC_STARTED": "Senkronizasyon başarıyla başlatıldı",
+
+  "PRICE_UPDATE_PROCESSING": "Fiyat içe aktarma işlemi yapılıyor",
+  "PRICE_MISSING": "Fiyat eksik",
+  "INVALID_ROW_DATA": "Geçersiz satır verisi",
+  "INVALID_PRICE": "Geçersiz fiyat"
 }

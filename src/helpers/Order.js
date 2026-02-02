@@ -2,6 +2,7 @@ import Order from '#models/Orders.js';
 import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
 import Product from '../models/Product.js';
+import { ORDER_STATUS_MAP } from '#constants/common.js';
 const sanitizeOrdersData = async (orders) => {
   const orderIds = [];
   const skuSet = new Set();
@@ -181,9 +182,11 @@ const sanitizeOrdersData = async (orders) => {
       },
     };
     // Only set status if the order is new
-    if (!existingOrder) {
-      updatePayload.status = data.Status;
-    }
+    updatePayload.status = resolveStatus({
+      existingStatus: existingOrder?.status,
+      incomingStatus: data.Status,
+    });
+
     const updateOperation = {
       $set: updatePayload,
     };
@@ -196,6 +199,26 @@ const sanitizeOrdersData = async (orders) => {
       },
     };
   });
+};
+
+const resolveStatus = ({ existingStatus, incomingStatus }) => {
+  // Highest priority
+  if (incomingStatus === ORDER_STATUS_MAP.MANCO) {
+    return ORDER_STATUS_MAP.CANCELED;
+  }
+
+  // Allow explicit close
+  if (incomingStatus === ORDER_STATUS_MAP.CLOSED) {
+    return ORDER_STATUS_MAP.CLOSED;
+  }
+
+  // IN_COMBI always moves to IN_PROGRESS
+  if (incomingStatus === ORDER_STATUS_MAP.IN_COMBI) {
+    return ORDER_STATUS_MAP.IN_PROGRESS;
+  }
+
+  // Default behavior
+  return existingStatus ?? incomingStatus;
 };
 
 const getPeriodDate = (lowercasedPeriod) => {

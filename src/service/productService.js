@@ -17,7 +17,7 @@ import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
-import { buildFilter } from '#utils/buildFilter.js';
+import { buildFilter, castFilter } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -26,6 +26,8 @@ import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
 import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
+import { upsertPricesForProducts } from '../service/priceService.js';
+
 const {
   CHANNEL_ENGINE_BASE_URL,
   CHANNEL_ENGINE_API_KEY,
@@ -114,7 +116,7 @@ const fetchProducts = async (query, sellerId) => {
   // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1, _id: 1 };
   // Fetch total and products in parallel
-  const [total, products] = await Promise.all([
+  const [total, products, sellerSync] = await Promise.all([
     Product.countDocuments(filter),
     Product.find(filter)
       .sort(sort)
@@ -122,11 +124,16 @@ const fetchProducts = async (query, sellerId) => {
       .limit(limit)
       .select('_id name status productSkuCode price msrp primaryImageUrl currentStockCount createdAt sellerId')
       .lean(),
+
+    Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync'),
   ]);
 
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
+    latestProductSyncDate: sellerSync.lastProductSync || null,
+    latestInventorySync: sellerSync.lastInventorySync || null,
+    latestPriceSync: sellerSync.lastPriceSync || null,
     appliedFilters,
   };
 };
@@ -658,13 +665,32 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
   }
   await Promise.all(bulkTasks);
 
+  const warnings = [];
   // insert inventories for products imported/updated
-  await upsertInventoriesForProducts({
-    sellerId,
-    productSkuCodes,
-    batchSize,
-    writeLimit,
-  });
+  const [inventoryResult, priceResult] = await Promise.allSettled([
+    upsertInventoriesForProducts({
+      sellerId,
+      productSkuCodes,
+      batchSize,
+      writeLimit,
+    }),
+    upsertPricesForProducts({
+      sellerId,
+      productSkuCodes,
+      batchSize,
+      writeLimit,
+    }),
+  ]);
+
+  if (inventoryResult.status === 'rejected') {
+    console.error('Inventory upsert failed:', inventoryResult.reason);
+    warnings.push('Inventory update failed');
+  }
+
+  if (priceResult.status === 'rejected') {
+    console.error('Price upsert failed:', priceResult.reason);
+    warnings.push('Price update failed');
+  }
 
   // Delete file async (non-blocking)
   if (deleteAfter && filePath) {
@@ -691,6 +717,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     updatedCount,
     invalidRowsCount,
     errorDetails,
+    warnings,
   };
 };
 
@@ -938,7 +965,12 @@ const addProductsToUserChannel = async (sellerId, channelId, productIds, locale)
       return {
         updateOne: {
           filter: { _id: p._id, sellerId },
-          update: { $set: { marketPlace: existing.join(', ') } },
+          update: {
+            $set: {
+              marketPlace: existing.join(', '),
+              updatedAt: new Date(),
+            },
+          },
         },
       };
     });
@@ -962,6 +994,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
     sellerId,
     buildCondition,
   });
+  const castedBaseFilter = castFilter(baseFilter);
 
   const {
     page = 1,
@@ -1003,14 +1036,14 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   ];
   const productLevelFilter = {};
 
-  for (const key in baseFilter) {
+  for (const key in castedBaseFilter) {
     if (key === '$or' || key === '$and') {
-      productLevelFilter[key] = baseFilter[key].map((cond) => {
+      productLevelFilter[key] = castedBaseFilter[key].map((cond) => {
         const field = Object.keys(cond)[0];
         return { [`productDetails.${field}`]: cond[field] };
       });
     } else if (!['sellerId', 'channelId'].includes(key)) {
-      productLevelFilter[`productDetails.${key}`] = baseFilter[key];
+      productLevelFilter[`productDetails.${key}`] = castedBaseFilter[key];
     }
   }
 
@@ -1395,11 +1428,23 @@ export const validateProductExportData = async (filters, sellerId) => {
     if (orQueries.length === 1) finalFilter = orQueries[0];
     else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-    finalFilter = {
-      ...finalFilter,
-      sellerId: new mongoose.Types.ObjectId(sellerId),
-      status: { $ne: 'removed' },
-    };
+    // Check if user already has a status filter
+    const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
+
+    if (hasStatusFilter) {
+      // Merge user's status filter with 'not removed' check using $and
+      finalFilter = {
+        $and: [finalFilter, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      };
+    } else {
+      // No user status filter, just add the default
+      finalFilter = {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
+    }
 
     const products = await Product.find(finalFilter).select('_id').limit(1).lean();
 
@@ -1458,11 +1503,23 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
     if (orQueries.length === 1) finalFilter = orQueries[0];
     else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-    finalFilter = {
-      ...finalFilter,
-      sellerId: new mongoose.Types.ObjectId(sellerId),
-      status: { $ne: 'removed' },
-    };
+    // Check if user already has a status filter
+    const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
+
+    if (hasStatusFilter) {
+      // Merge user's status filter with 'not removed' check using $and
+      finalFilter = {
+        $and: [finalFilter, { status: { $ne: 'removed' } }],
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+      };
+    } else {
+      // No user status filter, just add the default
+      finalFilter = {
+        ...finalFilter,
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        status: { $ne: 'removed' },
+      };
+    }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
@@ -1545,7 +1602,7 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-  const [total, products] = await Promise.all([
+  const [total, products, sellerSync] = await Promise.all([
     Product.countDocuments(finalFilter),
 
     Product.find(finalFilter)
@@ -1553,14 +1610,19 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
       .skip((currentPage - 1) * limit)
       .limit(limit)
       .select(
-        '_id name status productSkuCode productType price msrp primaryImageUrl currentStockCount createdAt sellerId isFrozen'
+        '_id name status productSkuCode productType price msrp primaryImageUrl currentStockCount createdAt sellerId isFrozen countryOfOrigin gender'
       )
       .lean(),
+
+    Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync'),
   ]);
 
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
+    latestProductSyncDate: sellerSync.lastProductSync || null,
+    latestInventorySync: sellerSync.lastInventorySync || null,
+    latestPriceSync: sellerSync.lastPriceSync || null,
     channel,
   };
 };

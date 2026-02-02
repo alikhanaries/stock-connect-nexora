@@ -42,7 +42,7 @@ const ProductSchema = new mongoose.Schema(
     categoryTrail: { type: String },
     categoryTrailAmazon: { type: String, default: null },
     categoryTrailNoon: { type: String, default: null },
-    marketPlace: { type: String, trim: true },
+    marketPlace: { type: String, trim: true, default: null },
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
     volumetricWeightCm: { type: Number, required: true },

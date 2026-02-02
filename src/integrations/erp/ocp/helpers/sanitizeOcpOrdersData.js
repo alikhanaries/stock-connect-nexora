@@ -166,8 +166,8 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
         houseNr: null,
         houseNrAddition: null,
         zipCode: shipAddr.zipCode ?? shipAddr.ZipCode,
-        city: shipAddr.city ?? shipAddr.City,
-        region: shipAddr.state ?? shipAddr.State,
+        city: shipAddr.city,
+        region: shipAddr.state === 'NA' ? shipAddr.city : shipAddr.state,
         countryIso: 'SA',
       },
       orderBillingAddress: {

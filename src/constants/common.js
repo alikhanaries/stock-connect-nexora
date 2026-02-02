@@ -61,6 +61,13 @@ export const ORDER_STATUS_MAP = {
   SHIPMENT_CREATED: 'SHIPMENT_CREATED',
 };
 
+export const syncFunctions = {
+  ORDER: 'lastOrderSync',
+  PRODUCT: 'lastProductSync',
+  INVENTORY: 'lastInventorySync',
+  PRICE: 'lastPriceSync',
+};
+
 export const SELECTED_FIELDS = [
   '_id',
   'orderId',
@@ -83,6 +90,8 @@ export const BLOCKED_STATUSES = {
   RETURNED: 'Order has been returned, cannot cancel',
   SHIPPED: 'Order has been shipped, cannot cancel now',
   CANCELED: 'Order has already been cancelled',
+  PENDING: 'Order is pending it cannot be cancelled',
+  PAYMENT_FAILED: 'Payment failed orders cannot be cancelled',
 };
 
 export const RETURN_STATUS = {
@@ -147,3 +156,7 @@ export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
 ];
 
 export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
+
+export const LOW_STOCK_THRESHOLD_SELLERS = ['kip', 'ramsey'];
+
+export const LOW_STOCK_THRESHOLD = 3;
