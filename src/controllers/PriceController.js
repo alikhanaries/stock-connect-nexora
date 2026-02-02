@@ -55,14 +55,6 @@ export const updateSingleProductPrice = async (req, res) => {
       return failResponse(res, req.locale.INVALID_INPUT, 400);
     }
 
-    if (typeof namshiPrice !== 'number' || namshiPrice < 0) {
-      return failResponse(res, req.locale.INVALID_INPUT, 400);
-    }
-
-    if (typeof noonPrice !== 'number' || noonPrice < 0) {
-      return failResponse(res, req.locale.INVALID_INPUT, 400);
-    }
-
     // ---- Build payload with optional fields ----
     const pricePayload = {
       productId,
