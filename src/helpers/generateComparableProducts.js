@@ -25,6 +25,7 @@ const IGNORED_FIELDS = new Set([
   // calculated / volatile
   'productType',
   'status',
+  'marketPlace',
 
   // image derivatives
   'images',
