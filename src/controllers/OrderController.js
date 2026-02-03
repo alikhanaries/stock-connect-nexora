@@ -75,11 +75,11 @@ export const getAdminOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-
+    const userId = req.user._id;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
-    const order = await orderService.getOrderById(id);
+    const order = await orderService.getOrderById(id, userId);
     if (!order) {
       return Responses.failResponse(res, req.locale.NO_ORDERS_FOUND, 404);
     }
@@ -115,11 +115,11 @@ export const getSyncedOrders = async (req, res) => {
     // TODO : Move this to service layer
     const { success, data } = await orderService.getNewOrders();
     if (!success) {
-      return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
+      return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
     }
 
     if (data.length === 0) {
-      return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
+      return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
     const [dataSavedInDb, response] = await Promise.allSettled([
@@ -139,8 +139,8 @@ export const getSyncedOrders = async (req, res) => {
 
     const message =
       newUpdateCount > 0
-        ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
-        : req.locale.NO_NEW_ORDERS_FOUND;
+        ? `${newUpdateCount} ${req?.locale?.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
+        : req?.locale?.NO_NEW_ORDERS_FOUND;
 
     const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW');
     if (newOrdersToAcknowledge.length > 0) {
