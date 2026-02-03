@@ -531,25 +531,49 @@ const aggregateSkuStatus = (skuList = []) => {
     }
   );
 };
+const getExtraStatus = (extraData = []) => {
+  const statusObj = extraData.find(
+    (e) => e?.Key?.toLowerCase() === 'status' || e?.status // fallback if CE sends direct object
+  );
+
+  return (statusObj?.Value || statusObj?.status || '').toLowerCase();
+};
+
 const buildStatusBreakdown = ({ line, existingSku }) => {
   const qty = line.Quantity || 0;
 
+  const prev = existingSku?.statusBreakdown ?? {};
+
   const empty = {
     confirmed: 0,
-    shipped: existingSku?.statusBreakdown?.shipped ?? 0,
+    shipped: prev.shipped ?? 0,
     delivered: 0,
     returned: 0,
     canceled: 0,
-    shipmentCreated: existingSku?.statusBreakdown?.shipmentCreated ?? 0,
+    shipmentCreated: prev.shipmentCreated ?? 0,
   };
 
+  //  EXTRA DATA OVERRIDE (highest priority)
+  const extraStatus = getExtraStatus(line.ExtraData);
+
+  if (extraStatus === 'delivered') {
+    return {
+      ...empty,
+      delivered: qty,
+      confirmed: 0,
+      shipped: 0,
+      shipmentCreated: 0,
+    };
+  }
+
+  //  Normal ChannelEngine status handling
   switch (line.Status) {
     case 'NEW':
     case 'IN_PROGRESS':
     case 'IN_COMBI':
       return {
         ...empty,
-        confirmed: qty - empty?.shipped,
+        confirmed: Math.max(qty - empty.shipped - empty.delivered, 0),
       };
 
     case 'SHIPPED':
@@ -578,7 +602,7 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
       };
 
     case 'CLOSED':
-      //  CLOSED is ambiguous → do NOT guess
+      // CLOSED is ambiguous → do NOT guess
       return {
         ...empty,
         confirmed: qty,
