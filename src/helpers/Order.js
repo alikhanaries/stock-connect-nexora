@@ -459,10 +459,44 @@ const sanitizeOrdersData = async (orders) => {
         orderId: data.Id,
         skuList,
       },
-      orderShippingAddress: { ...data.ShippingAddress },
-      orderBillingAddress: { ...data.BillingAddress },
-      // status: existingOrder?.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : normalizeSkuStatus(data?.Status),
-      status: normalizeSkuStatus(data?.Status),
+      orderShippingAddress: {
+        line1: data.ShippingAddress.Line1,
+        line2: data.ShippingAddress.Line2,
+        line3: data.ShippingAddress.Line3,
+        gender: data.ShippingAddress.Gender,
+        companyName: data.ShippingAddress.CompanyName,
+        firstName: data.ShippingAddress.FirstName,
+        lastName: data.ShippingAddress.LastName,
+        streetName: data.ShippingAddress.StreetName,
+        houseNr: data.ShippingAddress.HouseNr,
+        houseNrAddition: data.ShippingAddress.HouseNrAddition,
+        zipCode: data.ShippingAddress.ZipCode,
+        city: data.ShippingAddress.City,
+        region: data.ShippingAddress.Region,
+        countryIso: data.ShippingAddress.CountryIso,
+      },
+      orderBillingAddress: {
+        line1: data.BillingAddress.Line1,
+        line2: data.BillingAddress.Line2,
+        line3: data.BillingAddress.Line3,
+        gender: data.BillingAddress.Gender,
+        companyName: data.BillingAddress.CompanyName,
+        firstName: data.BillingAddress.FirstName,
+        lastName: data.BillingAddress.LastName,
+        streetName: data.BillingAddress.StreetName,
+        houseNr: data.BillingAddress.HouseNr,
+        houseNrAddition: data.BillingAddress.HouseNrAddition,
+        zipCode: data.BillingAddress.ZipCode,
+        city: data.BillingAddress.City,
+        region: data.BillingAddress.Region,
+        countryIso: data.BillingAddress.CountryIso,
+      },
+      status:
+        existingOrder?.status === 'SHIPPED' ||
+        existingOrder?.status === 'CLOSED' ||
+        existingOrder?.status === 'CANCELED'
+          ? existingOrder?.status
+          : normalizeSkuStatus(data?.Status),
     };
 
     return {
@@ -568,7 +602,6 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
     case 'NEW':
     case 'IN_PROGRESS':
     case 'IN_COMBI':
-    case 'CLOSED':
       return {
         ...empty,
         confirmed: Math.max(qty - empty.shipmentCreated - empty.shipped - empty.delivered - empty.canceled, 0),
@@ -578,7 +611,6 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
       return {
         ...empty,
         shipped: qty,
-        confirmed: Math.max(qty - empty.shipmentCreated - qty - empty.delivered - empty.canceled, 0),
       };
 
     case 'DELIVERED':
@@ -605,7 +637,11 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
         shipped: 0,
         shipmentCreated: 0,
       };
-
+    case 'CLOSED':
+      return {
+        ...empty,
+        confirmed: Math.max(qty - empty.shipped - empty.delivered - empty.canceled, 0),
+      };
     default:
       return empty;
   }

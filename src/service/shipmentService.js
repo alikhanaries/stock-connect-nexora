@@ -263,9 +263,9 @@ export const createPartialShipmentService = async (shipmentData) => {
     if (!sellerId) missingFields.push('sellerId');
     if (!userId) missingFields.push('userId');
     if (!pickUpId) missingFields.push('pickUpId');
-    if (!products || products.length === 0) missingFields.push('products');
+    if (!products.length) missingFields.push('products');
 
-    if (missingFields.length > 0) {
+    if (missingFields.length) {
       throw new Error(`Missing required shipment fields: ${missingFields.join(', ')}`);
     }
 
@@ -273,20 +273,23 @@ export const createPartialShipmentService = async (shipmentData) => {
     const order = await Order.findById(id);
     if (!order) return { success: false, message: 'Order not found.' };
 
-    if (sellerId !== order?.sellerId.toString()) {
+    if (sellerId !== order.sellerId.toString()) {
       return { success: false, message: 'Wrong seller Id.' };
     }
     const { orderSkuList, merchantOrderNo, orderId } = order;
 
-    // Validate SKU list
-    if (!orderSkuList?.skuList || orderSkuList.skuList.length === 0) {
+    if (!orderSkuList?.skuList?.length) {
       return { success: false, message: 'Order has empty line items.' };
     }
 
-    // Filter products to valid SKUs
-    const validProducts = products.filter((product) => orderSkuList.skuList.some((s) => s.id === product.orderLineId));
-    if (validProducts.length === 0) {
-      return { success: false, message: 'No valid SKUs found in order for shipment.' };
+    // STEP 3: Filter valid SKUs
+
+    const validProducts = products.filter((p) =>
+      orderSkuList.skuList.some((s) => String(s.id) === String(p.orderLineId))
+    );
+
+    if (!validProducts.length) {
+      return { success: false, message: 'No valid SKUs found in order.' };
     }
 
     // Parse invoice data
@@ -300,16 +303,17 @@ export const createPartialShipmentService = async (shipmentData) => {
         invoice_date: invoiceData.invoiceData?.invoiceDate || '',
       };
 
-      productsData = products.map((item) => ({
-        sku: item?.merchantProductNo,
-        qty: Number(item?.quantity || 0),
-        price: Number(item?.lineTotalInclVat || 0),
+      productsData = validProducts.map((item) => ({
+        sku: item.merchantProductNo,
+        qty: Number(item.quantity || 0),
+        price: Number(item.lineTotalInclVat || 0),
         hs_code: item.hsCode || '1111111',
       }));
     }
 
-    //  Step 3: Find existing shipments for given SKUs
-    const productLineIds = products.map((p) => p.orderLineId?.toString());
+    // STEP 5: Existing shipments
+
+    const productLineIds = validProducts.map((p) => String(p.orderLineId));
 
     const existingShipments = await Shipment.find({
       orderId: id,
@@ -320,31 +324,23 @@ export const createPartialShipmentService = async (shipmentData) => {
     //  Step 4: Build shipped quantity map
     const shippedQtyMap = {};
     for (const shipment of existingShipments || []) {
-      if (!['SHIPMENT_CREATED', 'DELIVERED', 'SHIPPED'].includes(shipment.status)) continue;
+      if (!['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'].includes(shipment.status)) continue;
       for (const product of shipment.products || []) {
-        const orderLineId = String(product.orderLineId);
-        const quantity = product.quantity || 0;
-
-        if (productLineIds.includes(orderLineId)) {
-          shippedQtyMap[orderLineId] = (shippedQtyMap[orderLineId] || 0) + quantity;
-        }
+        const lineId = String(product.orderLineId);
+        shippedQtyMap[lineId] = (shippedQtyMap[lineId] || 0) + Number(product.quantity || 0);
       }
     }
 
-    //  Step 5: Validate shipping quantities against available quantities
-    for (const product of products) {
+    // STEP 7: Quantity validation
+
+    for (const product of validProducts) {
       const orderLineId = String(product.orderLineId);
+      const sku = orderSkuList.skuList.find((s) => String(s.id) === orderLineId);
 
-      const matchedSku = order.orderSkuList?.skuList?.find((sku) => String(sku.id) === orderLineId);
-
-      if (!matchedSku) {
-        return { success: false, message: `Product ${orderLineId} not found in order.` };
-      }
-
-      const cancellationRequestedQty = matchedSku.cancellationRequestedQuantity || 0;
-      const availableQty = matchedSku.quantity - cancellationRequestedQty;
-      const alreadyShippedQty = shippedQtyMap[orderLineId] || 0;
-      const remainingQty = availableQty - alreadyShippedQty;
+      const canceledQty = sku.cancellationRequestedQuantity || 0;
+      const availableQty = sku.quantity - canceledQty;
+      const alreadyShipped = shippedQtyMap[orderLineId] || 0;
+      const remainingQty = availableQty - alreadyShipped;
 
       if (remainingQty <= 0) {
         return {
@@ -361,7 +357,8 @@ export const createPartialShipmentService = async (shipmentData) => {
       }
     }
 
-    //  Step 6: Prepare delivery & pickup details
+    // STEP 8: Delivery & Pickup
+
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
     const deliveryDetails = await saveDeliveryAddress(deliveryData);
@@ -369,7 +366,8 @@ export const createPartialShipmentService = async (shipmentData) => {
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
 
-    //  Step 7: Create shipment in Aymakan
+    // STEP 9: Create shipment (Aymakan)
+
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
@@ -424,16 +422,29 @@ export const createPartialShipmentService = async (shipmentData) => {
     });
 
     await shipmentDocument.save();
+    // STEP 11: SKU STATUS BREAKDOWN UPDATE
 
-    //  Step 10: Update order SKUs with AWB number
     for (const product of validProducts) {
-      const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
-      if (sku) sku.airWaybillNo = trackingNumber;
-    }
+      const sku = orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
 
-    if (!order?.sellerId) {
-      order.sellerId = sellerId;
+      const shippedQty = Number(product.quantity || 0);
+
+      sku.statusBreakdown ??= {
+        confirmed: sku.quantity || 0,
+        shipped: 0,
+        delivered: 0,
+        returned: 0,
+        canceled: 0,
+        shipmentCreated: 0,
+      };
+
+      sku.statusBreakdown.confirmed = Math.max(sku.statusBreakdown.confirmed - shippedQty, 0);
+
+      sku.statusBreakdown.shipmentCreated += shippedQty;
+      sku.airWaybillNo = trackingNumber;
+      sku.status = 'IN_PROGRESS';
     }
+    // STEP 12: Order update
 
     order.status = 'IN_PROGRESS';
     await order.save();
@@ -1055,10 +1066,10 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     const cancelReason = reason?.trim() || 'NA';
 
     // 1️ Only SHIPMENT_CREATED can be canceled
-    const shipment = await Shipment.findOne(
-      { _id: shipmentId, status: AYMAKAN_STATUS['AY-0001'].status },
-      { _id: 1, airWaybillNo: 1, orderId: 1 }
-    );
+    const shipment = await Shipment.findOne({
+      _id: shipmentId,
+      status: AYMAKAN_STATUS['AY-0001'].status, // SHIPMENT_CREATED
+    }).lean();
 
     if (!shipment) {
       return {
@@ -1067,66 +1078,56 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       };
     }
 
-    const trackingNumber = shipment.airWaybillNo;
+    const { airWaybillNo, orderId, products } = shipment;
 
     //2 Cancel shipment via Aymakan API
-    await cancelAymakanShipment(trackingNumber);
-    const { orderId, products } = shipment;
 
-    // 23 Cancel shipment
+    await cancelAymakanShipment(airWaybillNo);
 
-    await Shipment.findByIdAndUpdate(shipment._id, {
+    // STEP 3: Mark shipment as CANCELED
+
+    await Shipment.findByIdAndUpdate(shipmentId, {
       status: 'CANCELED',
       cancelReason,
     });
 
-    // 34 Fetch order
+    // STEP 4: Fetch order (mongoose doc, not lean)
 
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findById(orderId);
     if (!order) throw new Error('Order not found');
 
-    //4️ Recalculate SKU statuses
+    // STEP 5: REVERT SKU STATUS BREAKDOWN
 
-    for (const p of products || []) {
-      const sku = order.orderSkuList.skuList.find((s) => s.id === p.orderLineId);
+    for (const product of products || []) {
+      const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
 
       if (!sku) continue;
 
-      const cancelledQty = sku.cancellationRequestedQuantity || 0;
+      const qty = Number(product.quantity || 0);
 
-      let finalSkuStatus;
-
-      // SKU STATUS PRIORITY
-
-      if (cancelledQty > 0) {
-        finalSkuStatus = 'PARTIALLY_CANCELED';
-      } else {
-        finalSkuStatus = 'NEW';
+      // Defensive init
+      if (!sku.statusBreakdown) {
+        sku.statusBreakdown = {
+          confirmed: sku.quantity || 0,
+          shipped: 0,
+          delivered: 0,
+          returned: 0,
+          canceled: 0,
+          shipmentCreated: 0,
+        };
       }
 
-      await Order.updateOne(
-        { _id: orderId },
-        {
-          $set: {
-            'orderSkuList.skuList.$[sku].status': finalSkuStatus,
-          },
-        },
-        {
-          arrayFilters: [{ 'sku.id': p.orderLineId }],
-        }
-      );
+      //  Reduce shipmentCreated
+      sku.statusBreakdown.shipmentCreated = Math.max(sku.statusBreakdown.shipmentCreated - qty, 0);
+
+      //  Restore confirmed
+      sku.statusBreakdown.confirmed += qty;
+
+      // SKU status correction
+      sku.status = sku.statusBreakdown.confirmed === sku.quantity ? 'NEW' : 'IN_PROGRESS';
     }
 
-    //5️ Re-fetch updated order for final order status calculation
-
-    const updatedOrder = await Order.findById(orderId).select('orderSkuList.skuList.status').lean();
-
-    if (!updatedOrder?.orderSkuList?.skuList?.length) {
-      throw new Error('Order SKU list not found');
-    }
-
-    // Rule 1: Order is NEW only if ALL SKUs are NEW
-    const allSkusAreNew = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === 'NEW');
+    await order.save();
 
     // Rule 2: Any active shipment forces IN_PROGRESS
     const hasActiveShipment = await Shipment.exists({
@@ -1134,9 +1135,8 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       status: { $ne: 'CANCELED' },
     });
 
-    const finalOrderStatus = allSkusAreNew && !hasActiveShipment ? 'NEW' : 'IN_PROGRESS';
+    const finalOrderStatus = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
 
-    // Update order status
     await Order.findByIdAndUpdate(orderId, {
       status: finalOrderStatus,
     });
@@ -1148,8 +1148,8 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       {
         $push: {
           details: {
-            status: finalOrderStatus,
-            description: 'Shipment canceled and order/SKU statuses recalculated',
+            status: 'SHIPMENT CANCELED',
+            description: `Shipment canceled (AWB - ${airWaybillNo})`,
             createdAt: new Date(),
           },
         },
@@ -1160,7 +1160,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     return {
       success: true,
       message: 'Shipment canceled successfully',
-      shipmentId: shipment._id,
+      shipmentId,
     };
   } catch (error) {
     console.error('cancelShipmentService error:', error);
@@ -1903,6 +1903,31 @@ export const createManualShipmentService = async (shipmentData) => {
     } else if (partiallyShipped) {
       await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' });
     }
+
+    const updatedSkuList = updatedOrder.orderSkuList.skuList.map((sku) => {
+      const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+
+      const shippedQty = totalShippedMap[String(sku.id)] || 0;
+
+      const confirmedQty = Math.max(availableQty - shippedQty, 0);
+
+      return {
+        ...sku,
+        statusBreakdown: {
+          confirmed: confirmedQty,
+          shipped: shippedQty,
+          delivered: sku.statusBreakdown?.delivered ?? 0,
+          returned: sku.statusBreakdown?.returned ?? 0,
+          canceled: sku.statusBreakdown?.canceled ?? 0,
+          shipmentCreated: sku.statusBreakdown?.shipmentCreated ?? 0, // optional but recommended
+        },
+        status: shippedQty >= availableQty ? 'SHIPPED' : shippedQty > 0 ? 'IN_PROGRESS' : 'IN_PROGRESS',
+      };
+    });
+
+    await Order.findByIdAndUpdate(orderId, {
+      'orderSkuList.skuList': updatedSkuList,
+    });
 
     /* -------------------- LOGS -------------------- */
     await OrderLogs.updateOne(
