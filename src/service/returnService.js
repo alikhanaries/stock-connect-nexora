@@ -229,7 +229,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const [results, countResult, allChannelImage] = await Promise.all([
       Return.aggregate(pipeline),
       Return.aggregate(countPipeline),
-      Channel.find().select('-_id channelId channelImageUrl'),
+      Channel.find().select('-_id channelId channelImageUrl').lean(),
     ]);
 
     const channelMap = {};
