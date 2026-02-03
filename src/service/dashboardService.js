@@ -20,7 +20,9 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
   try {
     const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
 
-    if (!period) {
+    const currentRange = getDateRange({ period, startDate, endDate, month });
+    if (!currentRange) throw new Error(`Invalid period "${period}". Allowed: today, weekly, monthly`);
+    if (!currentRange) {
       const statusAgg = await Order.aggregate([
         { $match: { sellerId: sellerObjectId } },
         { $group: { _id: '$status', count: { $sum: 1 } } },
@@ -37,8 +39,6 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
       }));
     }
 
-    const currentRange = getDateRange({ period, startDate, endDate, month });
-    if (!currentRange) throw new Error(`Invalid period "${period}". Allowed: today, weekly, monthly`);
     const comparable = isComparablePeriod(period);
 
     // Calculate previous range
