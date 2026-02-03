@@ -369,112 +369,110 @@ const sanitizeOrdersData = async (orders) => {
   const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
 
   // Step 3: map orders into bulkWrite operations
-  return orders
-    .filter((data) => String(data.Id) === '1143')
-    .map((data) => {
-      const existingOrder = existingOrdersMap.get(String(data.Id));
+  return orders.map((data) => {
+    const existingOrder = existingOrdersMap.get(String(data.Id));
 
-      // Determine sellerId from first SKU
-      let finalSellerId = null;
-      if (Array.isArray(data.Lines) && data.Lines.length > 0) {
-        const firstSku = data.Lines[0].MerchantProductNo;
-        if (firstSku) finalSellerId = productSellerMap.get(firstSku) || null;
-      }
+    // Determine sellerId from first SKU
+    let finalSellerId = null;
+    if (Array.isArray(data.Lines) && data.Lines.length > 0) {
+      const firstSku = data.Lines[0].MerchantProductNo;
+      if (firstSku) finalSellerId = productSellerMap.get(firstSku) || null;
+    }
 
-      // Build SKU list with normalized statuses & preserved fields
-      const skuList = Array.isArray(data.Lines)
-        ? data.Lines.map((line) => {
-            const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => s.id === line.Id);
-            return {
-              ...line,
-              id: line.Id,
-              channelOrderLineNo: line.ChannelOrderLineNo,
-              //  CORRECT: schema-aligned status tracking
-              statusBreakdown: buildStatusBreakdown({
-                line,
-                existingSku,
-              }),
-              airWaybillNo: existingSku?.airWaybillNo ?? null,
-              merchantProductNo: line.MerchantProductNo,
-              quantity: line.Quantity,
-              status: normalizeSkuStatus(line?.Status),
-              cancellationRequestedQuantity:
-                existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity,
-            };
-          })
-        : [];
+    // Build SKU list with normalized statuses & preserved fields
+    const skuList = Array.isArray(data.Lines)
+      ? data.Lines.map((line) => {
+          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => s.id === line.Id);
+          return {
+            ...line,
+            id: line.Id,
+            channelOrderLineNo: line.ChannelOrderLineNo,
+            //  CORRECT: schema-aligned status tracking
+            statusBreakdown: buildStatusBreakdown({
+              line,
+              existingSku,
+            }),
+            airWaybillNo: existingSku?.airWaybillNo ?? null,
+            merchantProductNo: line.MerchantProductNo,
+            quantity: line.Quantity,
+            status: normalizeSkuStatus(line?.Status),
+            cancellationRequestedQuantity:
+              existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity,
+          };
+        })
+      : [];
 
-      // Build update payload
-      const updatePayload = {
+    // Build update payload
+    const updatePayload = {
+      orderId: data.Id,
+      channelId: data.ChannelId,
+      sellerId: finalSellerId,
+      channelName: data.ChannelName,
+      globalChannelName: data.GlobalChannelName,
+      globalChannelId: data.GlobalChannelId,
+      orderDate: data.OrderDate,
+      merchantComment: data.MerchantComment,
+      merchantOrderNo: data.MerchantOrderNo,
+      isBusinessOrder: data.IsBusinessOrder,
+      subTotalInclVat: data.SubTotalInclVat,
+      subTotalVat: data.SubTotalVat,
+      shippingCostsInclVat: data.ShippingCostsInclVat,
+      totalInclVat: data.TotalInclVat,
+      totalVat: data.TotalVat,
+      originalSubTotalInclVat: data.OriginalSubTotalInclVat,
+      originalSubTotalVat: data.OriginalSubTotalVat,
+      originalShippingCostsInclVat: data.OriginalShippingCostsInclVat,
+      originalShippingCostsVat: data.OriginalShippingCostsVat,
+      originalTotalInclVat: data.OriginalTotalInclVat,
+      originalTotalVat: data.OriginalTotalVat,
+      subTotalExclVat: data.SubTotalExclVat,
+      totalExclVat: data.TotalExclVat,
+      shippingCostsExclVat: data.ShippingCostsExclVat,
+      originalSubTotalExclVat: data.OriginalSubTotalExclVat,
+      originalShippingCostsExclVat: data.OriginalShippingCostsExclVat,
+      originalTotalExclVat: data.OriginalTotalExclVat,
+      originalSubTotalFee: data.OriginalSubTotalFee,
+      subTotalFee: data.SubTotalFee,
+      originalOrderFee: data.OriginalOrderFee,
+      orderFee: data.OrderFee,
+      originalTotalFee: data.OriginalTotalFee,
+      totalFee: data.TotalFee,
+      orderCustomer: {
         orderId: data.Id,
-        channelId: data.ChannelId,
-        sellerId: finalSellerId,
-        channelName: data.ChannelName,
-        globalChannelName: data.GlobalChannelName,
-        globalChannelId: data.GlobalChannelId,
-        orderDate: data.OrderDate,
-        merchantComment: data.MerchantComment,
-        merchantOrderNo: data.MerchantOrderNo,
-        isBusinessOrder: data.IsBusinessOrder,
-        subTotalInclVat: data.SubTotalInclVat,
-        subTotalVat: data.SubTotalVat,
-        shippingCostsInclVat: data.ShippingCostsInclVat,
-        totalInclVat: data.TotalInclVat,
-        totalVat: data.TotalVat,
-        originalSubTotalInclVat: data.OriginalSubTotalInclVat,
-        originalSubTotalVat: data.OriginalSubTotalVat,
-        originalShippingCostsInclVat: data.OriginalShippingCostsInclVat,
-        originalShippingCostsVat: data.OriginalShippingCostsVat,
-        originalTotalInclVat: data.OriginalTotalInclVat,
-        originalTotalVat: data.OriginalTotalVat,
-        subTotalExclVat: data.SubTotalExclVat,
-        totalExclVat: data.TotalExclVat,
-        shippingCostsExclVat: data.ShippingCostsExclVat,
-        originalSubTotalExclVat: data.OriginalSubTotalExclVat,
-        originalShippingCostsExclVat: data.OriginalShippingCostsExclVat,
-        originalTotalExclVat: data.OriginalTotalExclVat,
-        originalSubTotalFee: data.OriginalSubTotalFee,
-        subTotalFee: data.SubTotalFee,
-        originalOrderFee: data.OriginalOrderFee,
-        orderFee: data.OrderFee,
-        originalTotalFee: data.OriginalTotalFee,
-        totalFee: data.TotalFee,
-        orderCustomer: {
-          orderId: data.Id,
-          gender: data.BillingAddress.Gender,
-          firstName: data.BillingAddress.FirstName,
-          lastName: data.BillingAddress.LastName,
-          phone: data.Phone,
-          email: data.Email,
-          languageCode: data.LanguageCode,
-          companyRegistrationNo: data.CompanyRegistrationNo,
-          channelCustomerNo: data.ChannelCustomerNo,
-        },
-        orderPaymentDetails: {
-          orderId: data.Id,
-          vatNo: data.VatNo,
-          paymentMethod: data.PaymentMethod,
-          paymentReferenceNo: data.PaymentReferenceNo,
-          currencyCode: data.CurrencyCode,
-        },
-        orderSkuList: {
-          orderId: data.Id,
-          skuList,
-        },
-        orderShippingAddress: { ...data.ShippingAddress },
-        orderBillingAddress: { ...data.BillingAddress },
-        // status: existingOrder?.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : normalizeSkuStatus(data?.Status),
-        status: normalizeSkuStatus(data?.Status),
-      };
+        gender: data.BillingAddress.Gender,
+        firstName: data.BillingAddress.FirstName,
+        lastName: data.BillingAddress.LastName,
+        phone: data.Phone,
+        email: data.Email,
+        languageCode: data.LanguageCode,
+        companyRegistrationNo: data.CompanyRegistrationNo,
+        channelCustomerNo: data.ChannelCustomerNo,
+      },
+      orderPaymentDetails: {
+        orderId: data.Id,
+        vatNo: data.VatNo,
+        paymentMethod: data.PaymentMethod,
+        paymentReferenceNo: data.PaymentReferenceNo,
+        currencyCode: data.CurrencyCode,
+      },
+      orderSkuList: {
+        orderId: data.Id,
+        skuList,
+      },
+      orderShippingAddress: { ...data.ShippingAddress },
+      orderBillingAddress: { ...data.BillingAddress },
+      // status: existingOrder?.status === 'IN_PROGRESS' ? 'IN_PROGRESS' : normalizeSkuStatus(data?.Status),
+      status: normalizeSkuStatus(data?.Status),
+    };
 
-      return {
-        updateOne: {
-          filter: { orderId: data.Id },
-          update: { $set: updatePayload },
-          upsert: true,
-        },
-      };
-    });
+    return {
+      updateOne: {
+        filter: { orderId: data.Id },
+        update: { $set: updatePayload },
+        upsert: true,
+      },
+    };
+  });
 };
 
 export const deriveOrderStatusFromSkus = (skuList = []) => {
@@ -547,13 +545,13 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
   const empty = {
     confirmed: 0,
     shipped: prev.shipped ?? 0,
-    delivered: 0,
-    returned: 0,
-    canceled: 0,
+    delivered: prev.delivered ?? 0,
+    returned: prev.returned ?? 0,
+    canceled: prev.canceled ?? 0,
     shipmentCreated: prev.shipmentCreated ?? 0,
   };
 
-  //  EXTRA DATA OVERRIDE (highest priority)
+  // EXTRA DATA OVERRIDE (highest priority)
   const extraStatus = getExtraStatus(line.ExtraData);
 
   if (extraStatus === 'delivered') {
@@ -566,26 +564,30 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
     };
   }
 
-  //  Normal ChannelEngine status handling
   switch (line.Status) {
     case 'NEW':
     case 'IN_PROGRESS':
     case 'IN_COMBI':
+    case 'CLOSED':
       return {
         ...empty,
-        confirmed: Math.max(qty - empty.shipped - empty.delivered, 0),
+        confirmed: Math.max(qty - empty.shipmentCreated - empty.shipped - empty.delivered - empty.canceled, 0),
       };
 
     case 'SHIPPED':
       return {
         ...empty,
         shipped: qty,
+        confirmed: Math.max(qty - empty.shipmentCreated - qty - empty.delivered - empty.canceled, 0),
       };
 
     case 'DELIVERED':
       return {
         ...empty,
         delivered: qty,
+        confirmed: 0,
+        shipped: 0,
+        shipmentCreated: 0,
       };
 
     case 'RETURNED':
@@ -599,13 +601,9 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
       return {
         ...empty,
         canceled: qty,
-      };
-
-    case 'CLOSED':
-      // CLOSED is ambiguous → do NOT guess
-      return {
-        ...empty,
-        confirmed: qty,
+        confirmed: 0,
+        shipped: 0,
+        shipmentCreated: 0,
       };
 
     default:
