@@ -510,6 +510,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
           status: 1,
           airWaybillNo: 1,
           sellerId: 1,
+          shipmentMethod: 1,
           shipmentMerchantDetails: 1,
           deliveryCustomer: {
             name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
@@ -966,7 +967,7 @@ export const getSingleShipmentService = async (id) => {
 
   // Fetch tracking info only if we have an AWB number and it's not a MANUAL shipment
   let trackingData = null;
-  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod !== 'MANUAL') {
+  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod === 'AYMAKAN') {
     trackingData = await trackAymakanShipment(formattedShipmentData.airWaybillNo);
     formattedShipmentData.trackingInfo = formatShipmentTrackingInfo(trackingData?.trackingInfo);
   }
@@ -1031,6 +1032,7 @@ const transformShipmentResponse = (response) => {
     merchantOrderNo: data.merchantOrderNo,
     deliveryDetails,
     pickUpDetails,
+    shipmentMethod: data?.shipmentMethod,
   };
 };
 export const formatShipmentTrackingInfo = (data) => {
@@ -2010,6 +2012,231 @@ async function handleShipmentReturnStatusUpdate({ shipment, shipmentStatus, trac
     }
   );
 }
+
+export async function getChannelEngineShipmentDetailsService(orderMerchantNumber) {
+  try {
+    const response = await fetch(
+      `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?merchantOrderNos=${orderMerchantNumber}&apikey=${CHANNEL_ENGINE_API_KEY}`,
+      {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data?.Content?.length) {
+      return {
+        success: false,
+        message: 'No shipment data received from ChannelEngine',
+      };
+    }
+
+    return {
+      success: true,
+      data: data.Content,
+    };
+  } catch (error) {
+    console.error('Error fetching shipment details from ChannelEngine:', error.message);
+    return {
+      success: false,
+      message: error.message,
+    };
+  }
+}
+export const createShipmentsFromChannelEngine = async ({ order, channelEngineShipments, userId }) => {
+  const createdShipments = [];
+
+  for (const ceShipment of channelEngineShipments) {
+    // Idempotency check (CE shipment is unique)
+
+    const existing = await Shipment.findOne({
+      merchantShipmentNo: ceShipment.MerchantShipmentNo,
+    });
+
+    if (existing) {
+      createdShipments.push(existing);
+      continue;
+    }
+
+    // SellerId resolution (OrderLine.ExtraData)
+
+    const sellerId = ceShipment.Lines?.[0]?.OrderLine?.ExtraData?.find((x) => x.Key === 'sellerId')?.Value;
+
+    // Create shipment
+
+    const shipmentData = {
+      // References
+      orderId: order._id,
+      sellerId,
+      userId,
+
+      // Status
+      status: mapCEShipmentStatus(ceShipment),
+
+      // Identifiers
+      merchantShipmentNo: ceShipment.MerchantShipmentNo,
+      merchantOrderNo: ceShipment.MerchantOrderNo,
+
+      // TrackTraceNo === airwaybill
+      airWaybillNo: ceShipment.TrackTraceNo,
+
+      // Shipping info
+      method: ceShipment.Method,
+      shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
+      shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
+
+      isMerchantCreator: ceShipment.IsMerchantCreator,
+      shipmentMethod: 'CHANNEL_ENGINE',
+
+      // Dates
+      submissionDate: ceShipment.CreatedAt,
+      pickupDate: ceShipment.ShipmentDate,
+      deliveryDate: ceShipment.DeliveredAt,
+
+      // Products
+      products: buildShipmentProducts(ceShipment.Lines),
+      pieces: ceShipment.Lines?.reduce((sum, l) => sum + (l.Quantity || 0), 0),
+
+      // Tracking (only if exists)
+      trackingInfo: ceShipment.TrackTraceNo
+        ? [
+            {
+              trackingNo: ceShipment.TrackTraceNo,
+              trackingUrl: ceShipment.TrackTraceUrl,
+              carrier: ceShipment.Method,
+              createdAt: new Date(),
+              statusCode: 'NA',
+            },
+          ]
+        : [],
+
+      // Raw CE payload
+      extraData: {
+        channelEngine: ceShipment,
+      },
+
+      // Defaults
+      type: 'FORWARD',
+    };
+
+    const shipment = await Shipment.create(shipmentData);
+
+    createdShipments.push(shipment);
+  }
+
+  return createdShipments;
+};
+
+const buildShipmentProducts = (lines = []) => {
+  return lines.map((line) => ({
+    merchantProductNo: line.MerchantProductNo,
+    channelProductNo: line.ChannelProductNo,
+    quantity: line.Quantity,
+    status: line.ShipmentStatus,
+    orderLineId: line.OrderLine?.Id,
+    extraData: {
+      channelEngine: line,
+    },
+  }));
+};
+const mapCEShipmentStatus = (ceShipment) => {
+  if (ceShipment.DeliveredAt) return 'DELIVERED';
+
+  if (ceShipment.Lines?.some((l) => l.ShipmentStatus === 'SHIPPED')) {
+    return 'SHIPPED';
+  }
+
+  return 'SHIPMENT_CREATED';
+};
+
+const formatShipmentProducts = (lines = []) =>
+  lines.map((line) => ({
+    merchantProductNo: line.MerchantProductNo,
+    channelProductNo: line.ChannelProductNo,
+    quantity: line.Quantity,
+    status: line.ShipmentStatus,
+    orderLineId: line.OrderLine?.Id,
+    extraData: {
+      channelEngine: line,
+    },
+  }));
+
+export const formatChannelEngineShipments = ({ content = [], order, userId }) => {
+  return content.map((ceShipment) => {
+    // sellerId resolved from OrderLine ExtraData
+    const sellerId = ceShipment.Lines?.[0]?.OrderLine?.ExtraData?.find((x) => x.Key === 'sellerId')?.Value;
+
+    return {
+      // Required references
+
+      orderId: order._id,
+      sellerId,
+      userId,
+
+      // Status & dates
+
+      status: mapCEShipmentStatus(ceShipment),
+      submissionDate: ceShipment.CreatedAt,
+      pickupDate: ceShipment.ShipmentDate,
+      deliveryDate: ceShipment.DeliveredAt,
+
+      // Address refs
+
+      deliveryId: order.deliveryId,
+      pickUpId: order.pickUpId,
+
+      // ChannelEngine identifiers
+
+      merchantShipmentNo: ceShipment.MerchantShipmentNo,
+      merchantOrderNo: ceShipment.MerchantOrderNo,
+
+      // TrackTraceNo === airwaybill
+      airWaybillNo: ceShipment.TrackTraceNo,
+
+      shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
+      shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
+
+      method: ceShipment.Method,
+      isMerchantCreator: ceShipment.IsMerchantCreator,
+      shipmentMethod: 'AYMAKAN',
+
+      // Products
+
+      products: formatShipmentProducts(ceShipment.Lines),
+      pieces: ceShipment.Lines?.reduce((sum, l) => sum + (l.Quantity || 0), 0),
+
+      // Tracking
+
+      trackingInfo: ceShipment.TrackTraceNo
+        ? [
+            {
+              trackingNo: ceShipment.TrackTraceNo,
+              trackingUrl: ceShipment.TrackTraceUrl,
+              carrier: ceShipment.Method,
+            },
+          ]
+        : [],
+
+      // Raw CE data
+
+      extraData: {
+        channelEngine: ceShipment,
+      },
+
+      // Defaults
+
+      type: 'FORWARD',
+    };
+  });
+};
+
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
