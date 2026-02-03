@@ -50,19 +50,13 @@ export const updateSingleProductPrice = async (req, res) => {
     const sellerId = req.sellerId; // from auth middleware
     const { productId, price, namshiPrice, noonPrice, minPrice, maxPrice, msrp, purchasePrice } = req.body;
 
-    // ---- Mandatory validation ----
-    if (!productId || typeof price !== 'number' || price < 0) {
-      return failResponse(res, req.locale.INVALID_INPUT, 400);
-    }
-
     // ---- Build payload with optional fields ----
     const pricePayload = {
       productId,
-      price,
-      namshiPrice,
-      noonPrice,
     };
-
+    if (price !== undefined) pricePayload.price = price;
+    if (noonPrice !== undefined) pricePayload.noonPrice = noonPrice;
+    if (namshiPrice !== undefined) pricePayload.namshiPrice = namshiPrice;
     if (minPrice !== undefined) pricePayload.minPrice = minPrice;
     if (maxPrice !== undefined) pricePayload.maxPrice = maxPrice;
     if (msrp !== undefined) pricePayload.msrp = msrp;

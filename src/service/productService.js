@@ -130,7 +130,9 @@ const fetchProducts = async (query, sellerId) => {
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
-      .select('_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId')
+      .select(
+        '_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId noonPrice namshiPrice'
+      )
       .lean(),
 
     Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync'),

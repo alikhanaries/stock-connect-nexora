@@ -253,17 +253,9 @@ export const importPriceFromGoogleSheet = async (url, locale, sellerId) => {
   }
 };
 
-export const updateSingleProductPrice = async (
-  pricePayload, // { price, minPrice?, maxPrice?, msrp?, purchasePrice? }
-  locale,
-  sellerId
-) => {
+export const updateSingleProductPrice = async (pricePayload, locale, sellerId) => {
   try {
-    const { productId } = pricePayload;
-
-    const priceValue = Number(pricePayload.price);
-    const namshiPriceValue = Number(pricePayload.namshiPrice);
-    const noonPriceValue = Number(pricePayload.noonPrice);
+    const { productId, price, namshiPrice, noonPrice, minPrice, maxPrice, msrp, purchasePrice } = pricePayload;
     const now = new Date();
 
     // 1. Ensure product exists
@@ -277,9 +269,6 @@ export const updateSingleProductPrice = async (
 
     // 2. Build $set dynamically (ONLY provided fields)
     const setData = {
-      price: priceValue,
-      namshiPrice: namshiPriceValue,
-      noonPrice: noonPriceValue,
       updatedAt: now,
     };
 
@@ -296,7 +285,9 @@ export const updateSingleProductPrice = async (
         setData[key] = num;
       }
     };
-
+    addOptionalNumber('price');
+    addOptionalNumber('namshiPrice');
+    addOptionalNumber('noonPrice');
     addOptionalNumber('minPrice');
     addOptionalNumber('maxPrice');
     addOptionalNumber('msrp');
@@ -323,27 +314,35 @@ export const updateSingleProductPrice = async (
 
     // 4. Update product price only (optional fields stay in Price)
     const productSet = {
-      price: priceValue,
-      namshiPrice: namshiPriceValue,
-      noonPrice: noonPriceValue,
       updatedAt: now,
     };
 
-    if (pricePayload.minPrice !== undefined) productSet.minPrice = pricePayload.minPrice;
-    if (pricePayload.maxPrice !== undefined) productSet.maxPrice = pricePayload.maxPrice;
-    if (pricePayload.msrp !== undefined) productSet.msrp = pricePayload.msrp;
-    if (pricePayload.purchasePrice !== undefined) productSet.purchasePrice = pricePayload.purchasePrice;
+    if (price !== undefined) productSet.price = price;
+    if (namshiPrice !== undefined) productSet.namshiPrice = namshiPrice;
+    if (noonPrice !== undefined) productSet.noonPrice = noonPrice;
+    if (minPrice !== undefined) productSet.minPrice = minPrice;
+    if (maxPrice !== undefined) productSet.maxPrice = maxPrice;
+    if (msrp !== undefined) productSet.msrp = msrp;
+    if (purchasePrice !== undefined) productSet.purchasePrice = purchasePrice;
 
     // Update Product
     await Product.updateOne({ _id: productId }, { $set: productSet });
 
-    return {
+    let sendData = {
       productId,
       priceId: priceDoc._id,
-      price: priceDoc.price,
-      namshiPrice: priceDoc.namshiPrice,
-      noonPrice: priceDoc.noonPrice,
       updatedAt: priceDoc.updatedAt,
+    };
+    if (price !== undefined) sendData.price = price;
+    if (namshiPrice !== undefined) sendData.namshiPrice = namshiPrice;
+    if (noonPrice !== undefined) sendData.noonPrice = noonPrice;
+    if (minPrice !== undefined) sendData.minPrice = minPrice;
+    if (maxPrice !== undefined) sendData.maxPrice = maxPrice;
+    if (msrp !== undefined) sendData.msrp = msrp;
+    if (purchasePrice !== undefined) sendData.purchasePrice = purchasePrice;
+
+    return {
+      ...sendData,
     };
   } catch (err) {
     console.error('Service updateSingleProductPrice error:', err);
