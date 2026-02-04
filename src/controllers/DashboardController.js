@@ -4,7 +4,7 @@ import { errorLog } from '#middleware/index.js';
 
 export const getOrderFlow = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
+    const sellerId = req.query?.sellerId ?? req.sellerId;
     const { period, startDate, endDate, month, channelId } = req.query;
 
     const stats = await dashboardService.getOrderFlowStatus(sellerId, period, { startDate, endDate, month, channelId });
@@ -22,7 +22,7 @@ export const getOrderFlow = async (req, res) => {
 
 export const getorderOverview = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
+    const sellerId = req.query?.sellerId ?? req.sellerId;
     const { period, startDate, endDate, month, channelId } = req.query;
 
     const status = await dashboardService.getorderOverviewStatus(sellerId, period, {
@@ -61,7 +61,7 @@ export const getShipmentAnalytics = async (req, res) => {
 
 export const getAnalytics = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
+    const sellerId = req.query?.sellerId ?? req.sellerId;
     const { period, metric, startDate, endDate, month, channelId } = req.query;
 
     const data = await dashboardService.getAnalyticsTimeSeries(sellerId, period, metric, {

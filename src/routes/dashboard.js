@@ -8,7 +8,7 @@ import {
   getTopPerformersProducts,
   getSalesByChannel,
 } from '#controllers/DashboardController.js';
-import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, verifySellerAccess, verifyMultipleSellerAccess } from '#middleware/index.js';
 import {
   orderFlowStatusValidator,
   orderOverviewValidator,
@@ -25,7 +25,7 @@ dashboardRoutes.get(
   orderFlowStatusValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getOrderFlow
 );
 
@@ -34,7 +34,7 @@ dashboardRoutes.get(
   orderOverviewValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getorderOverview
 );
 
@@ -43,7 +43,7 @@ dashboardRoutes.get(
   orderAnalyticsValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getAnalytics
 );
 
