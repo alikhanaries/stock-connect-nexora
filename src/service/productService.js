@@ -731,10 +731,12 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       console.warn('CategoryTrail update error:', e.message)
     );
   }
+  // Resolve hierarchy only on successful imports/updates
 
-  // Resolve product types (non-critical)
-  await resolveProductTypes(sellerId);
-  await resolveHierarchyStatus(sellerId);
+  if (finalValidProducts.length > 0) {
+    await resolveProductTypes(sellerId);
+    await resolveHierarchyStatus(sellerId);
+  }
 
   return {
     success: true,
