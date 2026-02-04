@@ -249,9 +249,9 @@ export const getOrderById = async (id, userId) => {
   try {
     const order = await Order.findById(id).lean();
     if (!order) return false;
-    // --------------------------------------------------
+
     // Fetch CE shipment details (NON-BLOCKING)
-    // --------------------------------------------------
+
     let channelEngineShipments = [];
 
     try {
@@ -389,7 +389,6 @@ export const getOrderById = async (id, userId) => {
         id: sku.id,
         productCode: sku.merchantProductNo,
         totalQty: sku.quantity,
-
         confirmed: b.confirmed || 0,
         shipmentCreated: b.shipmentCreated || 0,
         shipped: b.shipped || 0,
