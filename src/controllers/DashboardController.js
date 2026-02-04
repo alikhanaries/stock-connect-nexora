@@ -5,9 +5,9 @@ import { errorLog } from '#middleware/index.js';
 export const getOrderFlow = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { period, startDate, endDate, month } = req.query;
+    const { period, startDate, endDate, month, channelId } = req.query;
 
-    const stats = await dashboardService.getOrderFlowStatus(sellerId, period, { startDate, endDate, month });
+    const stats = await dashboardService.getOrderFlowStatus(sellerId, period, { startDate, endDate, month, channelId });
 
     if (!stats) {
       return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
@@ -23,9 +23,14 @@ export const getOrderFlow = async (req, res) => {
 export const getorderOverview = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { period, startDate, endDate, month } = req.query;
+    const { period, startDate, endDate, month, channelId } = req.query;
 
-    const status = await dashboardService.getorderOverviewStatus(sellerId, period, { startDate, endDate, month });
+    const status = await dashboardService.getorderOverviewStatus(sellerId, period, {
+      startDate,
+      endDate,
+      month,
+      channelId,
+    });
     if (!status) {
       return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
     }
@@ -40,9 +45,9 @@ export const getorderOverview = async (req, res) => {
 export const getShipmentAnalytics = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { period } = req.query;
+    const { period, channelId } = req.query;
 
-    const data = await dashboardService.getShipmentAnalytics(sellerId, period);
+    const data = await dashboardService.getShipmentAnalytics(sellerId, period, channelId);
     if (!data) {
       return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
     }
@@ -57,9 +62,14 @@ export const getShipmentAnalytics = async (req, res) => {
 export const getAnalytics = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { period, metric, startDate, endDate, month } = req.query;
+    const { period, metric, startDate, endDate, month, channelId } = req.query;
 
-    const data = await dashboardService.getAnalyticsTimeSeries(sellerId, period, metric, { startDate, endDate, month });
+    const data = await dashboardService.getAnalyticsTimeSeries(sellerId, period, metric, {
+      startDate,
+      endDate,
+      month,
+      channelId,
+    });
     if (!data) {
       return Responses.failResponse(res, req.locale.FAILED_TO_GET_ORDER_STATUS, 404);
     }

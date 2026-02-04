@@ -147,7 +147,7 @@ export const getPreviousRange = (period, currentRange) => {
 
 export const isComparablePeriod = (period) => ['today', 'weekly', 'monthly'].includes(period);
 
-export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range }) => {
+export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range, channelId }) => {
   const isMonthly = period === 'monthly';
   const isToday = period === 'today';
   const isAll = period === 'all';
@@ -209,6 +209,7 @@ export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range
       $match: {
         sellerId: sellerObjectId,
         orderDate: { $gte: range.start, $lte: range.end },
+        ...(channelId !== null ? { channelId } : {}),
       },
     },
     { $group: { _id: groupId, value: valueExpression } },

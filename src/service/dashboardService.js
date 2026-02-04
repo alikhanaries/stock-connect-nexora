@@ -16,9 +16,12 @@ import {
   isComparablePeriod,
 } from '../helpers/dashboard.js';
 
-const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month } = {}) => {
+const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channelId } = {}) => {
   try {
     const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+
+    const channelFilter =
+      channelId !== undefined && channelId !== null && channelId !== '' ? { channelId: Number(channelId) } : {};
 
     const currentRange = getDateRange({ period, startDate, endDate, month });
     if (!currentRange) throw new Error(`Invalid period "${period}". Allowed: today, weekly, monthly`);
@@ -48,7 +51,13 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     const [currentAgg, previousAgg] = await Promise.all(
       [currentRange, previousRange].map((range) =>
         Order.aggregate([
-          { $match: { sellerId: sellerObjectId, orderDate: { $gte: range.start, $lte: range.end } } },
+          {
+            $match: {
+              sellerId: sellerObjectId,
+              ...channelFilter,
+              orderDate: { $gte: range.start, $lte: range.end },
+            },
+          },
           { $group: { _id: '$status', count: { $sum: 1 } } },
         ])
       )
@@ -77,7 +86,7 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
   }
 };
 
-const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, month } = {}) => {
+const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, month, channelId } = {}) => {
   const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
 
   const currentRange = getDateRange({ period, startDate, endDate, month });
@@ -85,12 +94,16 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const comparable = isComparablePeriod(period);
   const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
+  const baseMatch = {
+    sellerId: sellerObjectId,
+    ...(channelId ? { channelId: Number(channelId) } : {}),
+  };
 
   const aggregateMetrics = async ({ start, end }) => {
     const [data] = await Order.aggregate([
       {
         $match: {
-          sellerId: sellerObjectId,
+          ...baseMatch,
           orderDate: { $gte: start, $lte: end },
         },
       },
@@ -100,8 +113,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           _id: '$_id',
           totalOrderValue: { $first: '$totalInclVat' },
           deliveredTotal: {
-            $first: {
-              $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
+            $sum: {
+              $cond: [{ $eq: ['$status', 'DELIVERED'] }, { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] }, 0],
             },
           },
           totalProducts: {
@@ -157,8 +170,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
     buildMetric(
       'avgProductsPerOrder',
       'Avg Products per Order',
-      current.avgProductsPerOrder,
-      previous.avgProductsPerOrder
+      Math.round(current.avgProductsPerOrder),
+      Math.round(previous.avgProductsPerOrder)
     ),
   ];
 };
@@ -189,16 +202,27 @@ const getShipmentAnalytics = async (sellerId, period) => {
   }));
 };
 
-const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month } = {}) => {
+const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month, channelId } = {}) => {
   if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
-  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-    throw new Error('Invalid sellerId');
+  if (!mongoose.Types.ObjectId.isValid(sellerId)) throw new Error('Invalid sellerId');
+
+  const channelIdNum = channelId === undefined || channelId === null || channelId === '' ? null : Number(channelId);
+
+  if (channelIdNum !== null && !Number.isFinite(channelIdNum)) {
+    throw new Error('Invalid channelId');
   }
   const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range) throw new Error(`Invalid period "${period}"`);
 
-  const pipeline = buildAggregationPipeline({ sellerObjectId, period, metric, range });
+  const pipeline = buildAggregationPipeline({
+    sellerObjectId,
+    period,
+    metric,
+    range,
+    channelId: channelIdNum,
+  });
+
   const rawData = await Order.aggregate(pipeline);
 
   return { metric, data: normalizeSeries(period, rawData, range) };

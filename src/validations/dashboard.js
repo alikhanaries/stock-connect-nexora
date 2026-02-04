@@ -10,6 +10,12 @@ export const orderFlowStatusValidator = validate(async (req) => {
   // Validate query params
   const querySchema = z
     .object({
+      channelId: z
+        .string()
+        .optional()
+        .refine((v) => v === undefined || (/^\d+$/.test(v) && Number(v) > 0), {
+          message: 'channelId must be a positive number',
+        }),
       period: z
         .string()
         .optional()
@@ -60,6 +66,12 @@ export const orderOverviewValidator = validate(async (req) => {
   // Validate query params
   const querySchema = z
     .object({
+      channelId: z
+        .string()
+        .optional()
+        .refine((v) => v === undefined || (/^\d+$/.test(v) && Number(v) > 0), {
+          message: 'channelId must be a positive number',
+        }),
       period: z
         .string()
         .optional()
@@ -110,6 +122,12 @@ export const orderAnalyticsValidator = validate(async (req) => {
   // Validate query params
   const querySchema = z
     .object({
+      channelId: z
+        .string()
+        .optional()
+        .refine((v) => v === undefined || (/^\d+$/.test(v) && Number(v) > 0), {
+          message: 'channelId must be a positive number',
+        }),
       period: z
         .string()
         .optional()
