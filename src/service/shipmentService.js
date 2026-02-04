@@ -1066,10 +1066,10 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     const cancelReason = reason?.trim() || 'NA';
 
     // 1️ Only SHIPMENT_CREATED can be canceled
-    const shipment = await Shipment.findOne(
-      { _id: shipmentId, status: AYMAKAN_STATUS['AY-0001'].status },
-      { _id: 1, airWaybillNo: 1, orderId: 1 }
-    );
+    const shipment = await Shipment.findOne({
+      _id: shipmentId,
+      status: AYMAKAN_STATUS['AY-0001'].status, // SHIPMENT_CREATED
+    }).lean();
 
     if (!shipment) {
       return {
@@ -1078,66 +1078,56 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       };
     }
 
-    const trackingNumber = shipment.airWaybillNo;
+    const { airWaybillNo, orderId, products } = shipment;
 
     //2 Cancel shipment via Aymakan API
-    await cancelAymakanShipment(trackingNumber);
-    const { orderId, products } = shipment;
 
-    // 23 Cancel shipment
+    await cancelAymakanShipment(airWaybillNo);
 
-    await Shipment.findByIdAndUpdate(shipment._id, {
+    // STEP 3: Mark shipment as CANCELED
+
+    await Shipment.findByIdAndUpdate(shipmentId, {
       status: 'CANCELED',
       cancelReason,
     });
 
-    // 34 Fetch order
+    // STEP 4: Fetch order (mongoose doc, not lean)
 
-    const order = await Order.findById(orderId).lean();
+    const order = await Order.findById(orderId);
     if (!order) throw new Error('Order not found');
 
-    //4️ Recalculate SKU statuses
+    // STEP 5: REVERT SKU STATUS BREAKDOWN
 
-    for (const p of products || []) {
-      const sku = order.orderSkuList.skuList.find((s) => s.id === p.orderLineId);
+    for (const product of products || []) {
+      const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
 
       if (!sku) continue;
 
-      const cancelledQty = sku.cancellationRequestedQuantity || 0;
+      const qty = Number(product.quantity || 0);
 
-      let finalSkuStatus;
-
-      // SKU STATUS PRIORITY
-
-      if (cancelledQty > 0) {
-        finalSkuStatus = 'PARTIALLY_CANCELED';
-      } else {
-        finalSkuStatus = 'NEW';
+      // Defensive init
+      if (!sku.statusBreakdown) {
+        sku.statusBreakdown = {
+          confirmed: sku.quantity || 0,
+          shipped: 0,
+          delivered: 0,
+          returned: 0,
+          canceled: 0,
+          shipmentCreated: 0,
+        };
       }
 
-      await Order.updateOne(
-        { _id: orderId },
-        {
-          $set: {
-            'orderSkuList.skuList.$[sku].status': finalSkuStatus,
-          },
-        },
-        {
-          arrayFilters: [{ 'sku.id': p.orderLineId }],
-        }
-      );
+      //  Reduce shipmentCreated
+      sku.statusBreakdown.shipmentCreated = Math.max(sku.statusBreakdown.shipmentCreated - qty, 0);
+
+      //  Restore confirmed
+      sku.statusBreakdown.confirmed += qty;
+
+      // SKU status correction
+      sku.status = sku.statusBreakdown.confirmed === sku.quantity ? 'NEW' : 'IN_PROGRESS';
     }
 
-    //5️ Re-fetch updated order for final order status calculation
-
-    const updatedOrder = await Order.findById(orderId).select('orderSkuList.skuList.status').lean();
-
-    if (!updatedOrder?.orderSkuList?.skuList?.length) {
-      throw new Error('Order SKU list not found');
-    }
-
-    // Rule 1: Order is NEW only if ALL SKUs are NEW
-    const allSkusAreNew = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === 'NEW');
+    await order.save();
 
     // Rule 2: Any active shipment forces IN_PROGRESS
     const hasActiveShipment = await Shipment.exists({
@@ -1145,9 +1135,8 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       status: { $ne: 'CANCELED' },
     });
 
-    const finalOrderStatus = allSkusAreNew && !hasActiveShipment ? 'NEW' : 'IN_PROGRESS';
+    const finalOrderStatus = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
 
-    // Update order status
     await Order.findByIdAndUpdate(orderId, {
       status: finalOrderStatus,
     });
@@ -1159,8 +1148,8 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       {
         $push: {
           details: {
-            status: finalOrderStatus,
-            description: 'Shipment canceled and order/SKU statuses recalculated',
+            status: 'SHIPMENT CANCELED',
+            description: `Shipment canceled (AWB - ${airWaybillNo})`,
             createdAt: new Date(),
           },
         },
@@ -1171,7 +1160,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     return {
       success: true,
       message: 'Shipment canceled successfully',
-      shipmentId: shipment._id,
+      shipmentId,
     };
   } catch (error) {
     console.error('cancelShipmentService error:', error);

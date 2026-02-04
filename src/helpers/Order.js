@@ -515,7 +515,6 @@ const sanitizeOrdersData = async (orders) => {
   });
 };
 
-
 export const deriveOrderStatusFromSkus = (skuList = []) => {
   const s = aggregateSkuStatus(skuList);
 
@@ -577,7 +576,6 @@ const getExtraStatus = (extraData = []) => {
 
   return (statusObj?.Value || statusObj?.status || '').toLowerCase();
 };
-
 
 const buildStatusBreakdown = ({ line, existingSku }) => {
   const qty = line.Quantity || 0;
