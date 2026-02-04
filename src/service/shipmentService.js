@@ -1904,6 +1904,31 @@ export const createManualShipmentService = async (shipmentData) => {
       await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' });
     }
 
+    const updatedSkuList = updatedOrder.orderSkuList.skuList.map((sku) => {
+      const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+
+      const shippedQty = totalShippedMap[String(sku.id)] || 0;
+
+      const confirmedQty = Math.max(availableQty - shippedQty, 0);
+
+      return {
+        ...sku,
+        statusBreakdown: {
+          confirmed: confirmedQty,
+          shipped: shippedQty,
+          delivered: sku.statusBreakdown?.delivered ?? 0,
+          returned: sku.statusBreakdown?.returned ?? 0,
+          canceled: sku.statusBreakdown?.canceled ?? 0,
+          shipmentCreated: sku.statusBreakdown?.shipmentCreated ?? 0, // optional but recommended
+        },
+        status: shippedQty >= availableQty ? 'SHIPPED' : shippedQty > 0 ? 'IN_PROGRESS' : 'IN_PROGRESS',
+      };
+    });
+
+    await Order.findByIdAndUpdate(orderId, {
+      'orderSkuList.skuList': updatedSkuList,
+    });
+
     /* -------------------- LOGS -------------------- */
     await OrderLogs.updateOne(
       { orderId },
