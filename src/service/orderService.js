@@ -244,14 +244,13 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     return { success: false, message: err.message };
   }
 };
-
 export const getOrderById = async (id, userId) => {
   try {
     const order = await Order.findById(id).lean();
     if (!order) return false;
-    // --------------------------------------------------
+   
     // Fetch CE shipment details (NON-BLOCKING)
-    // --------------------------------------------------
+   
     let channelEngineShipments = [];
 
     try {
@@ -312,7 +311,7 @@ export const getOrderById = async (id, userId) => {
     allOrderSkus.forEach((sku) => {
       const b = sku.statusBreakdown || {};
       const image = productsMap[sku.merchantProductNo]?.image || null;
-      const hsCode = productsMap[sku.merchantProductNo]?.hsCode;
+      const hsCode = productsMap[sku.merchantProductNo]?.hsCode || sku.merchantProductNo;
 
       // ---------- CANCELLED ----------
       if (b.canceled > 0) {
@@ -329,7 +328,7 @@ export const getOrderById = async (id, userId) => {
       }
 
       // ---------- UNSHIPPED (CONFIRMED + SHIPMENT CREATED) ----------
-      const pendingQty = (b.confirmed || 0) + (b.shipmentCreated || 0);
+      const pendingQty = b.confirmed || 0;
 
       if (pendingQty > 0) {
         unshippedItems.push({
@@ -389,7 +388,6 @@ export const getOrderById = async (id, userId) => {
         id: sku.id,
         productCode: sku.merchantProductNo,
         totalQty: sku.quantity,
-
         confirmed: b.confirmed || 0,
         shipmentCreated: b.shipmentCreated || 0,
         shipped: b.shipped || 0,
