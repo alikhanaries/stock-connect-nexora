@@ -125,15 +125,22 @@ export const importProductsFromCsvFile = async (req, res) => {
 
 export const pushProductToChannelEngine = async (req, res) => {
   const { channelId } = req.params;
+  const sellerId = req.sellerId;
   try {
-    const sellerId = req.sellerId;
-    const { validProducts = [] } = await productService.validateProducts(channelId, sellerId);
+    const { activeProducts, inactiveProducts } = await productService.validateProducts(channelId, sellerId);
 
-    if (validProducts.length > 0) {
-      // Fire-and-forget (non-blocking)
+    if (activeProducts.length) {
       productService
-        .pushProductsAsync(validProducts, channelId, sellerId)
-        .catch((err) => console.error('Async push failed:', err));
+        .pushActiveProductsToChannel(activeProducts, channelId, sellerId)
+        .catch((err) => console.error('Async active push failed:', err));
+    }
+    if (inactiveProducts.length) {
+      const inactiveSkuList = inactiveProducts.filter((p) => p.productType === 'simple').map((p) => p.productSkuCode);
+      if (inactiveSkuList.length) {
+        productService
+          .pushInActiveProductsToChannel(inactiveSkuList)
+          .catch((err) => console.error('Async inactive delete failed:', err));
+      }
     }
     return successResponse(res, req.locale.ALL_PRODUCTS_PUSH_SUCCESS, 200, null);
   } catch (err) {
