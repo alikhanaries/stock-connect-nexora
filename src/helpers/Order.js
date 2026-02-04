@@ -539,6 +539,7 @@ const getExtraStatus = (extraData = []) => {
   return (statusObj?.Value || statusObj?.status || '').toLowerCase();
 };
 
+
 const buildStatusBreakdown = ({ line, existingSku }) => {
   const qty = line.Quantity || 0;
 
@@ -547,13 +548,13 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
   const empty = {
     confirmed: 0,
     shipped: prev.shipped ?? 0,
-    delivered: 0,
-    returned: 0,
-    canceled: 0,
+    delivered: prev.delivered ?? 0,
+    returned: prev.returned ?? 0,
+    canceled: prev.canceled ?? 0,
     shipmentCreated: prev.shipmentCreated ?? 0,
   };
 
-  //  EXTRA DATA OVERRIDE (highest priority)
+  // EXTRA DATA OVERRIDE (highest priority)
   const extraStatus = getExtraStatus(line.ExtraData);
 
   if (extraStatus === 'delivered') {
@@ -566,14 +567,13 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
     };
   }
 
-  //  Normal ChannelEngine status handling
   switch (line.Status) {
     case 'NEW':
     case 'IN_PROGRESS':
     case 'IN_COMBI':
       return {
         ...empty,
-        confirmed: Math.max(qty - empty.shipped - empty.delivered, 0),
+        confirmed: Math.max(qty - empty.shipmentCreated - empty.shipped - empty.delivered - empty.canceled, 0),
       };
 
     case 'SHIPPED':
@@ -586,6 +586,9 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
       return {
         ...empty,
         delivered: qty,
+        confirmed: 0,
+        shipped: 0,
+        shipmentCreated: 0,
       };
 
     case 'RETURNED':
@@ -599,20 +602,19 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
       return {
         ...empty,
         canceled: qty,
+        confirmed: 0,
+        shipped: 0,
+        shipmentCreated: 0,
       };
-
     case 'CLOSED':
-      // CLOSED is ambiguous → do NOT guess
       return {
         ...empty,
-        confirmed: qty,
+        confirmed: Math.max(qty - empty.shipped - empty.delivered - empty.canceled, 0),
       };
-
     default:
       return empty;
   }
 };
-
 export default {
   sanitizeOrdersData,
   getPeriodDate,
