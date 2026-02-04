@@ -148,7 +148,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
         label,
         value: Number(curr.toFixed(2)),
         changePercent: 100,
-        trend: 'neutral',
+        trend: 'up',
       };
     }
     return {
