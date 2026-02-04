@@ -715,7 +715,7 @@ export const ayMakanWebHookService = async (data) => {
           data?.tracking?.delivery_date || new Date(),
           shipmentData.merchantShipmentNo
         );
-      }, 'updating delivery state in ChannelEngine');
+      }, 'Updating delivery state in ChannelEngine');
     }
 
     // ---------------- UPDATE SHIPMENT ----------------
@@ -937,6 +937,7 @@ export const ayMakanWebHookService = async (data) => {
       success: true,
       message: `Shipment ${data.tracking} updated successfully`,
       shipmentId: shipmentData._id,
+      orderStatus: finalOrderStatus,
     };
   } catch (error) {
     console.error('ayMakanWebHookService error:', error);
