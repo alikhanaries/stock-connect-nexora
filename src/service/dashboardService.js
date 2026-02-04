@@ -34,19 +34,48 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
 
     const globalChannelFilter = buildGlobalChannelFilter(channel);
     // Aggregate current & previous
-    const [currentAgg, previousAgg] = await Promise.all(
-      [currentRange, previousRange].map((range) =>
-        Order.aggregate([
-          {
-            $match: {
-              sellerId: { $in: sellerObjectIds },
-              ...globalChannelFilter,
-              orderDate: { $gte: range.start, $lte: range.end },
+    const buildAgg = (range) => [
+      {
+        $match: {
+          sellerId: { $in: sellerObjectIds },
+          ...globalChannelFilter,
+          orderDate: { $gte: range.start, $lte: range.end },
+        },
+      },
+      {
+        $facet: {
+          statusCounts: [
+            { $match: { status: { $ne: 'DELIVERED' } } },
+            { $group: { _id: '$status', count: { $sum: 1 } } },
+          ],
+          deliveredQty: [
+            { $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false } },
+            { $match: { 'orderSkuList.skuList.statusBreakdown.delivered': { $gt: 0 } } },
+            {
+              $group: {
+                _id: 'DELIVERED',
+                count: { $sum: { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] } },
+              },
             },
-          },
-          { $group: { _id: '$status', count: { $sum: 1 } } },
-        ])
-      )
+          ],
+        },
+      },
+      {
+        $project: {
+          merged: { $concatArrays: ['$statusCounts', '$deliveredQty'] },
+        },
+      },
+      { $unwind: '$merged' },
+      {
+        $group: {
+          _id: '$merged._id',
+          count: { $sum: '$merged.count' },
+        },
+      },
+    ];
+
+    const [currentAgg, previousAgg] = await Promise.all(
+      [currentRange, previousRange].map((range) => Order.aggregate(buildAgg(range)))
     );
 
     const toMap = (arr) => Object.fromEntries(arr.map((s) => [s._id.toUpperCase(), s.count]));
