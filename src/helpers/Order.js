@@ -395,7 +395,13 @@ const sanitizeOrdersData = async (orders) => {
             airWaybillNo: existingSku?.airWaybillNo ?? null,
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
-            status: normalizeSkuStatus(line?.Status),
+            status:
+              existingSku?.status === 'SHIPPED' ||
+              existingSku?.status === 'DELIVERED' ||
+              existingSku?.status === 'RETURNED' ||
+              existingSku?.status === 'CANCELED'
+                ? existingOrder?.status
+                : normalizeSkuStatus(line?.Status),
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity,
           };
@@ -646,7 +652,6 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
       return empty;
   }
 };
-
 export default {
   sanitizeOrdersData,
   getPeriodDate,
