@@ -60,8 +60,6 @@ export const removeProductsFromCE = async (skuCodes) => {
 };
 
 export const syncProductExtraDataToMarketplace = async (bulkPayload = []) => {
-  console.log(bulkPayload, 'bulkPayload');
-
   if (!bulkPayload.length) return [];
   const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
     method: 'PATCH',
