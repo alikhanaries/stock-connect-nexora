@@ -294,6 +294,7 @@ export const getOrganizedOrderRowData = (flattenedOrder, organizedHeaders) => {
 };
 
 export const normalizeSkuStatus = (channelStatus) => {
+ 
   switch (channelStatus) {
     case 'NEW':
       return 'NEW';
@@ -308,7 +309,6 @@ export const normalizeSkuStatus = (channelStatus) => {
       return 'SHIPPED';
 
     case 'DELIVERED':
-    case 'RETURNED':
     case 'CLOSED':
       return 'CLOSED';
 
@@ -316,6 +316,8 @@ export const normalizeSkuStatus = (channelStatus) => {
     case 'PARTIALLY_CANCELED':
     case 'MANCO':
       return 'CANCELED';
+    case 'RETURNED':
+      return 'RETURNED';
 
     default:
       return 'IN_PROGRESS';
@@ -396,12 +398,12 @@ const sanitizeOrdersData = async (orders) => {
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
             status:
-              existingSku?.status === 'SHIPPED' ||
-              existingSku?.status === 'DELIVERED' ||
-              existingSku?.status === 'RETURNED' ||
-              existingSku?.status === 'CANCELED'
-                ? existingOrder?.status
-                : normalizeSkuStatus(line?.Status),
+                  existingSku?.status === 'SHIPPED' ||
+                  existingSku?.status === 'DELIVERED' ||
+                  existingSku?.status === 'RETURNED' ||
+                  existingSku?.status === 'CANCELED'
+                    ? existingOrder?.status
+                    : normalizeSkuStatus(line?.Status),
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity,
           };
