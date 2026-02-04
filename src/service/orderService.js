@@ -28,6 +28,8 @@ import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
+import { Readable } from 'stream';
+import { processAmazonOrderImportStream } from '#helpers/amazonOrder.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
@@ -1137,6 +1139,75 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
   }
 };
 
+export async function getNewAmazonOrders(url, locale, sellerId) {
+  try {
+    console.log('Fetching Google Sheet from URL:', url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
+    const stream = Readable.fromWeb(res.body);
+    return await processAmazonOrderImportStream(stream, { locale, sellerId });
+  } catch (error) {
+    console.error('Error fetching new orders from ChannelEngine:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+export const processAmazonOrders = async (orders, sellerId) => {
+  try {
+    console.log({ orders, sellerId });
+    // const operations = await orderhelper.sanitizeAmazonOrdersData(orders, sellerId);
+
+    // // Step 1: Convert flat CSV rows to CE format
+
+    // // Step 2: Pass to existing sanitizer (NO changes needed)
+    // // const operations = sanitizeAmazonOrdersData(ceOrders);
+
+    // // Execute the bulk write
+    // const result = await Order.bulkWrite(operations);
+    // // Get only newly created (upserted) orders
+    // const upsertedOrderIds = Object.values(result.upsertedIds || {});
+    // const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
+
+    // // Build log entries for each newly created order
+    // const orderLogs = upsertedIndexes.map((index, i) => {
+    //   const order = orders[index];
+    //   const orderId = upsertedOrderIds[i];
+
+    //   const logDetails = [
+    //     {
+    //       status: 'CREATED',
+    //       description: 'Order Placed',
+    //       createdAt: new Date(order?.OrderDate || order?.orderDate || Date.now()),
+    //     },
+    //   ];
+
+    //   return {
+    //     orderId,
+    //     details: logDetails,
+    //   };
+    // });
+
+    // // Insert logs only for newly created orders
+    // if (orderLogs.length > 0) {
+    //   await OrderLogs.insertMany(orderLogs);
+    //   console.log('Inserted order logs:', orderLogs.length);
+    // } else {
+    //   console.log('No new orders created — skipping log insertion');
+    // }
+
+    return {
+      success: true,
+      // data: {
+      //   ...result,
+      //   insertedOrderIds: upsertedOrderIds,
+      // },
+    };
+  } catch (error) {
+    console.error('Error in processOrders:', error.message);
+    return { success: false, message: error.message };
+  }
+};
+
 export default {
   getAllOrders,
   getAdminOrders,
@@ -1151,4 +1222,6 @@ export default {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrdersToCSV,
+  getNewAmazonOrders,
+  processAmazonOrders,
 };
