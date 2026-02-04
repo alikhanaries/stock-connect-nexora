@@ -500,9 +500,10 @@ const sanitizeOrdersData = async (orders) => {
         countryIso: data.BillingAddress.CountryIso,
       },
       status:
-        existingOrder?.status === 'SHIPPED' ||
-        existingOrder?.status === 'CLOSED' ||
-        existingOrder?.status === 'CANCELED'
+            existingOrder?.status === 'SHIPPED' ||
+            existingOrder?.status === 'CLOSED' ||
+            existingOrder?.status === 'CANCELED' ||
+            existingOrder?.status === 'RETURNED'
           ? existingOrder?.status
           : normalizeSkuStatus(data?.Status),
     };
