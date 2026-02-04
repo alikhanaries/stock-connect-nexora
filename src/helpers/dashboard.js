@@ -554,6 +554,17 @@ export const buildGlobalChannelFilter = (channel) => {
 
   return { globalChannelName: { $in: globalNames } };
 };
+
+export const pickSelectedGlobalNames = (channel) => {
+  if (!channel) return [];
+  const filter = buildGlobalChannelFilter(channel);
+  const v = filter?.globalChannelName;
+  if (typeof v === 'string') return [v];
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === 'object' && Array.isArray(v.$in)) return v.$in;
+  return [];
+};
+
 export default {
   getDateRange,
   getPreviousRange,
@@ -565,4 +576,5 @@ export default {
   topFacetPipeline,
   prevRevenuePipeline,
   buildGlobalChannelFilter,
+  pickSelectedGlobalNames,
 };

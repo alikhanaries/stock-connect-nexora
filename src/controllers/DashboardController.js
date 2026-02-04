@@ -131,3 +131,23 @@ export const getSalesByChannel = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const getOrdersByChannel = async (req, res) => {
+  try {
+    const sellerId = req.query?.sellerId ?? req.sellerId;
+    const { period, startDate, endDate, month, channel } = req.query;
+
+    const data = await dashboardService.getOrdersByChannel(sellerId, period, {
+      startDate,
+      endDate,
+      month,
+      channel,
+    });
+
+    if (!data) return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};

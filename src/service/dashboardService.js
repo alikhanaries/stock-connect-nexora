@@ -15,6 +15,7 @@ import {
   buildInventoryStatusPipeline,
   isComparablePeriod,
   buildGlobalChannelFilter,
+  pickSelectedGlobalNames,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
@@ -396,6 +397,48 @@ const getSalesByChannel = async (sellerId, period) => {
   return Array.isArray(data) ? data : [];
 };
 
+const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
+  const sellerObjectIds = String(sellerId)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((id) => {
+      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
+      return new mongoose.Types.ObjectId(id);
+    });
+
+  const range = getDateRange({ period, startDate, endDate, month });
+  if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
+
+  // ✅ use helper like order-flow, but ONLY to resolve selected names
+  const selectedNames = pickSelectedGlobalNames(channel); // e.g. ["OCP"]
+  const hasChannel = selectedNames.length > 0;
+
+  const pipeline = [
+    {
+      $match: {
+        sellerId: { $in: sellerObjectIds },
+        orderDate: { $gte: range.start, $lte: range.end },
+        globalChannelName: { $type: 'string', $ne: '' },
+      },
+    },
+    { $group: { _id: '$globalChannelName', count: { $sum: 1 } } },
+    {
+      $project: {
+        _id: 0,
+        key: '$_id',
+        value: hasChannel
+          ? { $cond: [{ $in: ['$_id', selectedNames] }, '$count', 0] } // ✅ keep selected, zero others
+          : '$count',
+      },
+    },
+    { $sort: { value: -1, key: 1 } },
+  ];
+
+  const data = await Order.aggregate(pipeline).allowDiskUse(true);
+  return Array.isArray(data) ? data : [];
+};
+
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,
@@ -404,4 +447,5 @@ export default {
   getTopPerformersProducts,
   getInventoryStatus,
   getSalesByChannel,
+  getOrdersByChannel,
 };
