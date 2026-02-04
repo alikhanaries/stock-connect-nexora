@@ -717,50 +717,192 @@ export const ayMakanWebHookService = async (data) => {
       })),
     });
 
-    // ---------------- ORDER STATUS DERIVATION ----------------
-    const order = await Order.findById(shipmentData.orderId).lean();
-    const skuList = order.orderSkuList?.skuList || [];
+    // SKU BREAKDOWN UPDATE
 
-    // SKU-based flags
-    let allDelivered = true;
-    let hasAnyShipped = false;
+    let shippedDelta = 0;
+    let deliveredDelta = 0;
+    let canceledDelta = 0;
 
-    for (const sku of skuList) {
-      if (sku.status !== 'DELIVERED') allDelivered = false;
-      if (sku.status === 'SHIPPED' || sku.status === 'DELIVERED') {
-        hasAnyShipped = true;
+    if (shipmentStatus === 'SHIPPED' || shipmentStatus === 'DELIVERED' || shipmentStatus === 'CANCELED') {
+      const orderDoc = await Order.findById(shipmentData.orderId);
+
+      if (orderDoc?.orderSkuList?.skuList?.length) {
+        for (const line of shipmentData.products || []) {
+          const sku = orderDoc.orderSkuList.skuList.find(
+            (s) => s.merchantProductNo === line.merchantProductNo || s.id === line.id
+          );
+
+          if (!sku) continue;
+
+          const qty = line.quantity || line.Quantity || 0;
+          if (qty <= 0) continue;
+
+          const sb = sku.statusBreakdown || {};
+          const safe = (n) => Math.max(n, 0);
+
+          // SHIPPED
+
+          if (shipmentStatus === 'SHIPPED') {
+            const moveQty = Math.min(sb.shipmentCreated || 0, qty);
+
+            sb.shipmentCreated = safe(sb.shipmentCreated - moveQty);
+            sb.shipped = safe((sb.shipped || 0) + moveQty);
+
+            shippedDelta += moveQty;
+          }
+
+          //  DELIVERED
+
+          if (shipmentStatus === 'DELIVERED') {
+            const moveQty = Math.min(sb.shipped || 0, qty);
+
+            sb.shipped = safe(sb.shipped - moveQty);
+            sb.delivered = safe((sb.delivered || 0) + moveQty);
+
+            deliveredDelta += moveQty;
+          }
+
+          //  CANCELED
+
+          if (shipmentStatus === 'CANCELED') {
+            // Cancel confirmed first, then shipmentCreated
+            let remaining = qty;
+
+            const fromConfirmed = Math.min(sb.confirmed || 0, remaining);
+            sb.confirmed = safe(sb.confirmed - fromConfirmed);
+            remaining -= fromConfirmed;
+
+            const fromShipmentCreated = Math.min(sb.shipmentCreated || 0, remaining);
+            sb.shipmentCreated = safe(sb.shipmentCreated - fromShipmentCreated);
+            remaining -= fromShipmentCreated;
+
+            const canceledQty = fromConfirmed + fromShipmentCreated;
+
+            if (canceledQty > 0) {
+              sb.canceled = safe((sb.canceled || 0) + canceledQty);
+              canceledDelta += canceledQty;
+            }
+          }
+
+          //  Re-derive SKU status
+
+          sku.statusBreakdown = sb;
+          sku.status = deriveSkuStatusFromBreakdown(sku.quantity, sku.statusBreakdown);
+        }
+
+        await orderDoc.save();
       }
     }
 
-    // SHIPMENT-based truth (CRITICAL FIX)
+    // ORDER STATUS DERIVATION (BREAKDOWN DRIVEN)
+
+    const order = await Order.findById(shipmentData.orderId).lean();
+    const skuList = order.orderSkuList?.skuList || [];
+
+    const aggregated = skuList.reduce(
+      (acc, sku) => {
+        const sb = sku.statusBreakdown || {};
+        acc.totalQty += sku.quantity || 0;
+        acc.confirmed += sb.confirmed || 0;
+        acc.shipmentCreated += sb.shipmentCreated || 0;
+        acc.shipped += sb.shipped || 0;
+        acc.delivered += sb.delivered || 0;
+        acc.canceled += sb.canceled || 0;
+        acc.returned += sb.returned || 0;
+        return acc;
+      },
+      {
+        totalQty: 0,
+        confirmed: 0,
+        shipmentCreated: 0,
+        shipped: 0,
+        delivered: 0,
+        canceled: 0,
+        returned: 0,
+      }
+    );
+
     const activeShipmentsCount = await Shipment.countDocuments({
       orderId: shipmentData.orderId,
       status: { $ne: 'CANCELED' },
     });
 
-    const allShipmentsCanceled = activeShipmentsCount === 0;
-
     let finalOrderStatus;
 
-    if (allShipmentsCanceled) {
-      // ONLY case where order can go back to NEW
+    if (activeShipmentsCount === 0 && aggregated.canceled === aggregated.totalQty) {
+      //  All canceled, no shipments
       finalOrderStatus = 'NEW';
-    } else if (allDelivered) {
+    } else if (aggregated.delivered === aggregated.totalQty) {
+      //  Fully delivered
       finalOrderStatus = 'DELIVERED';
-    } else if (hasAnyShipped) {
+    } else if (aggregated.delivered + aggregated.canceled === aggregated.totalQty) {
+      //  Finished: some delivered, some canceled
+      finalOrderStatus = 'CLOSED';
+    } else if (
+      aggregated.shipped > 0 &&
+      aggregated.confirmed === 0 &&
+      aggregated.shipmentCreated === 0 &&
+      aggregated.delivered === 0 &&
+      aggregated.returned === 0
+    ) {
+      //  Shipped, nothing pending
       finalOrderStatus = 'SHIPPED';
     } else {
+      //  Anything still pending
       finalOrderStatus = 'IN_PROGRESS';
     }
 
-    // ---------------- STATUS PRIORITY GUARD ----------------
+    // STATUS PRIORITY GUARD
+
+    const currentPriority = ORDER_PRIORITY.indexOf(order.status);
+    const nextPriority = ORDER_PRIORITY.indexOf(finalOrderStatus);
+
     const canUpdate =
-      finalOrderStatus === 'NEW'
-        ? order.status !== 'NEW'
-        : ORDER_PRIORITY.indexOf(finalOrderStatus) > ORDER_PRIORITY.indexOf(order.status);
+      // same-status (quantity/log updates)
+      nextPriority === currentPriority ||
+      // forward progress
+      nextPriority > currentPriority ||
+      // reset to NEW only if not final
+      (finalOrderStatus === 'NEW' && !['DELIVERED', 'CLOSED', 'CANCELED', 'PAYMENT_FAILED'].includes(order.status));
 
     if (canUpdate) {
       await Order.findByIdAndUpdate(order._id, { status: finalOrderStatus });
+    }
+
+    // ORDER LOGS (STATUS + QTY AWARE + CLOSED AWARE)
+
+    if (shippedDelta > 0 || deliveredDelta > 0 || canceledDelta > 0 || canUpdate) {
+      const descriptionParts = [];
+
+      //  Quantity-based messages (what changed)
+      if (deliveredDelta > 0) {
+        descriptionParts.push(`${deliveredDelta} item(s) delivered`);
+      }
+
+      if (shippedDelta > 0) {
+        descriptionParts.push(`${shippedDelta} item(s) shipped`);
+      }
+
+      if (canceledDelta > 0) {
+        descriptionParts.push(`${canceledDelta} item(s) canceled`);
+      }
+
+      //  Status-based meaning (what it means)
+      if (finalOrderStatus === 'CLOSED') {
+        descriptionParts.push('All actions completed; the order has been closed.');
+      } else if (finalOrderStatus === 'DELIVERED' && deliveredDelta === 0) {
+        descriptionParts.push('All items delivered');
+      } else if (finalOrderStatus === 'CANCELED' && canceledDelta === 0) {
+        descriptionParts.push('Order fully canceled');
+      } else if (finalOrderStatus === 'NEW') {
+        descriptionParts.push('All shipments canceled, order reset');
+      } else if (finalOrderStatus === 'SHIPPED' && shippedDelta === 0) {
+        descriptionParts.push('All shippable items shipped');
+      } else if (finalOrderStatus === 'IN_PROGRESS' && descriptionParts.length === 0) {
+        descriptionParts.push('Order in progress');
+      }
+
+      const description = `${descriptionParts.join('. ')}.`;
 
       await OrderLogs.updateOne(
         { orderId: order._id },
@@ -768,14 +910,10 @@ export const ayMakanWebHookService = async (data) => {
           $push: {
             details: {
               status: finalOrderStatus,
-              description:
-                finalOrderStatus === 'NEW'
-                  ? 'All shipments canceled, order reset'
-                  : finalOrderStatus === 'DELIVERED'
-                    ? 'All items delivered'
-                    : finalOrderStatus === 'SHIPPED'
-                      ? 'One or more items shipped'
-                      : 'Order in progress',
+              shippedQty: shippedDelta || 0,
+              deliveredQty: deliveredDelta || 0,
+              canceledQty: canceledDelta || 0,
+              description,
               createdAt: convetDateToUTC(new Date()),
             },
           },
@@ -2237,6 +2375,32 @@ export const formatChannelEngineShipments = ({ content = [], order, userId }) =>
   });
 };
 
+const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
+  const confirmed = sb.confirmed || 0;
+  const shipped = sb.shipped || 0;
+  const delivered = sb.delivered || 0;
+  const canceled = sb.canceled || 0;
+  const shipmentCreated = sb.shipmentCreated || 0;
+  const returned = sb.returned || 0;
+
+  // 1️ Fully delivered
+  if (delivered + canceled === quantity) {
+    return 'DELIVERED';
+  }
+
+  // 2️ Fully canceled
+  if (canceled === quantity) {
+    return 'CANCELED';
+  }
+
+  // 3️ Shipped but nothing pending
+  if (shipped > 0 && confirmed === 0 && shipmentCreated === 0 && delivered === 0 && returned === 0) {
+    return 'SHIPPED';
+  }
+
+  // 4️ Anything partially done
+  return 'IN_PROGRESS';
+};
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,

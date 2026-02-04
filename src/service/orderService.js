@@ -312,7 +312,7 @@ export const getOrderById = async (id, userId) => {
     allOrderSkus.forEach((sku) => {
       const b = sku.statusBreakdown || {};
       const image = productsMap[sku.merchantProductNo]?.image || null;
-      const hsCode = productsMap[sku.merchantProductNo]?.hsCode;
+      const hsCode = productsMap[sku.merchantProductNo]?.hsCode || sku.merchantProductNo;
 
       // ---------- CANCELLED ----------
       if (b.canceled > 0) {
@@ -329,7 +329,7 @@ export const getOrderById = async (id, userId) => {
       }
 
       // ---------- UNSHIPPED (CONFIRMED + SHIPMENT CREATED) ----------
-      const pendingQty = (b.confirmed || 0) + (b.shipmentCreated || 0);
+      const pendingQty = b.confirmed || 0;
 
       if (pendingQty > 0) {
         unshippedItems.push({
@@ -901,9 +901,8 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
       body: JSON.stringify(cancelPayload),
     }).catch((err) => console.error('ChannelEngine cancel failed (ignored):', err.message));
 
-    // ----------------------------------------------------
     // REBUILD SKU LIST (SOURCE OF TRUTH)
-    // ----------------------------------------------------
+
     const updatedSkuList = order.orderSkuList.skuList.map((sku) => {
       const lineId = sku.id.toString();
       const cancelItem = products.find((p) => p.orderLineId.toString() === lineId);
