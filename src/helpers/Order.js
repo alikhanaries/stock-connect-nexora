@@ -308,7 +308,6 @@ export const normalizeSkuStatus = (channelStatus) => {
       return 'SHIPPED';
 
     case 'DELIVERED':
-    case 'RETURNED':
     case 'CLOSED':
       return 'CLOSED';
 
@@ -316,6 +315,8 @@ export const normalizeSkuStatus = (channelStatus) => {
     case 'PARTIALLY_CANCELED':
     case 'MANCO':
       return 'CANCELED';
+    case 'RETURNED':
+      return 'RETURNED';
 
     default:
       return 'IN_PROGRESS';
@@ -500,7 +501,8 @@ const sanitizeOrdersData = async (orders) => {
       status:
         existingOrder?.status === 'SHIPPED' ||
         existingOrder?.status === 'CLOSED' ||
-        existingOrder?.status === 'CANCELED'
+        existingOrder?.status === 'CANCELED' ||
+        existingOrder?.status === 'RETURNED'
           ? existingOrder?.status
           : normalizeSkuStatus(data?.Status),
     };
@@ -514,7 +516,6 @@ const sanitizeOrdersData = async (orders) => {
     };
   });
 };
-
 
 export const deriveOrderStatusFromSkus = (skuList = []) => {
   const s = aggregateSkuStatus(skuList);
@@ -577,7 +578,6 @@ const getExtraStatus = (extraData = []) => {
 
   return (statusObj?.Value || statusObj?.status || '').toLowerCase();
 };
-
 
 const buildStatusBreakdown = ({ line, existingSku }) => {
   const qty = line.Quantity || 0;
