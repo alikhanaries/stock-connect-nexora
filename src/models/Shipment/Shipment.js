@@ -30,7 +30,7 @@ const shipmentSchema = new mongoose.Schema(
     deliveryDate: { type: Date, index: true },
 
     // Delivery & collection references
-    deliveryId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryAdress', required: true },
+    deliveryId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryAdress' },
     pickUpId: { type: mongoose.Schema.Types.ObjectId, ref: 'PickupAddress' },
 
     // ChannelEngine / Shipment info
@@ -41,7 +41,7 @@ const shipmentSchema = new mongoose.Schema(
     shippedFromStockLocationId: { type: Number, default: 0 },
     method: { type: String, index: true },
     isMerchantCreator: { type: Boolean, default: true },
-    shipmentMethod: { type: String, enum: ['AYMAKAN', 'MANUAL'], index: true },
+    shipmentMethod: { type: String, enum: ['AYMAKAN', 'CHANNEL_ENGINE', 'MANUAL'], index: true },
     description: { type: String },
 
     // products array

@@ -9,22 +9,22 @@ const SkuSchema = new mongoose.Schema(
     channelOrderLineNo: { type: String, trim: true },
     status: {
       type: String,
-      enum: [
-        'NEW',
-        'IN_PROGRESS',
-        'SHIPMENT_CREATED',
-        'PICKED',
-        'SHIPPED',
-        'RETURNED',
-        'CANCELED',
-        'CLOSED',
-        'IN_COMBI',
-        'DELIVERED',
-        'PARTIALLY_CANCELED',
-        'MANCO',
-      ],
-      default: 'NEW',
+      trim: true,
       index: true,
+    },
+    quantity: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+    //  STATUS-WISE QUANTITY BREAKDOWN
+    statusBreakdown: {
+      confirmed: { type: Number, default: 0, min: 0 },
+      shipped: { type: Number, default: 0, min: 0 },
+      delivered: { type: Number, default: 0, min: 0 },
+      returned: { type: Number, default: 0, min: 0 },
+      canceled: { type: Number, default: 0, min: 0 },
+      shipmentCreated: { type: Number, default: 0, min: 0 },
     },
     isFulfillmentByMarketplace: { type: Boolean, default: false },
     gtin: {
@@ -70,11 +70,7 @@ const SkuSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    quantity: {
-      type: Number,
-      required: true,
-      default: 0,
-    },
+
     cancellationRequestedQuantity: {
       type: Number,
       default: 0,
