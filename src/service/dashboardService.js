@@ -56,7 +56,7 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     // Final data mapping
     return ORDER_FLOW_STATUS_CONFIG.map(({ key, label, statuses }) => {
       const currentValue = statuses.reduce((sum, s) => sum + (currentStatus[s.toUpperCase()] || 0), 0);
-      if (period === 'all') return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
+      if (period === 'all') return { key, label, value: currentValue, changePercent: 100, trend: 'up' };
       if (!comparable) return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
       const previousValue = statuses.reduce((sum, s) => sum + (previousStatus[s.toUpperCase()] || 0), 0);
 
