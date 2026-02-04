@@ -27,7 +27,13 @@ import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
 import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
 import { upsertPricesForProducts } from '../service/priceService.js';
-import { chunkArray, getExistingProductsBySkuFromCE, removeProductsFromCE } from './channel/ceService.js';
+import {
+  chunkArray,
+  getExistingProductsBySkuFromCE,
+  removeProductsFromCE,
+  buildExtraDataPayload,
+  syncProductExtraDataToMarketplace,
+} from './channel/ceService.js';
 
 const {
   CHANNEL_ENGINE_BASE_URL,
@@ -1238,32 +1244,6 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
     appliedFilters,
   };
 };
-export async function syncProductExtraDataToMarketplace(bulkPayload = []) {
-  if (!bulkPayload.length) return [];
-  const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(bulkPayload),
-  });
-  if (!response.ok) {
-    throw new Error(`Marketplace PATCH failed: ${response.status}`);
-  }
-  return response.json();
-}
-
-const buildExtraDataPayload = (products = []) =>
-  products
-    .filter((p) => p.productSkuCode)
-    .map((p) => ({
-      MerchantProductNo: p.productSkuCode,
-      Operations: [
-        {
-          Op: 'replace',
-          Key: 'MarketPlace',
-          Value: p.marketPlace ?? null,
-        },
-      ],
-    }));
 
 const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
   try {
