@@ -14,18 +14,16 @@ import {
   prevRevenuePipeline,
   buildInventoryStatusPipeline,
   isComparablePeriod,
+  buildGlobalChannelFilter,
 } from '../helpers/dashboard.js';
 
-const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channelId } = {}) => {
+const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
   try {
     const sellerObjectIds = String(sellerId)
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
       .map((id) => new mongoose.Types.ObjectId(id));
-
-    const channelFilter =
-      channelId !== undefined && channelId !== null && channelId !== '' ? { channelId: Number(channelId) } : {};
 
     const currentRange = getDateRange({ period, startDate, endDate, month });
     if (!currentRange) throw new Error(`Invalid period "${period}".`);
@@ -34,6 +32,7 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     // Calculate previous range
     const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
 
+    const globalChannelFilter = buildGlobalChannelFilter(channel);
     // Aggregate current & previous
     const [currentAgg, previousAgg] = await Promise.all(
       [currentRange, previousRange].map((range) =>
@@ -41,7 +40,7 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
           {
             $match: {
               sellerId: { $in: sellerObjectIds },
-              ...channelFilter,
+              ...globalChannelFilter,
               orderDate: { $gte: range.start, $lte: range.end },
             },
           },
@@ -74,7 +73,7 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
   }
 };
 
-const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, month, channelId } = {}) => {
+const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
   const sellerObjectIds = String(sellerId)
     .split(',')
     .map((s) => s.trim())
@@ -86,9 +85,10 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const comparable = period !== 'all' && (isComparablePeriod(period) || currentRange.kind === 'custom');
   const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
   const baseMatch = {
     sellerId: { $in: sellerObjectIds },
-    ...(channelId ? { channelId: Number(channelId) } : {}),
+    ...globalChannelFilter,
   };
 
   const aggregateMetrics = async ({ start, end }) => {
@@ -203,13 +203,9 @@ const getShipmentAnalytics = async (sellerId, period) => {
   }));
 };
 
-const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month, channelId } = {}) => {
+const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month, channel } = {}) => {
   if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
-  const channelIdNum = channelId === undefined || channelId === null || channelId === '' ? null : Number(channelId);
-
-  if (channelIdNum !== null && !Number.isFinite(channelIdNum)) {
-    throw new Error('Invalid channelId');
-  }
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
   const sellerObjectIds = String(sellerId)
     .split(',')
     .map((s) => s.trim())
@@ -223,7 +219,7 @@ const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, end
     period,
     metric,
     range,
-    channelId: channelIdNum,
+    ...globalChannelFilter,
   });
 
   const rawData = await Order.aggregate(pipeline);

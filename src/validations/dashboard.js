@@ -3,6 +3,7 @@ import { validate } from './validate.js';
 // import { headerSchema } from './auth';
 import { headerSchema } from './headerSchema.js';
 
+const ALLOWED_CHANNELS = new Set(['all', 'amazon', 'noon', 'namshi', 'ocp']);
 export const orderFlowStatusValidator = validate(async (req) => {
   // Validate headers
   headerSchema.parse(req.headers);
@@ -10,12 +11,24 @@ export const orderFlowStatusValidator = validate(async (req) => {
   // Validate query params
   const querySchema = z
     .object({
-      channelId: z
+      channel: z
         .string()
         .optional()
-        .refine((v) => v === undefined || (/^\d+$/.test(v) && Number(v) > 0), {
-          message: 'channelId must be a positive number',
-        }),
+        .refine(
+          (val) => {
+            if (val === undefined || val === null || val === '') return true;
+
+            const values = String(val)
+              .split(',')
+              .map((c) => c.trim().toLowerCase())
+              .filter(Boolean);
+
+            if (!values.length) return true;
+
+            return values.every((v) => ALLOWED_CHANNELS.has(v));
+          },
+          { message: 'channel must be one of: all, amazon, noon, namshi, ocp (comma-separated allowed)' }
+        ),
       period: z
         .string()
         .optional()
@@ -60,18 +73,29 @@ export const orderFlowStatusValidator = validate(async (req) => {
   querySchema.parse(req.query);
 });
 export const orderOverviewValidator = validate(async (req) => {
-  // Validate headers
   headerSchema.parse(req.headers);
 
-  // Validate query params
   const querySchema = z
     .object({
-      channelId: z
+      channel: z
         .string()
         .optional()
-        .refine((v) => v === undefined || (/^\d+$/.test(v) && Number(v) > 0), {
-          message: 'channelId must be a positive number',
-        }),
+        .refine(
+          (val) => {
+            if (val === undefined || val === null || val === '') return true;
+
+            const values = String(val)
+              .split(',')
+              .map((c) => c.trim().toLowerCase())
+              .filter(Boolean);
+
+            if (!values.length) return true;
+
+            return values.every((v) => ALLOWED_CHANNELS.has(v));
+          },
+          { message: 'channel must be one of: all, amazon, noon, namshi, ocp (comma-separated allowed)' }
+        ),
+
       period: z
         .string()
         .optional()
@@ -122,12 +146,24 @@ export const orderAnalyticsValidator = validate(async (req) => {
   // Validate query params
   const querySchema = z
     .object({
-      channelId: z
+      channel: z
         .string()
         .optional()
-        .refine((v) => v === undefined || (/^\d+$/.test(v) && Number(v) > 0), {
-          message: 'channelId must be a positive number',
-        }),
+        .refine(
+          (val) => {
+            if (val === undefined || val === null || val === '') return true;
+
+            const values = String(val)
+              .split(',')
+              .map((c) => c.trim().toLowerCase())
+              .filter(Boolean);
+
+            if (!values.length) return true;
+
+            return values.every((v) => ALLOWED_CHANNELS.has(v));
+          },
+          { message: 'channel must be one of: all, amazon, noon, namshi, ocp (comma-separated allowed)' }
+        ),
       period: z
         .string()
         .optional()

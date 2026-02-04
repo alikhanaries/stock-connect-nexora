@@ -13,3 +13,10 @@ export const SHIPMENT_STATUS = [
   { key: 'DELIVERED', label: 'Delivered' },
   { key: 'CANCELED', label: 'Canceled' },
 ];
+
+export const CHANNEL_TO_GLOBAL_NAMES = Object.freeze({
+  amazon: ['Amazon.in (v3)', 'Amazon.sa (v3)'],
+  noon: ['Noon V2'],
+  namshi: ['Namshi'],
+  ocp: ['OCP'],
+});

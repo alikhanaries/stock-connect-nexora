@@ -1,3 +1,4 @@
+import { CHANNEL_TO_GLOBAL_NAMES } from '#constants/dashboard.js';
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -174,7 +175,7 @@ export const getPreviousRange = (period, currentRange) => {
 export const isComparablePeriod = (period) =>
   ['today', 'weekly', 'monthly', 'month'].includes(period) || /^last_(\d{1,3})_days$/.test(period);
 
-export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, range, channelId }) => {
+export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, range, ...globalChannelFilter }) => {
   const isMonthly = period === 'monthly';
   const isToday = period === 'today';
   const isAll = period === 'all';
@@ -236,7 +237,7 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
       $match: {
         sellerId: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
-        ...(channelId !== null ? { channelId } : {}),
+        ...globalChannelFilter,
       },
     },
     { $group: { _id: groupId, value: valueExpression } },
@@ -536,6 +537,23 @@ export const prevRevenuePipeline = (sellerObjectId, prevRange, keys = []) => [
   },
 ];
 
+export const buildGlobalChannelFilter = (channel) => {
+  if (!channel) return {};
+
+  const values = String(channel)
+    .split(',')
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!values.length || values.includes('all')) return {};
+
+  const globalNames = values.flatMap((v) => {
+    const mapped = CHANNEL_TO_GLOBAL_NAMES[v];
+    return mapped;
+  });
+
+  return { globalChannelName: { $in: globalNames } };
+};
 export default {
   getDateRange,
   getPreviousRange,
@@ -546,4 +564,5 @@ export default {
   extractCategoryLabel,
   topFacetPipeline,
   prevRevenuePipeline,
+  buildGlobalChannelFilter,
 };
