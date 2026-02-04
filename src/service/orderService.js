@@ -899,9 +899,8 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
       body: JSON.stringify(cancelPayload),
     }).catch((err) => console.error('ChannelEngine cancel failed (ignored):', err.message));
 
-    // ----------------------------------------------------
     // REBUILD SKU LIST (SOURCE OF TRUTH)
-    // ----------------------------------------------------
+
     const updatedSkuList = order.orderSkuList.skuList.map((sku) => {
       const lineId = sku.id.toString();
       const cancelItem = products.find((p) => p.orderLineId.toString() === lineId);
