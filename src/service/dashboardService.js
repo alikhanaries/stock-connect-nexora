@@ -28,25 +28,8 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
       channelId !== undefined && channelId !== null && channelId !== '' ? { channelId: Number(channelId) } : {};
 
     const currentRange = getDateRange({ period, startDate, endDate, month });
-    if (!currentRange) throw new Error(`Invalid period "${period}". Allowed: today, weekly, monthly`);
-    if (!currentRange) {
-      const statusAgg = await Order.aggregate([
-        { $match: { sellerId: sellerObjectIds } },
-        { $group: { _id: '$status', count: { $sum: 1 } } },
-      ]);
-
-      const statusMap = Object.fromEntries(statusAgg.map((s) => [s._id.toUpperCase(), s.count]));
-
-      return ORDER_FLOW_STATUS_CONFIG.map(({ key, label, statuses }) => ({
-        key,
-        label,
-        value: statuses.reduce((sum, s) => sum + (statusMap[s.toUpperCase()] || 0), 0),
-        changePercent: 0,
-        trend: 'neutral',
-      }));
-    }
-
-    const comparable = isComparablePeriod(period);
+    if (!currentRange) throw new Error(`Invalid period "${period}".`);
+    const comparable = period !== 'all' && (isComparablePeriod(period) || currentRange.kind === 'custom');
 
     // Calculate previous range
     const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
@@ -73,12 +56,13 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     // Final data mapping
     return ORDER_FLOW_STATUS_CONFIG.map(({ key, label, statuses }) => {
       const currentValue = statuses.reduce((sum, s) => sum + (currentStatus[s.toUpperCase()] || 0), 0);
+      if (period === 'all') return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
+      if (!comparable) return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
       const previousValue = statuses.reduce((sum, s) => sum + (previousStatus[s.toUpperCase()] || 0), 0);
 
       let changePercent =
         previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : currentValue > 0 ? 100 : 0;
       changePercent = Number(changePercent.toFixed(1));
-      if (!comparable) return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
       const trend = changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'neutral';
       const finalChangePercent = trend === 'down' ? Math.abs(changePercent) : changePercent;
 
@@ -100,7 +84,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
   const currentRange = getDateRange({ period, startDate, endDate, month });
   if (!currentRange) throw new Error(`Invalid period "${period}"`);
 
-  const comparable = isComparablePeriod(period);
+  const comparable = period !== 'all' && (isComparablePeriod(period) || currentRange.kind === 'custom');
   const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
   const baseMatch = {
     sellerId: { $in: sellerObjectIds },
@@ -158,12 +142,21 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const buildMetric = (key, label, curr, prev) => {
     const change = calcChange(curr, prev);
+    if (period === 'all') {
+      return {
+        key,
+        label,
+        value: Number(curr.toFixed(2)),
+        changePercent: 100,
+        trend: 'neutral',
+      };
+    }
     return {
       key,
       label,
       value: Number(curr.toFixed(2)),
-      changePercent: comparable ? Math.abs(change) : 0,
-      trend: comparable ? (change > 0 ? 'up' : change < 0 ? 'down' : 'neutral') : 'neutral',
+      changePercent: Math.abs(change),
+      trend: change > 0 ? 'up' : change < 0 ? 'down' : 'neutral',
     };
   };
 

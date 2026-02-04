@@ -121,7 +121,7 @@ export const getDateRange = (input, offset = 0) => {
 };
 
 export const getPreviousRange = (period, currentRange) => {
-  const { start } = currentRange;
+  const { start, end, kind, days } = currentRange;
 
   switch (period) {
     case 'today': {
@@ -143,9 +143,36 @@ export const getPreviousRange = (period, currentRange) => {
         end: new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999),
       };
   }
+  if (kind === 'rolling') {
+    const n = Number(days) || 0;
+    return {
+      start: new Date(start.getTime() - n * DAY_MS),
+      end: new Date(end.getTime() - n * DAY_MS),
+    };
+  }
+
+  if (kind === 'month') {
+    return {
+      start: new Date(start.getFullYear(), start.getMonth() - 1, 1),
+      end: new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999),
+    };
+  }
+
+  if (kind === 'custom') {
+    const durationMs = end.getTime() - start.getTime() + 1; // inclusive
+    const prevEnd = new Date(start.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - durationMs + 1);
+    return {
+      start: startOfDay(prevStart),
+      end: endOfDay(prevEnd),
+    };
+  }
+
+  return undefined;
 };
 
-export const isComparablePeriod = (period) => ['today', 'weekly', 'monthly'].includes(period);
+export const isComparablePeriod = (period) =>
+  ['today', 'weekly', 'monthly', 'month'].includes(period) || /^last_(\d{1,3})_days$/.test(period);
 
 export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, range, channelId }) => {
   const isMonthly = period === 'monthly';
