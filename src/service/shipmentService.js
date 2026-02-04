@@ -1525,6 +1525,7 @@ export const createReverseShipmentWithAymakan = async (shipmentData) => {
     const finalDeclaredValue = calculatedDeclaredValue > 0 ? calculatedDeclaredValue : 1;
 
     // Final Aymakan Payload
+    
     const payload = {
       requested_by: requestedBy.trim(),
 
