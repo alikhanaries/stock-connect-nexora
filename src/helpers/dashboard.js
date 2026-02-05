@@ -1,3 +1,4 @@
+import { CHANNEL_TO_GLOBAL_NAMES } from '#constants/dashboard.js';
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -94,18 +95,23 @@ export const getDateRange = (input, offset = 0) => {
   }
 
   if (period === 'weekly') {
-    const endDate = new Date(startOfDay(now).getTime() + offset * 7 * DAY_MS);
-    start = new Date(endDate.getTime() - 6 * DAY_MS);
-    end = endOfDay(endDate);
+    const startOfWeekMon = (d) => {
+      const day = d.getDay();
+      const diff = (day + 6) % 7;
+      return startOfDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff));
+    };
+
+    const base = new Date(now.getTime() + offset * 7 * DAY_MS);
+    start = startOfWeekMon(base);
+    end = endOfDay(new Date(start.getTime() + 6 * DAY_MS));
+
     return { start, end, kind: 'weekly', days: 7 };
   }
 
   if (period === 'monthly') {
-    const year = now.getFullYear();
-    const month = now.getMonth() + offset;
-
-    start = new Date(year, month, 1);
-    end = endOfDay(new Date(year, month + 1, 0));
+    const base = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    start = startOfDay(base);
+    end = endOfDay(new Date(base.getFullYear(), base.getMonth() + 1, 0));
     return { start, end, kind: 'monthly', days: null };
   }
 
@@ -121,7 +127,7 @@ export const getDateRange = (input, offset = 0) => {
 };
 
 export const getPreviousRange = (period, currentRange) => {
-  const { start } = currentRange;
+  const { start, end, kind, days } = currentRange;
 
   switch (period) {
     case 'today': {
@@ -143,19 +149,49 @@ export const getPreviousRange = (period, currentRange) => {
         end: new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999),
       };
   }
+  if (kind === 'rolling') {
+    const n = Number(days) || 0;
+    return {
+      start: new Date(start.getTime() - n * DAY_MS),
+      end: new Date(end.getTime() - n * DAY_MS),
+    };
+  }
+
+  if (kind === 'month') {
+    return {
+      start: new Date(start.getFullYear(), start.getMonth() - 1, 1),
+      end: new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999),
+    };
+  }
+
+  if (kind === 'custom') {
+    const durationMs = end.getTime() - start.getTime() + 1; // inclusive
+    const prevEnd = new Date(start.getTime() - 1);
+    const prevStart = new Date(prevEnd.getTime() - durationMs + 1);
+    return {
+      start: startOfDay(prevStart),
+      end: endOfDay(prevEnd),
+    };
+  }
+
+  return undefined;
 };
 
-export const isComparablePeriod = (period) => ['today', 'weekly', 'monthly'].includes(period);
+export const isComparablePeriod = (period) =>
+  ['today', 'weekly', 'monthly', 'month'].includes(period) || /^last_(\d{1,3})_days$/.test(period);
 
-export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range }) => {
+export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, range, ...globalChannelFilter }) => {
   const isMonthly = period === 'monthly';
   const isToday = period === 'today';
   const isAll = period === 'all';
 
   const groupId = isMonthly
     ? {
-        week: {
-          $ceil: { $divide: [{ $dayOfMonth: '$orderDate' }, 7] },
+        date: {
+          $dateToString: {
+            format: '%Y-%m-%d',
+            date: '$orderDate',
+          },
         },
       }
     : isAll
@@ -207,8 +243,9 @@ export const buildAggregationPipeline = ({ sellerObjectId, period, metric, range
   return [
     {
       $match: {
-        sellerId: sellerObjectId,
+        sellerId: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
+        ...globalChannelFilter,
       },
     },
     { $group: { _id: groupId, value: valueExpression } },
@@ -264,24 +301,19 @@ const buildMonthBuckets = (start, end) => {
   return out;
 };
 
-const normalizeMonthlyWeeks = (raw = []) => {
-  if (!raw.length) {
-    return Array.from({ length: 5 }, (_, i) => ({
-      label: `Week ${i + 1}`,
-      value: 0,
-    }));
+const normalizeMonthlyWeeks = (raw = [], range) => {
+  const map = new Map(raw.map((r) => [r._id.date, r.value ?? 0]));
+
+  const days = [];
+  let cur = new Date(range.start);
+
+  while (cur <= range.end) {
+    const label = cur.toISOString().slice(0, 10); // YYYY-MM-DD
+    days.push({ label, value: map.get(label) ?? 0 });
+    cur.setDate(cur.getDate() + 1);
   }
 
-  const map = new Map(raw.map((r) => [r._id.week, r.value]));
-  const maxWeek = Math.max(...map.keys());
-
-  return Array.from({ length: maxWeek }, (_, i) => {
-    const week = i + 1;
-    return {
-      label: `Week ${week}`,
-      value: map.get(week) || 0,
-    };
-  });
+  return days;
 };
 
 const normalizeTodayHours = (raw) => {
@@ -299,7 +331,7 @@ export const normalizeSeries = (period, raw = [], range) => {
   if (!range?.start || !range?.end) return [];
 
   if (period === 'monthly') {
-    return normalizeMonthlyWeeks(raw);
+    return normalizeMonthlyWeeks(raw, range);
   }
 
   if (period === 'today') {
@@ -508,6 +540,34 @@ export const prevRevenuePipeline = (sellerObjectId, prevRange, keys = []) => [
   },
 ];
 
+export const buildGlobalChannelFilter = (channel) => {
+  if (!channel) return {};
+
+  const values = String(channel)
+    .split(',')
+    .map((c) => c.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (!values.length || values.includes('all')) return {};
+
+  const globalNames = values.flatMap((v) => {
+    const mapped = CHANNEL_TO_GLOBAL_NAMES[v];
+    return mapped;
+  });
+
+  return { globalChannelName: { $in: globalNames } };
+};
+
+export const pickSelectedGlobalNames = (channel) => {
+  if (!channel) return [];
+  const filter = buildGlobalChannelFilter(channel);
+  const v = filter?.globalChannelName;
+  if (typeof v === 'string') return [v];
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === 'object' && Array.isArray(v.$in)) return v.$in;
+  return [];
+};
+
 export default {
   getDateRange,
   getPreviousRange,
@@ -518,4 +578,6 @@ export default {
   extractCategoryLabel,
   topFacetPipeline,
   prevRevenuePipeline,
+  buildGlobalChannelFilter,
+  pickSelectedGlobalNames,
 };
