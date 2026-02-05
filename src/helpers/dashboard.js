@@ -95,18 +95,23 @@ export const getDateRange = (input, offset = 0) => {
   }
 
   if (period === 'weekly') {
-    const endDate = new Date(startOfDay(now).getTime() + offset * 7 * DAY_MS);
-    start = new Date(endDate.getTime() - 6 * DAY_MS);
-    end = endOfDay(endDate);
+    const startOfWeekMon = (d) => {
+      const day = d.getDay();
+      const diff = (day + 6) % 7;
+      return startOfDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() - diff));
+    };
+
+    const base = new Date(now.getTime() + offset * 7 * DAY_MS);
+    start = startOfWeekMon(base);
+    end = endOfDay(new Date(start.getTime() + 6 * DAY_MS));
+
     return { start, end, kind: 'weekly', days: 7 };
   }
 
   if (period === 'monthly') {
-    const year = now.getFullYear();
-    const month = now.getMonth() + offset;
-
-    start = new Date(year, month, 1);
-    end = endOfDay(new Date(year, month + 1, 0));
+    const base = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+    start = startOfDay(base);
+    end = endOfDay(new Date(base.getFullYear(), base.getMonth() + 1, 0));
     return { start, end, kind: 'monthly', days: null };
   }
 
@@ -183,7 +188,7 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
   const groupId = isMonthly
     ? {
         week: {
-          $ceil: { $divide: [{ $dayOfMonth: '$orderDate' }, 7] },
+          $min: [4, { $ceil: { $divide: [{ $dayOfMonth: '$orderDate' }, 7] } }],
         },
       }
     : isAll
@@ -294,23 +299,12 @@ const buildMonthBuckets = (start, end) => {
 };
 
 const normalizeMonthlyWeeks = (raw = []) => {
-  if (!raw.length) {
-    return Array.from({ length: 5 }, (_, i) => ({
-      label: `Week ${i + 1}`,
-      value: 0,
-    }));
-  }
+  const map = new Map(raw.map((r) => [Number(r?._id?.week), r.value ?? 0]));
 
-  const map = new Map(raw.map((r) => [r._id.week, r.value]));
-  const maxWeek = Math.max(...map.keys());
-
-  return Array.from({ length: maxWeek }, (_, i) => {
-    const week = i + 1;
-    return {
-      label: `Week ${week}`,
-      value: map.get(week) || 0,
-    };
-  });
+  return [1, 2, 3, 4].map((week) => ({
+    label: `Week ${week}`,
+    value: map.get(week) ?? 0,
+  }));
 };
 
 const normalizeTodayHours = (raw) => {
