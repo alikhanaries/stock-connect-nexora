@@ -15,6 +15,7 @@ import {
   buildInventoryStatusPipeline,
   isComparablePeriod,
   buildGlobalChannelFilter,
+  pickSelectedGlobalNames,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
@@ -354,31 +355,41 @@ const getInventoryStatus = async (sellerId, period) => {
   };
 };
 
-const getSalesByChannel = async (sellerId, period) => {
-  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-    throw new Error('Invalid sellerId');
-  }
+const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
+  const sellerObjectIds = String(sellerId)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((id) => {
+      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
+      return new mongoose.Types.ObjectId(id);
+    });
 
-  const range = getDateRange(period);
-  if (!range?.start || !range?.end) {
-    throw new Error(`Invalid period "${period}"`);
-  }
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-  const data = await Order.aggregate([
+  const range = getDateRange({ period, startDate, endDate, month });
+  if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
+  const selectedNames = pickSelectedGlobalNames(channel);
+  const hasChannel = selectedNames.length > 0;
+
+  const pipeline = [
     {
       $match: {
-        sellerId: sellerObjectId,
+        sellerId: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
-        channelName: { $type: 'string', $ne: '' },
+        globalChannelName: { $type: 'string', $ne: '' },
         totalInclVat: { $type: 'number' },
       },
     },
     {
       $group: {
-        _id: '$channelName',
-        value: {
+        _id: '$globalChannelName',
+        deliveredSales: {
           $sum: {
             $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
+          },
+        },
+        deliveredTotal: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'DELIVERED'] }, { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] }, 0],
           },
         },
       },
@@ -387,12 +398,63 @@ const getSalesByChannel = async (sellerId, period) => {
       $project: {
         _id: 0,
         key: '$_id',
-        value: { $round: ['$value', 2] },
+        value: hasChannel
+          ? { $cond: [{ $in: ['$_id', selectedNames] }, { $round: ['$deliveredSales', 2] }, 0] }
+          : { $round: ['$deliveredSales', 2] },
       },
     },
-    { $sort: { value: -1 } },
-  ]).allowDiskUse(true);
+    { $sort: { value: -1, key: 1 } },
+  ];
 
+  const data = await Order.aggregate(pipeline).allowDiskUse(true);
+  const out = Array.isArray(data) ? data : [];
+  if (hasChannel) {
+    const map = new Map(out.map((r) => [r.key, r.value]));
+    for (const name of selectedNames) {
+      if (!map.has(name)) out.push({ key: name, value: 0 });
+    }
+    out.sort((a, b) => b.value - a.value || a.key.localeCompare(b.key));
+  }
+
+  return out;
+};
+
+const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
+  const sellerObjectIds = String(sellerId)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((id) => {
+      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
+      return new mongoose.Types.ObjectId(id);
+    });
+
+  const range = getDateRange({ period, startDate, endDate, month });
+  if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
+
+  const selectedNames = pickSelectedGlobalNames(channel);
+  const hasChannel = selectedNames.length > 0;
+
+  const pipeline = [
+    {
+      $match: {
+        sellerId: { $in: sellerObjectIds },
+        orderDate: { $gte: range.start, $lte: range.end },
+        globalChannelName: { $type: 'string', $ne: '' },
+      },
+    },
+    { $group: { _id: '$globalChannelName', count: { $sum: 1 } } },
+    {
+      $project: {
+        _id: 0,
+        key: '$_id',
+        value: hasChannel ? { $cond: [{ $in: ['$_id', selectedNames] }, '$count', 0] } : '$count',
+      },
+    },
+    { $sort: { value: -1, key: 1 } },
+  ];
+
+  const data = await Order.aggregate(pipeline).allowDiskUse(true);
   return Array.isArray(data) ? data : [];
 };
 
@@ -404,4 +466,5 @@ export default {
   getTopPerformersProducts,
   getInventoryStatus,
   getSalesByChannel,
+  getOrdersByChannel,
 };
