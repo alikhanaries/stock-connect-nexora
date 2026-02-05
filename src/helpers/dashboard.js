@@ -187,8 +187,11 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
 
   const groupId = isMonthly
     ? {
-        week: {
-          $min: [4, { $ceil: { $divide: [{ $dayOfMonth: '$orderDate' }, 7] } }],
+        date: {
+          $dateToString: {
+            format: '%Y-%m-%d',
+            date: '$orderDate',
+          },
         },
       }
     : isAll
@@ -298,13 +301,19 @@ const buildMonthBuckets = (start, end) => {
   return out;
 };
 
-const normalizeMonthlyWeeks = (raw = []) => {
-  const map = new Map(raw.map((r) => [Number(r?._id?.week), r.value ?? 0]));
+const normalizeMonthlyWeeks = (raw = [], range) => {
+  const map = new Map(raw.map((r) => [r._id.date, r.value ?? 0]));
 
-  return [1, 2, 3, 4].map((week) => ({
-    label: `Week ${week}`,
-    value: map.get(week) ?? 0,
-  }));
+  const days = [];
+  let cur = new Date(range.start);
+
+  while (cur <= range.end) {
+    const label = cur.toISOString().slice(0, 10); // YYYY-MM-DD
+    days.push({ label, value: map.get(label) ?? 0 });
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  return days;
 };
 
 const normalizeTodayHours = (raw) => {
@@ -322,7 +331,7 @@ export const normalizeSeries = (period, raw = [], range) => {
   if (!range?.start || !range?.end) return [];
 
   if (period === 'monthly') {
-    return normalizeMonthlyWeeks(raw);
+    return normalizeMonthlyWeeks(raw, range);
   }
 
   if (period === 'today') {
@@ -548,6 +557,17 @@ export const buildGlobalChannelFilter = (channel) => {
 
   return { globalChannelName: { $in: globalNames } };
 };
+
+export const pickSelectedGlobalNames = (channel) => {
+  if (!channel) return [];
+  const filter = buildGlobalChannelFilter(channel);
+  const v = filter?.globalChannelName;
+  if (typeof v === 'string') return [v];
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === 'object' && Array.isArray(v.$in)) return v.$in;
+  return [];
+};
+
 export default {
   getDateRange,
   getPreviousRange,
@@ -559,4 +579,5 @@ export default {
   topFacetPipeline,
   prevRevenuePipeline,
   buildGlobalChannelFilter,
+  pickSelectedGlobalNames,
 };
