@@ -34,6 +34,7 @@ export const mapRowToAmazonOrders = (row, rowNumber, locale) => {
     'currency',
     'shipservicelevel',
     'orderstatus',
+    'brandname',
   ];
 
   for (const field of requiredFields) {
@@ -75,36 +76,24 @@ export const mapRowToAmazonOrders = (row, rowNumber, locale) => {
     return { rowNumber, errorData: errors };
   }
 
-  // Final minimal payload
   return {
     rowNumber,
-
-    // Order identifiers
     orderId: normalized.orderid,
     orderItemId: normalized.orderitemid,
-
-    // Dates
     purchaseDate: normalized.purchasedate,
     paymentDate: normalized.paymentsdate,
-
-    // Buyer
     buyerEmail: normalized.buyeremail,
     buyerName: normalized.buyername || '',
     buyerPhoneNumber: normalized.buyerphonenumber || '',
-
-    // Product
     sku: normalized.sku,
     productName: normalized.productname,
+    brandName: normalized.brandname || '',
     quantityPurchased: normalized.quantitypurchased || '0',
-
-    // Pricing
     currency: normalized.currency,
     itemPrice: normalized.itemprice || '0',
     itemTax: itemTax ?? 0,
     shippingPrice: shippingPrice ?? 0,
     shippingTax: shippingTax ?? 0,
-
-    // Shipping
     shipServiceLevel: normalized.shipservicelevel,
     recipientName: normalized.recipientname || '',
     shipAddress1: normalized.shipaddress1 || '',
@@ -116,14 +105,10 @@ export const mapRowToAmazonOrders = (row, rowNumber, locale) => {
     shipPostalCode: normalized.shippostalcode || '',
     shipCountry: normalized.shipcountry || 'SA',
     shipPhoneNumber: normalized.shipphonenumber || '',
-
-    // Delivery
     deliveryStartDate: normalized.deliverystartdate || '',
     deliveryEndDate: normalized.deliveryenddate || '',
     deliveryTimezone: normalized.deliverytimezone || '',
     deliveryInstructions: normalized.deliveryinstructions || '',
-
-    // Status & Payment
     orderStatus: normalized.orderstatus,
     paymentMethod: normalized.paymentmethod || '',
     codCollectibleAmount: normalized.codcollectibleamount || '',

@@ -340,39 +340,32 @@ export const syncAmazonOrders = async (req, res) => {
     if (!exportUrl) {
       return Responses.errorResponse(res, req?.locale?.INVALID_URL, 400);
     }
-    // // TODO : Move this to service layer
-    const { success, data, errors } = await orderService.getNewAmazonOrders(exportUrl, req.locale, sellerId);
+
+    const { success, data } = await orderService.getNewAmazonOrders(exportUrl, req.locale, sellerId);
+
     if (!success) {
       return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
     }
     if (data.length === 0) {
       return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
     }
-    console.log({ data, errors });
 
-    // const [dataSavedInDb, response] = await Promise.allSettled([orderService.processAmazonOrders(data, sellerId)]);
+    const dataSavedInDb = await orderService.processAmazonOrders(data, sellerId);
 
-    // if (!dataSavedInDb.value.success && !response.value.success) {
-    //   return Responses.errorResponse(res, dataSavedInDb.value.message && response.value.message, 500);
-    // }
+    if (!dataSavedInDb.success) {
+      return Responses.errorResponse(res, dataSavedInDb.message, 500);
+    }
 
-    // const newUpdateCount =
-    //   (dataSavedInDb?.value?.data?.upsertedCount ? dataSavedInDb?.value?.data?.upsertedCount : 0) +
-    //   (response?.value?.data?.upsertedCount ? response?.value?.data?.upsertedCount : 0);
+    const newUpdateCount = dataSavedInDb?.data?.upsertedCount ? dataSavedInDb?.data?.upsertedCount : 0;
 
-    // await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
+    await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
 
-    // const message =
-    //   newUpdateCount > 0
-    //     ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
-    //     : req.locale.NO_NEW_ORDERS_FOUND;
+    const message =
+      newUpdateCount > 0
+        ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY} on amazon`
+        : `${req.locale.NO_NEW_ORDERS_FOUND} on amazon`;
 
-    // const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW');
-    // if (newOrdersToAcknowledge.length > 0) {
-    //   orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge);
-    // }
-
-    return Responses.successResponse(res, 'Amazon orders synced successfully', 200);
+    return Responses.successResponse(res, message, 200);
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);
