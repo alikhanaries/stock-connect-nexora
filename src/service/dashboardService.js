@@ -384,6 +384,11 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
         _id: '$globalChannelName',
         deliveredSales: {
           $sum: {
+            $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
+          },
+        },
+        deliveredTotal: {
+          $sum: {
             $cond: [{ $eq: ['$status', 'DELIVERED'] }, { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] }, 0],
           },
         },
