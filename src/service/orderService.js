@@ -1155,8 +1155,6 @@ export async function getNewAmazonOrders(url, locale, sellerId) {
 
 export const processAmazonOrders = async (orders, sellerId) => {
   try {
-    console.log({ orders, sellerId });
-
     const operations = await sanitizeAmazonOrdersData(orders, sellerId);
 
     const result = await Order.bulkWrite(operations);

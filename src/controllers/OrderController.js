@@ -328,14 +328,11 @@ export const exportOrders = async (req, res) => {
 export const syncAmazonOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    console.log({ sellerId });
     const url = AMAZON_ORDER_SHEET_URL;
-    console.log({ url });
     if (!url) {
       return Responses.errorResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
     const exportUrl = await convertGoogleSheetUrlToExport(url);
-    console.log({ exportUrl });
 
     if (!exportUrl) {
       return Responses.errorResponse(res, req?.locale?.INVALID_URL, 400);
