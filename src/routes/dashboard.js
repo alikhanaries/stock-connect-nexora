@@ -81,7 +81,7 @@ dashboardRoutes.get(
   salesByChannelValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getSalesByChannel
 );
 
