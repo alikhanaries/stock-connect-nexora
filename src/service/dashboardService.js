@@ -427,8 +427,7 @@ const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate,
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
 
-  // ✅ use helper like order-flow, but ONLY to resolve selected names
-  const selectedNames = pickSelectedGlobalNames(channel); // e.g. ["OCP"]
+  const selectedNames = pickSelectedGlobalNames(channel);
   const hasChannel = selectedNames.length > 0;
 
   const pipeline = [
@@ -444,9 +443,7 @@ const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate,
       $project: {
         _id: 0,
         key: '$_id',
-        value: hasChannel
-          ? { $cond: [{ $in: ['$_id', selectedNames] }, '$count', 0] } // ✅ keep selected, zero others
-          : '$count',
+        value: hasChannel ? { $cond: [{ $in: ['$_id', selectedNames] }, '$count', 0] } : '$count',
       },
     },
     { $sort: { value: -1, key: 1 } },
