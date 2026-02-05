@@ -58,3 +58,30 @@ export const removeProductsFromCE = async (skuCodes) => {
     return { success: false, message: err.message };
   }
 };
+
+export const syncProductExtraDataToMarketplace = async (bulkPayload = []) => {
+  if (!bulkPayload.length) return [];
+  const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(bulkPayload),
+  });
+  if (!response.ok) {
+    throw new Error(`Marketplace PATCH failed: ${response.status}`);
+  }
+  return response.json();
+};
+
+export const buildExtraDataPayload = (products = []) =>
+  products
+    .filter((p) => p.productSkuCode)
+    .map((p) => ({
+      MerchantProductNo: p.productSkuCode,
+      Operations: [
+        {
+          Op: 'replace',
+          Key: 'MarketPlace',
+          Value: p.marketPlace ?? null,
+        },
+      ],
+    }));
