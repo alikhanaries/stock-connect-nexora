@@ -179,6 +179,3 @@ export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int S
 export const LOW_STOCK_THRESHOLD_SELLERS = ['kip', 'ramsey'];
 
 export const LOW_STOCK_THRESHOLD = 3;
-
-export const AMAZON_ORDER_SHEET_URL =
-  'https://docs.google.com/spreadsheets/d/1ObHzCditr3C0fDNKZjmq7bT41WEEOCbSM97aTAzMGjE/edit?gid=235114748#gid=235114748';

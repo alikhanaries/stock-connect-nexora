@@ -2,7 +2,7 @@ import Responses from '#helpers/response.js';
 import orderService from '#service/orderService.js';
 import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
-import { VALID_PERIODS, USER_ROLES, AMAZON_ORDER_SHEET_URL } from '#constants/common.js';
+import { VALID_PERIODS, USER_ROLES } from '#constants/common.js';
 import {
   cancelFullOrderOcp,
   cancelPartialOrderOcp,
@@ -13,6 +13,7 @@ import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
+import { config } from '#config/config.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -328,7 +329,7 @@ export const exportOrders = async (req, res) => {
 export const syncAmazonOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const url = AMAZON_ORDER_SHEET_URL;
+    const url = config.AMAZON_ORDER_SHEET_URL;
     if (!url) {
       return Responses.errorResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
     }
