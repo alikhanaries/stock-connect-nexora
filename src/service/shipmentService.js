@@ -2197,7 +2197,7 @@ export async function getChannelEngineShipmentDetailsService(orderMerchantNumber
         },
       }
     );
-    console.log('response', response);
+
     // 🔴 Handle rate limit
     if (response.status === 429) {
       const retryAfter = Number(response.headers.get('retry-after') || 60);
@@ -2218,7 +2218,7 @@ export async function getChannelEngineShipmentDetailsService(orderMerchantNumber
     }
 
     const data = await response.json();
-    console.log('data', data);
+
     if (!data?.Content?.length) {
       return {
         success: false,
