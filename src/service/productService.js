@@ -292,7 +292,7 @@ const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
 };
 
 // Push a single batch to CE
-const pushBatch = async (batch, index) => {
+export const pushBatch = async (batch, index) => {
   return withRetry(async () => {
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
       method: 'POST',
