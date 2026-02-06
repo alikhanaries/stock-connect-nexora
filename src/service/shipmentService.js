@@ -448,9 +448,11 @@ export const createPartialShipmentService = async (shipmentData) => {
 
     order.status = 'IN_PROGRESS';
     await order.save();
+    const qtyMessage = validProducts.map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
+
     const logEntry = {
       status: 'SHIPMENT CREATED',
-      description: `Shipment created with AWB -${trackingNumber}`,
+      description: `Shipment created with AWB - ${trackingNumber}. Items shipped: ${qtyMessage}.`,
       createdAt: new Date(),
     };
 
@@ -1281,14 +1283,14 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     });
 
     // 7️ Order logs
-
+    const qtyMessage = (products || []).map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
     await OrderLogs.updateOne(
       { orderId },
       {
         $push: {
           details: {
             status: 'SHIPMENT CANCELED',
-            description: `Shipment canceled (AWB - ${airWaybillNo})`,
+            description: `Shipment canceled (AWB - ${airWaybillNo}). Items reverted: ${qtyMessage}.`,
             createdAt: new Date(),
           },
         },
