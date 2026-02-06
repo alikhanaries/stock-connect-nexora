@@ -469,20 +469,20 @@ export const pushActiveProductsToChannel = async (products, sellerId) => {
 };
 
 const syncSkuAvailability = async (products, sellerId) => {
-  const allSkus = [];
+  const skuSet = new Set();
   const dbStatusMap = new Map();
 
   for (const p of products) {
     if (!p.productSkuCode) continue;
 
     const sku = p.productSkuCode.trim().toUpperCase();
-    allSkus.push(sku);
-    dbStatusMap.set(sku, p.status); // active / inactive
+    skuSet.add(sku);
+    dbStatusMap.set(sku, p.status);
   }
 
-  if (!allSkus.length) return;
+  if (!skuSet.size) return;
 
-  const ceProducts = await getExistingProductsBySkuFromCE(allSkus);
+  const ceProducts = await getExistingProductsBySkuFromCE([...skuSet]);
 
   const ceStatusMap = new Map();
   ceProducts.forEach((p) => {
@@ -492,7 +492,7 @@ const syncSkuAvailability = async (products, sellerId) => {
   const pushList = [];
   const deleteList = [];
 
-  for (const sku of allSkus) {
+  for (const sku of skuSet) {
     const dbStatus = dbStatusMap.get(sku);
     const ceStatus = ceStatusMap.get(sku);
 
@@ -508,7 +508,8 @@ const syncSkuAvailability = async (products, sellerId) => {
   }
 
   if (pushList.length) {
-    const productsToPush = products.filter((p) => pushList.includes(p.productSkuCode.toUpperCase()));
+    const pushSet = new Set(pushList);
+    const productsToPush = products.filter((p) => pushSet.has(p.productSkuCode?.toUpperCase()));
     await pushActiveProductsToChannel(productsToPush, sellerId);
   }
 
