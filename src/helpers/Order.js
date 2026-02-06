@@ -293,7 +293,36 @@ export const getOrganizedOrderRowData = (flattenedOrder, organizedHeaders) => {
   });
 };
 
-export const normalizeSkuStatus = (channelStatus) => {
+export const normalizeSkuStatus = (skuStatus) => {
+  switch (skuStatus) {
+    case 'NEW':
+    case 'IN_PROGRESS':
+    case 'IN_COMBI':
+    case 'SHIPMENT_CREATED':
+      return 'IN_PROGRESS';
+
+    case 'PICKED':
+    case 'SHIPPED':
+      return 'SHIPPED';
+
+    case 'DELIVERED':
+    case 'CLOSED':
+      return 'DELIVERED';
+
+    case 'CANCELED':
+    case 'PARTIALLY_CANCELED':
+    case 'MANCO':
+      return 'CANCELED';
+
+    case 'RETURNED':
+      return 'RETURNED';
+
+    default:
+      return 'IN_PROGRESS';
+  }
+};
+
+export const normalizeOrderStatus = (channelStatus) => {
   switch (channelStatus) {
     case 'NEW':
       return 'NEW';
@@ -383,28 +412,83 @@ const sanitizeOrdersData = async (orders) => {
     // Build SKU list with normalized statuses & preserved fields
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
-          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => s.id === line.Id);
+          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+
           return {
-            ...line,
+            // ---------- REQUIRED ----------
             id: line.Id,
-            channelOrderLineNo: line.ChannelOrderLineNo,
-            //  CORRECT: schema-aligned status tracking
+            merchantProductNo: line.MerchantProductNo,
+            quantity: line.Quantity,
+            unitPriceInclVat: line.UnitPriceInclVat ?? 0,
+
+            // ---------- STATUS ----------
+            status: ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
+              ? existingSku.status
+              : normalizeSkuStatus(line.Status),
+
             statusBreakdown: buildStatusBreakdown({
               line,
               existingSku,
             }),
-            airWaybillNo: existingSku?.airWaybillNo ?? null,
-            merchantProductNo: line.MerchantProductNo,
-            quantity: line.Quantity,
-            status:
-              existingSku?.status === 'SHIPPED' ||
-              existingSku?.status === 'DELIVERED' ||
-              existingSku?.status === 'RETURNED' ||
-              existingSku?.status === 'CANCELED'
-                ? existingOrder?.status
-                : normalizeSkuStatus(line?.Status),
+
             cancellationRequestedQuantity:
-              existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity,
+              existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
+
+            airWaybillNo: existingSku?.airWaybillNo ?? null,
+
+            // ---------- OPTIONAL / METADATA ----------
+            channelOrderLineNo: line.ChannelOrderLineNo,
+            isFulfillmentByMarketplace: line.IsFulfillmentByMarketplace ?? false,
+            gtin: line.Gtin,
+            description: line.Description,
+
+            stockLocation: line.StockLocation
+              ? {
+                  id: line.StockLocation.Id,
+                  name: line.StockLocation.Name,
+                }
+              : undefined,
+
+            unitVat: line.UnitVat,
+            lineTotalInclVat: line.LineTotalInclVat,
+            lineVat: line.LineVat,
+
+            originalUnitPriceInclVat: line.OriginalUnitPriceInclVat,
+            originalUnitVat: line.OriginalUnitVat,
+            originalLineTotalInclVat: line.OriginalLineTotalInclVat,
+            originalLineVat: line.OriginalLineVat,
+            originalFeeFixed: line.OriginalFeeFixed,
+
+            bundleProductMerchantProductNo: line.BundleProductMerchantProductNo,
+            bundleOrderLineId: line.BundleOrderLineId,
+
+            jurisCode: line.JurisCode,
+            jurisName: line.JurisName,
+            vatRate: line.VatRate,
+
+            unitPriceExclVat: line.UnitPriceExclVat,
+            lineTotalExclVat: line.LineTotalExclVat,
+            originalUnitPriceExclVat: line.OriginalUnitPriceExclVat,
+            originalLineTotalExclVat: line.OriginalLineTotalExclVat,
+
+            extraData: Array.isArray(line.ExtraData)
+              ? line.ExtraData.map((e) => ({
+                  key: e.Key,
+                  value: String(e.Value),
+                }))
+              : [],
+
+            channelProductNo: line.ChannelProductNo,
+            feeFixed: line.FeeFixed,
+            feeRate: line.FeeRate,
+            condition: line.Condition ?? 'UNKNOWN',
+
+            exactDeliveryDate: line.ExactDeliveryDate,
+            expectedDeliveryDate: line.ExpectedDeliveryDate,
+            latestDeliveryDate: line.LatestDeliveryDate,
+            exactShipmentDate: line.ExactShipmentDate,
+            expectedShipmentDate: line.ExpectedShipmentDate,
+            latestShipmentDate: line.LatestShipmentDate,
           };
         })
       : [];
@@ -498,13 +582,10 @@ const sanitizeOrdersData = async (orders) => {
         region: data.BillingAddress.Region,
         countryIso: data.BillingAddress.CountryIso,
       },
-      status:
-        existingOrder?.status === 'SHIPPED' ||
-        existingOrder?.status === 'CLOSED' ||
-        existingOrder?.status === 'CANCELED' ||
-        existingOrder?.status === 'RETURNED'
-          ? existingOrder?.status
-          : normalizeSkuStatus(data?.Status),
+
+      status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
+        ? existingOrder.status
+        : normalizeOrderStatus(data?.Status),
     };
 
     return {
@@ -584,76 +665,103 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
 
   const prev = existingSku?.statusBreakdown ?? {};
 
-  const empty = {
-    confirmed: 0,
+  const base = {
+    confirmed: prev.confirmed ?? 0,
+    shipmentCreated: prev.shipmentCreated ?? 0,
     shipped: prev.shipped ?? 0,
     delivered: prev.delivered ?? 0,
     returned: prev.returned ?? 0,
     canceled: prev.canceled ?? 0,
-    shipmentCreated: prev.shipmentCreated ?? 0,
   };
 
-  // EXTRA DATA OVERRIDE (highest priority)
+  const clamp = (n) => Math.max(n, 0);
+
+  // ---------------- EXTRA DATA OVERRIDE (HIGHEST PRIORITY)
   const extraStatus = getExtraStatus(line.ExtraData);
 
   if (extraStatus === 'delivered') {
     return {
-      ...empty,
-      delivered: qty,
       confirmed: 0,
-      shipped: 0,
       shipmentCreated: 0,
+      shipped: 0,
+      delivered: qty,
+      returned: base.returned,
+      canceled: base.canceled,
     };
   }
+
+  let result = { ...base };
 
   switch (line.Status) {
     case 'NEW':
     case 'IN_PROGRESS':
-    case 'IN_COMBI':
-      return {
-        ...empty,
-        confirmed: Math.max(qty - empty.shipmentCreated - empty.shipped - empty.delivered - empty.canceled, 0),
-      };
+    case 'IN_COMBI': {
+      const used = result.shipmentCreated + result.shipped + result.delivered + result.returned + result.canceled;
 
-    case 'SHIPPED':
-      return {
-        ...empty,
-        shipped: qty,
-      };
+      result.confirmed = clamp(qty - used);
+      break;
+    }
 
-    case 'DELIVERED':
-      return {
-        ...empty,
-        delivered: qty,
-        confirmed: 0,
-        shipped: 0,
-        shipmentCreated: 0,
-      };
+    case 'SHIPPED': {
+      const used = result.delivered + result.returned + result.canceled;
 
-    case 'RETURNED':
-      return {
-        ...empty,
-        returned: qty,
-      };
+      result.shipped = clamp(qty - used);
+      result.confirmed = 0;
+      result.shipmentCreated = 0;
+      break;
+    }
+
+    case 'DELIVERED': {
+      result.delivered = qty;
+      result.confirmed = 0;
+      result.shipmentCreated = 0;
+      result.shipped = 0;
+      break;
+    }
+
+    case 'RETURNED': {
+      const used = result.canceled;
+      result.returned = clamp(qty - used);
+      result.confirmed = 0;
+      result.shipmentCreated = 0;
+      result.shipped = 0;
+      break;
+    }
 
     case 'CANCELED':
-    case 'MANCO':
-      return {
-        ...empty,
-        canceled: qty,
-        confirmed: 0,
-        shipped: 0,
-        shipmentCreated: 0,
-      };
-    case 'CLOSED':
-      return {
-        ...empty,
-        confirmed: Math.max(qty - empty.shipped - empty.delivered - empty.canceled, 0),
-      };
+    case 'MANCO': {
+      const used = result.delivered + result.returned;
+
+      result.canceled = clamp(qty - used);
+      result.confirmed = 0;
+      result.shipmentCreated = 0;
+      result.shipped = 0;
+      break;
+    }
+
+    case 'CLOSED': {
+      const used = result.shipmentCreated + result.shipped + result.delivered + result.returned + result.canceled;
+
+      result.confirmed = clamp(qty - used);
+      break;
+    }
+
     default:
-      return empty;
+      break;
   }
+
+  // ---------------- FINAL NORMALIZATION (GUARANTEE TOTALS)
+  const total =
+    result.confirmed + result.shipmentCreated + result.shipped + result.delivered + result.returned + result.canceled;
+
+  if (total > qty) {
+    const overflow = total - qty;
+    result.shipped = clamp(result.shipped - overflow);
+  }
+
+  return result;
 };
+
 export default {
   sanitizeOrdersData,
   getPeriodDate,

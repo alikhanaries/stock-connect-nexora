@@ -15,7 +15,7 @@ import { updateSyncDate } from '../helpers/updateSyncDate.js';
 
 export const getAllOrders = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
+    const sellerId = '68e8f64332640c1cb525f2e5';
     const { data, appliedFilters, pagination, latestOrderSyncDate } = await orderService.getAllOrders(
       req.query,
       sellerId

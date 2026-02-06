@@ -864,6 +864,10 @@ export const ayMakanWebHookService = async (data) => {
       //  Anything still pending
       finalOrderStatus = 'IN_PROGRESS';
     }
+    // FORCE RULE: Delivered orders must be Closed
+    if (finalOrderStatus === 'DELIVERED') {
+      finalOrderStatus = 'CLOSED';
+    }
 
     // STATUS PRIORITY GUARD
 
@@ -2179,8 +2183,11 @@ async function handleShipmentReturnStatusUpdate({ shipment, shipmentStatus, trac
   );
 }
 
-export async function getChannelEngineShipmentDetailsService(orderMerchantNumber) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function getChannelEngineShipmentDetailsService(orderMerchantNumber, retryCount = 0) {
   try {
+    console.log('orderMerchantNumber', orderMerchantNumber);
     const response = await fetch(
       `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?merchantOrderNos=${orderMerchantNumber}&apikey=${CHANNEL_ENGINE_API_KEY}`,
       {
@@ -2190,13 +2197,28 @@ export async function getChannelEngineShipmentDetailsService(orderMerchantNumber
         },
       }
     );
+    console.log('response', response);
+    // 🔴 Handle rate limit
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get('retry-after') || 60);
+
+      if (retryCount >= 3) {
+        throw new Error('ChannelEngine rate limit exceeded. Max retries reached.');
+      }
+
+      console.warn(`ChannelEngine 429 received. Retrying after ${retryAfter}s (attempt ${retryCount + 1})`);
+
+      await sleep(retryAfter * 1000);
+      return getChannelEngineShipmentDetailsService(orderMerchantNumber, retryCount + 1);
+    }
 
     if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+      const text = await response.text();
+      throw new Error(`ChannelEngine API failed (${response.status}): ${text}`);
     }
 
     const data = await response.json();
-
+    console.log('data', data);
     if (!data?.Content?.length) {
       return {
         success: false,
@@ -2210,12 +2232,14 @@ export async function getChannelEngineShipmentDetailsService(orderMerchantNumber
     };
   } catch (error) {
     console.error('Error fetching shipment details from ChannelEngine:', error.message);
+
     return {
       success: false,
       message: error.message,
     };
   }
 }
+
 export const createShipmentsFromChannelEngine = async ({ order, channelEngineShipments, userId }) => {
   const createdShipments = [];
 
