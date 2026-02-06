@@ -262,41 +262,10 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     return { success: false, message: err.message };
   }
 };
-export const getOrderById = async (id, userId) => {
+export const getOrderById = async (id) => {
   try {
     const order = await Order.findById(id).lean();
     if (!order) return false;
-
-    // Fetch CE shipment details (NON-BLOCKING)
-
-    let channelEngineShipments = [];
-
-    try {
-      const ceResponse = await getChannelEngineShipmentDetailsService(order.merchantOrderNo);
-
-      if (ceResponse?.success && Array.isArray(ceResponse.data)) {
-        channelEngineShipments = ceResponse.data;
-      } else {
-        console.warn('ChannelEngine shipment fetch failed (ignored):', ceResponse?.message);
-      }
-    } catch (err) {
-      console.warn('ChannelEngine shipment fetch error (ignored):', err.message);
-    }
-
-    // Create shipments only if CE returned data
-
-    if (channelEngineShipments.length > 0) {
-      try {
-        await createShipmentsFromChannelEngine({
-          order,
-          channelEngineShipments,
-          userId,
-        });
-      } catch (err) {
-        console.error('Shipment creation failed (ignored):', err.message);
-      }
-    }
-
     const shipments = await Shipment.find({
       orderId: id,
       type: 'FORWARD',
@@ -1176,6 +1145,39 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
   }
 };
 
+// Fetch CE shipment details
+export const syncChannelEngineShipment = async (userId) => {
+  try {
+    let channelEngineShipments = [];
+
+    try {
+      const ceResponse = await getChannelEngineShipmentDetailsService();
+
+      //  Successful API response
+      if (ceResponse?.success && Array.isArray(ceResponse.data)) {
+        channelEngineShipments = ceResponse.data;
+      } else {
+        console.warn('ChannelEngine shipment fetch failed (ignored):', ceResponse?.message);
+      }
+    } catch (err) {
+      console.warn('ChannelEngine shipment fetch error (ignored):', err.message);
+    }
+    const shippedData = channelEngineShipments.filter((s) => s.MerchantShipmentNo !== null);
+
+    // Create shipments only if CE returned data
+
+    if (shippedData.length > 0) {
+      try {
+        await createShipmentsFromChannelEngine(shippedData, userId);
+      } catch (err) {
+        console.error('Shipment creation failed (ignored):', err.message);
+      }
+    }
+  } catch (err) {
+    console.error('Shipment creation failed (ignored):', err.message);
+  }
+};
+
 export default {
   getAllOrders,
   getAdminOrders,
@@ -1190,4 +1192,5 @@ export default {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrdersToCSV,
+  syncChannelEngineShipment,
 };
