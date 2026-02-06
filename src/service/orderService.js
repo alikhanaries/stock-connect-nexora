@@ -281,6 +281,7 @@ export const getOrderById = async (id, userId) => {
 
     const shipments = await Shipment.find({
       orderId: id,
+      type: 'FORWARD',
       status: { $ne: 'CANCELED' },
     }).lean();
 
@@ -479,20 +480,39 @@ export const processOrders = async (orders, sellerId) => {
 
 export async function getNewOrders() {
   try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-    const data = await response.json();
-    if (!data?.Content?.length) {
-      return { success: false, message: 'No data received from ChannelEngine' };
+    let page = 1;
+    const pageSize = 100;
+    let allOrders = [];
+    let hasMore = true;
+
+    while (hasMore && page <= 3) {
+      const response = await fetch(
+        `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      const data = await response.json();
+
+      if (!data?.Content?.length) {
+        hasMore = false;
+        break;
+      }
+
+      allOrders.push(...data.Content);
+
+      const fetchedCount = page * pageSize;
+      hasMore = fetchedCount < data.TotalCount;
+
+      page++;
     }
     return {
       success: true,
-      data: data.Content,
+      data: allOrders,
     };
   } catch (error) {
-    console.error('Error fetching new orders from ChannelEngine:', error.message);
+    console.error('Error fetching orders from ChannelEngine:', error.message);
     return { success: false, message: error.message };
   }
 }
@@ -907,13 +927,13 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
 
       const shippedQty = shippedQtyMap[lineId] || 0;
       const deliveredQty = deliveredQtyMap[lineId] || 0;
-
+      const shipmentCreatedQty = sku?.statusBreakdown?.shipmentCreated || 0;
       const prevCanceled = sku.cancellationRequestedQuantity || 0;
       const newlyCanceled = cancelItem ? cancelItem.quantity : 0;
 
       const canceledQty = prevCanceled + newlyCanceled;
 
-      const confirmedQty = sku.quantity - canceledQty - shippedQty - deliveredQty;
+      const confirmedQty = sku.quantity - canceledQty - shippedQty - deliveredQty - shipmentCreatedQty;
 
       return {
         ...sku,
@@ -927,6 +947,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
           delivered: deliveredQty,
           returned: 0,
           canceled: canceledQty,
+          shipmentCreated: shipmentCreatedQty,
         },
       };
     });
