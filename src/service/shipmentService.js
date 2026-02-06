@@ -2187,7 +2187,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function getChannelEngineShipmentDetailsService(orderMerchantNumber, retryCount = 0) {
   try {
-    console.log('orderMerchantNumber', orderMerchantNumber);
+   
     const response = await fetch(
       `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?merchantOrderNos=${orderMerchantNumber}&apikey=${CHANNEL_ENGINE_API_KEY}`,
       {
