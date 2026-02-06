@@ -110,20 +110,38 @@ const getAllOrders = async (query, sellerId) => {
       // Convert comma-separated string → array
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
 
-      // Validate against enum
-      const validStatuses = Object.values(ORDER_STATUS_MAP);
-      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+      if (statusArray.includes('DELIVERED')) {
+        // Custom delivered logic
+        filter.status = 'CLOSED';
 
-      if (invalid.length > 0) {
-        throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
+        filter['orderSkuList.skuList'] = {
+          $not: {
+            $elemMatch: {
+              status: { $in: ['IN_PROGRESS', 'SHIPPED', 'RETURNED'] },
+            },
+          },
+          $elemMatch: {
+            status: 'DELIVERED',
+          },
+        };
+
+        appliedFilters.status = 'DELIVERED';
+      } else {
+        // Normal status behavior
+        const validStatuses = Object.values(ORDER_STATUS_MAP);
+        const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+
+        if (invalid.length) {
+          throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
+        }
+
+        // Build Mongo filter (case-insensitive)
+        filter.status = {
+          $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+        };
+
+        appliedFilters.status = status;
       }
-
-      // Build Mongo filter (case-insensitive)
-      filter.status = {
-        $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
-      };
-
-      appliedFilters.status = status; // or original string if you prefer
     }
 
     const [totalOrders, orders, allChannels, sellerSync] = await Promise.all([
