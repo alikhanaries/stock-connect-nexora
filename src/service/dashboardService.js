@@ -136,10 +136,9 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalOrderValue: { $first: '$totalInclVat' },
           deliveredTotal: {
             $sum: {
-              $cond: [
-                { $eq: ['$orderSkuList.skuList.status', 'DELIVERED'] },
-                { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] },
-                0,
+              $multiply: [
+                { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
+                { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
               ],
             },
           },
@@ -380,7 +379,12 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
         sellerId: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
         globalChannelName: { $type: 'string', $ne: '' },
-        totalInclVat: { $type: 'number' },
+      },
+    },
+    {
+      $unwind: {
+        path: '$orderSkuList.skuList',
+        preserveNullAndEmptyArrays: false,
       },
     },
     {
@@ -388,15 +392,9 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
         _id: '$globalChannelName',
         deliveredSales: {
           $sum: {
-            $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
-          },
-        },
-        deliveredTotal: {
-          $sum: {
-            $cond: [
-              { $eq: ['$orderSkuList.skuList.status', 'DELIVERED'] },
-              { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] },
-              0,
+            $multiply: [
+              { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
+              { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
             ],
           },
         },
