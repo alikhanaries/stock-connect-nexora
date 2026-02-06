@@ -141,7 +141,6 @@ const getAllOrders = async (query, sellerId) => {
       }
     }
 
-    console.log('filter----------', filter);
     const [totalOrders, orders, allChannels, sellerSync] = await Promise.all([
       Order.countDocuments(filter),
       Order.find(filter)
@@ -155,7 +154,7 @@ const getAllOrders = async (query, sellerId) => {
       Channel.find().select('_id channelId channelImageUrl'),
       Seller.findById(sellerId).select('-_id lastOrderSync'),
     ]);
-    console.log('orders----------', orders);
+
     const channelMap = {};
     allChannels.forEach((channel) => {
       channelMap[channel.channelId] = channel.channelImageUrl;
@@ -271,7 +270,7 @@ export const getOrderById = async (id, userId) => {
     // Fetch CE shipment details (NON-BLOCKING)
 
     let channelEngineShipments = [];
-    console.log('order---', order);
+
     try {
       const ceResponse = await getChannelEngineShipmentDetailsService(order.merchantOrderNo);
 
