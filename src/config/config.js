@@ -31,4 +31,5 @@ export const config = {
   OCP_URL: process.env.OCP_URL,
   OCP_API_KEY: process.env.OCP_API_KEY,
   BASE_URL: process.env.BASE_URL,
+  AMAZON_ORDER_SHEET_URL: process.env.AMAZON_ORDER_SHEET_URL,
 };

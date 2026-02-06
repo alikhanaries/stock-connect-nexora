@@ -10,6 +10,7 @@ import {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrders,
+  syncAmazonOrders,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -271,6 +272,29 @@ router.get(
 router.patch('/merchant-cancellation', merchantCancelIdValidator, checkLanguage, authMiddleware, merchantCancelById);
 
 router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, exportOrders);
+
+/**
+ * @swagger
+ * /orders/syncAmazonOrder:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Sync Amazon orders
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ */
+router.get(
+  '/sync-amazon-orders',
+  syncOrdersValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  syncAmazonOrders
+);
 
 /**
  * @swagger
