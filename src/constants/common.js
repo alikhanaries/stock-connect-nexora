@@ -1,6 +1,15 @@
 // Define valid statuses for channels
 export const VALID_STATUSES = ['active', 'inactive', 'removed'];
-export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED', 'PAYMENT_FAILED', 'PENDING'];
+export const ORDER_PRIORITY = [
+  'NEW', // 0 – created, nothing done
+  'PENDING', // 1 – waiting for payment / confirmation
+  'IN_PROGRESS', // 2 – partially processed
+  'SHIPPED', // 3 – nothing pending, shipped
+  'DELIVERED', // 4 – fully delivered
+  'CLOSED', // 5 – delivered + canceled (final success)
+  'CANCELED', // 6 – fully canceled (final failure)
+  'PAYMENT_FAILED', // 7 – terminal failure
+];
 // Map status to display messages
 export const STATUS_MESSAGES = { active: 'activated', inactive: 'inactivated', removed: 'removed' };
 
@@ -99,6 +108,16 @@ export const RETURN_STATUS = {
   RECEIVED: 'RECEIVED',
   CANCELLED: 'CANCELLED',
   SHIPMENT_CREATED: 'SHIPMENT_CREATED',
+};
+
+export const AMAZON_STATUS_MAP = {
+  Returned: 'RETURNED',
+  Delivered: 'DELIVERED',
+  'In Progress': 'IN_PROGRESS',
+  Canceled: 'CANCELED',
+  Shipped: 'SHIPPED',
+  Pending: 'PENDING',
+  Unshipped: 'NEW',
 };
 
 export const PRODUCT_EXPORT_HEADERS = [

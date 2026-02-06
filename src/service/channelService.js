@@ -7,6 +7,8 @@ import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
 import UserSeller from '../models/UserSeller.js';
 import { CHANNEL_IMAGE_MAP } from '#constants/common.js';
+import Product from '#models/Product.js';
+import { buildExtraDataPayload, syncProductExtraDataToMarketplace } from './channel/ceService.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -342,7 +344,76 @@ export const updateUserChannelsStatus = async (sellerId, ids, status) => {
 
 export const removeUserChannels = async (sellerId, ids) => {
   try {
-    // Remove from UserChannels
+    // Collect SKUs BEFORE deletion
+    const userChannelProducts = await UserChannelProducts.find(
+      {
+        sellerId: new ObjectId(sellerId),
+        channelId: { $in: ids },
+      },
+      { skuList: 1 }
+    ).lean();
+
+    if (!userChannelProducts.length) return 0;
+
+    const skuCodes = [...new Set(userChannelProducts.flatMap((doc) => doc.skuList.map((s) => s.skuCode)))];
+
+    // Get channel names
+    const channels = await Channel.find({ channelId: { $in: ids } }, { channelName: 1 }).lean();
+
+    const removedChannelNames = channels.map((c) => c.channelName);
+
+    // Update Product marketPlace
+    const products = await Product.find(
+      {
+        sellerId: new ObjectId(sellerId),
+        productSkuCode: { $in: skuCodes },
+      },
+      { productSkuCode: 1, marketPlace: 1 }
+    ).lean();
+
+    const bulkOps = products.map((p) => {
+      const updatedMarketplaces = p.marketPlace
+        ?.split(',')
+        .map((s) => s.trim())
+        .filter((mp) => !removedChannelNames.includes(mp));
+
+      return {
+        updateOne: {
+          filter: {
+            sellerId: new ObjectId(sellerId),
+            productSkuCode: p.productSkuCode,
+          },
+          update: {
+            $set: {
+              marketPlace: updatedMarketplaces?.length ? updatedMarketplaces.join(', ') : null,
+              updatedAt: new Date(),
+            },
+          },
+        },
+      };
+    });
+
+    if (bulkOps.length) {
+      await Product.bulkWrite(bulkOps);
+    }
+
+    // Reload updated products
+    const updatedProducts = await Product.find(
+      {
+        sellerId: new ObjectId(sellerId),
+        productSkuCode: { $in: skuCodes },
+      },
+      { productSkuCode: 1, marketPlace: 1, _id: 0 }
+    ).lean();
+
+    // Build payload using existing helper
+    const payload = buildExtraDataPayload(updatedProducts);
+
+    if (payload.length) {
+      await syncProductExtraDataToMarketplace(payload);
+    }
+
+    // delete mappings
     const channelResult = await UserChannels.updateMany(
       { sellerId: new ObjectId(sellerId) },
       { $pull: { channelIds: { id: { $in: ids } } } }

@@ -27,6 +27,13 @@ import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
 import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
 import { upsertPricesForProducts } from '../service/priceService.js';
+import {
+  chunkArray,
+  getExistingProductsBySkuFromCE,
+  removeProductsFromCE,
+  buildExtraDataPayload,
+  syncProductExtraDataToMarketplace,
+} from './channel/ceService.js';
 
 const {
   CHANNEL_ENGINE_BASE_URL,
@@ -42,6 +49,7 @@ const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
 const MAX_RETRIES = 3;
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
+const SKU_BATCH_SIZE = 50;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 
@@ -122,7 +130,7 @@ const fetchProducts = async (query, sellerId) => {
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
-      .select('_id name status productSkuCode price msrp primaryImageUrl currentStockCount createdAt sellerId')
+      .select('_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId')
       .lean(),
 
     Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync'),
@@ -328,71 +336,61 @@ const validateProducts = async (channelId, sellerId) => {
   ).lean();
 
   const skuCodes = channelProducts.flatMap((cp) => cp.skuList.map((s) => s.skuCode));
-  if (!skuCodes.length) return { validProducts: [] };
+  if (!skuCodes.length) {
+    return { activeProducts: [], inactiveProducts: [] };
+  }
 
-  // Get products for those SKUs (child products)
-  const childProducts = await Product.find({
+  // Get products for those SKUs
+  const products = await Product.find({
     sellerId,
     productSkuCode: { $in: skuCodes },
-    status: 'active',
-    $or: [
-      { syncedAt: null },
-      {
-        $expr: { $gt: ['$updatedAt', '$syncedAt'] }, // only push products updatedAt since last sync
-      },
-    ],
+    $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
   }).lean();
 
-  // If no updated children → nothing to push
-  if (childProducts.length === 0) {
-    return { validProducts: [] };
+  if (!products.length) {
+    return { activeProducts: [], inactiveProducts: [] };
   }
-  // Collect parent SKUs from child products
-  const parentSkuCodes = new Set();
-  for (const p of childProducts) {
-    if (p.parentProductSkuCode) parentSkuCodes.add(p.parentProductSkuCode);
-    if (p.grandParentProductSkuCode) parentSkuCodes.add(p.grandParentProductSkuCode);
+  //  Split by status
+  const activeProducts = [];
+  const inactiveProducts = [];
+  for (const product of products) {
+    if (product.status === 'active') {
+      activeProducts.push(product);
+    } else if (product.status === 'inactive') {
+      inactiveProducts.push(product);
+    }
+  }
+  //  Collect parent & grandparent SKUs (only from ACTIVE products)
+  const hierarchySkuSet = new Set();
+  for (const p of activeProducts) {
+    if (p.parentProductSkuCode) hierarchySkuSet.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) hierarchySkuSet.add(p.grandParentProductSkuCode);
   }
 
-  // Fetch parent products
-  const parentProducts = parentSkuCodes.size
+  //  Fetch parent / grandparent products
+  const hierarchyProducts = hierarchySkuSet.size
     ? await Product.find({
         sellerId,
-        productSkuCode: { $in: [...parentSkuCodes] },
-        status: 'active',
+        productSkuCode: { $in: [...hierarchySkuSet] },
         $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
       }).lean()
     : [];
 
-  // Check if those parents have any grandparent
-  const grandParentSkuCodes = new Set();
-  for (const p of parentProducts) {
-    if (p.grandParentProductSkuCode) grandParentSkuCodes.add(p.grandParentProductSkuCode);
-  }
-
-  // Fetch grandparent products (if any)
-  const grandParentProducts = grandParentSkuCodes.size
-    ? await Product.find({
-        sellerId,
-        productSkuCode: { $in: [...grandParentSkuCodes] },
-        status: 'active',
-        $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
-      }).lean()
-    : [];
-
-  // Combine all (child + parent + grandparent) — remove duplicates
-  const allProductsMap = new Map();
-  [...childProducts, ...parentProducts, ...grandParentProducts].forEach((p) => {
-    allProductsMap.set(p.productSkuCode, p);
+  //  Merge ACTIVE hierarchy (dedupe by SKU)
+  const activeProductMap = new Map();
+  [...activeProducts, ...hierarchyProducts].forEach((p) => {
+    if (p.status === 'active') {
+      activeProductMap.set(p.productSkuCode, p);
+    }
   });
-  const validatedProducts = Array.from(allProductsMap.values());
 
   return {
-    validProducts: validatedProducts,
+    activeProducts: Array.from(activeProductMap.values()),
+    inactiveProducts,
   };
 };
 
-export const pushProductsAsync = async (products, channelId, sellerId) => {
+export const pushActiveProductsToChannel = async (products, channelId, sellerId) => {
   const channel = await Channel.findOne({ channelId }).lean();
 
   if (!channel) {
@@ -456,6 +454,34 @@ export const pushProductsAsync = async (products, channelId, sellerId) => {
     )
   );
 };
+
+export const pushInActiveProductsToChannel = async (inactiveSkuList = []) => {
+  if (!inactiveSkuList.length) return;
+  const skuBatches = chunkArray(
+    inactiveSkuList.map((sku) => sku.trim().toUpperCase()),
+    SKU_BATCH_SIZE
+  );
+  const skusToRemove = [];
+  for (const batch of skuBatches) {
+    const existingProducts = await getExistingProductsBySkuFromCE(batch);
+    const existingSkuSet = new Set(existingProducts.map((p) => p.MerchantProductNo?.toUpperCase()));
+    batch.forEach((sku) => {
+      if (existingSkuSet.has(sku)) {
+        skusToRemove.push(sku);
+      }
+    });
+  }
+  if (!skusToRemove.length) {
+    return;
+  }
+  //  delete only existing SKUs
+  const result = await removeProductsFromCE(skusToRemove);
+  if (!result?.success) {
+    throw new Error(result?.message || 'Failed to remove inactive products from ChannelEngine');
+  }
+  return result;
+};
+
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
   const errorDetails = [];
@@ -705,10 +731,12 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       console.warn('CategoryTrail update error:', e.message)
     );
   }
+  // Resolve hierarchy only on successful imports/updates
 
-  // Resolve product types (non-critical)
-  await resolveProductTypes(sellerId);
-  await resolveHierarchyStatus(sellerId);
+  if (finalValidProducts.length > 0) {
+    await resolveProductTypes(sellerId);
+    await resolveHierarchyStatus(sellerId);
+  }
 
   return {
     success: true,
@@ -1219,66 +1247,7 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
   };
 };
 
-async function existProductsFromChannelEngine() {
-  const page = 1;
-  const batchSize = 500;
-
-  try {
-    const response = await fetch(
-      `${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&size=${batchSize}`,
-      { method: 'GET', headers: { 'Content-Type': 'application/json' } }
-    );
-
-    if (!response.ok) {
-      throw new Error(`ChannelEngine GET failed with status ${response.status}`);
-    }
-
-    const data = await response.json();
-    if (!data.Content) return [];
-
-    return data.Content.map((p) => p.MerchantProductNo?.trim().toUpperCase()).filter(Boolean);
-  } catch (err) {
-    console.error('Error fetching from ChannelEngine:', err);
-    return [];
-  }
-}
-
-async function removeProductsFromChannelEngine(skuCodes) {
-  if (!skuCodes?.length) return { success: true, message: 'No SKUs provided' };
-
-  try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(skuCodes),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('ChannelEngine bulkdelete failed:', errorText);
-      return { success: false, message: errorText };
-    }
-
-    return { success: true };
-  } catch (err) {
-    console.error('Error calling ChannelEngine:', err);
-    return { success: false, message: err.message };
-  }
-}
-
 const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
-  /**
-   * TODO [TEMPORARY EXCLUSION - CE/NOON]:
-   * These SKUs are temporarily restricted from unlinking/removal.
-   * Reason: Avoid accidental deletion during ongoing ChannelEngine and Noon integrations.
-   * Remove this list and all related conditions once integrations are fully completed.
-   */
-  const EXCLUDED_SKUS = new Set([
-    'SKU-BLAZER-010-BLU',
-    'SKU-BLAZER-011-BRN',
-    'SKU-BLAZER-012-GRN',
-    'SKU-BLAZER-011-PINK',
-  ]);
   try {
     const products = await Product.find(
       { _id: { $in: ids }, sellerId: new mongoose.Types.ObjectId(sellerId) },
@@ -1286,38 +1255,12 @@ const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
     ).lean();
     if (!products.length) return 0;
     const skuCodes = products.map((p) => p.productSkuCode);
-    const existProductFromCE = await existProductsFromChannelEngine();
-    /**
-     * TODO [TEMPORARY FILTER - CE/NOON]:
-     * Filtering out temporarily restricted SKUs before CE unlinking.
-     */
-    const commonSkuCodes = skuCodes.filter((sku) => existProductFromCE.includes(sku) && !EXCLUDED_SKUS.has(sku));
-    if (commonSkuCodes.length > 0) {
-      const ceResult = await removeProductsFromChannelEngine(commonSkuCodes);
-      if (!ceResult.success) {
-        return {
-          success: false,
-          message: 'ChannelEngine deletion failed',
-          ceError: ceResult.message,
-        };
-      }
-    } else {
-      console.log('No valid SKUs to remove from ChannelEngine');
-    }
-    /**
-     * TODO [TEMPORARY FILTER - CE/NOON]:
-     * Excluding temporary SKUs from DB update operations.
-     */
-    const validSkuCodes = skuCodes.filter((sku) => !EXCLUDED_SKUS.has(sku));
-    if (!validSkuCodes.length) {
-      return { success: true, message: 'No valid SKUs to process' };
-    }
     const result = await UserChannelProducts.updateMany(
       {
         sellerId: new mongoose.Types.ObjectId(sellerId),
         channelId: Number(channelId),
       },
-      { $pull: { skuList: { skuCode: { $in: validSkuCodes } } } }
+      { $pull: { skuList: { skuCode: { $in: skuCodes } } } }
     );
 
     const channel = await Channel.findOne({ channelId }).select('channelName').lean();
@@ -1326,28 +1269,39 @@ const unlinkProductFromChannel = async (sellerId, channelId, ids, locale) => {
     }
     const channelName = channel.channelName;
 
-    const bulkOps = products
-      .map((p) => {
-        if (!p.marketPlace) return null;
+    const bulkOps = products.reduce((ops, p) => {
+      if (!p.marketPlace) return ops;
 
-        const updatedList = p.marketPlace
-          .split(',')
-          .map((s) => s.trim())
-          .filter((name) => name && name !== channelName);
+      const updatedMarketplaces = p.marketPlace
+        .split(',')
+        .map((s) => s.trim())
+        .filter((name) => name && name !== channelName);
 
-        return {
-          updateOne: {
-            filter: { _id: p._id, sellerId: new mongoose.Types.ObjectId(sellerId) },
-            update: updatedList.length
-              ? { $set: { marketPlace: updatedList.join(', ') } }
-              : { $set: { marketPlace: null } },
+      ops.push({
+        updateOne: {
+          filter: { _id: p._id, sellerId: new mongoose.Types.ObjectId(sellerId) },
+          update: {
+            $set: {
+              marketPlace: updatedMarketplaces.length ? updatedMarketplaces.join(', ') : null,
+              updatedAt: new Date(),
+            },
           },
-        };
-      })
-      .filter(Boolean);
+        },
+      });
+      return ops;
+    }, []);
 
     if (bulkOps.length) {
       await Product.bulkWrite(bulkOps);
+    }
+    const updatedProducts = await Product.find(
+      { _id: { $in: ids }, sellerId: new mongoose.Types.ObjectId(sellerId) },
+      { productSkuCode: 1, marketPlace: 1, _id: 0 }
+    ).lean();
+
+    const payload = buildExtraDataPayload(updatedProducts);
+    if (payload.length) {
+      await syncProductExtraDataToMarketplace(payload);
     }
     return result.modifiedCount || 0;
   } catch (err) {
@@ -1641,7 +1595,8 @@ export default {
   getAllProductIdsBySellerId,
   unlinkProductFromChannel,
   validateProducts,
-  pushProductsAsync,
+  pushActiveProductsToChannel,
+  pushInActiveProductsToChannel,
   validateProductExportData,
   exportProductsToCSV,
   getProductById,
