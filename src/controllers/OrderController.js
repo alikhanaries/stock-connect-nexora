@@ -12,6 +12,8 @@ import {
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
+import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
+import { config } from '#config/config.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -330,5 +332,49 @@ export const exportOrders = async (req, res) => {
     console.error('Controller Error: exportOrders:', error.message);
     errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export const syncAmazonOrders = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const url = config.AMAZON_ORDER_SHEET_URL;
+    if (!url) {
+      return Responses.errorResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
+    }
+    const exportUrl = await convertGoogleSheetUrlToExport(url);
+
+    if (!exportUrl) {
+      return Responses.errorResponse(res, req?.locale?.INVALID_URL, 400);
+    }
+
+    const { success, data } = await orderService.getNewAmazonOrders(exportUrl, req.locale, sellerId);
+
+    if (!success) {
+      return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
+    }
+    if (data.length === 0) {
+      return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
+    }
+
+    const dataSavedInDb = await orderService.processAmazonOrders(data, sellerId);
+
+    if (!dataSavedInDb.success) {
+      return Responses.errorResponse(res, dataSavedInDb.message, 500);
+    }
+
+    const newUpdateCount = dataSavedInDb?.data?.upsertedCount ? dataSavedInDb?.data?.upsertedCount : 0;
+
+    await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
+
+    const message =
+      newUpdateCount > 0
+        ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY} on amazon`
+        : `${req.locale.NO_NEW_ORDERS_FOUND} on amazon`;
+
+    return Responses.successResponse(res, message, 200);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
   }
 };
