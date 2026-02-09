@@ -128,10 +128,16 @@ export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
         (s) => s.id === item.orderItemId || s.merchantProductNo === item.sku
       );
 
+      const qty = parseInt(item.quantityPurchased) || 1;
+      const mappedStatus = existingSku?.status || mapAmazonStatus(item.orderStatus);
+
+      const statusBreakdown = existingSku?.statusBreakdown ?? buildAmazonStatusBreakdown(mappedStatus, qty);
+
       return {
         id: item.orderItemId || `${orderId}-${index}`,
         channelOrderLineNo: item.orderItemId,
-        status: existingSku?.status || mapAmazonStatus(item.orderStatus),
+        status: mappedStatus,
+        statusBreakdown,
         isFulfillmentByMarketplace: false,
         gtin: null,
         description: item.productName,
@@ -156,7 +162,7 @@ export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
         extraData: null,
         channelProductNo: item.orderItemId,
         merchantProductNo: item.sku,
-        quantity: parseInt(item.quantityPurchased) || 1,
+        quantity: qty,
         cancellationRequestedQuantity: existingSku?.cancellationRequestedQuantity || 0,
         unitPriceInclVat: parseFloat(item.itemPrice) || 0,
         feeFixed: parseFloat(item.paymentMethodFee) || 0,
@@ -304,6 +310,31 @@ const parseAmazonDate = (dateStr) => {
 const mapAmazonStatus = (amazonStatus) => {
   if (!amazonStatus) return 'NEW';
   return AMAZON_STATUS_MAP[amazonStatus] || 'NEW';
+};
+
+const buildAmazonStatusBreakdown = (status, qty) => {
+  const empty = {
+    confirmed: 0,
+    shipped: 0,
+    delivered: 0,
+    returned: 0,
+    canceled: 0,
+    shipmentCreated: 0,
+  };
+
+  switch (status) {
+    case 'NEW':
+    case 'IN_PROGRESS':
+      return { ...empty, confirmed: qty };
+    case 'SHIPPED':
+      return { ...empty, shipped: qty };
+    case 'DELIVERED':
+      return { ...empty, delivered: qty };
+    case 'CANCELED':
+      return { ...empty, canceled: qty };
+    default:
+      return { ...empty, confirmed: qty };
+  }
 };
 
 const getPeriodDate = (lowercasedPeriod) => {

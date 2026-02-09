@@ -511,6 +511,7 @@ export const syncAmazonOrders = async (sellerId, locale) => {
     const { success, data } = await getNewAmazonOrders(exportUrl, locale, sellerId);
 
     if (!success) {
+      console.log('fetch failed: unable to fetch data from amazon');
       return { success: false, message: 'unable to fetch data from amazon' };
     }
     if (data.length === 0) {
@@ -1229,6 +1230,10 @@ export const processAmazonOrders = async (orders, sellerId) => {
   try {
     const operations = await sanitizeAmazonOrdersData(orders, sellerId);
 
+    if (operations.length === 0) {
+      return { success: true, data: { upsertedCount: 0, modifiedCount: 0 } };
+    }
+
     const result = await Order.bulkWrite(operations);
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
     const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
@@ -1259,6 +1264,20 @@ export const processAmazonOrders = async (orders, sellerId) => {
       console.log('No new orders created — skipping log insertion');
     }
 
+    const allOrderIds = orders.map((o) => o.orderId);
+    const allProcessedOrders = await Order.find({ orderId: { $in: allOrderIds } })
+      .select('_id')
+      .lean();
+    const allProcessedOrderIds = allProcessedOrders.map((o) => o._id);
+
+    try {
+      await createAmazonShipmentsForNewOrders(allProcessedOrderIds, sellerId);
+    } catch (shipmentError) {
+      console.error('Shipment creation failed:', shipmentError.message);
+    }
+
+    console.log('Amazon.sa order saved sucessfully...');
+
     return {
       success: true,
       data: {
@@ -1267,7 +1286,7 @@ export const processAmazonOrders = async (orders, sellerId) => {
       },
     };
   } catch (error) {
-    console.error('Error in processOrders:', error.message);
+    console.error('Error in processAmazonOrders:', error.message);
     return { success: false, message: error.message };
   }
 };
@@ -1302,6 +1321,85 @@ export const syncChannelEngineShipment = async (userId) => {
     }
   } catch (err) {
     console.error('Shipment creation failed (ignored):', err.message);
+  }
+};
+
+const createAmazonShipmentsForNewOrders = async (orderIds, sellerId) => {
+  if (!orderIds || orderIds.length === 0) return;
+
+  try {
+    const ordersNeedingShipments = await Order.find({
+      _id: { $in: orderIds },
+      status: { $in: ['SHIPPED', 'DELIVERED'] },
+    }).lean();
+
+    if (ordersNeedingShipments.length === 0) return;
+
+    const existingShipments = await Shipment.find({
+      orderId: { $in: ordersNeedingShipments.map((o) => o._id) },
+      type: 'FORWARD',
+    }).lean();
+
+    const ordersWithShipments = new Set(existingShipments.map((s) => s.orderId.toString()));
+
+    const shipmentsToCreate = [];
+
+    for (const order of ordersNeedingShipments) {
+      if (ordersWithShipments.has(order._id.toString())) continue;
+
+      const skuList = order.orderSkuList?.skuList || [];
+      if (skuList.length === 0) continue;
+
+      const products = skuList.map((sku, index) => {
+        let orderLineIdNum = parseInt(sku.id, 10);
+        if (isNaN(orderLineIdNum)) {
+          orderLineIdNum = Date.now() + index;
+        }
+        return {
+          merchantProductNo: sku.merchantProductNo,
+          orderLineId: orderLineIdNum,
+          quantity: sku.quantity,
+          lineTotalInclVat: sku.lineTotalInclVat || 0,
+          hsCode: sku.merchantProductNo,
+        };
+      });
+
+      const awbNumber = `AMZ-${order.orderId}`;
+
+      shipmentsToCreate.push({
+        orderId: order._id,
+        sellerId: sellerId,
+        userId: sellerId,
+        status: order.status,
+        airWaybillNo: awbNumber,
+        merchantOrderNo: order.merchantOrderNo || order.orderId,
+        shipmentMethod: 'MANUAL',
+        method: 'AMAZON',
+        type: 'FORWARD',
+        isMerchantCreator: false,
+        products,
+        pieces: products.reduce((sum, p) => sum + p.quantity, 0),
+        submissionDate: order.orderDate || new Date(),
+        deliveryDate: order.status === 'DELIVERED' ? new Date() : null,
+        trackingInfo: [
+          {
+            statusCode: order.status,
+            description: `Order ${order.status.toLowerCase()} via Amazon`,
+            createdAt: new Date(),
+          },
+        ],
+      });
+    }
+
+    if (shipmentsToCreate.length > 0) {
+      await Shipment.insertMany(shipmentsToCreate);
+      console.log('Amazon.sa shipment created sucessfully...');
+    }
+
+    return shipmentsToCreate;
+  } catch (error) {
+    console.error('Error creating Amazon shipments:', error.message);
+    throw error;
   }
 };
 
