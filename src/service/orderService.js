@@ -31,6 +31,8 @@ import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
 import { Readable } from 'stream';
 import { processAmazonOrderImportStream } from '#helpers/amazonOrder.js';
+import { convertGoogleSheetUrlToExport } from '../helpers/googleSheetFormaterHandler.js';
+import { errorLog } from '../middleware/errorLogMiddleware.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
@@ -464,6 +466,42 @@ export const processOrders = async (orders, sellerId) => {
     };
   } catch (error) {
     console.error('Error in processOrders:', error.message);
+    return { success: false, message: error.message };
+  }
+};
+
+export const syncAmazonOrders = async (sellerId, locale) => {
+  try {
+    const url = config.AMAZON_ORDER_SHEET_URL;
+    if (!url) {
+      return { success: false, message: 'Google sheet url is required' };
+    }
+    const exportUrl = await convertGoogleSheetUrlToExport(url);
+
+    if (!exportUrl) {
+      return { success: false, message: 'Invalid google sheet url' };
+    }
+
+    const { success, data } = await getNewAmazonOrders(exportUrl, locale, sellerId);
+
+    if (!success) {
+      return { success: false, message: 'unable to fetch data from amazon' };
+    }
+    if (data.length === 0) {
+      return { success: true, message: 'already up to date' };
+    }
+
+    const dataSavedInDb = await processAmazonOrders(data, sellerId);
+
+    if (!dataSavedInDb.success) {
+      return { success: false, message: dataSavedInDb.message };
+    }
+
+    const newUpdateCount = dataSavedInDb?.data?.upsertedCount ? dataSavedInDb?.data?.upsertedCount : 0;
+
+    return { success: true, message: 'Orders synced successfully', data: { newUpdateCount } };
+  } catch (error) {
+    errorLog(error);
     return { success: false, message: error.message };
   }
 };
@@ -1258,4 +1296,5 @@ export default {
   syncChannelEngineShipment,
   getNewAmazonOrders,
   processAmazonOrders,
+  syncAmazonOrders,
 };

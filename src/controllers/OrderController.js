@@ -12,8 +12,6 @@ import {
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
-import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
-import { config } from '#config/config.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -132,18 +130,33 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    const [dataSavedInDb, response] = await Promise.allSettled([
+    const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
       orderService.processOrders(data, sellerId),
       getSyncedOrdersOcp(sellerId),
+      orderService.syncAmazonOrders(sellerId, req.locale),
     ]);
 
-    if (!dataSavedInDb.value.success && !response.value.success) {
-      return Responses.errorResponse(res, dataSavedInDb.value.message && response.value.message, 500);
+    // Check for rejected promises or failed results
+    const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
+    const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
+    const isAmazonSuccess = amazonResponse.status === 'fulfilled' && amazonResponse.value?.success;
+
+    if (!isChannelEngineSuccess && !isOcpSuccess && !isAmazonSuccess) {
+      const errorMessages = [
+        dataSavedInDb.status === 'rejected' ? dataSavedInDb.reason?.message : dataSavedInDb.value?.message,
+        response.status === 'rejected' ? response.reason?.message : response.value?.message,
+        amazonResponse.status === 'rejected' ? amazonResponse.reason?.message : amazonResponse.value?.message,
+      ]
+        .filter(Boolean)
+        .join('; ');
+
+      return Responses.errorResponse(res, errorMessages || 'All sync operations failed', 500);
     }
 
     const newUpdateCount =
-      (dataSavedInDb?.value?.data?.upsertedCount ? dataSavedInDb?.value?.data?.upsertedCount : 0) +
-      (response?.value?.data?.upsertedCount ? response?.value?.data?.upsertedCount : 0);
+      ((dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.data?.upsertedCount) || 0) +
+      ((response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0) +
+      ((amazonResponse.status === 'fulfilled' && amazonResponse.value?.data?.newUpdateCount) || 0);
 
     await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
 
@@ -331,49 +344,5 @@ export const exportOrders = async (req, res) => {
     console.error('Controller Error: exportOrders:', error.message);
     errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
-  }
-};
-
-export const syncAmazonOrders = async (req, res) => {
-  try {
-    const sellerId = req.sellerId;
-    const url = config.AMAZON_ORDER_SHEET_URL;
-    if (!url) {
-      return Responses.errorResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
-    }
-    const exportUrl = await convertGoogleSheetUrlToExport(url);
-
-    if (!exportUrl) {
-      return Responses.errorResponse(res, req?.locale?.INVALID_URL, 400);
-    }
-
-    const { success, data } = await orderService.getNewAmazonOrders(exportUrl, req.locale, sellerId);
-
-    if (!success) {
-      return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
-    }
-    if (data.length === 0) {
-      return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
-    }
-
-    const dataSavedInDb = await orderService.processAmazonOrders(data, sellerId);
-
-    if (!dataSavedInDb.success) {
-      return Responses.errorResponse(res, dataSavedInDb.message, 500);
-    }
-
-    const newUpdateCount = dataSavedInDb?.data?.upsertedCount ? dataSavedInDb?.data?.upsertedCount : 0;
-
-    await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
-
-    const message =
-      newUpdateCount > 0
-        ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY} on amazon`
-        : `${req.locale.NO_NEW_ORDERS_FOUND} on amazon`;
-
-    return Responses.successResponse(res, message, 200);
-  } catch (error) {
-    errorLog(error);
-    return Responses.errorResponse(res, error, 500);
   }
 };
