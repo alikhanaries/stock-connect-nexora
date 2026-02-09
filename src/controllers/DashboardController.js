@@ -118,10 +118,10 @@ export const getTopPerformersProducts = async (req, res) => {
 
 export const getSalesByChannel = async (req, res) => {
   try {
-    const sellerId = req.query?.sellerId ?? req.sellerId;
+    const sellerIds = req.sellerIds;
     const { period, startDate, endDate, month, channel } = req.query;
 
-    const data = await dashboardService.getSalesByChannel(sellerId, period, {
+    const data = await dashboardService.getSalesByChannel(sellerIds, period, {
       startDate,
       endDate,
       month,
@@ -139,10 +139,10 @@ export const getSalesByChannel = async (req, res) => {
 
 export const getOrdersByChannel = async (req, res) => {
   try {
-    const sellerId = req.query?.sellerId ?? req.sellerId;
+    const sellerIds = req.sellerIds;
     const { period, startDate, endDate, month, channel } = req.query;
 
-    const data = await dashboardService.getOrdersByChannel(sellerId, period, {
+    const data = await dashboardService.getOrdersByChannel(sellerIds, period, {
       startDate,
       endDate,
       month,
