@@ -2247,23 +2247,43 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
   const bulkOps = [];
 
   for (const ceShipment of channelEngineShipments) {
-    //  Resolve order
-    const order = await Order.findOne({
-      merchantOrderNo: ceShipment.MerchantOrderNo,
-    }).lean();
-
-    if (!order) {
-      console.warn('Order not found for MerchantOrderNo:', ceShipment.MerchantOrderNo);
-      continue;
-    }
-
     const lines = ceShipment.Lines || [];
     if (!lines.length) continue;
 
-    const merchantShipmentNo =
-      ceShipment.MerchantShipmentNo ||
-      ceShipment.ChannelShipmentNo ||
-      `${ceShipment.MerchantOrderNo}-${ceShipment.CreatedAt}`;
+    //  Extract ChannelOrderLineNos FIRST
+    const channelOrderLineNos = lines.map((l) => l?.OrderLine?.ChannelOrderLineNo).filter(Boolean);
+
+    let order = null;
+
+    // 1️ Try merchantOrderNo
+    if (ceShipment.MerchantOrderNo) {
+      order = await Order.findOne({
+        merchantOrderNo: ceShipment.MerchantOrderNo,
+      }).lean();
+    }
+
+    // 2️ Fallback via SKU mapping
+    if (!order && channelOrderLineNos.length) {
+      order = await Order.findOne({
+        'orderSkuList.skuList': {
+          $elemMatch: {
+            channelOrderLineNo: { $in: channelOrderLineNos },
+          },
+        },
+      }).lean();
+    }
+
+    if (!order) {
+      console.warn(
+        'Order not found for shipment:',
+        ceShipment.MerchantShipmentNo || ceShipment.ChannelShipmentNo,
+        'ChannelOrderLineNos:',
+        channelOrderLineNos
+      );
+      continue;
+    }
+
+    const merchantShipmentNo = ceShipment.MerchantShipmentNo;
 
     const products = buildShipmentProducts(lines);
     const pieces = lines.reduce((sum, l) => sum + (l.Quantity || 0), 0);
