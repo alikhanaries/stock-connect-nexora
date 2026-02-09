@@ -496,7 +496,7 @@ export const processOrders = async (orders, sellerId) => {
   }
 };
 
-export const syncAmazonOrders = async (sellerId, locale) => {
+export const syncAmazonOrders = async (sellerId, locale, userId) => {
   try {
     const url = config.AMAZON_ORDER_SHEET_URL;
     if (!url) {
@@ -511,14 +511,13 @@ export const syncAmazonOrders = async (sellerId, locale) => {
     const { success, data } = await getNewAmazonOrders(exportUrl, locale, sellerId);
 
     if (!success) {
-      console.log('fetch failed: unable to fetch data from amazon');
       return { success: false, message: 'unable to fetch data from amazon' };
     }
     if (data.length === 0) {
       return { success: true, message: 'already up to date' };
     }
 
-    const dataSavedInDb = await processAmazonOrders(data, sellerId);
+    const dataSavedInDb = await processAmazonOrders(data, sellerId, userId);
 
     if (!dataSavedInDb.success) {
       return { success: false, message: dataSavedInDb.message };
@@ -1226,7 +1225,7 @@ export async function getNewAmazonOrders(url, locale, sellerId) {
   }
 }
 
-export const processAmazonOrders = async (orders, sellerId) => {
+export const processAmazonOrders = async (orders, sellerId, userId) => {
   try {
     const operations = await sanitizeAmazonOrdersData(orders, sellerId);
 
@@ -1271,7 +1270,7 @@ export const processAmazonOrders = async (orders, sellerId) => {
     const allProcessedOrderIds = allProcessedOrders.map((o) => o._id);
 
     try {
-      await createAmazonShipmentsForNewOrders(allProcessedOrderIds, sellerId);
+      await createAmazonShipmentsForNewOrders(allProcessedOrderIds, sellerId, userId);
     } catch (shipmentError) {
       console.error('Shipment creation failed:', shipmentError.message);
     }
@@ -1324,7 +1323,7 @@ export const syncChannelEngineShipment = async (userId) => {
   }
 };
 
-const createAmazonShipmentsForNewOrders = async (orderIds, sellerId) => {
+const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => {
   if (!orderIds || orderIds.length === 0) return;
 
   try {
@@ -1366,21 +1365,26 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId) => {
 
       const awbNumber = `AMZ-${order.orderId}`;
 
+      // Use expectedDeliveryDate from first SKU if available, otherwise use current date for delivered orders
+      const sheetDeliveryDate = skuList[0]?.expectedDeliveryDate;
+      const deliveryDate =
+        order.status === 'DELIVERED' ? (sheetDeliveryDate ? new Date(sheetDeliveryDate) : new Date()) : null;
+
       shipmentsToCreate.push({
         orderId: order._id,
         sellerId: sellerId,
-        userId: sellerId,
+        userId: userId || sellerId,
         status: order.status,
         airWaybillNo: awbNumber,
         merchantOrderNo: order.merchantOrderNo || order.orderId,
-        shipmentMethod: 'MANUAL',
+        shipmentMethod: 'AMAZON',
         method: 'AMAZON',
         type: 'FORWARD',
         isMerchantCreator: false,
         products,
         pieces: products.reduce((sum, p) => sum + p.quantity, 0),
         submissionDate: order.orderDate || new Date(),
-        deliveryDate: order.status === 'DELIVERED' ? new Date() : null,
+        deliveryDate,
         trackingInfo: [
           {
             statusCode: order.status,

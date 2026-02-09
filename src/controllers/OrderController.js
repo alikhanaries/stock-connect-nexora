@@ -133,7 +133,7 @@ export const getSyncedOrders = async (req, res) => {
     const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
       orderService.processOrders(data, sellerId),
       getSyncedOrdersOcp(sellerId),
-      orderService.syncAmazonOrders(sellerId, req.locale),
+      orderService.syncAmazonOrders(sellerId, req.locale, req.user._id),
     ]);
 
     // Check for rejected promises or failed results

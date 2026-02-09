@@ -325,11 +325,14 @@ const buildAmazonStatusBreakdown = (status, qty) => {
   switch (status) {
     case 'NEW':
     case 'IN_PROGRESS':
+    case 'PENDING':
       return { ...empty, confirmed: qty };
     case 'SHIPPED':
       return { ...empty, shipped: qty };
     case 'DELIVERED':
       return { ...empty, delivered: qty };
+    case 'RETURNED':
+      return { ...empty, returned: qty };
     case 'CANCELED':
       return { ...empty, canceled: qty };
     default:
