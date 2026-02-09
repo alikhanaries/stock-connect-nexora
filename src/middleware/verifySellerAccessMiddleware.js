@@ -39,6 +39,28 @@ export const verifyMultipleSellerAccess = async (req, res, next) => {
     const user = req.user;
     const connectedSellerIds = req.sellerIds;
     let { sellerId } = req.query;
+
+    const isAll = typeof sellerId === 'string' && sellerId.trim().toLowerCase() === 'all';
+    if (isAll) {
+      if (user?.role === USER_ROLES.MASTER_ADMIN) {
+        const sellers = await Seller.find({ isDeleted: false, type: SELLER_TYPE.NORMAL }).select('_id').lean();
+
+        if (!sellers?.length) return Responses.failResponse(res, 'No seller found', 404);
+
+        const ids = sellers.map((s) => s._id.toString());
+        req.sellerId = new mongoose.Types.ObjectId(ids[0]);
+        req.sellerIds = ids;
+        return next();
+      }
+
+      if (!Array.isArray(connectedSellerIds) || connectedSellerIds.length === 0) {
+        return Responses.errorResponse(res, 'Server configuration error', 500);
+      }
+
+      req.sellerId = new mongoose.Types.ObjectId(connectedSellerIds[0]);
+      req.sellerIds = connectedSellerIds;
+      return next();
+    }
     const sellerIds = String(sellerId ?? '')
       .split(',')
       .map((s) => s.trim())

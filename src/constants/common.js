@@ -68,6 +68,7 @@ export const ORDER_STATUS_MAP = {
   IN_COMBI: 'IN_COMBI',
   PARTIALLY_CANCELED: 'PARTIALLY_CANCELED',
   SHIPMENT_CREATED: 'SHIPMENT_CREATED',
+  DELIVERED: 'DELIVERED',
 };
 
 export const syncFunctions = {
@@ -108,6 +109,16 @@ export const RETURN_STATUS = {
   RECEIVED: 'RECEIVED',
   CANCELLED: 'CANCELLED',
   SHIPMENT_CREATED: 'SHIPMENT_CREATED',
+};
+
+export const AMAZON_STATUS_MAP = {
+  Returned: 'RETURNED',
+  Delivered: 'DELIVERED',
+  'In Progress': 'IN_PROGRESS',
+  Canceled: 'CANCELED',
+  Shipped: 'SHIPPED',
+  Pending: 'PENDING',
+  Unshipped: 'NEW',
 };
 
 export const PRODUCT_EXPORT_HEADERS = [

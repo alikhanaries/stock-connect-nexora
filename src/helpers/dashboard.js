@@ -231,16 +231,7 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
             },
           };
 
-  const valueExpression =
-    metric === 'sales'
-      ? {
-          $sum: {
-            $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
-          },
-        }
-      : { $sum: 1 };
-
-  return [
+  const pipeline = [
     {
       $match: {
         sellerId: { $in: sellerObjectIds },
@@ -248,17 +239,35 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
         ...globalChannelFilter,
       },
     },
-    { $group: { _id: groupId, value: valueExpression } },
-    {
-      $sort: isMonthly
-        ? { '_id.week': 1 }
-        : isAll
-          ? { '_id.month': 1 }
-          : isToday
-            ? { '_id.hour': 1 }
-            : { '_id.date': 1 },
-    },
   ];
+  if (metric === 'sales') {
+    pipeline.push({
+      $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false },
+    });
+  }
+
+  pipeline.push({
+    $group: {
+      _id: groupId,
+      value:
+        metric === 'sales'
+          ? {
+              $sum: {
+                $multiply: [
+                  { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
+                  { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+                ],
+              },
+            }
+          : { $sum: 1 },
+    },
+  });
+
+  pipeline.push({
+    $sort: isMonthly ? { '_id.date': 1 } : isAll ? { '_id.month': 1 } : isToday ? { '_id.hour': 1 } : { '_id.date': 1 },
+  });
+
+  return pipeline;
 };
 
 const toISODate = (d) => {

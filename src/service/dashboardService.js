@@ -20,9 +20,10 @@ import {
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
   try {
-    const sellerObjectIds = String(sellerId)
-      .split(',')
-      .map((s) => s.trim())
+    const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+    const sellerObjectIds = ids
+      .map(String)
       .filter(Boolean)
       .map((id) => new mongoose.Types.ObjectId(id));
 
@@ -104,9 +105,10 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
 };
 
 const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
-  const sellerObjectIds = String(sellerId)
-    .split(',')
-    .map((s) => s.trim())
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
     .filter(Boolean)
     .map((id) => new mongoose.Types.ObjectId(id));
 
@@ -136,7 +138,10 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalOrderValue: { $first: '$totalInclVat' },
           deliveredTotal: {
             $sum: {
-              $cond: [{ $eq: ['$status', 'DELIVERED'] }, { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] }, 0],
+              $multiply: [
+                { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
+                { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+              ],
             },
           },
           totalProducts: {
@@ -236,9 +241,10 @@ const getShipmentAnalytics = async (sellerId, period) => {
 const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month, channel } = {}) => {
   if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
   const globalChannelFilter = buildGlobalChannelFilter(channel);
-  const sellerObjectIds = String(sellerId)
-    .split(',')
-    .map((s) => s.trim())
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
     .filter(Boolean)
     .map((id) => new mongoose.Types.ObjectId(id));
   const range = getDateRange({ period, startDate, endDate, month });
@@ -356,14 +362,12 @@ const getInventoryStatus = async (sellerId, period) => {
 };
 
 const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
-  const sellerObjectIds = String(sellerId)
-    .split(',')
-    .map((s) => s.trim())
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
     .filter(Boolean)
-    .map((id) => {
-      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
-      return new mongoose.Types.ObjectId(id);
-    });
+    .map((id) => new mongoose.Types.ObjectId(id));
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
@@ -376,7 +380,12 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
         sellerId: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
         globalChannelName: { $type: 'string', $ne: '' },
-        totalInclVat: { $type: 'number' },
+      },
+    },
+    {
+      $unwind: {
+        path: '$orderSkuList.skuList',
+        preserveNullAndEmptyArrays: false,
       },
     },
     {
@@ -384,12 +393,10 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
         _id: '$globalChannelName',
         deliveredSales: {
           $sum: {
-            $cond: [{ $eq: ['$status', 'DELIVERED'] }, '$totalInclVat', 0],
-          },
-        },
-        deliveredTotal: {
-          $sum: {
-            $cond: [{ $eq: ['$status', 'DELIVERED'] }, { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] }, 0],
+            $multiply: [
+              { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
+              { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+            ],
           },
         },
       },
@@ -420,14 +427,12 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
 };
 
 const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
-  const sellerObjectIds = String(sellerId)
-    .split(',')
-    .map((s) => s.trim())
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
     .filter(Boolean)
-    .map((id) => {
-      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
-      return new mongoose.Types.ObjectId(id);
-    });
+    .map((id) => new mongoose.Types.ObjectId(id));
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);

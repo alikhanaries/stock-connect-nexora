@@ -1,7 +1,310 @@
 import Order from '#models/Orders.js';
+import Product from '../models/Product.js';
+import Seller from '../models/Seller.js';
+import Channel from '../models/Channel.js';
 import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
-import Product from '../models/Product.js';
+import { AMAZON_STATUS_MAP, ORDER_STATUS_MAP } from '#constants/common.js';
+
+const resolveStatus = ({ existingStatus, incomingStatus }) => {
+  // Highest priority
+  if (incomingStatus === ORDER_STATUS_MAP.MANCO) {
+    return ORDER_STATUS_MAP.CANCELED;
+  }
+
+  // Allow explicit close
+  if (incomingStatus === ORDER_STATUS_MAP.CLOSED) {
+    return ORDER_STATUS_MAP.CLOSED;
+  }
+
+  // IN_COMBI always moves to IN_PROGRESS
+  if (incomingStatus === ORDER_STATUS_MAP.IN_COMBI) {
+    return ORDER_STATUS_MAP.IN_PROGRESS;
+  }
+
+  // Default behavior
+  return existingStatus ?? incomingStatus;
+};
+
+export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
+  const orderMap = new Map();
+
+  orders.forEach((row) => {
+    const orderId = row.orderId;
+    if (!orderMap.has(orderId)) {
+      orderMap.set(orderId, {
+        orderInfo: row,
+        items: [],
+      });
+    }
+    orderMap.get(orderId).items.push(row);
+  });
+
+  const orderIds = Array.from(orderMap.keys());
+
+  const skuSet = new Set();
+  orders.forEach((row) => {
+    if (row.sku) skuSet.add(row.sku);
+  });
+
+  const brandNameSet = new Set();
+  orders.forEach((row) => {
+    if (row.brandName) brandNameSet.add(row.brandName.toLowerCase().trim());
+  });
+
+  const brandOrQuery =
+    brandNameSet.size > 0
+      ? Array.from(brandNameSet).map((brand) => ({
+          name: { $regex: new RegExp(`^${brand}$`, 'i') },
+        }))
+      : [{ _id: null }];
+
+  const [existingOrdersDb, productsDb, sellersDb, amazonChannel] = await Promise.all([
+    Order.find({ orderId: { $in: orderIds } }).lean(),
+    Product.find({ productSkuCode: { $in: Array.from(skuSet) } })
+      .select('productSkuCode sellerId')
+      .lean(),
+    Seller.find({
+      $or: brandOrQuery,
+      isDeleted: false,
+    })
+      .select('_id name')
+      .lean(),
+    Channel.findOne({ globalChannelId: 1635 }).select('channelId channelName globalChannelId globalChannelName').lean(),
+  ]);
+
+  const channelInfo = amazonChannel || {
+    channelId: 3,
+    channelName: 'Amazon.sa (v3)',
+    globalChannelId: 1635,
+    globalChannelName: 'Amazon',
+  };
+
+  const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
+  const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
+
+  const brandSellerMap = new Map();
+  sellersDb.forEach((seller) => {
+    brandSellerMap.set(seller.name.toLowerCase().trim(), seller._id);
+  });
+
+  const operations = [];
+
+  for (const [orderId, orderData] of orderMap) {
+    const { orderInfo, items } = orderData;
+    const existingOrder = existingOrdersMap.get(orderId);
+
+    let finalSellerId = null;
+
+    if (orderInfo.brandName) {
+      const brandKey = orderInfo.brandName.toLowerCase().trim();
+      finalSellerId = brandSellerMap.get(brandKey) || null;
+    }
+
+    if (!finalSellerId && items.length > 0) {
+      const firstSku = items[0].sku;
+      if (firstSku) {
+        finalSellerId = productSellerMap.get(firstSku) || null;
+      }
+    }
+
+    if (!finalSellerId) {
+      finalSellerId = defaultSellerId;
+    }
+    const purchaseDate = parseAmazonDate(orderInfo.purchaseDate);
+
+    let totalPrice = 0;
+    let totalTax = 0;
+    let totalShipping = 0;
+
+    items.forEach((item) => {
+      totalPrice += parseFloat(item.itemPrice) || 0;
+      totalTax += parseFloat(item.itemTax) || 0;
+      totalShipping += parseFloat(item.shippingPrice) || 0;
+    });
+
+    const skuList = items.map((item, index) => {
+      const existingSku = existingOrder?.orderSkuList?.skuList?.find(
+        (s) => s.id === item.orderItemId || s.merchantProductNo === item.sku
+      );
+
+      return {
+        id: item.orderItemId || `${orderId}-${index}`,
+        channelOrderLineNo: item.orderItemId,
+        status: existingSku?.status || mapAmazonStatus(item.orderStatus),
+        isFulfillmentByMarketplace: false,
+        gtin: null,
+        description: item.productName,
+        stockLocation: null,
+        unitVat: parseFloat(item.itemTax) || 0,
+        lineTotalInclVat: parseFloat(item.itemPrice) || 0,
+        lineVat: parseFloat(item.itemTax) || 0,
+        originalUnitPriceInclVat: parseFloat(item.itemPrice) || 0,
+        originalUnitVat: parseFloat(item.itemTax) || 0,
+        originalLineTotalInclVat: parseFloat(item.itemPrice) || 0,
+        originalLineVat: parseFloat(item.itemTax) || 0,
+        originalFeeFixed: 0,
+        bundleProductMerchantProductNo: null,
+        bundleOrderLineId: null,
+        jurisCode: null,
+        jurisName: null,
+        vatRate: 0,
+        unitPriceExclVat: parseFloat(item.itemPrice) || 0,
+        lineTotalExclVat: parseFloat(item.itemPrice) || 0,
+        originalUnitPriceExclVat: parseFloat(item.itemPrice) || 0,
+        originalLineTotalExclVat: parseFloat(item.itemPrice) || 0,
+        extraData: null,
+        channelProductNo: item.orderItemId,
+        merchantProductNo: item.sku,
+        quantity: parseInt(item.quantityPurchased) || 1,
+        cancellationRequestedQuantity: existingSku?.cancellationRequestedQuantity || 0,
+        unitPriceInclVat: parseFloat(item.itemPrice) || 0,
+        feeFixed: parseFloat(item.paymentMethodFee) || 0,
+        feeRate: 0,
+        condition: null,
+        exactDeliveryDate: null,
+        expectedDeliveryDate: item.deliveryEndDate ? new Date(item.deliveryEndDate) : null,
+        latestDeliveryDate: null,
+        exactShipmentDate: null,
+        expectedShipmentDate: null,
+        latestShipmentDate: null,
+        airWaybillNo: existingSku?.airWaybillNo || null,
+      };
+    });
+
+    const incomingStatus = mapAmazonStatus(orderInfo.orderStatus);
+    const finalStatus = resolveStatus({
+      existingStatus: existingOrder?.status,
+      incomingStatus,
+    });
+
+    const updatePayload = {
+      orderId: orderId,
+      channelId: channelInfo.channelId,
+      sellerId: finalSellerId,
+      channelName: channelInfo.channelName,
+      globalChannelName: channelInfo.globalChannelName,
+      globalChannelId: channelInfo.globalChannelId,
+      orderDate: purchaseDate,
+      merchantComment: null,
+      merchantOrderNo: orderId,
+      isBusinessOrder: false,
+      subTotalInclVat: totalPrice,
+      subTotalVat: totalTax,
+      shippingCostsInclVat: totalShipping,
+      totalInclVat: totalPrice + totalShipping,
+      totalVat: totalTax,
+      originalSubTotalInclVat: totalPrice,
+      originalSubTotalVat: totalTax,
+      originalShippingCostsInclVat: totalShipping,
+      originalShippingCostsVat: 0,
+      originalTotalInclVat: totalPrice + totalShipping,
+      originalTotalVat: totalTax,
+      subTotalExclVat: totalPrice - totalTax,
+      totalExclVat: totalPrice + totalShipping - totalTax,
+      shippingCostsExclVat: totalShipping,
+      originalSubTotalExclVat: totalPrice - totalTax,
+      originalShippingCostsExclVat: totalShipping,
+      originalTotalExclVat: totalPrice + totalShipping - totalTax,
+      originalSubTotalFee: 0,
+      subTotalFee: 0,
+      originalOrderFee: 0,
+      orderFee: 0,
+      originalTotalFee: 0,
+      totalFee: 0,
+      status: finalStatus,
+      orderCustomer: {
+        orderId: orderId,
+        gender: null,
+        firstName: orderInfo.buyerName?.split(' ')[0] || '',
+        lastName: orderInfo.buyerName?.split(' ').slice(1).join(' ') || '',
+        phone: orderInfo.buyerPhoneNumber || orderInfo.shipPhoneNumber || '',
+        email: orderInfo.buyerEmail || '',
+        languageCode: null,
+        companyRegistrationNo: null,
+        channelCustomerNo: null,
+      },
+      orderPaymentDetails: {
+        orderId: orderId,
+        vatNo: null,
+        paymentMethod: orderInfo.paymentMethod || 'Amazon',
+        paymentReferenceNo: null,
+        currencyCode: orderInfo.currency || 'SAR',
+      },
+      orderSkuList: {
+        orderId: orderId,
+        skuList,
+      },
+      orderShippingAddress: {
+        line1: orderInfo.shipAddress1 || '',
+        line2: orderInfo.shipAddress2 || '',
+        line3: orderInfo.shipAddress3 || '',
+        gender: null,
+        companyName: null,
+        firstName: orderInfo.recipientName?.split(' ')[0] || '',
+        lastName: orderInfo.recipientName?.split(' ').slice(1).join(' ') || '',
+        streetName: orderInfo.shipAddress1 || '',
+        houseNr: orderInfo.shipAddress2 || '',
+        houseNrAddition: null,
+        zipCode: orderInfo.shipPostalCode || '',
+        city: orderInfo.shipCity || '',
+        region: orderInfo.shipState || '',
+        countryIso: orderInfo.shipCountry || 'SA',
+      },
+      orderBillingAddress: {
+        line1: orderInfo.shipAddress1 || '',
+        line2: orderInfo.shipAddress2 || '',
+        line3: orderInfo.shipAddress3 || '',
+        gender: null,
+        companyName: null,
+        firstName: orderInfo.buyerName?.split(' ')[0] || '',
+        lastName: orderInfo.buyerName?.split(' ').slice(1).join(' ') || '',
+        streetName: orderInfo.shipAddress1 || '',
+        houseNr: orderInfo.shipAddress2 || '',
+        houseNrAddition: null,
+        zipCode: orderInfo.shipPostalCode || '',
+        city: orderInfo.shipCity || '',
+        region: orderInfo.shipState || '',
+        countryIso: orderInfo.shipCountry || 'SA',
+      },
+    };
+
+    operations.push({
+      updateOne: {
+        filter: { orderId: orderId },
+        update: { $set: updatePayload },
+        upsert: true,
+      },
+    });
+  }
+
+  console.log('Total operations to execute:', operations.length);
+  return operations;
+};
+
+const parseAmazonDate = (dateStr) => {
+  if (!dateStr) return new Date();
+
+  try {
+    const parts = dateStr.split(' ');
+    const datePart = parts[0];
+    const timePart = parts[1] || '0:00';
+
+    const [month, day, year] = datePart.split('/').map(Number);
+    const [hour, minute] = timePart.split(':').map(Number);
+
+    const fullYear = year < 100 ? 2000 + year : year;
+
+    return new Date(fullYear, month - 1, day, hour, minute);
+  } catch {
+    return new Date();
+  }
+};
+
+const mapAmazonStatus = (amazonStatus) => {
+  if (!amazonStatus) return 'NEW';
+  return AMAZON_STATUS_MAP[amazonStatus] || 'NEW';
+};
 
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
@@ -293,7 +596,36 @@ export const getOrganizedOrderRowData = (flattenedOrder, organizedHeaders) => {
   });
 };
 
-export const normalizeSkuStatus = (channelStatus) => {
+export const normalizeSkuStatus = (skuStatus) => {
+  switch (skuStatus) {
+    case 'NEW':
+    case 'IN_PROGRESS':
+    case 'IN_COMBI':
+    case 'SHIPMENT_CREATED':
+      return 'IN_PROGRESS';
+
+    case 'PICKED':
+    case 'SHIPPED':
+      return 'SHIPPED';
+
+    case 'DELIVERED':
+    case 'CLOSED':
+      return 'DELIVERED';
+
+    case 'CANCELED':
+    case 'PARTIALLY_CANCELED':
+    case 'MANCO':
+      return 'CANCELED';
+
+    case 'RETURNED':
+      return 'RETURNED';
+
+    default:
+      return 'IN_PROGRESS';
+  }
+};
+
+export const normalizeOrderStatus = (channelStatus) => {
   switch (channelStatus) {
     case 'NEW':
       return 'NEW';
@@ -383,28 +715,83 @@ const sanitizeOrdersData = async (orders) => {
     // Build SKU list with normalized statuses & preserved fields
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
-          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => s.id === line.Id);
+          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+
           return {
-            ...line,
+            // ---------- REQUIRED ----------
             id: line.Id,
-            channelOrderLineNo: line.ChannelOrderLineNo,
-            //  CORRECT: schema-aligned status tracking
+            merchantProductNo: line.MerchantProductNo,
+            quantity: line.Quantity,
+            unitPriceInclVat: line.UnitPriceInclVat ?? 0,
+
+            // ---------- STATUS ----------
+            status: ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
+              ? existingSku.status
+              : normalizeSkuStatus(line.Status),
+
             statusBreakdown: buildStatusBreakdown({
               line,
               existingSku,
             }),
-            airWaybillNo: existingSku?.airWaybillNo ?? null,
-            merchantProductNo: line.MerchantProductNo,
-            quantity: line.Quantity,
-            status:
-              existingSku?.status === 'SHIPPED' ||
-              existingSku?.status === 'DELIVERED' ||
-              existingSku?.status === 'RETURNED' ||
-              existingSku?.status === 'CANCELED'
-                ? existingOrder?.status
-                : normalizeSkuStatus(line?.Status),
+
             cancellationRequestedQuantity:
-              existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity,
+              existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
+
+            airWaybillNo: existingSku?.airWaybillNo ?? null,
+
+            // ---------- OPTIONAL / METADATA ----------
+            channelOrderLineNo: line.ChannelOrderLineNo,
+            isFulfillmentByMarketplace: line.IsFulfillmentByMarketplace ?? false,
+            gtin: line.Gtin,
+            description: line.Description,
+
+            stockLocation: line.StockLocation
+              ? {
+                  id: line.StockLocation.Id,
+                  name: line.StockLocation.Name,
+                }
+              : undefined,
+
+            unitVat: line.UnitVat,
+            lineTotalInclVat: line.LineTotalInclVat,
+            lineVat: line.LineVat,
+
+            originalUnitPriceInclVat: line.OriginalUnitPriceInclVat,
+            originalUnitVat: line.OriginalUnitVat,
+            originalLineTotalInclVat: line.OriginalLineTotalInclVat,
+            originalLineVat: line.OriginalLineVat,
+            originalFeeFixed: line.OriginalFeeFixed,
+
+            bundleProductMerchantProductNo: line.BundleProductMerchantProductNo,
+            bundleOrderLineId: line.BundleOrderLineId,
+
+            jurisCode: line.JurisCode,
+            jurisName: line.JurisName,
+            vatRate: line.VatRate,
+
+            unitPriceExclVat: line.UnitPriceExclVat,
+            lineTotalExclVat: line.LineTotalExclVat,
+            originalUnitPriceExclVat: line.OriginalUnitPriceExclVat,
+            originalLineTotalExclVat: line.OriginalLineTotalExclVat,
+
+            extraData: Array.isArray(line.ExtraData)
+              ? line.ExtraData.map((e) => ({
+                  key: e.Key,
+                  value: String(e.Value),
+                }))
+              : [],
+
+            channelProductNo: line.ChannelProductNo,
+            feeFixed: line.FeeFixed,
+            feeRate: line.FeeRate,
+            condition: line.Condition ?? 'UNKNOWN',
+
+            exactDeliveryDate: line.ExactDeliveryDate,
+            expectedDeliveryDate: line.ExpectedDeliveryDate,
+            latestDeliveryDate: line.LatestDeliveryDate,
+            exactShipmentDate: line.ExactShipmentDate,
+            expectedShipmentDate: line.ExpectedShipmentDate,
+            latestShipmentDate: line.LatestShipmentDate,
           };
         })
       : [];
@@ -498,13 +885,10 @@ const sanitizeOrdersData = async (orders) => {
         region: data.BillingAddress.Region,
         countryIso: data.BillingAddress.CountryIso,
       },
-      status:
-        existingOrder?.status === 'SHIPPED' ||
-        existingOrder?.status === 'CLOSED' ||
-        existingOrder?.status === 'CANCELED' ||
-        existingOrder?.status === 'RETURNED'
-          ? existingOrder?.status
-          : normalizeSkuStatus(data?.Status),
+
+      status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
+        ? existingOrder.status
+        : normalizeOrderStatus(data?.Status),
     };
 
     return {
@@ -584,78 +968,106 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
 
   const prev = existingSku?.statusBreakdown ?? {};
 
-  const empty = {
-    confirmed: 0,
+  const base = {
+    confirmed: prev.confirmed ?? 0,
+    shipmentCreated: prev.shipmentCreated ?? 0,
     shipped: prev.shipped ?? 0,
     delivered: prev.delivered ?? 0,
     returned: prev.returned ?? 0,
     canceled: prev.canceled ?? 0,
-    shipmentCreated: prev.shipmentCreated ?? 0,
   };
 
-  // EXTRA DATA OVERRIDE (highest priority)
+  const clamp = (n) => Math.max(n, 0);
+
+  // ---------------- EXTRA DATA OVERRIDE (HIGHEST PRIORITY)
   const extraStatus = getExtraStatus(line.ExtraData);
 
   if (extraStatus === 'delivered') {
     return {
-      ...empty,
-      delivered: qty,
       confirmed: 0,
-      shipped: 0,
       shipmentCreated: 0,
+      shipped: 0,
+      delivered: qty,
+      returned: base.returned,
+      canceled: base.canceled,
     };
   }
+
+  let result = { ...base };
 
   switch (line.Status) {
     case 'NEW':
     case 'IN_PROGRESS':
-    case 'IN_COMBI':
-      return {
-        ...empty,
-        confirmed: Math.max(qty - empty.shipmentCreated - empty.shipped - empty.delivered - empty.canceled, 0),
-      };
+    case 'IN_COMBI': {
+      const used = result.shipmentCreated + result.shipped + result.delivered + result.returned + result.canceled;
 
-    case 'SHIPPED':
-      return {
-        ...empty,
-        shipped: qty,
-      };
+      result.confirmed = clamp(qty - used);
+      break;
+    }
 
-    case 'DELIVERED':
-      return {
-        ...empty,
-        delivered: qty,
-        confirmed: 0,
-        shipped: 0,
-        shipmentCreated: 0,
-      };
+    case 'SHIPPED': {
+      const used = result.delivered + result.returned + result.canceled;
 
-    case 'RETURNED':
-      return {
-        ...empty,
-        returned: qty,
-      };
+      result.shipped = clamp(qty - used);
+      result.confirmed = 0;
+      result.shipmentCreated = 0;
+      break;
+    }
+
+    case 'DELIVERED': {
+      result.delivered = qty;
+      result.confirmed = 0;
+      result.shipmentCreated = 0;
+      result.shipped = 0;
+      break;
+    }
+
+    case 'RETURNED': {
+      const used = result.canceled;
+      result.returned = clamp(qty - used);
+      result.confirmed = 0;
+      result.shipmentCreated = 0;
+      result.shipped = 0;
+      break;
+    }
 
     case 'CANCELED':
-    case 'MANCO':
-      return {
-        ...empty,
-        canceled: qty,
-        confirmed: 0,
-        shipped: 0,
-        shipmentCreated: 0,
-      };
-    case 'CLOSED':
-      return {
-        ...empty,
-        confirmed: Math.max(qty - empty.shipped - empty.delivered - empty.canceled, 0),
-      };
+    case 'MANCO': {
+      const used = result.delivered + result.returned;
+
+      result.canceled = clamp(qty - used);
+      result.confirmed = 0;
+      result.shipmentCreated = 0;
+      result.shipped = 0;
+      break;
+    }
+
+    case 'CLOSED': {
+      const used = result.shipmentCreated + result.shipped + result.delivered + result.returned + result.canceled;
+
+      result.confirmed = clamp(qty - used);
+      break;
+    }
+
     default:
-      return empty;
+      break;
   }
+
+  // ---------------- FINAL NORMALIZATION (GUARANTEE TOTALS)
+  const total =
+    result.confirmed + result.shipmentCreated + result.shipped + result.delivered + result.returned + result.canceled;
+
+  if (total > qty) {
+    const overflow = total - qty;
+    result.shipped = clamp(result.shipped - overflow);
+  }
+
+  return result;
 };
+
 export default {
   sanitizeOrdersData,
+  sanitizeAmazonOrdersData,
   getPeriodDate,
   flattenAggregatedOrder,
   getAggregatedOrderHeaders,

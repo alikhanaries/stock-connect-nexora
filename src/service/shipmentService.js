@@ -448,9 +448,11 @@ export const createPartialShipmentService = async (shipmentData) => {
 
     order.status = 'IN_PROGRESS';
     await order.save();
+    const qtyMessage = validProducts.map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
+
     const logEntry = {
       status: 'SHIPMENT CREATED',
-      description: `Shipment created with AWB -${trackingNumber}`,
+      description: `Shipment created with AWB - ${trackingNumber}. Items shipped: ${qtyMessage}.`,
       createdAt: new Date(),
     };
 
@@ -861,6 +863,10 @@ export const ayMakanWebHookService = async (data) => {
     } else {
       //  Anything still pending
       finalOrderStatus = 'IN_PROGRESS';
+    }
+    // FORCE RULE: Delivered orders must be Closed
+    if (finalOrderStatus === 'DELIVERED') {
+      finalOrderStatus = 'CLOSED';
     }
 
     // STATUS PRIORITY GUARD
@@ -1281,14 +1287,14 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     });
 
     // 7️ Order logs
-
+    const qtyMessage = (products || []).map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
     await OrderLogs.updateOne(
       { orderId },
       {
         $push: {
           details: {
             status: 'SHIPMENT CANCELED',
-            description: `Shipment canceled (AWB - ${airWaybillNo})`,
+            description: `Shipment canceled (AWB - ${airWaybillNo}). Items reverted: ${qtyMessage}.`,
             createdAt: new Date(),
           },
         },
@@ -2177,125 +2183,184 @@ async function handleShipmentReturnStatusUpdate({ shipment, shipmentStatus, trac
   );
 }
 
-export async function getChannelEngineShipmentDetailsService(orderMerchantNumber) {
-  try {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function getChannelEngineShipmentDetailsService() {
+  const allShipments = [];
+  let page = 1;
+  const pageSize = 100;
+  let retryCount = 0;
+
+  while (true) {
     const response = await fetch(
-      `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?merchantOrderNos=${orderMerchantNumber}&apikey=${CHANNEL_ENGINE_API_KEY}`,
+      `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?page=${page}&pageSize=${pageSize}&apikey=${CHANNEL_ENGINE_API_KEY}`,
       {
         method: 'GET',
-        headers: {
-          accept: 'application/json',
-        },
+        headers: { accept: 'application/json' },
       }
     );
 
+    //  Rate limit handling
+    if (response.status === 429) {
+      const retryAfter = Number(response.headers.get('retry-after') || 60);
+      if (retryCount >= 3) {
+        throw new Error('ChannelEngine rate limit exceeded. Max retries reached.');
+      }
+      retryCount++;
+      await sleep(retryAfter * 1000);
+      continue;
+    }
+
     if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+      const text = await response.text();
+      throw new Error(`ChannelEngine API failed (${response.status}): ${text}`);
     }
 
     const data = await response.json();
 
     if (!data?.Content?.length) {
-      return {
-        success: false,
-        message: 'No shipment data received from ChannelEngine',
-      };
+      break; //  No more data
     }
 
-    return {
-      success: true,
-      data: data.Content,
-    };
-  } catch (error) {
-    console.error('Error fetching shipment details from ChannelEngine:', error.message);
-    return {
-      success: false,
-      message: error.message,
-    };
+    allShipments.push(...data.Content);
+    console.log(
+      `Page ${page}: received ${data.Content.length}, total so far ${allShipments.length}/${data.TotalCount}`
+    );
+
+    //  Stop condition (important)
+    if (page * data.ItemsPerPage >= data.TotalCount) {
+      break;
+    }
+
+    page++;
   }
+
+  return {
+    success: true,
+    data: allShipments,
+    total: allShipments.length,
+  };
 }
-export const createShipmentsFromChannelEngine = async ({ order, channelEngineShipments, userId }) => {
-  const createdShipments = [];
+export const createShipmentsFromChannelEngine = async (channelEngineShipments, userId) => {
+  if (!channelEngineShipments?.length) return true;
+
+  const bulkOps = [];
 
   for (const ceShipment of channelEngineShipments) {
-    // Idempotency check (CE shipment is unique)
+    const lines = ceShipment.Lines || [];
+    if (!lines.length) continue;
 
-    const existing = await Shipment.findOne({
-      merchantShipmentNo: ceShipment.MerchantShipmentNo,
-    });
+    //  Extract ChannelOrderLineNos FIRST
+    const channelOrderLineNos = lines.map((l) => l?.OrderLine?.ChannelOrderLineNo).filter(Boolean);
 
-    if (existing) {
-      createdShipments.push(existing);
+    let order = null;
+
+    // 1️ Try merchantOrderNo
+    if (ceShipment.MerchantOrderNo) {
+      order = await Order.findOne({
+        merchantOrderNo: ceShipment.MerchantOrderNo,
+      }).lean();
+    }
+
+    // 2️ Fallback via SKU mapping
+    if (!order && channelOrderLineNos.length) {
+      order = await Order.findOne({
+        'orderSkuList.skuList': {
+          $elemMatch: {
+            channelOrderLineNo: { $in: channelOrderLineNos },
+          },
+        },
+      }).lean();
+    }
+
+    if (!order) {
+      console.warn(
+        'Order not found for shipment:',
+        ceShipment.MerchantShipmentNo || ceShipment.ChannelShipmentNo,
+        'ChannelOrderLineNos:',
+        channelOrderLineNos
+      );
       continue;
     }
 
-    // SellerId resolution (OrderLine.ExtraData)
+    const merchantShipmentNo = ceShipment.MerchantShipmentNo;
 
-    const sellerId = ceShipment.Lines?.[0]?.OrderLine?.ExtraData?.find((x) => x.Key === 'sellerId')?.Value;
+    const products = buildShipmentProducts(lines);
+    const pieces = lines.reduce((sum, l) => sum + (l.Quantity || 0), 0);
 
-    // Create shipment
+    bulkOps.push({
+      updateOne: {
+        filter: {
+          merchantShipmentNo,
+          shipmentMethod: 'CHANNEL_ENGINE',
+        },
+        update: {
+          //  Always update
+          $set: {
+            orderId: order._id,
+            sellerId: order.sellerId,
+            userId,
 
-    const shipmentData = {
-      // References
-      orderId: order._id,
-      sellerId,
-      userId,
+            status: mapCEShipmentStatus(ceShipment),
 
-      // Status
-      status: mapCEShipmentStatus(ceShipment),
+            merchantOrderNo: ceShipment.MerchantOrderNo,
 
-      // Identifiers
-      merchantShipmentNo: ceShipment.MerchantShipmentNo,
-      merchantOrderNo: ceShipment.MerchantOrderNo,
+            airWaybillNo: ceShipment.AirWaybillNo || ceShipment.TrackTraceNo || merchantShipmentNo,
 
-      // TrackTraceNo === airwaybill
-      airWaybillNo: ceShipment.TrackTraceNo,
+            method: ceShipment.Method,
+            shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
+            shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
 
-      // Shipping info
-      method: ceShipment.Method,
-      shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
-      shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
+            isMerchantCreator: ceShipment.IsMerchantCreator ?? true,
 
-      isMerchantCreator: ceShipment.IsMerchantCreator,
-      shipmentMethod: 'CHANNEL_ENGINE',
+            submissionDate: new Date(ceShipment.CreatedAt),
+            pickupDate: ceShipment.ShipmentDate ? new Date(ceShipment.ShipmentDate) : null,
+            deliveryDate: ceShipment.DeliveredAt ? new Date(ceShipment.DeliveredAt) : null,
 
-      // Dates
-      submissionDate: ceShipment.CreatedAt,
-      pickupDate: ceShipment.ShipmentDate,
-      deliveryDate: ceShipment.DeliveredAt,
+            extraData: { channelEngine: ceShipment },
 
-      // Products
-      products: buildShipmentProducts(ceShipment.Lines),
-      pieces: ceShipment.Lines?.reduce((sum, l) => sum + (l.Quantity || 0), 0),
+            type: 'FORWARD',
+          },
 
-      // Tracking (only if exists)
-      trackingInfo: ceShipment.TrackTraceNo
-        ? [
-            {
-              trackingNo: ceShipment.TrackTraceNo,
-              trackingUrl: ceShipment.TrackTraceUrl,
-              carrier: ceShipment.Method,
-              createdAt: new Date(),
-              statusCode: 'NA',
-            },
-          ]
-        : [],
-
-      // Raw CE payload
-      extraData: {
-        channelEngine: ceShipment,
+          //  Only on insert
+          $setOnInsert: {
+            shipmentMethod: 'CHANNEL_ENGINE',
+            products,
+            pieces,
+            trackingInfo: ceShipment.TrackTraceNo
+              ? [
+                  {
+                    trackingNo: ceShipment.TrackTraceNo,
+                    trackingUrl: ceShipment.TrackTraceUrl,
+                    carrier: ceShipment.Method,
+                    createdAt: new Date(),
+                    statusCode: 'NA',
+                  },
+                ]
+              : [],
+          },
+        },
+        upsert: true,
       },
-
-      // Defaults
-      type: 'FORWARD',
-    };
-
-    const shipment = await Shipment.create(shipmentData);
-
-    createdShipments.push(shipment);
+    });
   }
 
-  return createdShipments;
+  if (!bulkOps.length) {
+    console.log('No shipment operations to write');
+    return true;
+  }
+
+  const result = await Shipment.bulkWrite(bulkOps, {
+    ordered: false, //  fastest
+  });
+
+  console.log('Bulk shipment sync result:', {
+    inserted: result.upsertedCount,
+    modified: result.modifiedCount,
+    matched: result.matchedCount,
+  });
+
+  return true;
 };
 
 const buildShipmentProducts = (lines = []) => {

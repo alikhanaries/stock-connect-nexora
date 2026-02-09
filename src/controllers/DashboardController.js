@@ -4,10 +4,10 @@ import { errorLog } from '#middleware/index.js';
 
 export const getOrderFlow = async (req, res) => {
   try {
-    const sellerId = req.query?.sellerId ?? req.sellerId;
+    const sellerIds = req.sellerIds;
     const { period, startDate, endDate, month, channel } = req.query;
 
-    const stats = await dashboardService.getOrderFlowStatus(sellerId, period, {
+    const stats = await dashboardService.getOrderFlowStatus(sellerIds, period, {
       startDate,
       endDate,
       month,
@@ -27,10 +27,10 @@ export const getOrderFlow = async (req, res) => {
 
 export const getorderOverview = async (req, res) => {
   try {
-    const sellerId = req.query?.sellerId ?? req.sellerId;
+    const sellerIds = req.sellerIds;
     const { period, startDate, endDate, month, channel } = req.query;
 
-    const status = await dashboardService.getorderOverviewStatus(sellerId, period, {
+    const status = await dashboardService.getorderOverviewStatus(sellerIds, period, {
       startDate,
       endDate,
       month,
@@ -66,10 +66,10 @@ export const getShipmentAnalytics = async (req, res) => {
 
 export const getAnalytics = async (req, res) => {
   try {
-    const sellerId = req.query?.sellerId ?? req.sellerId;
+    const sellerIds = req.sellerIds;
     const { period, metric, startDate, endDate, month, channel } = req.query;
 
-    const data = await dashboardService.getAnalyticsTimeSeries(sellerId, period, metric, {
+    const data = await dashboardService.getAnalyticsTimeSeries(sellerIds, period, metric, {
       startDate,
       endDate,
       month,
@@ -118,10 +118,10 @@ export const getTopPerformersProducts = async (req, res) => {
 
 export const getSalesByChannel = async (req, res) => {
   try {
-    const sellerId = req.query?.sellerId ?? req.sellerId;
+    const sellerIds = req.sellerIds;
     const { period, startDate, endDate, month, channel } = req.query;
 
-    const data = await dashboardService.getSalesByChannel(sellerId, period, {
+    const data = await dashboardService.getSalesByChannel(sellerIds, period, {
       startDate,
       endDate,
       month,
@@ -139,10 +139,10 @@ export const getSalesByChannel = async (req, res) => {
 
 export const getOrdersByChannel = async (req, res) => {
   try {
-    const sellerId = req.query?.sellerId ?? req.sellerId;
+    const sellerIds = req.sellerIds;
     const { period, startDate, endDate, month, channel } = req.query;
 
-    const data = await dashboardService.getOrdersByChannel(sellerId, period, {
+    const data = await dashboardService.getOrdersByChannel(sellerIds, period, {
       startDate,
       endDate,
       month,

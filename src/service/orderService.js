@@ -10,6 +10,7 @@ import orderhelper, {
   flattenAggregatedOrder,
   getAggregatedOrderHeaders,
   getOrganizedOrderRowData,
+  sanitizeAmazonOrdersData,
 } from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -28,6 +29,10 @@ import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
+import { Readable } from 'stream';
+import { processAmazonOrderImportStream } from '#helpers/amazonOrder.js';
+import { convertGoogleSheetUrlToExport } from '../helpers/googleSheetFormaterHandler.js';
+import { errorLog } from '../middleware/errorLogMiddleware.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
@@ -107,20 +112,38 @@ const getAllOrders = async (query, sellerId) => {
       // Convert comma-separated string → array
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
 
-      // Validate against enum
-      const validStatuses = Object.values(ORDER_STATUS_MAP);
-      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+      if (statusArray.includes('DELIVERED')) {
+        // Custom delivered logic
+        filter.status = 'CLOSED';
 
-      if (invalid.length > 0) {
-        throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
+        filter['orderSkuList.skuList'] = {
+          $not: {
+            $elemMatch: {
+              status: { $in: ['IN_PROGRESS', 'SHIPPED', 'RETURNED'] },
+            },
+          },
+          $elemMatch: {
+            status: 'DELIVERED',
+          },
+        };
+
+        appliedFilters.status = 'DELIVERED';
+      } else {
+        // Normal status behavior
+        const validStatuses = Object.values(ORDER_STATUS_MAP);
+        const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+
+        if (invalid.length) {
+          throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
+        }
+
+        // Build Mongo filter (case-insensitive)
+        filter.status = {
+          $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+        };
+
+        appliedFilters.status = status;
       }
-
-      // Build Mongo filter (case-insensitive)
-      filter.status = {
-        $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
-      };
-
-      appliedFilters.status = status; // or original string if you prefer
     }
 
     const [totalOrders, orders, allChannels, sellerSync] = await Promise.all([
@@ -244,43 +267,13 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     return { success: false, message: err.message };
   }
 };
-export const getOrderById = async (id, userId) => {
+export const getOrderById = async (id) => {
   try {
     const order = await Order.findById(id).lean();
     if (!order) return false;
-
-    // Fetch CE shipment details (NON-BLOCKING)
-
-    let channelEngineShipments = [];
-
-    try {
-      const ceResponse = await getChannelEngineShipmentDetailsService(order.merchantOrderNo);
-
-      if (ceResponse?.success && Array.isArray(ceResponse.data)) {
-        channelEngineShipments = ceResponse.data;
-      } else {
-        console.warn('ChannelEngine shipment fetch failed (ignored):', ceResponse?.message);
-      }
-    } catch (err) {
-      console.warn('ChannelEngine shipment fetch error (ignored):', err.message);
-    }
-
-    // Create shipments only if CE returned data
-
-    if (channelEngineShipments.length > 0) {
-      try {
-        await createShipmentsFromChannelEngine({
-          order,
-          channelEngineShipments,
-          userId,
-        });
-      } catch (err) {
-        console.error('Shipment creation failed (ignored):', err.message);
-      }
-    }
-
     const shipments = await Shipment.find({
       orderId: id,
+      type: 'FORWARD',
       status: { $ne: 'CANCELED' },
     }).lean();
 
@@ -477,22 +470,77 @@ export const processOrders = async (orders, sellerId) => {
   }
 };
 
+export const syncAmazonOrders = async (sellerId, locale) => {
+  try {
+    const url = config.AMAZON_ORDER_SHEET_URL;
+    if (!url) {
+      return { success: false, message: 'Google sheet url is required' };
+    }
+    const exportUrl = await convertGoogleSheetUrlToExport(url);
+
+    if (!exportUrl) {
+      return { success: false, message: 'Invalid google sheet url' };
+    }
+
+    const { success, data } = await getNewAmazonOrders(exportUrl, locale, sellerId);
+
+    if (!success) {
+      return { success: false, message: 'unable to fetch data from amazon' };
+    }
+    if (data.length === 0) {
+      return { success: true, message: 'already up to date' };
+    }
+
+    const dataSavedInDb = await processAmazonOrders(data, sellerId);
+
+    if (!dataSavedInDb.success) {
+      return { success: false, message: dataSavedInDb.message };
+    }
+
+    const newUpdateCount = dataSavedInDb?.data?.upsertedCount ? dataSavedInDb?.data?.upsertedCount : 0;
+
+    return { success: true, message: 'Orders synced successfully', data: { newUpdateCount } };
+  } catch (error) {
+    errorLog(error);
+    return { success: false, message: error.message };
+  }
+};
+
 export async function getNewOrders() {
   try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}`);
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-    const data = await response.json();
-    if (!data?.Content?.length) {
-      return { success: false, message: 'No data received from ChannelEngine' };
+    let page = 1;
+    const pageSize = 100;
+    let allOrders = [];
+    let hasMore = true;
+
+    while (hasMore && page <= 3) {
+      const response = await fetch(
+        `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      const data = await response.json();
+
+      if (!data?.Content?.length) {
+        hasMore = false;
+        break;
+      }
+
+      allOrders.push(...data.Content);
+
+      const fetchedCount = page * pageSize;
+      hasMore = fetchedCount < data.TotalCount;
+
+      page++;
     }
     return {
       success: true,
-      data: data.Content,
+      data: allOrders,
     };
   } catch (error) {
-    console.error('Error fetching new orders from ChannelEngine:', error.message);
+    console.error('Error fetching orders from ChannelEngine:', error.message);
     return { success: false, message: error.message };
   }
 }
@@ -907,13 +955,13 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
 
       const shippedQty = shippedQtyMap[lineId] || 0;
       const deliveredQty = deliveredQtyMap[lineId] || 0;
-
+      const shipmentCreatedQty = sku?.statusBreakdown?.shipmentCreated || 0;
       const prevCanceled = sku.cancellationRequestedQuantity || 0;
       const newlyCanceled = cancelItem ? cancelItem.quantity : 0;
 
       const canceledQty = prevCanceled + newlyCanceled;
 
-      const confirmedQty = sku.quantity - canceledQty - shippedQty - deliveredQty;
+      const confirmedQty = sku.quantity - canceledQty - shippedQty - deliveredQty - shipmentCreatedQty;
 
       return {
         ...sku,
@@ -927,6 +975,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
           delivered: deliveredQty,
           returned: 0,
           canceled: canceledQty,
+          shipmentCreated: shipmentCreatedQty,
         },
       };
     });
@@ -1137,6 +1186,99 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
   }
 };
 
+export async function getNewAmazonOrders(url, locale, sellerId) {
+  try {
+    console.log('Fetching Google Sheet from URL:', url);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
+    const stream = Readable.fromWeb(res.body);
+    return await processAmazonOrderImportStream(stream, { locale, sellerId });
+  } catch (error) {
+    console.error('Error fetching new orders from ChannelEngine:', error.message);
+    return { success: false, message: error.message };
+  }
+}
+
+export const processAmazonOrders = async (orders, sellerId) => {
+  try {
+    const operations = await sanitizeAmazonOrdersData(orders, sellerId);
+
+    const result = await Order.bulkWrite(operations);
+    const upsertedOrderIds = Object.values(result.upsertedIds || {});
+    const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
+
+    const orderLogs = upsertedIndexes.map((index, i) => {
+      const order = orders[index];
+      const orderId = upsertedOrderIds[i];
+
+      const logDetails = [
+        {
+          status: 'CREATED',
+          description: 'Order Placed',
+          createdAt: new Date(order?.OrderDate || order?.orderDate || Date.now()),
+        },
+      ];
+
+      return {
+        orderId,
+        details: logDetails,
+      };
+    });
+
+    // Insert logs only for newly created orders
+    if (orderLogs.length > 0) {
+      await OrderLogs.insertMany(orderLogs);
+      console.log('Inserted order logs:', orderLogs.length);
+    } else {
+      console.log('No new orders created — skipping log insertion');
+    }
+
+    return {
+      success: true,
+      data: {
+        ...result,
+        insertedOrderIds: upsertedOrderIds,
+      },
+    };
+  } catch (error) {
+    console.error('Error in processOrders:', error.message);
+    return { success: false, message: error.message };
+  }
+};
+
+// Fetch CE shipment details
+export const syncChannelEngineShipment = async (userId) => {
+  try {
+    let channelEngineShipments = [];
+
+    try {
+      const ceResponse = await getChannelEngineShipmentDetailsService();
+
+      //  Successful API response
+      if (ceResponse?.success && Array.isArray(ceResponse.data)) {
+        channelEngineShipments = ceResponse.data;
+      } else {
+        console.warn('ChannelEngine shipment fetch failed (ignored):', ceResponse?.message);
+      }
+    } catch (err) {
+      console.warn('ChannelEngine shipment fetch error (ignored):', err.message);
+    }
+    const shippedData = channelEngineShipments.filter((s) => s.MerchantShipmentNo !== null);
+
+    // Create shipments only if CE returned data
+
+    if (shippedData.length > 0) {
+      try {
+        await createShipmentsFromChannelEngine(shippedData, userId);
+      } catch (err) {
+        console.error('Shipment creation failed (ignored):', err.message);
+      }
+    }
+  } catch (err) {
+    console.error('Shipment creation failed (ignored):', err.message);
+  }
+};
+
 export default {
   getAllOrders,
   getAdminOrders,
@@ -1151,4 +1293,8 @@ export default {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrdersToCSV,
+  syncChannelEngineShipment,
+  getNewAmazonOrders,
+  processAmazonOrders,
+  syncAmazonOrders,
 };
