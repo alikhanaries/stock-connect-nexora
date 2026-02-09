@@ -193,7 +193,7 @@ export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
       globalChannelId: channelInfo.globalChannelId,
       orderDate: purchaseDate,
       merchantComment: null,
-      merchantOrderNo: orderId,
+      merchantOrderNo: `${channelInfo.globalChannelId}-${orderId}`,
       isBusinessOrder: false,
       subTotalInclVat: totalPrice,
       subTotalVat: totalTax,
