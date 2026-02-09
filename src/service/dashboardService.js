@@ -362,14 +362,12 @@ const getInventoryStatus = async (sellerId, period) => {
 };
 
 const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
-  const sellerObjectIds = String(sellerId)
-    .split(',')
-    .map((s) => s.trim())
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
     .filter(Boolean)
-    .map((id) => {
-      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
-      return new mongoose.Types.ObjectId(id);
-    });
+    .map((id) => new mongoose.Types.ObjectId(id));
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
@@ -429,14 +427,12 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
 };
 
 const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
-  const sellerObjectIds = String(sellerId)
-    .split(',')
-    .map((s) => s.trim())
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
     .filter(Boolean)
-    .map((id) => {
-      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
-      return new mongoose.Types.ObjectId(id);
-    });
+    .map((id) => new mongoose.Types.ObjectId(id));
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
