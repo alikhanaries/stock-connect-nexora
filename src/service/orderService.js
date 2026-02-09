@@ -1327,7 +1327,7 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => 
   try {
     const ordersNeedingShipments = await Order.find({
       _id: { $in: orderIds },
-      status: { $in: ['SHIPPED', 'DELIVERED'] },
+      status: { $in: ['SHIPPED', 'DELIVERED', 'RETURNED'] },
     }).lean();
 
     if (ordersNeedingShipments.length === 0) return;
@@ -1347,14 +1347,10 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => 
       const skuList = order.orderSkuList?.skuList || [];
       if (skuList.length === 0) continue;
 
-      const products = skuList.map((sku, index) => {
-        let orderLineIdNum = parseInt(sku.id, 10);
-        if (isNaN(orderLineIdNum)) {
-          orderLineIdNum = Date.now() + index;
-        }
+      const products = skuList.map((sku) => {
         return {
           merchantProductNo: sku.merchantProductNo,
-          orderLineId: orderLineIdNum,
+          orderLineId: sku.id,
           quantity: sku.quantity,
           lineTotalInclVat: sku.lineTotalInclVat || 0,
           hsCode: sku.merchantProductNo,
@@ -1370,7 +1366,7 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => 
       shipmentsToCreate.push({
         orderId: order._id,
         sellerId: sellerId,
-        userId: userId || sellerId,
+        userId: userId,
         status: order.status,
         airWaybillNo: awbNumber,
         merchantOrderNo: order.merchantOrderNo || order.orderId,
