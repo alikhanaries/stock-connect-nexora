@@ -1275,8 +1275,6 @@ export const processAmazonOrders = async (orders, sellerId, userId) => {
       console.error('Shipment creation failed:', shipmentError.message);
     }
 
-    console.log('Amazon.sa order saved sucessfully...');
-
     return {
       success: true,
       data: {
@@ -1365,7 +1363,6 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => 
 
       const awbNumber = `AMZ-${order.orderId}`;
 
-      // Use expectedDeliveryDate from first SKU if available, otherwise use current date for delivered orders
       const sheetDeliveryDate = skuList[0]?.expectedDeliveryDate;
       const deliveryDate =
         order.status === 'DELIVERED' ? (sheetDeliveryDate ? new Date(sheetDeliveryDate) : new Date()) : null;
@@ -1397,7 +1394,6 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => 
 
     if (shipmentsToCreate.length > 0) {
       await Shipment.insertMany(shipmentsToCreate);
-      console.log('Amazon.sa shipment created sucessfully...');
     }
 
     return shipmentsToCreate;
