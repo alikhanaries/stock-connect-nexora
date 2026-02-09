@@ -129,11 +129,11 @@ export const getSyncedOrders = async (req, res) => {
     ]);
 
     // Check for rejected promises or failed results
-    const ceSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
-    const ocpSuccess = response.status === 'fulfilled' && response.value?.success;
-    const amazonSuccess = amazonResponse.status === 'fulfilled' && amazonResponse.value?.success;
+    const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
+    const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
+    const isAmazonSuccess = amazonResponse.status === 'fulfilled' && amazonResponse.value?.success;
 
-    if (!ceSuccess && !ocpSuccess && !amazonSuccess) {
+    if (!isChannelEngineSuccess && !isOcpSuccess && !isAmazonSuccess) {
       const errorMessages = [
         dataSavedInDb.status === 'rejected' ? dataSavedInDb.reason?.message : dataSavedInDb.value?.message,
         response.status === 'rejected' ? response.reason?.message : response.value?.message,
