@@ -8,6 +8,8 @@ export const verifySellerAccess = async (req, res, next) => {
     const user = req.user;
     const connectedSellerIds = req.sellerIds;
     let { sellerId } = req.query;
+    if (!sellerId) sellerId = req.params.sellerId;
+
     if (user?.role === USER_ROLES.MASTER_ADMIN) {
       if (!sellerId) {
         sellerId = await Seller.findOne({ isDeleted: false, type: SELLER_TYPE.NORMAL });
