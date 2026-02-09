@@ -20,9 +20,10 @@ import {
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
   try {
-    const sellerObjectIds = String(sellerId)
-      .split(',')
-      .map((s) => s.trim())
+    const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+    const sellerObjectIds = ids
+      .map(String)
       .filter(Boolean)
       .map((id) => new mongoose.Types.ObjectId(id));
 
@@ -104,9 +105,10 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
 };
 
 const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
-  const sellerObjectIds = String(sellerId)
-    .split(',')
-    .map((s) => s.trim())
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
     .filter(Boolean)
     .map((id) => new mongoose.Types.ObjectId(id));
 
@@ -239,9 +241,10 @@ const getShipmentAnalytics = async (sellerId, period) => {
 const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month, channel } = {}) => {
   if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
   const globalChannelFilter = buildGlobalChannelFilter(channel);
-  const sellerObjectIds = String(sellerId)
-    .split(',')
-    .map((s) => s.trim())
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
     .filter(Boolean)
     .map((id) => new mongoose.Types.ObjectId(id));
   const range = getDateRange({ period, startDate, endDate, month });

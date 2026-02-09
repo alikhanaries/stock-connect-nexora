@@ -77,11 +77,10 @@ export const getAdminOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user._id;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
-    const order = await orderService.getOrderById(id, userId);
+    const order = await orderService.getOrderById(id);
     if (!order) {
       return Responses.failResponse(res, req.locale.NO_ORDERS_FOUND, 404);
     }
@@ -114,11 +113,20 @@ export const getOrderStats = async (req, res) => {
 export const getSyncedOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const userId = req.user._id;
     // TODO : Move this to service layer
     const { success, data } = await orderService.getNewOrders();
     if (!success) {
       return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
     }
+    orderService
+      ?.syncChannelEngineShipment(userId)
+      .then(() => {
+        console.log(' ChannelEngine shipment sync completed successfully');
+      })
+      .catch((error) => {
+        console.error(' ChannelEngine shipment sync failed:', error);
+      });
 
     if (data.length === 0) {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
@@ -144,7 +152,7 @@ export const getSyncedOrders = async (req, res) => {
         ? `${newUpdateCount} ${req?.locale?.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
         : req?.locale?.NO_NEW_ORDERS_FOUND;
 
-    const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW');
+    const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW' || !order.MerchantOrderNo);
     if (newOrdersToAcknowledge.length > 0) {
       orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge);
     }
