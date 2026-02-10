@@ -241,6 +241,7 @@ export const fetchReturnsWebhook = async () => {
 // Handles Omniful QC webhook
 export const handleOmnifulQCWebhook = async (req, res) => {
   try {
+    console.log('in side omniful webhook----------------------');
     const result = await omnifullService.handleOmnifulQCWebhook(req.body);
 
     if (!result.success) {
