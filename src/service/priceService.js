@@ -8,6 +8,7 @@ import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
 import { ALLOWEDMARKETPLACES } from '#constants/common.js';
+import { updateSyncDate } from '../helpers/updateSyncDate.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -459,6 +460,8 @@ export const syncPriceToChannelEngine = async (sellerId) => {
         )
       );
     }
+
+    await updateSyncDate(sellerId, 'PRICE', totalSynced);
 
     // Await remaining tasks
     if (tasks.length) {
