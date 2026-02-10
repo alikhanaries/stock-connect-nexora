@@ -799,6 +799,7 @@ const sanitizeOrdersData = async (orders) => {
     // Build update payload
     const updatePayload = {
       orderId: data.Id,
+      channelOrderNumber: data.ChannelOrderNo,
       channelId: data.ChannelId,
       sellerId: finalSellerId,
       channelName: data.ChannelName,
