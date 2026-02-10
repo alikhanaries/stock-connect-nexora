@@ -117,14 +117,6 @@ export const getSyncedOrders = async (req, res) => {
     if (!success) {
       return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
     }
-    orderService
-      ?.syncChannelEngineShipment(userId)
-      .then(() => {
-        console.log(' ChannelEngine shipment sync completed successfully');
-      })
-      .catch((error) => {
-        console.error(' ChannelEngine shipment sync failed:', error);
-      });
 
     if (data.length === 0) {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
@@ -169,7 +161,14 @@ export const getSyncedOrders = async (req, res) => {
     if (newOrdersToAcknowledge.length > 0) {
       orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge);
     }
-
+    orderService
+      ?.syncChannelEngineShipment(userId)
+      .then(() => {
+        console.log(' ChannelEngine shipment sync completed successfully');
+      })
+      .catch((error) => {
+        console.error(' ChannelEngine shipment sync failed:', error);
+      });
     return Responses.successResponse(res, message, 200);
   } catch (error) {
     errorLog(error);
