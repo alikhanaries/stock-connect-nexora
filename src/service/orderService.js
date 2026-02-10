@@ -140,7 +140,7 @@ const getAllOrders = async (query, sellerId) => {
                       '$$sku.quantity',
                     ],
                   },
-                  { $gt: ['$$sku.statusBreakdown.delivered', 0] }, // ✅ delivered must be > 0
+                  { $gt: ['$$sku.statusBreakdown.delivered', 0] }, //  delivered must be > 0
                 ],
               },
             },
