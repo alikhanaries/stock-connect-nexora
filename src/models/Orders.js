@@ -12,6 +12,12 @@ const OrderSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    channelOrderNumber: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
     sellerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Seller',
