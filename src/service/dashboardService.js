@@ -212,7 +212,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
   ];
 };
 
-const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, month } = {}) => {
+const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
   const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
   const sellerObjectIds = ids
@@ -221,6 +221,11 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
     .map((id) => new mongoose.Types.ObjectId(id));
   const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
   if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
+
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
+  const hasChannel =
+    Array.isArray(globalChannelFilter?.globalChannelName?.$in) && globalChannelFilter.globalChannelName.$in.length > 0;
+  const ordersCollection = Order.collection.name;
   const pipeline = [
     {
       $match: {
@@ -229,6 +234,27 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
         ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
       },
     },
+
+    ...(hasChannel
+      ? [
+          {
+            $lookup: {
+              from: ordersCollection,
+              localField: 'orderId',
+              foreignField: '_id',
+              as: 'order',
+              pipeline: [{ $project: { _id: 1, globalChannelName: 1 } }],
+            },
+          },
+          { $unwind: '$order' },
+          {
+            $match: {
+              'order.globalChannelName': { $in: globalChannelFilter.globalChannelName.$in },
+            },
+          },
+        ]
+      : []),
+
     {
       $group: {
         _id: '$status',
@@ -357,11 +383,11 @@ const getInventoryStatus = async (sellerId, period, { startDate, endDate, month,
     total,
     activePercentage,
     breakdown: [
-      { status: 'active', count: statusMap.get('active') ?? 0 },
-      { status: 'inactive', count: statusMap.get('inactive') ?? 0 },
-      { status: 'other', count: statusMap.get('other') ?? 0 },
-      { status: 'unfreeze', count: freezeMap.get('unfreeze') ?? 0 },
-      { status: 'freeze', count: freezeMap.get('freeze') ?? 0 },
+      { key: 'active', value: statusMap.get('active') ?? 0 },
+      { key: 'inactive', value: statusMap.get('inactive') ?? 0 },
+      { key: 'other', value: statusMap.get('other') ?? 0 },
+      { key: 'unfreeze', value: freezeMap.get('unfreeze') ?? 0 },
+      { key: 'freeze', value: freezeMap.get('freeze') ?? 0 },
     ],
   };
 };

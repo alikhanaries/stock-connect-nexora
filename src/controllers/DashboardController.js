@@ -50,12 +50,13 @@ export const getorderOverview = async (req, res) => {
 export const getShipmentAnalytics = async (req, res) => {
   try {
     const sellerIds = req.sellerIds ?? req.sellerId;
-    const { period, startDate, endDate, month } = req.query;
+    const { period, startDate, endDate, month, channel } = req.query;
 
     const data = await dashboardService.getShipmentAnalytics(sellerIds, period, {
       startDate,
       endDate,
       month,
+      channel,
     });
 
     if (!data) {
