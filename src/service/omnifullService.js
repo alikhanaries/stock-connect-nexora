@@ -96,8 +96,8 @@ export const handleOmnifulQCWebhook = async (webhookPayload) => {
       totalQuantity: order_details.quantity || 0,
       passed: order_details.grn_pass_quantity || 0,
       failed: order_details.grn_fail_quantity || 0,
-      status: webhookPayload.data.status || '',
-      remark: webhookPayload.data.remark || '',
+      status: webhookPayload.data.status || 'NA',
+      remark: webhookPayload.data.remark || 'NA',
       lastUpdated: new Date(),
     };
 

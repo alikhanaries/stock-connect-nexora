@@ -10,6 +10,22 @@ const sellerSchema = new Schema(
       trim: true,
       index: true,
     },
+    lastInventorySync: {
+      type: Date,
+      default: null,
+    },
+    lastProductSync: {
+      type: Date,
+      default: null,
+    },
+    lastOrderSync: {
+      type: Date,
+      default: null,
+    },
+    lastPriceSync: {
+      type: Date,
+      default: null,
+    },
     name: {
       type: String,
       required: [true, 'Seller name is required.'],

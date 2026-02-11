@@ -11,16 +11,21 @@ import {
 
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
+import { updateSyncDate } from '../helpers/updateSyncDate.js';
 
 export const getAllOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { data, appliedFilters, pagination } = await orderService.getAllOrders(req.query, sellerId);
+    const { data, appliedFilters, pagination, latestOrderSyncDate } = await orderService.getAllOrders(
+      req.query,
+      sellerId
+    );
 
     if (!data.length) {
       return Responses.successResponse(res, req.locale.NO_ORDERS_FOUND, 200, {
         content: [],
         appliedFilters: appliedFilters || {},
+        latestOrderSyncDate,
         ...pagination,
       });
     }
@@ -28,6 +33,7 @@ export const getAllOrders = async (req, res) => {
     return Responses.successResponse(res, req?.locale?.ORDERS_FETCHED_SUCCESSFULLY, 200, {
       content: data,
       appliedFilters: appliedFilters || {},
+      latestOrderSyncDate,
       ...pagination,
     });
   } catch (error) {
@@ -69,7 +75,6 @@ export const getAdminOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
@@ -106,35 +111,61 @@ export const getOrderStats = async (req, res) => {
 export const getSyncedOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const userId = req.user._id;
     // TODO : Move this to service layer
     const { success, data } = await orderService.getNewOrders();
     if (!success) {
-      return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
+      return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
     }
+    orderService
+      ?.syncChannelEngineShipment(userId)
+      .then(() => {
+        console.log(' ChannelEngine shipment sync completed successfully');
+      })
+      .catch((error) => {
+        console.error(' ChannelEngine shipment sync failed:', error);
+      });
 
     if (data.length === 0) {
-      return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
+      return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    const [dataSavedInDb, response] = await Promise.allSettled([
-      orderService.processOrders(data),
+    const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
+      orderService.processOrders(data, sellerId),
       getSyncedOrdersOcp(sellerId),
+      orderService.syncAmazonOrders(sellerId, req.locale),
     ]);
 
-    if (!dataSavedInDb.value.success && !response.value.success) {
-      return Responses.errorResponse(res, dataSavedInDb.value.message && response.value.message, 500);
+    // Check for rejected promises or failed results
+    const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
+    const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
+    const isAmazonSuccess = amazonResponse.status === 'fulfilled' && amazonResponse.value?.success;
+
+    if (!isChannelEngineSuccess && !isOcpSuccess && !isAmazonSuccess) {
+      const errorMessages = [
+        dataSavedInDb.status === 'rejected' ? dataSavedInDb.reason?.message : dataSavedInDb.value?.message,
+        response.status === 'rejected' ? response.reason?.message : response.value?.message,
+        amazonResponse.status === 'rejected' ? amazonResponse.reason?.message : amazonResponse.value?.message,
+      ]
+        .filter(Boolean)
+        .join('; ');
+
+      return Responses.errorResponse(res, errorMessages || 'All sync operations failed', 500);
     }
 
     const newUpdateCount =
-      (dataSavedInDb?.value?.data?.upsertedCount ? dataSavedInDb?.value?.data?.upsertedCount : 0) +
-      (response?.value?.data?.upsertedCount ? response?.value?.data?.upsertedCount : 0);
+      ((dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.data?.upsertedCount) || 0) +
+      ((response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0) +
+      ((amazonResponse.status === 'fulfilled' && amazonResponse.value?.data?.newUpdateCount) || 0);
+
+    await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
 
     const message =
       newUpdateCount > 0
-        ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
-        : req.locale.NO_NEW_ORDERS_FOUND;
+        ? `${newUpdateCount} ${req?.locale?.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
+        : req?.locale?.NO_NEW_ORDERS_FOUND;
 
-    const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW');
+    const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW' || !order.MerchantOrderNo);
     if (newOrdersToAcknowledge.length > 0) {
       orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge);
     }

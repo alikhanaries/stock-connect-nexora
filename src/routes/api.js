@@ -11,6 +11,7 @@ import seller from './seller.js';
 import shipmentRoutes from './shipment.js';
 import dashboardRoutes from './dashboard.js';
 import inventoryRoutes from './inventory.js';
+import priceRoutes from './price.js';
 
 const router = express.Router();
 
@@ -26,4 +27,5 @@ router.use('/seller', seller);
 router.use('/shipment', shipmentRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/inventory', inventoryRoutes);
+router.use('/price', priceRoutes);
 export default router;

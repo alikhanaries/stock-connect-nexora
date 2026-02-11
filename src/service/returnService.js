@@ -25,6 +25,7 @@ import {
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
 import { syncReturnShipmentStatus } from '#service/shipmentService.js';
+import Channel from '../models/Channel.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 //Fetches returns from ChannelEngine and saves them to the database.
@@ -141,7 +142,7 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10 } = query;
+    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -164,6 +165,10 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
       appliedFilters.status = status;
     }
+
+    // Add other filters to appliedFilters
+    if (channelId) appliedFilters.channelId = channelId;
+    if (platform) appliedFilters.platform = platform;
 
     const { pipeline } = buildReturnMatchAndPipeline(query, {
       includeSearchNameSplit: true,
@@ -225,7 +230,16 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
     pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
-    const [results, countResult] = await Promise.all([Return.aggregate(pipeline), Return.aggregate(countPipeline)]);
+    const [results, countResult, allChannelImage] = await Promise.all([
+      Return.aggregate(pipeline),
+      Return.aggregate(countPipeline),
+      Channel.find().select('-_id channelId channelImageUrl').lean(),
+    ]);
+
+    const channelMap = {};
+    allChannelImage.forEach((channel) => {
+      channelMap[channel.channelId] = channel.channelImageUrl;
+    });
 
     const totalReturns = countResult?.[0]?.total || 0;
 
@@ -241,6 +255,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       status: r.status,
       platform: r.platform,
       returnId: r.returnId,
+      channelImage: channelMap[results[0].channelId],
     }));
 
     return {

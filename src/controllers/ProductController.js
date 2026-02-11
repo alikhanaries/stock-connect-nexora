@@ -12,10 +12,14 @@ import Seller from '#models/Seller.js';
 export const getProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { products, pagination, appliedFilters } = await productService.fetchProducts(req.query, sellerId);
+    const { products, pagination, appliedFilters, latestProductSyncDate, latestInventorySync, latestPriceSync } =
+      await productService.fetchProducts(req.query, sellerId);
     const responseData = {
       content: products || [],
       appliedFilters: appliedFilters || {},
+      latestProductSyncDate,
+      latestInventorySync,
+      latestPriceSync,
       ...pagination,
     };
     const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
@@ -121,15 +125,22 @@ export const importProductsFromCsvFile = async (req, res) => {
 
 export const pushProductToChannelEngine = async (req, res) => {
   const { channelId } = req.params;
+  const sellerId = req.sellerId;
   try {
-    const sellerId = req.sellerId;
-    const { validProducts = [] } = await productService.validateProducts(channelId, sellerId);
+    const { activeProducts, inactiveProducts } = await productService.validateProducts(channelId, sellerId);
 
-    if (validProducts.length > 0) {
-      // Fire-and-forget (non-blocking)
+    if (activeProducts.length) {
       productService
-        .pushProductsAsync(validProducts, channelId, sellerId)
-        .catch((err) => console.error('Async push failed:', err));
+        .pushActiveProductsToChannel(activeProducts, channelId, sellerId)
+        .catch((err) => console.error('Async active push failed:', err));
+    }
+    if (inactiveProducts.length) {
+      const inactiveSkuList = inactiveProducts.filter((p) => p.productType === 'simple').map((p) => p.productSkuCode);
+      if (inactiveSkuList.length) {
+        productService
+          .pushInActiveProductsToChannel(inactiveSkuList)
+          .catch((err) => console.error('Async inactive delete failed:', err));
+      }
     }
     return successResponse(res, req.locale.ALL_PRODUCTS_PUSH_SUCCESS, 200, null);
   } catch (err) {
@@ -462,17 +473,13 @@ export const searchProducts = async (req, res) => {
     const { channelId, search } = req.query;
     const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
 
-    const { products, pagination, channel } = await productService.searchProuctsByFilter(
-      filters,
-      req.query,
-      sellerId,
-      channelId,
-      search
-    );
+    const { products, pagination, channel, latestProductSyncDate, latestInventorySync, latestPriceSync } =
+      await productService.searchProuctsByFilter(filters, req.query, sellerId, channelId, search);
 
     const responseData = channelId
-      ? { channel, content: products || [], ...pagination }
-      : { content: products || [], ...pagination };
+      ? { channel, content: products || [], latestProductSyncDate, latestInventorySync, latestPriceSync, ...pagination }
+      : { content: products || [], latestProductSyncDate, latestInventorySync, latestPriceSync, ...pagination };
+
     const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
     return successResponse(res, message, 200, responseData);
   } catch (error) {
