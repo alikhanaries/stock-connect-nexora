@@ -212,15 +212,21 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
   ];
 };
 
-const getShipmentAnalytics = async (sellerId, period) => {
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-  const range = getDateRange(period);
+const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, month } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+  const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
+  if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
   const pipeline = [
     {
       $match: {
-        sellerId: sellerObjectId,
-        updatedAt: { $gte: range.start, $lte: range.end },
+        sellerId: { $in: sellerObjectIds },
         status: { $in: SHIPMENT_STATUS.map((s) => s.key) },
+        ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
       },
     },
     {
@@ -321,21 +327,20 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
   };
 };
 
-const getInventoryStatus = async (sellerId, period) => {
-  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-    throw new Error('Invalid sellerId');
-  }
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-  const range = period ? getDateRange(period) : null;
+const getInventoryStatus = async (sellerId, period, { startDate, endDate, month, channelId } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
-  if (period && !range) {
-    throw new Error(`Invalid period "${period}"`);
-  }
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
 
-  const pipeline = buildInventoryStatusPipeline(sellerObjectId, range);
-  if (!Array.isArray(pipeline) || pipeline.length === 0) {
-    throw new Error('Invalid aggregation pipeline');
-  }
+  const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
+  if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
+
+  const pipeline = buildInventoryStatusPipeline(sellerObjectIds, range, channelId);
+  if (!Array.isArray(pipeline) || pipeline.length === 0) throw new Error('Invalid aggregation pipeline');
+
   const result = await Inventory.aggregate(pipeline).allowDiskUse(true);
   const agg = result?.[0] ?? {};
 

@@ -54,7 +54,7 @@ dashboardRoutes.get(
   statusValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getShipmentAnalytics
 );
 
@@ -72,7 +72,7 @@ dashboardRoutes.get(
   inventoryStatusValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getInventoryStatus
 );
 

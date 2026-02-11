@@ -49,10 +49,15 @@ export const getorderOverview = async (req, res) => {
 
 export const getShipmentAnalytics = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const { period, channelId } = req.query;
+    const sellerIds = req.sellerIds ?? req.sellerId;
+    const { period, startDate, endDate, month } = req.query;
 
-    const data = await dashboardService.getShipmentAnalytics(sellerId, period, channelId);
+    const data = await dashboardService.getShipmentAnalytics(sellerIds, period, {
+      startDate,
+      endDate,
+      month,
+    });
+
     if (!data) {
       return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
     }
@@ -87,10 +92,16 @@ export const getAnalytics = async (req, res) => {
 
 export const getInventoryStatus = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const { period } = req.query;
+    const sellerIds = req.sellerIds ?? req.sellerId;
+    const { period, startDate, endDate, month, channelId } = req.query;
 
-    const data = await dashboardService.getInventoryStatus(sellerId, period);
+    const data = await dashboardService.getInventoryStatus(sellerIds, period, {
+      startDate,
+      endDate,
+      month,
+      channelId,
+    });
+
     if (!data) {
       return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
     }

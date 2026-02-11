@@ -366,12 +366,24 @@ export const normalizeSeries = (period, raw = [], range) => {
   }));
 };
 
-export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
+export const buildInventoryStatusPipeline = (sellerObjectIds, range, channelId) => {
   const match = {
-    sellerId: sellerObjectId,
+    sellerId: { $in: sellerObjectIds },
     productSkuCode: { $type: 'string', $ne: '' },
     ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
   };
+
+  const channelIds = String(channelId ?? '')
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
+
+  const productLookupPipeline = [
+    ...(channelIds.length ? [{ $match: { channelId: { $in: channelIds } } }] : []),
+    { $project: { _id: 0, status: 1, isFrozen: 1 } },
+  ];
 
   return [
     { $match: match },
@@ -382,7 +394,7 @@ export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
         localField: '_id',
         foreignField: 'productSkuCode',
         as: 'product',
-        pipeline: [{ $project: { _id: 0, status: 1, isFrozen: 1 } }],
+        pipeline: productLookupPipeline,
       },
     },
     {
