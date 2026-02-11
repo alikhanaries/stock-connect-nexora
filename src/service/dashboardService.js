@@ -135,7 +135,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
       {
         $group: {
           _id: '$_id',
-          totalOrderValue: { $first: '$totalInclVat' },
+          totalOrderValue: { $first: { $ifNull: ['$originalTotalInclVat', 0] } },
           deliveredTotal: {
             $sum: {
               $multiply: [
@@ -200,7 +200,13 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
   const prevAvgOrderValue = previous.totalOrders > 0 ? previous.totalOrderValue / previous.totalOrders : 0;
 
   return [
-    buildMetric('totalSales', 'Total Sales', current.totalDeliveredSales, previous.totalDeliveredSales),
+    buildMetric(
+      'totalSales',
+      'Total Sales by Product Delivered',
+      current.totalDeliveredSales,
+      previous.totalDeliveredSales
+    ),
+    buildMetric('totalRevenue', 'Total sales by Order', current.totalOrderValue, previous.totalOrderValue),
     buildMetric('orders', 'Orders', current.totalOrders, previous.totalOrders),
     buildMetric('avgOrderValue', 'Avg Order Value', currAvgOrderValue, prevAvgOrderValue),
     buildMetric(
