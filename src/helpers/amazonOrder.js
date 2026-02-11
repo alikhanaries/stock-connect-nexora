@@ -274,7 +274,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
   ]);
 
   const channelInfo = amazonChannel || {
-    channelId: 3,
+    channelId: amazonChannel.channelId,
     channelName: 'Amazon.sa (v3)',
     globalChannelId: 1635,
     globalChannelName: 'Amazon',
