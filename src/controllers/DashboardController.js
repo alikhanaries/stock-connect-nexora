@@ -94,13 +94,14 @@ export const getAnalytics = async (req, res) => {
 export const getInventoryStatus = async (req, res) => {
   try {
     const sellerIds = req.sellerIds ?? req.sellerId;
-    const { period, startDate, endDate, month, channelId } = req.query;
+    const { period, startDate, endDate, month, channel, type } = req.query;
 
     const data = await dashboardService.getInventoryStatus(sellerIds, period, {
       startDate,
       endDate,
       month,
-      channelId,
+      channel,
+      type,
     });
 
     if (!data) {

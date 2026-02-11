@@ -12,6 +12,7 @@ import {
   extractCategoryLabel,
   topFacetPipeline,
   prevRevenuePipeline,
+  pickChannelIdsFromChannel,
   buildInventoryStatusPipeline,
   isComparablePeriod,
   buildGlobalChannelFilter,
@@ -353,7 +354,7 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
   };
 };
 
-const getInventoryStatus = async (sellerId, period, { startDate, endDate, month, channelId } = {}) => {
+const getInventoryStatus = async (sellerId, period, { startDate, endDate, month, channel, type } = {}) => {
   const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
   const sellerObjectIds = ids
@@ -364,7 +365,8 @@ const getInventoryStatus = async (sellerId, period, { startDate, endDate, month,
   const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
   if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
 
-  const pipeline = buildInventoryStatusPipeline(sellerObjectIds, range, channelId);
+  const channelIds = pickChannelIdsFromChannel(channel);
+  const pipeline = buildInventoryStatusPipeline(sellerObjectIds, range, channelIds);
   if (!Array.isArray(pipeline) || pipeline.length === 0) throw new Error('Invalid aggregation pipeline');
 
   const result = await Inventory.aggregate(pipeline).allowDiskUse(true);
@@ -375,20 +377,44 @@ const getInventoryStatus = async (sellerId, period, { startDate, endDate, month,
   const statusMap = new Map(statusCounts.map((r) => [r.status, r.count]));
   const freezeMap = new Map(freezeCounts.map((r) => [r.status, r.count]));
 
-  const activeCount = statusMap.get('active') ?? 0;
   const total = agg?.totalCount?.[0]?.count ?? 0;
+  const activeCount = statusMap.get('active') ?? 0;
   const activePercentage = total === 0 ? 0 : Number(((activeCount / total) * 100).toFixed(1));
+
+  const normalizedType = String(type ?? '').toLowerCase();
+
+  if (normalizedType === 'state') {
+    return {
+      total,
+      breakdown: [
+        { key: 'unfreeze', value: freezeMap.get('unfreeze') ?? 0 },
+        { key: 'freeze', value: freezeMap.get('freeze') ?? 0 },
+      ],
+    };
+  }
+
+  if (normalizedType === 'status') {
+    return {
+      total,
+      activePercentage,
+      breakdown: [
+        { key: 'active', value: statusMap.get('active') ?? 0 },
+        { key: 'inactive', value: statusMap.get('inactive') ?? 0 },
+      ],
+    };
+  }
 
   return {
     total,
     activePercentage,
-    breakdown: [
-      { key: 'active', value: statusMap.get('active') ?? 0 },
-      { key: 'inactive', value: statusMap.get('inactive') ?? 0 },
-      { key: 'other', value: statusMap.get('other') ?? 0 },
-      { key: 'unfreeze', value: freezeMap.get('unfreeze') ?? 0 },
-      { key: 'freeze', value: freezeMap.get('freeze') ?? 0 },
-    ],
+    statusBreakdown: {
+      active: statusMap.get('active') ?? 0,
+      inactive: statusMap.get('inactive') ?? 0,
+    },
+    stateBreakdown: {
+      unfreeze: freezeMap.get('unfreeze') ?? 0,
+      freeze: freezeMap.get('freeze') ?? 0,
+    },
   };
 };
 
