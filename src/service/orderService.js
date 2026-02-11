@@ -1,4 +1,5 @@
 import Order from '#models/Orders.js';
+import mongoose from 'mongoose';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import {
   ORDER_STATUS_MAP,
@@ -10,7 +11,6 @@ import orderhelper, {
   flattenAggregatedOrder,
   getAggregatedOrderHeaders,
   getOrganizedOrderRowData,
-  sanitizeAmazonOrdersData,
 } from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -29,8 +29,6 @@ import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
-import { Readable } from 'stream';
-import { processAmazonOrderImportStream } from '#helpers/amazonOrder.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
@@ -75,7 +73,11 @@ const getAllOrders = async (query, sellerId) => {
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
 
-    const filter = { sellerId: sellerId };
+    // Convert sellerId to ObjectId
+    const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+
+    // Base match stage
+    const filter = { sellerId: sellerObjectId };
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
@@ -86,6 +88,7 @@ const getAllOrders = async (query, sellerId) => {
         { 'orderCustomer.firstName': regex },
         { 'orderCustomer.lastName': regex },
       ];
+      appliedFilters.search = search;
     }
 
     if (platform) {
@@ -106,54 +109,74 @@ const getAllOrders = async (query, sellerId) => {
       }
     }
 
-    if (status) {
-      // Convert comma-separated string → array
-      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+    // Build aggregation pipeline
+    const pipeline = [{ $match: filter }];
 
-      if (statusArray.includes('DELIVERED')) {
-        // Custom delivered logic
-        filter.status = 'CLOSED';
+    if (status && status.toUpperCase().includes('DELIVERED')) {
+      appliedFilters.status = 'DELIVERED';
 
-        filter['orderSkuList.skuList'] = {
-          $not: {
-            $elemMatch: {
-              status: { $in: ['IN_PROGRESS', 'SHIPPED', 'RETURNED'] },
+      // Filter delivered SKUs using $filter to keep skuList as an array
+      pipeline.push({
+        $addFields: {
+          'orderSkuList.skuList': {
+            $filter: {
+              input: '$orderSkuList.skuList',
+              as: 'sku',
+              cond: {
+                $and: [
+                  { $eq: ['$$sku.statusBreakdown.confirmed', 0] },
+                  { $eq: ['$$sku.statusBreakdown.shipped', 0] },
+                  { $eq: ['$$sku.statusBreakdown.returned', 0] },
+                  {
+                    $eq: [
+                      {
+                        $add: ['$$sku.statusBreakdown.delivered', '$$sku.statusBreakdown.canceled'],
+                      },
+                      '$$sku.quantity',
+                    ],
+                  },
+                  { $gt: ['$$sku.statusBreakdown.delivered', 0] }, //  delivered must be > 0
+                ],
+              },
             },
           },
-          $elemMatch: {
-            status: 'DELIVERED',
-          },
-        };
+        },
+      });
 
-        appliedFilters.status = 'DELIVERED';
-      } else {
-        // Normal status behavior
-        const validStatuses = Object.values(ORDER_STATUS_MAP);
-        const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+      // Remove orders that have no delivered SKUs
+      pipeline.push({
+        $match: {
+          'orderSkuList.skuList.0': { $exists: true },
+        },
+      });
+    } else if (status) {
+      // Normal status filter
+      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+      const validStatuses = Object.values(ORDER_STATUS_MAP);
+      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
 
-        if (invalid.length) {
-          throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
-        }
-
-        // Build Mongo filter (case-insensitive)
-        filter.status = {
-          $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
-        };
-
-        appliedFilters.status = status;
+      if (invalid.length) {
+        throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
       }
+
+      // Build Mongo filter (case-insensitive)
+      filter.status = {
+        $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+      };
+
+      appliedFilters.status = status;
+      pipeline[0] = { $match: filter };
     }
 
+    // Sorting, skip, limit
+    pipeline.push({ $sort: { [sortBy]: sortDirection } });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: parseInt(size) });
+
+    // Execute aggregation and fetch other data
     const [totalOrders, orders, allChannels, sellerSync] = await Promise.all([
       Order.countDocuments(filter),
-      Order.find(filter)
-        .skip(skip)
-        .limit(size)
-        .sort({ [sortBy]: sortDirection })
-        .collation({ locale: 'en_US', numericOrdering: true })
-        .select(SELECTED_FIELDS)
-        .lean(),
-
+      Order.aggregate(pipeline),
       Channel.find().select('_id channelId channelImageUrl'),
       Seller.findById(sellerId).select('-_id lastOrderSync'),
     ]);
@@ -1148,66 +1171,6 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
   }
 };
 
-export async function getNewAmazonOrders(url, locale, sellerId) {
-  try {
-    console.log('Fetching Google Sheet from URL:', url);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
-    const stream = Readable.fromWeb(res.body);
-    return await processAmazonOrderImportStream(stream, { locale, sellerId });
-  } catch (error) {
-    console.error('Error fetching new orders from ChannelEngine:', error.message);
-    return { success: false, message: error.message };
-  }
-}
-
-export const processAmazonOrders = async (orders, sellerId) => {
-  try {
-    const operations = await sanitizeAmazonOrdersData(orders, sellerId);
-
-    const result = await Order.bulkWrite(operations);
-    const upsertedOrderIds = Object.values(result.upsertedIds || {});
-    const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
-
-    const orderLogs = upsertedIndexes.map((index, i) => {
-      const order = orders[index];
-      const orderId = upsertedOrderIds[i];
-
-      const logDetails = [
-        {
-          status: 'CREATED',
-          description: 'Order Placed',
-          createdAt: new Date(order?.OrderDate || order?.orderDate || Date.now()),
-        },
-      ];
-
-      return {
-        orderId,
-        details: logDetails,
-      };
-    });
-
-    // Insert logs only for newly created orders
-    if (orderLogs.length > 0) {
-      await OrderLogs.insertMany(orderLogs);
-      console.log('Inserted order logs:', orderLogs.length);
-    } else {
-      console.log('No new orders created — skipping log insertion');
-    }
-
-    return {
-      success: true,
-      data: {
-        ...result,
-        insertedOrderIds: upsertedOrderIds,
-      },
-    };
-  } catch (error) {
-    console.error('Error in processOrders:', error.message);
-    return { success: false, message: error.message };
-  }
-};
-
 // Fetch CE shipment details
 export const syncChannelEngineShipment = async (userId) => {
   try {
@@ -1256,6 +1219,4 @@ export default {
   cancelPartialOrder,
   exportOrdersToCSV,
   syncChannelEngineShipment,
-  getNewAmazonOrders,
-  processAmazonOrders,
 };

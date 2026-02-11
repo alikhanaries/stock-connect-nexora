@@ -9,15 +9,22 @@ import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
 import { ALLOWEDMARKETPLACES } from '#constants/common.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
+import { pushBatch, pushInActiveProductsToChannel } from './productService.js';
+import { mapProductToChannelEngine } from '../helpers/ProductMapper.js';
+import { chunkArray, getExistingProductsBySkuFromCE } from './channel/ceService.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE } = config;
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
+  config;
 const MAX_RETRIES = 3;
 const MAX_TASK_BUFFER = 1000;
+const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
+const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
+const SKU_BATCH_SIZE = 50;
 
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
@@ -357,17 +364,16 @@ export const syncStockToChannelEngine = async (sellerId) => {
     const escaped = ALLOWEDMARKETPLACES.map((m) => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const marketplaceRegex = new RegExp(`(^|,\\s*)(${escaped.join('|')})(?=\\s*,|$)`, 'i');
 
-    const cursor = Product.find(
-      {
-        sellerId: new ObjectId(sellerId),
-        marketPlace: {
-          $exists: true,
-          $ne: null,
-          $regex: marketplaceRegex,
-        },
+    const cursor = Product.find({
+      sellerId: new ObjectId(sellerId),
+      marketPlace: {
+        $exists: true,
+        $ne: null,
+        $regex: marketplaceRegex,
       },
-      { productSkuCode: 1, currentStockCount: 1 }
-    )
+      syncedAt: { $ne: null },
+      $expr: { $gt: ['$updatedAt', '$syncedAt'] },
+    })
       .lean()
       .cursor();
 
@@ -375,10 +381,10 @@ export const syncStockToChannelEngine = async (sellerId) => {
     let totalSynced = 0;
     let failedBatches = 0;
     const tasks = [];
-
+    const processedList = new Set();
     for await (const product of cursor) {
       if (!product.productSkuCode) continue;
-
+      processedList.add(product);
       batch.push({
         MerchantProductNo: product.productSkuCode,
         StockLocations: [{ Stock: Number(product.currentStockCount) || 0 }],
@@ -428,6 +434,7 @@ export const syncStockToChannelEngine = async (sellerId) => {
     if (tasks.length) {
       await Promise.all(tasks);
     }
+    await syncSkuAvailability([...processedList], sellerId);
     await updateSyncDate(sellerId, 'INVENTORY', totalSynced);
 
     return {
@@ -439,6 +446,82 @@ export const syncStockToChannelEngine = async (sellerId) => {
   } catch (err) {
     console.error('Service syncProductStock error:', err);
     throw err;
+  }
+};
+export const pushActiveProductsToChannel = async (products, sellerId) => {
+  const limitExec = pLimit(MAX_CONCURRENT);
+  const batches = [];
+  for (let i = 0; i < products.length; i += BATCH_SIZE) {
+    batches.push(products.slice(i, i + BATCH_SIZE));
+  }
+  await Promise.allSettled(
+    batches.map((batch, idx) =>
+      limitExec(async () => {
+        const result = await pushBatch(batch.map(mapProductToChannelEngine), idx);
+        const skus = batch.map((p) => p.productSkuCode);
+        await Product.updateMany(
+          { sellerId, productSkuCode: { $in: skus } },
+          { $set: { syncedAt: new Date() } },
+          { timestamps: false }
+        );
+        return result;
+      })
+    )
+  );
+};
+
+const syncSkuAvailability = async (products, sellerId) => {
+  const skuSet = new Set();
+  const dbStatusMap = new Map();
+
+  for (const p of products) {
+    if (!p.productSkuCode) continue;
+
+    const sku = p.productSkuCode.trim().toUpperCase();
+    skuSet.add(sku);
+    dbStatusMap.set(sku, p.status);
+  }
+
+  if (!skuSet.size) return;
+  const skuArray = [...skuSet];
+  const skuBatches = chunkArray(skuArray, SKU_BATCH_SIZE);
+
+  // Fetch CE products in batches
+  const ceStatusMap = new Map();
+
+  for (const batch of skuBatches) {
+    const ceProducts = await getExistingProductsBySkuFromCE(batch);
+    ceProducts.forEach((p) => {
+      const sku = p.MerchantProductNo?.trim().toUpperCase();
+      ceStatusMap.set(sku, p.IsActive ? 'active' : 'inactive');
+    });
+  }
+  const pushList = [];
+  const deleteList = [];
+
+  for (const sku of skuSet) {
+    const dbStatus = dbStatusMap.get(sku);
+    const ceStatus = ceStatusMap.get(sku);
+
+    // DB active but CE inactive / not exist
+    if (dbStatus === 'active' && ceStatus !== 'active') {
+      pushList.push(sku);
+    }
+
+    // DB inactive but CE active
+    if (dbStatus === 'inactive' && ceStatus === 'active') {
+      deleteList.push(sku);
+    }
+  }
+
+  if (pushList.length) {
+    const pushSet = new Set(pushList);
+    const productsToPush = products.filter((p) => pushSet.has(p.productSkuCode?.toUpperCase()));
+    await pushActiveProductsToChannel(productsToPush, sellerId);
+  }
+
+  if (deleteList.length) {
+    await pushInActiveProductsToChannel(deleteList);
   }
 };
 
