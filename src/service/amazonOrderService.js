@@ -51,7 +51,10 @@ export async function getNewAmazonOrders(url, locale, sellerId) {
     const stream = Readable.fromWeb(res.body);
     return await processAmazonOrderImportStream(stream, { locale, sellerId });
   } catch (error) {
-    console.error('Error fetching new orders from ChannelEngine:', error.message);
+    console.error('Error fetching new orders from Amazon:', error.message);
+    if (error.cause) {
+      console.error('Fetch error cause:', error.cause);
+    }
     return { success: false, message: error.message };
   }
 }

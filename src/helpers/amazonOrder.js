@@ -3,7 +3,6 @@ import csv from 'csv-parser';
 import fs from 'fs';
 import { AMAZON_STATUS_MAP, ORDER_STATUS_MAP } from '../constants/common.js';
 import Order from '../models/Orders.js';
-import Product from '../models/Product.js';
 import Seller from '../models/Seller.js';
 import Channel from '../models/Channel.js';
 
@@ -230,7 +229,7 @@ export const processAmazonOrderImportStream = async (
   };
 };
 
-export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
+export const sanitizeAmazonOrdersData = async (orders) => {
   const orderMap = new Map();
 
   orders.forEach((row) => {
@@ -263,11 +262,8 @@ export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
         }))
       : [{ _id: null }];
 
-  const [existingOrdersDb, productsDb, sellersDb, amazonChannel] = await Promise.all([
+  const [existingOrdersDb, sellersDb, amazonChannel] = await Promise.all([
     Order.find({ orderId: { $in: orderIds } }).lean(),
-    Product.find({ productSkuCode: { $in: Array.from(skuSet) } })
-      .select('productSkuCode sellerId')
-      .lean(),
     Seller.find({
       $or: brandOrQuery,
       isDeleted: false,
@@ -285,7 +281,6 @@ export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
   };
 
   const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
-  const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
 
   const brandSellerMap = new Map();
   sellersDb.forEach((seller) => {
@@ -305,16 +300,11 @@ export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
       finalSellerId = brandSellerMap.get(brandKey) || null;
     }
 
-    if (!finalSellerId && items.length > 0) {
-      const firstSku = items[0].sku;
-      if (firstSku) {
-        finalSellerId = productSellerMap.get(firstSku) || null;
-      }
+    if (!finalSellerId) {
+      console.warn(`Skipping order ${orderId}: no seller found for brand "${orderInfo.brandName}"`);
+      continue;
     }
 
-    if (!finalSellerId) {
-      finalSellerId = defaultSellerId;
-    }
     const purchaseDate = parseAmazonDate(orderInfo.purchaseDate);
 
     let totalPrice = 0;
@@ -390,6 +380,7 @@ export const sanitizeAmazonOrdersData = async (orders, defaultSellerId) => {
 
     const updatePayload = {
       orderId: orderId,
+      channelOrderNumber: orderId,
       channelId: channelInfo.channelId,
       sellerId: finalSellerId,
       channelName: channelInfo.channelName,
