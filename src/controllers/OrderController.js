@@ -12,6 +12,7 @@ import {
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
+import { syncAmazonOrders } from '../service/amazonOrderService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -133,7 +134,7 @@ export const getSyncedOrders = async (req, res) => {
     const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
       orderService.processOrders(data, sellerId),
       getSyncedOrdersOcp(sellerId),
-      orderService.syncAmazonOrders(sellerId, req.locale, req.user._id),
+      syncAmazonOrders(sellerId, req.locale, req.user._id),
     ]);
 
     // Check for rejected promises or failed results
