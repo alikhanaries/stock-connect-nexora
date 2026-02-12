@@ -103,9 +103,16 @@ export const getInventoryStatus = async (req, res) => {
 
 export const getTopPerformersProducts = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const { period, type } = req.query;
-    const data = await dashboardService.getTopPerformersProducts(sellerId, period, type);
+    const sellerIds = req.sellerIds ?? req.sellerId;
+    const { period, type, startDate, endDate, month, channel } = req.query;
+
+    const data = await dashboardService.getTopPerformersProducts(sellerIds, period, type, {
+      startDate,
+      endDate,
+      month,
+      channel,
+    });
+
     if (!data) {
       return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
     }

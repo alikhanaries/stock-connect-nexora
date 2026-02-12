@@ -63,7 +63,7 @@ dashboardRoutes.get(
   topOrdersValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getTopPerformersProducts
 );
 
