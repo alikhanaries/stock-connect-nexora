@@ -12,6 +12,7 @@ import {
   extractCategoryLabel,
   topFacetPipeline,
   prevRevenuePipeline,
+  pickChannelIdsFromChannel,
   buildInventoryStatusPipeline,
   isComparablePeriod,
   buildGlobalChannelFilter,
@@ -218,17 +219,49 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
   ];
 };
 
-const getShipmentAnalytics = async (sellerId, period) => {
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-  const range = getDateRange(period);
+const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+  const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
+  if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
+
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
+  const hasChannel =
+    Array.isArray(globalChannelFilter?.globalChannelName?.$in) && globalChannelFilter.globalChannelName.$in.length > 0;
+  const ordersCollection = Order.collection.name;
   const pipeline = [
     {
       $match: {
-        sellerId: sellerObjectId,
-        updatedAt: { $gte: range.start, $lte: range.end },
+        sellerId: { $in: sellerObjectIds },
         status: { $in: SHIPMENT_STATUS.map((s) => s.key) },
+        ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
       },
     },
+
+    ...(hasChannel
+      ? [
+          {
+            $lookup: {
+              from: ordersCollection,
+              localField: 'orderId',
+              foreignField: '_id',
+              as: 'order',
+              pipeline: [{ $project: { _id: 1, globalChannelName: 1 } }],
+            },
+          },
+          { $unwind: '$order' },
+          {
+            $match: {
+              'order.globalChannelName': { $in: globalChannelFilter.globalChannelName.$in },
+            },
+          },
+        ]
+      : []),
+
     {
       $group: {
         _id: '$status',
@@ -327,21 +360,21 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
   };
 };
 
-const getInventoryStatus = async (sellerId, period) => {
-  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-    throw new Error('Invalid sellerId');
-  }
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-  const range = period ? getDateRange(period) : null;
+const getInventoryStatus = async (sellerId, period, { startDate, endDate, month, channel, type } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
-  if (period && !range) {
-    throw new Error(`Invalid period "${period}"`);
-  }
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
 
-  const pipeline = buildInventoryStatusPipeline(sellerObjectId, range);
-  if (!Array.isArray(pipeline) || pipeline.length === 0) {
-    throw new Error('Invalid aggregation pipeline');
-  }
+  const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
+  if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
+
+  const channelIds = pickChannelIdsFromChannel(channel);
+  const pipeline = buildInventoryStatusPipeline(sellerObjectIds, range, channelIds);
+  if (!Array.isArray(pipeline) || pipeline.length === 0) throw new Error('Invalid aggregation pipeline');
+
   const result = await Inventory.aggregate(pipeline).allowDiskUse(true);
   const agg = result?.[0] ?? {};
 
@@ -350,20 +383,44 @@ const getInventoryStatus = async (sellerId, period) => {
   const statusMap = new Map(statusCounts.map((r) => [r.status, r.count]));
   const freezeMap = new Map(freezeCounts.map((r) => [r.status, r.count]));
 
-  const activeCount = statusMap.get('active') ?? 0;
   const total = agg?.totalCount?.[0]?.count ?? 0;
+  const activeCount = statusMap.get('active') ?? 0;
   const activePercentage = total === 0 ? 0 : Number(((activeCount / total) * 100).toFixed(1));
+
+  const normalizedType = String(type ?? '').toLowerCase();
+
+  if (normalizedType === 'state') {
+    return {
+      total,
+      breakdown: [
+        { key: 'unfreeze', value: freezeMap.get('unfreeze') ?? 0 },
+        { key: 'freeze', value: freezeMap.get('freeze') ?? 0 },
+      ],
+    };
+  }
+
+  if (normalizedType === 'status') {
+    return {
+      total,
+      activePercentage,
+      breakdown: [
+        { key: 'active', value: statusMap.get('active') ?? 0 },
+        { key: 'inactive', value: statusMap.get('inactive') ?? 0 },
+      ],
+    };
+  }
 
   return {
     total,
     activePercentage,
-    breakdown: [
-      { status: 'active', count: statusMap.get('active') ?? 0 },
-      { status: 'inactive', count: statusMap.get('inactive') ?? 0 },
-      { status: 'other', count: statusMap.get('other') ?? 0 },
-      { status: 'unfreeze', count: freezeMap.get('unfreeze') ?? 0 },
-      { status: 'freeze', count: freezeMap.get('freeze') ?? 0 },
-    ],
+    statusBreakdown: {
+      active: statusMap.get('active') ?? 0,
+      inactive: statusMap.get('inactive') ?? 0,
+    },
+    stateBreakdown: {
+      unfreeze: freezeMap.get('unfreeze') ?? 0,
+      freeze: freezeMap.get('freeze') ?? 0,
+    },
   };
 };
 
