@@ -367,7 +367,6 @@ export const normalizeSeries = (period, raw = [], range) => {
 };
 
 export const pickChannelIdsFromChannel = (channel) => {
-  console.log('pickChannelIdsFromChannel called with channel:', channel);
   const keys = String(channel ?? '')
     .split(',')
     .map((v) => v.trim().toLowerCase())
