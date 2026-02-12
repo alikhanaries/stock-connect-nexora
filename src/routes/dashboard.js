@@ -9,14 +9,14 @@ import {
   getSalesByChannel,
   getOrdersByChannel,
 } from '#controllers/DashboardController.js';
-import { authMiddleware, checkLanguage, verifySellerAccess, verifyMultipleSellerAccess } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
 import {
   orderFlowStatusValidator,
   orderOverviewValidator,
   orderAnalyticsValidator,
   statusValidator,
   inventoryStatusValidator,
-  topOrdersValidator,
+  topProductsValidator,
   salesByChannelValidator,
   ordersByChannelValidator,
 } from '#validations/dashboard.js';
@@ -59,11 +59,11 @@ dashboardRoutes.get(
 );
 
 dashboardRoutes.get(
-  '/top-orders',
-  topOrdersValidator,
+  '/top-products',
+  topProductsValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getTopPerformersProducts
 );
 

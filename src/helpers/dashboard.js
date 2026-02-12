@@ -522,11 +522,17 @@ export const extractCategoryLabel = (trail = '') => {
   return parts[parts.length - 1] || '';
 };
 
-export const topFacetPipeline = (sellerObjectId, range, type) => {
+export const topFacetPipeline = (sellerObjectIds, range, type, globalChannelFilter = {}) => {
   const isCategory = type === 'category';
 
   return [
-    { $match: { sellerId: sellerObjectId, orderDate: { $gte: range.start, $lte: range.end } } },
+    {
+      $match: {
+        sellerId: { $in: sellerObjectIds },
+        ...globalChannelFilter,
+        orderDate: { $gte: range.start, $lte: range.end },
+      },
+    },
     { $unwind: '$orderSkuList.skuList' },
     { $match: { 'orderSkuList.skuList.merchantProductNo': { $type: 'string', $ne: '' } } },
     {
@@ -567,8 +573,14 @@ export const topFacetPipeline = (sellerObjectId, range, type) => {
   ];
 };
 
-export const prevRevenuePipeline = (sellerObjectId, prevRange, keys = []) => [
-  { $match: { sellerId: sellerObjectId, orderDate: { $gte: prevRange.start, $lte: prevRange.end } } },
+export const prevRevenuePipeline = (sellerObjectIds, prevRange, keys = [], globalChannelFilter = {}) => [
+  {
+    $match: {
+      sellerId: { $in: sellerObjectIds },
+      ...globalChannelFilter,
+      orderDate: { $gte: prevRange.start, $lte: prevRange.end },
+    },
+  },
   { $unwind: '$orderSkuList.skuList' },
 
   { $match: { 'orderSkuList.skuList.merchantProductNo': { $in: keys } } },

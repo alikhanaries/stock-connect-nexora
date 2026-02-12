@@ -302,19 +302,30 @@ const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, end
   return { metric, data: normalizeSeries(period, rawData, range) };
 };
 
-export const getTopPerformersProducts = async (sellerId, period, type) => {
-  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-    throw new Error('Invalid sellerId');
-  }
-  const range = getDateRange(period);
-  if (!range) throw new Error(`Invalid period "${period}"`);
+export const getTopPerformersProducts = async (
+  sellerId,
+  period = null,
+  type,
+  { startDate, endDate, month, channel } = {}
+) => {
+  const ids = Array.isArray(sellerId) ? sellerId : String(sellerId).split(',');
+  const sellerObjectIds = ids
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .map((id) => {
+      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
+      return new mongoose.Types.ObjectId(id);
+    });
 
-  const prevRange = getPreviousRange(period, range);
-  if (!prevRange?.start || !prevRange?.end) throw new Error(`Invalid period "${period}"`);
+  const range = getDateRange({ period, startDate, endDate, month });
+  if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}"`);
 
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+  const comparable = period !== 'all' && (isComparablePeriod(period) || range.kind === 'custom');
+  const prevRange = comparable ? getPreviousRange(period, range) : range;
 
-  const [agg] = await Order.aggregate(topFacetPipeline(sellerObjectId, range, type));
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
+
+  const [agg] = await Order.aggregate(topFacetPipeline(sellerObjectIds, range, type, globalChannelFilter));
   const top = Array.isArray(agg?.items) ? agg.items : [];
   const total = agg?.meta?.[0]?.total ?? 0;
 
@@ -323,8 +334,7 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
   const items = [];
   const keys = [];
 
-  for (let i = 0; i < top.length; i++) {
-    const x = top[i];
+  for (const x of top) {
     const key = x?._id;
     if (!key) continue;
 
@@ -342,8 +352,13 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
 
   if (!keys.length) return { type, items: [], meta: { shown: 0, total: 0 } };
 
-  const prevAgg = await Order.aggregate(prevRevenuePipeline(sellerObjectId, prevRange, keys));
-  const prevMap = new Map((Array.isArray(prevAgg) ? prevAgg : []).map((r) => [String(r._id), +r?.prevRevenue || 0]));
+  if (!comparable) {
+    for (const item of items) delete item._key;
+    return { type, items, meta: { shown: items.length, total: +total || 0 } };
+  }
+
+  const prevAgg = await Order.aggregate(prevRevenuePipeline(sellerObjectIds, prevRange, keys, globalChannelFilter));
+  const prevMap = new Map((prevAgg ?? []).map((r) => [String(r._id), +r?.prevRevenue || 0]));
 
   for (const item of items) {
     const prev = prevMap.get(String(item._key)) || 0;
@@ -353,11 +368,7 @@ export const getTopPerformersProducts = async (sellerId, period, type) => {
     delete item._key;
   }
 
-  return {
-    type,
-    items,
-    meta: { shown: items.length, total: +total || 0 },
-  };
+  return { type, items, meta: { shown: items.length, total: +total || 0 } };
 };
 
 const getInventoryStatus = async (sellerId, period, { startDate, endDate, month, channel, type } = {}) => {
