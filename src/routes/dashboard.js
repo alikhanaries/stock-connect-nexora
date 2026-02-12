@@ -16,7 +16,7 @@ import {
   orderAnalyticsValidator,
   statusValidator,
   inventoryStatusValidator,
-  topOrdersValidator,
+  topProductsValidator,
   salesByChannelValidator,
   ordersByChannelValidator,
 } from '#validations/dashboard.js';
@@ -59,8 +59,8 @@ dashboardRoutes.get(
 );
 
 dashboardRoutes.get(
-  '/top-orders',
-  topOrdersValidator,
+  '/top-products',
+  topProductsValidator,
   checkLanguage,
   authMiddleware,
   verifyMultipleSellerAccess,

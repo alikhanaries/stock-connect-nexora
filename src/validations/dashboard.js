@@ -240,7 +240,7 @@ export const inventoryStatusValidator = validate(async (req) => {
   querySchema.parse(req.query);
 });
 
-export const topOrdersValidator = validate(async (req) => {
+export const topProductsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
   const querySchema = z
