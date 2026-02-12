@@ -9,7 +9,7 @@ import {
   getSalesByChannel,
   getOrdersByChannel,
 } from '#controllers/DashboardController.js';
-import { authMiddleware, checkLanguage, verifySellerAccess, verifyMultipleSellerAccess } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
 import {
   orderFlowStatusValidator,
   orderOverviewValidator,
