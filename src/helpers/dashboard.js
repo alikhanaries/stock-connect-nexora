@@ -73,7 +73,7 @@ export const getDateRange = (input, offset = 0) => {
   }
 
   if (period === 'all') {
-    const start = new Date(2024, 0, 1);
+    const start = new Date(2025, 0, 1);
     start.setHours(0, 0, 0, 0);
 
     return {
