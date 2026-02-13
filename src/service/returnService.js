@@ -246,6 +246,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const formattedReturns = results.map((r) => ({
       _id: r._id,
       orderID: r.orderID || null,
+      channelId: r.channelId || null,
       quantity: r.quantity || 0,
       totalPrice: r.totalPrice || null,
       customer: r.customer || null,
