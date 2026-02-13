@@ -131,8 +131,10 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
+    const orderData = data.filter((order) => order.GlobalChannelId !== 1635);
+
     const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
-      orderService.processOrders(data, sellerId),
+      orderService.processOrders(orderData, sellerId),
       getSyncedOrdersOcp(sellerId),
       syncAmazonOrders(sellerId, req.locale, req.user._id),
     ]);
