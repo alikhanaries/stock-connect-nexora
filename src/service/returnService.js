@@ -255,7 +255,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       status: r.status,
       platform: r.platform,
       returnId: r.returnId,
-      channelImage: channelMap[results[0].channelId],
+      channelImage: channelMap[r.channelId],
     }));
 
     return {
