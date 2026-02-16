@@ -1071,8 +1071,15 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   for (const key in castedBaseFilter) {
     if (key === '$or' || key === '$and') {
       productLevelFilter[key] = castedBaseFilter[key].map((cond) => {
-        const field = Object.keys(cond)[0];
-        return { [`productDetails.${field}`]: cond[field] };
+        const remapped = {};
+        for (const [field, val] of Object.entries(cond)) {
+          if (field.startsWith('$')) {
+            remapped[field] = val;
+          } else {
+            remapped[`productDetails.${field}`] = val;
+          }
+        }
+        return remapped;
       });
     } else if (!['sellerId', 'channelId'].includes(key)) {
       productLevelFilter[`productDetails.${key}`] = castedBaseFilter[key];
