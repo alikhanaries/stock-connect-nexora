@@ -395,6 +395,54 @@ async function sendPriceBatch(priceUpdates, retries = MAX_RETRIES) {
   }
 }
 
+async function sendExtraDataPriceBatch(mariketPriceUpdates, retries = MAX_RETRIES) {
+  try {
+    const response = await fetch(
+      `${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json-patch+json' },
+        body: JSON.stringify(mariketPriceUpdates),
+      }
+    );
+
+    const text = await response.text();
+
+    if (!response.ok) {
+      const err = new Error(`HTTP ${response.status}: ${text}`);
+      err.statusCode = response.status;
+      throw err;
+    }
+
+    if (response.ok && text) {
+      const result = JSON.parse(text);
+
+      if (result.Content?.RejectedCount > 0 && retries > 0) {
+        const failedProductSku = new Set(result.Content?.ProductMessages.map((r) => r.Reference));
+        const newBatch = mariketPriceUpdates
+          .filter((item) => failedProductSku.has(item.MerchantProductNo))
+          .map((item) => ({
+            ...item,
+            Operations: item.Operations.map((op) => ({ ...op, Op: 'add' })),
+          }));
+        return await sendExtraDataPriceBatch(newBatch, retries - 1);
+      }
+
+      return result;
+    }
+
+    return { success: true };
+  } catch (err) {
+    if ((err.statusCode >= 400 && err.statusCode < 500) || retries <= 0) {
+      console.error(`Giving up after error:`, err.message);
+      throw err;
+    }
+    const delay = (MAX_RETRIES - retries + 1) * 1000;
+    await new Promise((r) => setTimeout(r, delay));
+    return sendExtraDataPriceBatch(mariketPriceUpdates, retries - 1);
+  }
+}
+
 export const syncPriceToChannelEngine = async (sellerId) => {
   try {
     if (!ObjectId.isValid(sellerId)) {
@@ -414,7 +462,7 @@ export const syncPriceToChannelEngine = async (sellerId) => {
         },
         price: { $type: 'number', $gte: 0 },
       },
-      { productSkuCode: 1, price: 1 }
+      { productSkuCode: 1, price: 1, namshiPrice: 1, noonPrice: 1 }
     )
       .lean()
       .cursor();
@@ -423,6 +471,8 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     let totalSynced = 0;
     let failedBatches = 0;
     const tasks = [];
+    let extraPriceBatch = [];
+    let extraPriceTotalSync = 0;
 
     for await (const product of cursor) {
       if (!product.productSkuCode) continue;
@@ -431,9 +481,26 @@ export const syncPriceToChannelEngine = async (sellerId) => {
         MerchantProductNo: product.productSkuCode,
         Price: product.price,
       });
+
+      extraPriceBatch.push({
+        MerchantProductNo: product.productSkuCode,
+        Operations: [
+          {
+            Op: 'replace',
+            Key: 'namshiPrice',
+            Value: product.namshiPrice || product.price,
+          },
+          {
+            Op: 'replace',
+            Key: 'noonPrice',
+            Value: product.noonPrice || product.price,
+          },
+        ],
+      });
       if (batch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
         const payload = batch;
         batch = [];
+
         tasks.push(
           limit(() =>
             sendPriceBatch(payload)
@@ -447,7 +514,23 @@ export const syncPriceToChannelEngine = async (sellerId) => {
           )
         );
       }
+      if (extraPriceBatch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
+        const payload = extraPriceBatch;
+        extraPriceBatch = [];
 
+        tasks.push(
+          limit(() =>
+            sendExtraDataPriceBatch(payload)
+              .then(() => {
+                extraPriceTotalSync += payload.length;
+              })
+              .catch((err) => {
+                failedBatches++;
+                console.error(`Batch failed (${payload.length} items):`, err.message);
+              })
+          )
+        );
+      }
       if (tasks.length >= MAX_TASK_BUFFER) {
         await Promise.all(tasks);
         tasks.length = 0;
@@ -470,7 +553,22 @@ export const syncPriceToChannelEngine = async (sellerId) => {
       );
     }
 
-    await updateSyncDate(sellerId, 'PRICE', totalSynced);
+    if (extraPriceBatch.length) {
+      tasks.push(
+        limit(() =>
+          sendExtraDataPriceBatch(extraPriceBatch)
+            .then(() => {
+              extraPriceTotalSync += extraPriceBatch.length;
+            })
+            .catch((err) => {
+              failedBatches++;
+              console.error(`Batch failed (${extraPriceBatch.length} items):`, err.message);
+            })
+        )
+      );
+    }
+
+    await updateSyncDate(sellerId, 'PRICE', Math.max(totalSynced, extraPriceTotalSync));
 
     // Await remaining tasks
     if (tasks.length) {
@@ -480,7 +578,7 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     return {
       success: failedBatches === 0,
       message: 'Price sync completed',
-      totalSynced,
+      totalSynced: Math.max(totalSynced, extraPriceTotalSync),
       failedBatches,
     };
   } catch (err) {

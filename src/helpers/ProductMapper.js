@@ -347,14 +347,14 @@ export const mapProductToChannelEngine = (product) => {
     },
     {
       Key: 'noonPrice',
-      Value: product?.noonPrice || null,
+      Value: product?.noonPrice || product.price || 0,
       Type: 'TEXT',
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
     {
       Key: 'namshiPrice',
-      Value: product?.namshiPrice || null,
+      Value: product?.namshiPrice || product.price || 0,
       Type: 'TEXT',
       IsPublic: true,
       LanguageIsoCode: 'en',
