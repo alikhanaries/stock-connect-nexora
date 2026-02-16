@@ -705,6 +705,7 @@ const transformOrderResponse = (response) => {
     city: data.orderShippingAddress?.city,
     region: data.orderShippingAddress?.region,
     zipCode: data.orderShippingAddress?.zipCode,
+    country: data.orderShippingAddress?.countryIso,
   };
 
   return {
