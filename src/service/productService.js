@@ -739,7 +739,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   if (finalValidProducts.length > 0) {
     await resolveProductTypes(sellerId);
-    await resolveHierarchyStatus(sellerId);
+    await resolveHierarchyStatus(sellerId, productSkuCodes);
   }
 
   return {
