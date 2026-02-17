@@ -32,4 +32,5 @@ export const config = {
   OCP_API_KEY: process.env.OCP_API_KEY,
   BASE_URL: process.env.BASE_URL,
   AMAZON_ORDER_SHEET_URL: process.env.AMAZON_ORDER_SHEET_URL,
+  IS_OCP_ORDER_SYNC_ENABLED: process.env.OCP_ORDER_SYNC_FEATURE === 'true',
 };
