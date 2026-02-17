@@ -479,6 +479,10 @@ export const pushInActiveProductsToChannel = async (inactiveSkuList = []) => {
   if (!result?.success) {
     throw new Error(result?.message || 'Failed to remove inactive products from ChannelEngine');
   }
+
+  // ---- UPDATE SYNC DATE ONLY IF SUCCESSFUL ----
+  await Product.updateMany({ productSkuCode: { $in: skusToRemove } }, { $set: { syncedAt: new Date() } });
+
   return result;
 };
 

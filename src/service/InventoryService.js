@@ -11,7 +11,7 @@ import { ALLOWEDMARKETPLACES } from '#constants/common.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { pushBatch, pushInActiveProductsToChannel } from './productService.js';
 import { mapProductToChannelEngine } from '../helpers/ProductMapper.js';
-import { getExistingProductsBySkuFromCE } from './channel/ceService.js';
+import { chunkArray, getExistingProductsBySkuFromCE } from './channel/ceService.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -24,6 +24,7 @@ const MAX_RETRIES = 3;
 const MAX_TASK_BUFFER = 1000;
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
+const SKU_BATCH_SIZE = 50;
 
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
   const batchSize = Number(process.env.BATCH_SIZE) || 500;
@@ -370,7 +371,8 @@ export const syncStockToChannelEngine = async (sellerId) => {
         $ne: null,
         $regex: marketplaceRegex,
       },
-      $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
+      syncedAt: { $ne: null },
+      $expr: { $gt: ['$updatedAt', '$syncedAt'] },
     })
       .lean()
       .cursor();
@@ -481,14 +483,19 @@ const syncSkuAvailability = async (products, sellerId) => {
   }
 
   if (!skuSet.size) return;
+  const skuArray = [...skuSet];
+  const skuBatches = chunkArray(skuArray, SKU_BATCH_SIZE);
 
-  const ceProducts = await getExistingProductsBySkuFromCE([...skuSet]);
-
+  // Fetch CE products in batches
   const ceStatusMap = new Map();
-  ceProducts.forEach((p) => {
-    ceStatusMap.set(p.MerchantProductNo?.toUpperCase(), p.IsActive ? 'active' : 'inactive');
-  });
 
+  for (const batch of skuBatches) {
+    const ceProducts = await getExistingProductsBySkuFromCE(batch);
+    ceProducts.forEach((p) => {
+      const sku = p.MerchantProductNo?.trim().toUpperCase();
+      ceStatusMap.set(sku, p.IsActive ? 'active' : 'inactive');
+    });
+  }
   const pushList = [];
   const deleteList = [];
 
