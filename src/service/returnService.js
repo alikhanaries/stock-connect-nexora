@@ -506,6 +506,7 @@ export const getReturnById = async (id) => {
       totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
       orderInfo,
       returnLogsData,
+      omniful: returnData.omniful || null,
     };
 
     return formatReturnDetails(aggregatedResult);
@@ -813,6 +814,7 @@ export const getReturnsForWebhook = async (queryParams = {}) => {
     };
   }
 };
+
 export default {
   getReturns,
   getReturnsFromDatabase,
