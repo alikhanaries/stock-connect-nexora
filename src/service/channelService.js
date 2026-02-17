@@ -353,64 +353,65 @@ export const removeUserChannels = async (sellerId, ids) => {
       { skuList: 1 }
     ).lean();
 
-    if (!userChannelProducts.length) return 0;
+    const skuCodes = userChannelProducts.length
+      ? [...new Set(userChannelProducts.flatMap((doc) => doc.skuList.map((s) => s.skuCode)))]
+      : [];
 
-    const skuCodes = [...new Set(userChannelProducts.flatMap((doc) => doc.skuList.map((s) => s.skuCode)))];
+    if (skuCodes.length) {
+      // Get channel names
+      const channels = await Channel.find({ channelId: { $in: ids } }, { channelName: 1 }).lean();
 
-    // Get channel names
-    const channels = await Channel.find({ channelId: { $in: ids } }, { channelName: 1 }).lean();
+      const removedChannelNames = channels.map((c) => c.channelName);
 
-    const removedChannelNames = channels.map((c) => c.channelName);
+      // Update Product marketPlace
+      const products = await Product.find(
+        {
+          sellerId: new ObjectId(sellerId),
+          productSkuCode: { $in: skuCodes },
+        },
+        { productSkuCode: 1, marketPlace: 1 }
+      ).lean();
 
-    // Update Product marketPlace
-    const products = await Product.find(
-      {
-        sellerId: new ObjectId(sellerId),
-        productSkuCode: { $in: skuCodes },
-      },
-      { productSkuCode: 1, marketPlace: 1 }
-    ).lean();
+      const bulkOps = products.map((p) => {
+        const updatedMarketplaces = p.marketPlace
+          ?.split(',')
+          .map((s) => s.trim())
+          .filter((mp) => !removedChannelNames.includes(mp));
 
-    const bulkOps = products.map((p) => {
-      const updatedMarketplaces = p.marketPlace
-        ?.split(',')
-        .map((s) => s.trim())
-        .filter((mp) => !removedChannelNames.includes(mp));
-
-      return {
-        updateOne: {
-          filter: {
-            sellerId: new ObjectId(sellerId),
-            productSkuCode: p.productSkuCode,
-          },
-          update: {
-            $set: {
-              marketPlace: updatedMarketplaces?.length ? updatedMarketplaces.join(', ') : null,
-              updatedAt: new Date(),
+        return {
+          updateOne: {
+            filter: {
+              sellerId: new ObjectId(sellerId),
+              productSkuCode: p.productSkuCode,
+            },
+            update: {
+              $set: {
+                marketPlace: updatedMarketplaces?.length ? updatedMarketplaces.join(', ') : null,
+                updatedAt: new Date(),
+              },
             },
           },
+        };
+      });
+
+      if (bulkOps.length) {
+        await Product.bulkWrite(bulkOps);
+      }
+
+      // Reload updated products
+      const updatedProducts = await Product.find(
+        {
+          sellerId: new ObjectId(sellerId),
+          productSkuCode: { $in: skuCodes },
         },
-      };
-    });
+        { productSkuCode: 1, marketPlace: 1, _id: 0 }
+      ).lean();
+      // Build payload using existing helper
+      const payload = buildExtraDataPayload(updatedProducts);
 
-    if (bulkOps.length) {
-      await Product.bulkWrite(bulkOps);
-    }
-
-    // Reload updated products
-    const updatedProducts = await Product.find(
-      {
-        sellerId: new ObjectId(sellerId),
-        productSkuCode: { $in: skuCodes },
-      },
-      { productSkuCode: 1, marketPlace: 1, _id: 0 }
-    ).lean();
-
-    // Build payload using existing helper
-    const payload = buildExtraDataPayload(updatedProducts);
-
-    if (payload.length) {
-      await syncProductExtraDataToMarketplace(payload);
+      if (payload.length) {
+        await syncProductExtraDataToMarketplace(payload);
+      }
     }
 
     // delete mappings
