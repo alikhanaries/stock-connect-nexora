@@ -3,7 +3,7 @@ import { formatDateTime } from './Common.js';
 export const escapeCsv = (row) => {
   return row
     .map((field) => {
-      if (field === null || field === undefined || field === '') return 'N/A';
+      if (field === null || field === undefined || field === '') return '';
       const str = String(field);
       if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
         return `"${str.replace(/"/g, '""')}"`;
