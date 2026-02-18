@@ -146,6 +146,8 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
       const set = { updatedAt: now };
 
       if (data.price !== undefined) set.price = data.price;
+      if (data.namshiPrice !== undefined) set.namshiPrice = data.namshiPrice;
+      if (data.noonPrice !== undefined) set.noonPrice = data.noonPrice;
       if (data.minPrice !== undefined) set.minPrice = data.minPrice;
       if (data.maxPrice !== undefined) set.maxPrice = data.maxPrice;
       if (data.msrp !== undefined) set.msrp = data.msrp;
@@ -251,15 +253,9 @@ export const importPriceFromGoogleSheet = async (url, locale, sellerId) => {
   }
 };
 
-export const updateSingleProductPrice = async (
-  pricePayload, // { price, minPrice?, maxPrice?, msrp?, purchasePrice? }
-  locale,
-  sellerId
-) => {
+export const updateSingleProductPrice = async (pricePayload, locale, sellerId) => {
   try {
-    const { productId } = pricePayload;
-
-    const priceValue = Number(pricePayload.price);
+    const { productId, price, namshiPrice, noonPrice, minPrice, maxPrice, msrp, purchasePrice } = pricePayload;
     const now = new Date();
 
     // 1. Ensure product exists
@@ -273,7 +269,6 @@ export const updateSingleProductPrice = async (
 
     // 2. Build $set dynamically (ONLY provided fields)
     const setData = {
-      price: priceValue,
       updatedAt: now,
     };
 
@@ -290,7 +285,9 @@ export const updateSingleProductPrice = async (
         setData[key] = num;
       }
     };
-
+    addOptionalNumber('price');
+    addOptionalNumber('namshiPrice');
+    addOptionalNumber('noonPrice');
     addOptionalNumber('minPrice');
     addOptionalNumber('maxPrice');
     addOptionalNumber('msrp');
@@ -317,23 +314,35 @@ export const updateSingleProductPrice = async (
 
     // 4. Update product price only (optional fields stay in Price)
     const productSet = {
-      price: priceValue,
       updatedAt: now,
     };
 
-    if (pricePayload.minPrice !== undefined) productSet.minPrice = pricePayload.minPrice;
-    if (pricePayload.maxPrice !== undefined) productSet.maxPrice = pricePayload.maxPrice;
-    if (pricePayload.msrp !== undefined) productSet.msrp = pricePayload.msrp;
-    if (pricePayload.purchasePrice !== undefined) productSet.purchasePrice = pricePayload.purchasePrice;
+    if (price !== undefined) productSet.price = price;
+    if (namshiPrice !== undefined) productSet.namshiPrice = namshiPrice;
+    if (noonPrice !== undefined) productSet.noonPrice = noonPrice;
+    if (minPrice !== undefined) productSet.minPrice = minPrice;
+    if (maxPrice !== undefined) productSet.maxPrice = maxPrice;
+    if (msrp !== undefined) productSet.msrp = msrp;
+    if (purchasePrice !== undefined) productSet.purchasePrice = purchasePrice;
 
     // Update Product
     await Product.updateOne({ _id: productId }, { $set: productSet });
 
-    return {
+    let sendData = {
       productId,
       priceId: priceDoc._id,
-      price: priceDoc.price,
       updatedAt: priceDoc.updatedAt,
+    };
+    if (price !== undefined) sendData.price = price;
+    if (namshiPrice !== undefined) sendData.namshiPrice = namshiPrice;
+    if (noonPrice !== undefined) sendData.noonPrice = noonPrice;
+    if (minPrice !== undefined) sendData.minPrice = minPrice;
+    if (maxPrice !== undefined) sendData.maxPrice = maxPrice;
+    if (msrp !== undefined) sendData.msrp = msrp;
+    if (purchasePrice !== undefined) sendData.purchasePrice = purchasePrice;
+
+    return {
+      ...sendData,
     };
   } catch (err) {
     console.error('Service updateSingleProductPrice error:', err);
@@ -386,6 +395,54 @@ async function sendPriceBatch(priceUpdates, retries = MAX_RETRIES) {
   }
 }
 
+async function sendExtraDataPriceBatch(mariketPriceUpdates, retries = MAX_RETRIES) {
+  try {
+    const response = await fetch(
+      `${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json-patch+json' },
+        body: JSON.stringify(mariketPriceUpdates),
+      }
+    );
+
+    const text = await response.text();
+
+    if (!response.ok) {
+      const err = new Error(`HTTP ${response.status}: ${text}`);
+      err.statusCode = response.status;
+      throw err;
+    }
+
+    if (response.ok && text) {
+      const result = JSON.parse(text);
+
+      if (result.Content?.RejectedCount > 0 && retries > 0) {
+        const failedProductSku = new Set(result.Content?.ProductMessages.map((r) => r.Reference));
+        const newBatch = mariketPriceUpdates
+          .filter((item) => failedProductSku.has(item.MerchantProductNo))
+          .map((item) => ({
+            ...item,
+            Operations: item.Operations.map((op) => ({ ...op, Op: 'add' })),
+          }));
+        return await sendExtraDataPriceBatch(newBatch, retries - 1);
+      }
+
+      return result;
+    }
+
+    return { success: true };
+  } catch (err) {
+    if ((err.statusCode >= 400 && err.statusCode < 500) || retries <= 0) {
+      console.error(`Giving up after error:`, err.message);
+      throw err;
+    }
+    const delay = (MAX_RETRIES - retries + 1) * 1000;
+    await new Promise((r) => setTimeout(r, delay));
+    return sendExtraDataPriceBatch(mariketPriceUpdates, retries - 1);
+  }
+}
+
 export const syncPriceToChannelEngine = async (sellerId) => {
   try {
     if (!ObjectId.isValid(sellerId)) {
@@ -405,7 +462,7 @@ export const syncPriceToChannelEngine = async (sellerId) => {
         },
         price: { $type: 'number', $gte: 0 },
       },
-      { productSkuCode: 1, price: 1 }
+      { productSkuCode: 1, price: 1, namshiPrice: 1, noonPrice: 1 }
     )
       .lean()
       .cursor();
@@ -414,6 +471,8 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     let totalSynced = 0;
     let failedBatches = 0;
     const tasks = [];
+    let extraPriceBatch = [];
+    let extraPriceTotalSync = 0;
 
     for await (const product of cursor) {
       if (!product.productSkuCode) continue;
@@ -422,9 +481,26 @@ export const syncPriceToChannelEngine = async (sellerId) => {
         MerchantProductNo: product.productSkuCode,
         Price: product.price,
       });
+
+      extraPriceBatch.push({
+        MerchantProductNo: product.productSkuCode,
+        Operations: [
+          {
+            Op: 'replace',
+            Key: 'namshiPrice',
+            Value: product.namshiPrice || product.price,
+          },
+          {
+            Op: 'replace',
+            Key: 'noonPrice',
+            Value: product.noonPrice || product.price,
+          },
+        ],
+      });
       if (batch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
         const payload = batch;
         batch = [];
+
         tasks.push(
           limit(() =>
             sendPriceBatch(payload)
@@ -438,7 +514,23 @@ export const syncPriceToChannelEngine = async (sellerId) => {
           )
         );
       }
+      if (extraPriceBatch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
+        const payload = extraPriceBatch;
+        extraPriceBatch = [];
 
+        tasks.push(
+          limit(() =>
+            sendExtraDataPriceBatch(payload)
+              .then(() => {
+                extraPriceTotalSync += payload.length;
+              })
+              .catch((err) => {
+                failedBatches++;
+                console.error(`Batch failed (${payload.length} items):`, err.message);
+              })
+          )
+        );
+      }
       if (tasks.length >= MAX_TASK_BUFFER) {
         await Promise.all(tasks);
         tasks.length = 0;
@@ -461,7 +553,22 @@ export const syncPriceToChannelEngine = async (sellerId) => {
       );
     }
 
-    await updateSyncDate(sellerId, 'PRICE', totalSynced);
+    if (extraPriceBatch.length) {
+      tasks.push(
+        limit(() =>
+          sendExtraDataPriceBatch(extraPriceBatch)
+            .then(() => {
+              extraPriceTotalSync += extraPriceBatch.length;
+            })
+            .catch((err) => {
+              failedBatches++;
+              console.error(`Batch failed (${extraPriceBatch.length} items):`, err.message);
+            })
+        )
+      );
+    }
+
+    await updateSyncDate(sellerId, 'PRICE', Math.max(totalSynced, extraPriceTotalSync));
 
     // Await remaining tasks
     if (tasks.length) {
@@ -471,7 +578,7 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     return {
       success: failedBatches === 0,
       message: 'Price sync completed',
-      totalSynced,
+      totalSynced: Math.max(totalSynced, extraPriceTotalSync),
       failedBatches,
     };
   } catch (err) {
@@ -496,6 +603,8 @@ export const upsertPricesForProducts = async ({ sellerId, productSkuCodes, batch
       sellerId: 1,
       productSkuCode: 1,
       price: 1,
+      noonPrice: 1,
+      namshiPrice: 1,
       minPrice: 1,
       maxPrice: 1,
       msrp: 1,
@@ -518,6 +627,8 @@ export const upsertPricesForProducts = async ({ sellerId, productSkuCodes, batch
         },
         $set: {
           price: product.price,
+          noonPrice: product.noonPrice,
+          namshiPrice: product.namshiPrice,
           minPrice: product.minPrice ?? undefined,
           maxPrice: product.maxPrice ?? undefined,
           msrp: product.msrp ?? undefined,

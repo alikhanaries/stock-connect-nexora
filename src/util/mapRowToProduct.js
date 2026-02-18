@@ -59,6 +59,8 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     brand: brand,
     ean: r.ean || null,
     price: cleanNumber(r.price),
+    noonPrice: cleanNumber(r.noonprice),
+    namshiPrice: cleanNumber(r.namshiprice),
     minPrice: cleanNumber(r.minprice) || null,
     maxPrice: cleanNumber(r.maxprice) || null,
     msrp: cleanNumber(r.msrp),

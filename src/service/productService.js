@@ -130,7 +130,9 @@ const fetchProducts = async (query, sellerId) => {
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
-      .select('_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId')
+      .select(
+        '_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId noonPrice namshiPrice'
+      )
       .lean(),
 
     Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync'),
@@ -611,6 +613,12 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
     if (isNewSku && isSimple) {
       if (typeof product.price !== 'number' || product.price <= 0) {
         rowErrors.push('Price must be greater than 0 for simple products.');
+      }
+      if (typeof product.noonPrice !== 'number' || product.noonPrice <= 0) {
+        rowErrors.push('Noon Price must be greater than 0 for simple products.');
+      }
+      if (typeof product.namshiPrice !== 'number' || product.namshiPrice <= 0) {
+        rowErrors.push('Namshi Price must be greater than 0 for simple products.');
       }
     }
 
