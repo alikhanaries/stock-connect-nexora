@@ -142,16 +142,33 @@ export async function resolveProductTypes(sellerId) {
  * - Parent / Grandparent → ACTIVE if any child is active
  * - Status always propagates upward (child → parent → grandparent)
  */
-export async function resolveHierarchyStatus(sellerId) {
+export async function resolveHierarchyStatus(sellerId, affectedSkus = []) {
+  if (!affectedSkus.length) return;
   // fetch seller
   const seller = await Seller.findById(sellerId, { name: 1 }).lean();
   const sellerName = seller?.name?.toLowerCase();
   if (!sellerName) throw new Error('Seller not found');
   // special rule sellers
   const isLowStockThresholdSeller = LOW_STOCK_THRESHOLD_SELLERS.includes(sellerName);
+  const baseProducts = await Product.find(
+    { sellerId, productSkuCode: { $in: affectedSkus } },
+    {
+      productSkuCode: 1,
+      parentProductSkuCode: 1,
+      grandParentProductSkuCode: 1,
+    }
+  ).lean();
+
+  const hierarchySkus = new Set();
+
+  for (const p of baseProducts) {
+    hierarchySkus.add(p.productSkuCode);
+    if (p.parentProductSkuCode) hierarchySkus.add(p.parentProductSkuCode);
+    if (p.grandParentProductSkuCode) hierarchySkus.add(p.grandParentProductSkuCode);
+  }
 
   const products = await Product.find(
-    { sellerId },
+    { sellerId, productSkuCode: { $in: [...hierarchySkus] } },
     {
       productSkuCode: 1,
       parentProductSkuCode: 1,
@@ -207,7 +224,7 @@ export async function resolveHierarchyStatus(sellerId) {
   await Product.updateMany(
     {
       sellerId,
-      productSkuCode: { $nin: [...mustBeActive] },
+      productSkuCode: { $in: affectedSkus.filter((s) => !mustBeActive.has(s)) },
     },
     { $set: { status: 'inactive' } }
   );

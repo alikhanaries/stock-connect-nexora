@@ -10,7 +10,6 @@ const ReturnSchema = new mongoose.Schema(
     },
     merchantReturnNo: {
       type: String,
-      required: true,
       index: true,
     },
     merchantOrderNo: {
@@ -76,6 +75,9 @@ const ReturnSchema = new mongoose.Schema(
     ],
     shipmentId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Shipment' }],
     logs: [ReturntatusInfo],
+    omniful: {
+      type: mongoose.Schema.Types.Mixed,
+    },
   },
   {
     timestamps: true,

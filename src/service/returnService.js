@@ -246,6 +246,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const formattedReturns = results.map((r) => ({
       _id: r._id,
       orderID: r.orderID || null,
+      channelId: r.channelId || null,
       quantity: r.quantity || 0,
       totalPrice: r.totalPrice || null,
       customer: r.customer || null,
@@ -255,7 +256,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
       status: r.status,
       platform: r.platform,
       returnId: r.returnId,
-      channelImage: channelMap[results[0].channelId],
+      channelImage: channelMap[r.channelId],
     }));
 
     return {
@@ -506,6 +507,7 @@ export const getReturnById = async (id) => {
       totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
       orderInfo,
       returnLogsData,
+      omniful: returnData.omniful || null,
     };
 
     return formatReturnDetails(aggregatedResult);
@@ -813,6 +815,7 @@ export const getReturnsForWebhook = async (queryParams = {}) => {
     };
   }
 };
+
 export default {
   getReturns,
   getReturnsFromDatabase,

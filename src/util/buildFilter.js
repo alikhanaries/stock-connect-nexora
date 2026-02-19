@@ -93,6 +93,13 @@ export const castFilter = (obj) => {
     }
 
     if (STRING_NUMERIC_FIELDS.has(k) && v && typeof v === 'object' && !Array.isArray(v)) {
+      // passing through empty / not-empty filters as-is
+      const passThrough = ['$in', '$nin'];
+      const hasOnlyPassThrough = Object.keys(v).every((op) => passThrough.includes(op));
+      if (hasOnlyPassThrough) {
+        out[k] = v;
+        continue;
+      }
       const exprs = Object.entries(v).map(([op, val]) => buildExprCondition(k, op, val));
       out.$and = out.$and ? out.$and.concat(exprs) : exprs;
       continue;

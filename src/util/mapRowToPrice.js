@@ -22,12 +22,22 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
   }
 
   // Price (mandatory)
-  if (normalized.price === '') {
+  if (normalized.price === '' || normalized.namshiprice === '' || normalized.noonprice === '') {
     errors.push(`${locale.PRICE_MISSING} ${normalized.productskucode}`);
   }
 
   const price = Number(normalized.price);
   if (normalized.price !== '' && (Number.isNaN(price) || price < 0)) {
+    errors.push(`${locale.INVALID_PRICE} ${normalized.productskucode}`);
+  }
+
+  const namshiPrice = Number(normalized.namshiprice);
+  if (normalized.namshiprice !== '' && (Number.isNaN(namshiPrice) || namshiPrice < 0)) {
+    errors.push(`${locale.INVALID_PRICE} ${normalized.productskucode}`);
+  }
+
+  const noonPrice = Number(normalized.noonprice);
+  if (normalized.noonprice !== '' && (Number.isNaN(noonPrice) || noonPrice < 0)) {
     errors.push(`${locale.INVALID_PRICE} ${normalized.productskucode}`);
   }
 
@@ -71,6 +81,8 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
     rowNumber,
     productSkuCode: normalized.productskucode,
     price,
+    namshiPrice,
+    noonPrice,
   };
 
   if (minPrice !== undefined) priceData.minPrice = minPrice;

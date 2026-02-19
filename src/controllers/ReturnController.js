@@ -2,6 +2,7 @@ import returnService from '#service/returnService.js';
 import Responses from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 import mongoose from 'mongoose';
+import omnifullService from '#service/omnifullService.js';
 
 // Gets all returns stored in the database with pagination and filtering.
 
@@ -236,6 +237,25 @@ export const fetchReturnsWebhook = async () => {
     errorLog(error);
   }
 };
+
+// Handles Omniful QC webhook
+export const handleOmnifulQCWebhook = async (req, res) => {
+  try {
+    console.log('in side omniful webhook----------------------');
+    const result = await omnifullService.handleOmnifulQCWebhook(req.body);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || 'Failed to process QC webhook', result.statusCode || 400);
+    }
+
+    return Responses.successResponse(res, result.message || 'QC details updated successfully', 200, result.data);
+  } catch (error) {
+    console.error('Controller Error: handleOmnifulQCWebhook:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getAllReturns,
   syncReturns,
@@ -246,4 +266,5 @@ export default {
   getReturnById,
   exportReturns,
   fetchReturnsWebhook,
+  handleOmnifulQCWebhook,
 };

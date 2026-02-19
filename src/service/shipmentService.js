@@ -1136,26 +1136,27 @@ const transformShipmentResponse = (response) => {
   const data = response;
 
   // Delivery Address
+  const d = data.deliveryDetails || {};
   const deliveryDetails = {
-    address: [data.deliveryDetails?.address].filter(Boolean).join(', '),
-    city: data.deliveryDetails?.city,
-    region: data.deliveryDetails?.country,
-    zipCode: data.deliveryDetails?.postcode,
-    name: data.deliveryDetails?.name || data.deliveryDetails?.email || 'NA',
-    email: data.deliveryDetails?.email,
-    country: data.deliveryDetails?.country,
-    phoneNumber: data.deliveryDetails?.phone,
+    address: [d.address].filter(Boolean).join(', ') || 'NA',
+    city: d.city ?? 'NA',
+    region: d.country ?? 'NA',
+    zipCode: d.postcode ?? 'NA',
+    name: d.name ?? d.email ?? 'NA',
+    email: d.email ?? 'NA',
+    country: d.country ?? 'NA',
+    phoneNumber: d.phone ?? 'NA',
   };
   // Pickup Address
   const pickUpDetails = {
-    address: data.pickupDetails?.address,
-    city: data.pickupDetails?.city,
-    region: data.pickupDetails?.country,
-    zipCode: data.pickupDetails?.postcode,
-    name: data.pickupDetails?.name || data.pickupDetails?.email || 'NA',
-    email: data.pickupDetails?.email,
-    country: data.pickupDetails?.country,
-    phoneNumber: data.pickupDetails?.phone,
+    address: data.pickupDetails?.address ?? 'NA',
+    city: data.pickupDetails?.city ?? 'NA',
+    region: data.pickupDetails?.country ?? 'NA',
+    zipCode: data.pickupDetails?.postcode ?? 'NA',
+    name: data.pickupDetails?.name ?? data.pickupDetails?.email ?? 'NA',
+    email: data.pickupDetails?.email ?? 'NA',
+    country: data.pickupDetails?.country ?? 'NA',
+    phoneNumber: data.pickupDetails?.phone ?? 'NA',
   };
 
   // Payment Info
@@ -1168,10 +1169,11 @@ const transformShipmentResponse = (response) => {
   };
 
   // Customer Info
+  const c = data.customerInfo || {};
   const customerInfo = {
-    name: `${data.customerInfo?.firstName || ''} ${data.customerInfo?.lastName || ''}`.trim(),
-    email: data.customerInfo?.email,
-    phoneNo: data.customerInfo?.phone,
+    name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || 'NA',
+    email: c.email ?? 'NA',
+    phoneNo: c.phone ?? 'NA',
   };
 
   return {
