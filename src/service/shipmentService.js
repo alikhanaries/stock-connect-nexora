@@ -497,6 +497,15 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
         },
       },
       { $unwind: { path: '$deliveryInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'channelengineorders',
+          localField: 'orderId',
+          foreignField: '_id',
+          as: 'orderDetails',
+        },
+      },
+      { $unwind: { path: '$orderDetails', preserveNullAndEmptyArrays: true } },
     ];
 
     // Build OR search conditions
@@ -518,9 +527,9 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     aggregationPipeline.push(
       {
         $project: {
-          orderId: 1,
           createdAt: '$createdAt',
           status: 1,
+          shipmentDate: '$submissionDate',
           airWaybillNo: 1,
           sellerId: 1,
           shipmentMethod: 1,
@@ -529,6 +538,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
             name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
             email: { $ifNull: ['$deliveryInfo.email', '$shipmentMerchantDetails.email'] },
           },
+          orderId: '$orderDetails.orderId',
         },
       },
       { $sort: { createdAt: sortDirection } },
@@ -958,7 +968,7 @@ export const getSingleShipmentService = async (id) => {
   const shipmentData = await Shipment.findOne({ _id: id }, { type: 1, _id: 1 });
 
   if (!shipmentData) {
-    throw new Error('Shipment not found');
+    return null;
   }
   const shipmentType = shipmentData?.type;
   const pipeLine = [{ $match: { _id: new mongoose.Types.ObjectId(id) } }];
@@ -1109,6 +1119,8 @@ export const getSingleShipmentService = async (id) => {
         pickupDetails: 1,
         customerInfo: '$orderDetails.orderCustomer',
         paymentInfo: '$orderDetails.orderPaymentDetails',
+        orderId: '$orderDetails.orderId',
+        orderMongoId: '$orderDetails._id',
       },
     }
   );
@@ -1161,11 +1173,11 @@ const transformShipmentResponse = (response) => {
 
   // Payment Info
   const paymentInfo = {
-    paymentReferenceNo: data.paymentInfo.paymentReferenceNo,
-    paymentMethod: data?.paymentInfo?.paymentMethod,
-    currencyCode: data?.paymentInfo?.currencyCode,
-    vatNo: data?.paymentInfo?.vatNo,
-    orderId: data?.paymentInfo?.orderId,
+    paymentReferenceNo: data?.paymentInfo?.paymentReferenceNo ?? '',
+    paymentMethod: data?.paymentInfo?.paymentMethod ?? 'UNKNOWN',
+    currencyCode: data?.paymentInfo?.currencyCode ?? 'SAR',
+    vatNo: data?.paymentInfo?.vatNo ?? '',
+    orderId: data?.paymentInfo?.orderId ?? null,
   };
 
   // Customer Info
@@ -1179,9 +1191,11 @@ const transformShipmentResponse = (response) => {
   return {
     _id: data?._id,
     orderId: data?.orderId,
+    orderMongoId: data?.orderMongoId,
     paymentInfo,
     customerInfo,
     status: data.status,
+    shipmentDate: data?.submissionDate,
     products: data.products,
     airWaybillNo: data.airWaybillNo,
     merchantShipmentNo: data.merchantShipmentNo,
@@ -1989,6 +2003,10 @@ export const createManualShipmentService = async (shipmentData) => {
       submissionDate: new Date(),
       shipmentMethod: 'MANUAL',
       isMerchantCreator: true,
+      shipmentMerchantDetails: {
+        name: method,
+        email: 'NA',
+      },
       ...(description && { description }),
     }).save();
 
