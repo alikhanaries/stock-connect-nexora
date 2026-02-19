@@ -58,6 +58,20 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+    {
+      Key: 'noonPrice',
+      Value: product?.noonPrice || product.price || 0,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'namshiPrice',
+      Value: product?.namshiPrice || product.price || 0,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
   ];
   const attributesString = product.attributes || null;
   return {

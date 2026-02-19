@@ -371,7 +371,8 @@ export const syncStockToChannelEngine = async (sellerId) => {
         $ne: null,
         $regex: marketplaceRegex,
       },
-      $or: [{ syncedAt: null }, { $expr: { $gt: ['$updatedAt', '$syncedAt'] } }],
+      syncedAt: { $ne: null },
+      $expr: { $gt: ['$updatedAt', '$syncedAt'] },
     })
       .lean()
       .cursor();

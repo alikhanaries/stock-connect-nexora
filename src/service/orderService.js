@@ -11,7 +11,6 @@ import orderhelper, {
   flattenAggregatedOrder,
   getAggregatedOrderHeaders,
   getOrganizedOrderRowData,
-  sanitizeAmazonOrdersData,
 } from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -30,10 +29,6 @@ import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
-import { Readable } from 'stream';
-import { processAmazonOrderImportStream } from '#helpers/amazonOrder.js';
-import { convertGoogleSheetUrlToExport } from '../helpers/googleSheetFormaterHandler.js';
-import { errorLog } from '../middleware/errorLogMiddleware.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
@@ -496,42 +491,6 @@ export const processOrders = async (orders, sellerId) => {
   }
 };
 
-export const syncAmazonOrders = async (sellerId, locale) => {
-  try {
-    const url = config.AMAZON_ORDER_SHEET_URL;
-    if (!url) {
-      return { success: false, message: 'Google sheet url is required' };
-    }
-    const exportUrl = await convertGoogleSheetUrlToExport(url);
-
-    if (!exportUrl) {
-      return { success: false, message: 'Invalid google sheet url' };
-    }
-
-    const { success, data } = await getNewAmazonOrders(exportUrl, locale, sellerId);
-
-    if (!success) {
-      return { success: false, message: 'unable to fetch data from amazon' };
-    }
-    if (data.length === 0) {
-      return { success: true, message: 'already up to date' };
-    }
-
-    const dataSavedInDb = await processAmazonOrders(data, sellerId);
-
-    if (!dataSavedInDb.success) {
-      return { success: false, message: dataSavedInDb.message };
-    }
-
-    const newUpdateCount = dataSavedInDb?.data?.upsertedCount ? dataSavedInDb?.data?.upsertedCount : 0;
-
-    return { success: true, message: 'Orders synced successfully', data: { newUpdateCount } };
-  } catch (error) {
-    errorLog(error);
-    return { success: false, message: error.message };
-  }
-};
-
 export async function getNewOrders() {
   try {
     let page = 1;
@@ -731,6 +690,7 @@ const transformOrderResponse = (response) => {
     city: data.orderShippingAddress?.city,
     region: data.orderShippingAddress?.region,
     zipCode: data.orderShippingAddress?.zipCode,
+    country: data.orderShippingAddress?.countryIso,
   };
 
   return {
@@ -1212,66 +1172,6 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
   }
 };
 
-export async function getNewAmazonOrders(url, locale, sellerId) {
-  try {
-    console.log('Fetching Google Sheet from URL:', url);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
-    const stream = Readable.fromWeb(res.body);
-    return await processAmazonOrderImportStream(stream, { locale, sellerId });
-  } catch (error) {
-    console.error('Error fetching new orders from ChannelEngine:', error.message);
-    return { success: false, message: error.message };
-  }
-}
-
-export const processAmazonOrders = async (orders, sellerId) => {
-  try {
-    const operations = await sanitizeAmazonOrdersData(orders, sellerId);
-
-    const result = await Order.bulkWrite(operations);
-    const upsertedOrderIds = Object.values(result.upsertedIds || {});
-    const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
-
-    const orderLogs = upsertedIndexes.map((index, i) => {
-      const order = orders[index];
-      const orderId = upsertedOrderIds[i];
-
-      const logDetails = [
-        {
-          status: 'CREATED',
-          description: 'Order Placed',
-          createdAt: new Date(order?.OrderDate || order?.orderDate || Date.now()),
-        },
-      ];
-
-      return {
-        orderId,
-        details: logDetails,
-      };
-    });
-
-    // Insert logs only for newly created orders
-    if (orderLogs.length > 0) {
-      await OrderLogs.insertMany(orderLogs);
-      console.log('Inserted order logs:', orderLogs.length);
-    } else {
-      console.log('No new orders created — skipping log insertion');
-    }
-
-    return {
-      success: true,
-      data: {
-        ...result,
-        insertedOrderIds: upsertedOrderIds,
-      },
-    };
-  } catch (error) {
-    console.error('Error in processOrders:', error.message);
-    return { success: false, message: error.message };
-  }
-};
-
 // Fetch CE shipment details
 export const syncChannelEngineShipment = async (userId) => {
   try {
@@ -1320,7 +1220,4 @@ export default {
   cancelPartialOrder,
   exportOrdersToCSV,
   syncChannelEngineShipment,
-  getNewAmazonOrders,
-  processAmazonOrders,
-  syncAmazonOrders,
 };
