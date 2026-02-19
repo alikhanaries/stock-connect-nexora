@@ -13,6 +13,7 @@ import {
   addProductsToUserChannel,
   unlinkProductFromChannel,
   exportProducts,
+  exportUserChannelProducts,
   searchProducts,
   freezeOrUnfreezeProducts,
 } from '#controllers/ProductController.js';
@@ -469,6 +470,15 @@ productsRouter.get(
   authMiddleware,
   verifySellerAccess,
   exportProducts
+);
+
+productsRouter.get(
+  '/export-channel-products/:channelId',
+  getUserChannelProductsValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  exportUserChannelProducts
 );
 
 /**

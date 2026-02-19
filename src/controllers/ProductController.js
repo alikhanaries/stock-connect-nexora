@@ -8,6 +8,7 @@ import { PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
+import { exportUserChannelProductsToCSV } from '../service/exportProductService.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -467,6 +468,44 @@ export const exportProducts = async (req, res) => {
   }
 };
 
+export const exportUserChannelProducts = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { channelId } = req.params;
+
+    if (!channelId) {
+      return failResponse(res, req?.locale?.CHANNEL_ID_REQUIRED || 'Channel ID is required', 400);
+    }
+
+    const seller = await Seller.findById(sellerId).select('name').lean();
+
+    if (!seller) {
+      return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const filename = `${sellerName}_ChannelProductExport_${exportDate}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    res.write('\uFEFF');
+
+    res.write(PRODUCT_EXPORT_HEADERS.join(',') + '\n');
+
+    await exportUserChannelProductsToCSV(sellerId, channelId, req.query, res);
+
+    return res.end();
+  } catch (error) {
+    console.error('Controller Error: exportUserChannelProducts:', error.message);
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
 export const searchProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId;
@@ -504,6 +543,7 @@ export default {
   addProductsToUserChannel,
   unlinkProductFromChannel,
   exportProducts,
+  exportUserChannelProducts,
   searchProducts,
   freezeOrUnfreezeProducts,
 };
