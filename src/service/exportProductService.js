@@ -35,8 +35,8 @@ export const exportUserChannelProductsToCSV = async (sellerId, channelId, query,
 
     for await (const product of cursor) {
       const row = [
-        product.grandParentProductSkuCode || ' ',
-        product.parentProductSkuCode || ' ',
+        product.grandParentProductSkuCode || '',
+        product.parentProductSkuCode || '',
         product.productSkuCode || '',
         product.brand || '',
         product.categoryTrail || '',
