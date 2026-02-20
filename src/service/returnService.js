@@ -198,6 +198,16 @@ export const getReturnsFromDatabase = async (query = {}) => {
           },
           quantity: '$totalQuantity',
           totalPrice: { $ifNull: ['$orderTotalPrice', '$totalPrice'] },
+          orderSkus: {
+            $map: {
+              input: { $ifNull: ['$orderInfo.orderSkuList.skuList', []] },
+              as: 'sku',
+              in: {
+                productSku: '$$sku.merchantProductNo',
+                productPrice: '$$sku.originalUnitPriceInclVat',
+              },
+            },
+          },
         },
       }
     );
@@ -243,21 +253,39 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
     const totalReturns = countResult?.[0]?.total || 0;
 
-    const formattedReturns = results.map((r) => ({
-      _id: r._id,
-      orderID: r.orderID || null,
-      channelId: r.channelId || null,
-      quantity: r.quantity || 0,
-      totalPrice: r.totalPrice || null,
-      customer: r.customer || null,
-      placedOn: r.placedOn,
-      email: r.email || null,
-      phoneNumber: r.phoneNumber || null,
-      status: r.status,
-      platform: r.platform,
-      returnId: r.returnId,
-      channelImage: channelMap[r.channelId],
-    }));
+    const formattedReturns = results.map((r) => {
+      const returnProductMap = new Map((r.products || []).map((p) => [p.productSkuCode, p.quantity || 0]));
+
+      const matchedSkus = (r.orderSkus || [])
+        .filter((sku) => returnProductMap.has(sku.productSku))
+        .map((sku) => {
+          const quantity = returnProductMap.get(sku.productSku);
+          return {
+            productSku: sku.productSku,
+            productPrice: sku.productPrice,
+            quantity,
+            totalPrice: (sku.productPrice || 0) * quantity,
+          };
+        });
+
+      const totalPrice = matchedSkus.reduce((sum, sku) => sum + sku.totalPrice, 0);
+
+      return {
+        _id: r._id,
+        orderID: r.orderID || null,
+        channelId: r.channelId || null,
+        quantity: r.quantity || 0,
+        totalPrice,
+        customer: r.customer || null,
+        placedOn: r.placedOn,
+        email: r.email || null,
+        phoneNumber: r.phoneNumber || null,
+        status: r.status,
+        platform: r.platform,
+        returnId: r.returnId,
+        channelImage: channelMap[r.channelId],
+      };
+    });
 
     return {
       success: formattedReturns.length > 0,
