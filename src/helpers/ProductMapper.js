@@ -38,6 +38,13 @@ export const mapProductToChannelEngine = (product) => {
       LanguageIsoCode: 'en',
     },
     {
+      Key: 'ageRangeDescription',
+      Value: product.ageRangeDescription || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
       Key: 'countryOfOrigin',
       Value: product.countryOfOrigin || null,
       Type: 'TEXT',

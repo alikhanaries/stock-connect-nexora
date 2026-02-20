@@ -89,6 +89,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     hsCodeAE: r.hscodeae || null,
     hsCodeSA: r.hscodesa || null,
     gender: r.gender || '',
+    ageRangeDescription: r.agerangedescription || '',
     countryOfOrigin: r.countryoforigin || '',
   };
 

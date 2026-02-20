@@ -17,7 +17,7 @@ import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
-import { buildFilter, castFilter } from '#utils/buildFilter.js';
+import { buildFilter, castFilter, remapExprField } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -1081,7 +1081,9 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
       productLevelFilter[key] = castedBaseFilter[key].map((cond) => {
         const remapped = {};
         for (const [field, val] of Object.entries(cond)) {
-          if (field.startsWith('$')) {
+          if (field === '$expr') {
+            remapped.$expr = remapExprField(val, 'productDetails');
+          } else if (field.startsWith('$')) {
             remapped[field] = val;
           } else {
             remapped[`productDetails.${field}`] = val;
