@@ -132,10 +132,8 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    const orderData = data.filter((order) => order.GlobalChannelId !== 1635);
-
     const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
-      orderService.processOrders(orderData, sellerId),
+      orderService.processOrders(data, sellerId),
       config.IS_OCP_ORDER_SYNC_ENABLED
         ? getSyncedOrdersOcp(sellerId)
         : Promise.resolve({ success: true, message: 'OCP order sync is disabled' }),
