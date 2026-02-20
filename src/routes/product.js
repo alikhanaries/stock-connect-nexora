@@ -473,7 +473,7 @@ productsRouter.get(
 );
 
 productsRouter.get(
-  '/export-channel-products/:channelId',
+  '/export-products/:channelId',
   getUserChannelProductsValidator,
   checkLanguage,
   authMiddleware,
