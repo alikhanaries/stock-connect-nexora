@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
-import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS } from '#constants/dashboard.js';
+import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS, CHANNEL_STATUS_CONFIG } from '#constants/dashboard.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
 import Inventory from '#models/Inventory.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 import {
   getDateRange,
   getPreviousRange,
@@ -17,6 +18,7 @@ import {
   isComparablePeriod,
   buildGlobalChannelFilter,
   pickSelectedGlobalNames,
+  buildChannelStatusPipeline,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
@@ -537,6 +539,36 @@ const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate,
   return Array.isArray(data) ? data : [];
 };
 
+export const getChannelStatus = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
+  if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
+
+  const channelIds = pickChannelIdsFromChannel(channel);
+  const pipeline = buildChannelStatusPipeline(sellerObjectIds, range, channelIds);
+
+  const result = await UserChannelProducts.aggregate(pipeline).allowDiskUse(true);
+  const agg = result?.[0] ?? {};
+
+  const total = agg?.totalCount?.[0]?.count ?? 0;
+  const statusCounts = Array.isArray(agg?.statusCounts) ? agg.statusCounts : [];
+  const statusMap = new Map(statusCounts.map((r) => [String(r.status).toUpperCase(), r.count]));
+
+  return {
+    total,
+    breakdown: CHANNEL_STATUS_CONFIG.map(({ label, key }) => ({
+      key: label,
+      value: statusMap.get(key) ?? 0,
+    })),
+  };
+};
+
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,
@@ -546,4 +578,5 @@ export default {
   getInventoryStatus,
   getSalesByChannel,
   getOrdersByChannel,
+  getChannelStatus,
 };
