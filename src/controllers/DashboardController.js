@@ -49,10 +49,16 @@ export const getorderOverview = async (req, res) => {
 
 export const getShipmentAnalytics = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const { period, channelId } = req.query;
+    const sellerIds = req.sellerIds ?? req.sellerId;
+    const { period, startDate, endDate, month, channel } = req.query;
 
-    const data = await dashboardService.getShipmentAnalytics(sellerId, period, channelId);
+    const data = await dashboardService.getShipmentAnalytics(sellerIds, period, {
+      startDate,
+      endDate,
+      month,
+      channel,
+    });
+
     if (!data) {
       return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
     }
@@ -87,10 +93,17 @@ export const getAnalytics = async (req, res) => {
 
 export const getInventoryStatus = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const { period } = req.query;
+    const sellerIds = req.sellerIds ?? req.sellerId;
+    const { period, startDate, endDate, month, channel, type } = req.query;
 
-    const data = await dashboardService.getInventoryStatus(sellerId, period);
+    const data = await dashboardService.getInventoryStatus(sellerIds, period, {
+      startDate,
+      endDate,
+      month,
+      channel,
+      type,
+    });
+
     if (!data) {
       return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
     }
@@ -103,9 +116,16 @@ export const getInventoryStatus = async (req, res) => {
 
 export const getTopPerformersProducts = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-    const { period, type } = req.query;
-    const data = await dashboardService.getTopPerformersProducts(sellerId, period, type);
+    const sellerIds = req.sellerIds ?? req.sellerId;
+    const { period, type, startDate, endDate, month, channel } = req.query;
+
+    const data = await dashboardService.getTopPerformersProducts(sellerIds, period, type, {
+      startDate,
+      endDate,
+      month,
+      channel,
+    });
+
     if (!data) {
       return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
     }

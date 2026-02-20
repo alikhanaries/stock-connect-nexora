@@ -19,3 +19,11 @@ export const CHANNEL_TO_GLOBAL_NAMES = Object.freeze({
   namshi: ['Namshi'],
   ocp: ['OCP'],
 });
+
+export const CHANNEL_KEY_TO_IDS = Object.freeze({
+  noon: [1],
+  amazon: [3],
+  namshi: [4],
+  ocp: [6],
+  trendyol: [5],
+});
