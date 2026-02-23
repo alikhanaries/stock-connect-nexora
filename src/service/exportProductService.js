@@ -70,6 +70,8 @@ export const exportUserChannelProductsToCSV = async (sellerId, channelId, query,
         product.sizeType || '',
         product.vatRateType || '',
         product.volumetricWeightCm || 0,
+        product.noonPrice || 0,
+        product.namshiPrice || 0,
       ];
 
       if (!res.write(escapeCsv(row) + '\n')) {
@@ -148,6 +150,8 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
         product.sizeType || '',
         product.vatRateType || '',
         product.volumetricWeightCm || 0,
+        product.noonPrice || 0,
+        product.namshiPrice || 0,
       ];
 
       if (!res.write(escapeCsv(row) + '\n')) {
