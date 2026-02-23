@@ -254,21 +254,30 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const totalReturns = countResult?.[0]?.total || 0;
 
     const formattedReturns = results.map((r) => {
-      const returnProductMap = new Map((r.products || []).map((p) => [p.productSkuCode, p.quantity || 0]));
+      const orderSkuMap = new Map((r.orderSkus || []).map((sku) => [sku.productSku, sku]));
 
-      const matchedSkus = (r.orderSkus || [])
-        .filter((sku) => returnProductMap.has(sku.productSku))
-        .map((sku) => {
-          const quantity = returnProductMap.get(sku.productSku);
-          return {
-            productSku: sku.productSku,
-            productPrice: sku.productPrice,
-            quantity,
-            totalPrice: (sku.productPrice || 0) * quantity,
-          };
-        });
+      const matchedSkus = (r.products || []).map((p) => {
+        const quantity = p.quantity || 0;
+        const orderSku = orderSkuMap.get(p.productSkuCode);
 
-      const totalPrice = matchedSkus.reduce((sum, sku) => sum + sku.totalPrice, 0);
+        let productPrice = 0;
+        if (orderSku && typeof orderSku.productPrice === 'number') {
+          productPrice = orderSku.productPrice;
+        } else if (typeof p.price === 'number') {
+          productPrice = p.price;
+        } else {
+          console.warn(`Missing price for returned product SKU ${p.productSkuCode} in return ${r._id}`);
+        }
+
+        return {
+          productSku: p.productSkuCode,
+          productPrice,
+          quantity,
+          totalPrice: (productPrice || 0) * quantity,
+        };
+      });
+
+      const totalPrice = matchedSkus.reduce((sum, sku) => sum + sku.totalPrice, 0) || 0;
 
       return {
         _id: r._id,
