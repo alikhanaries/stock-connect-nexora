@@ -7,14 +7,24 @@ export const verifySellerAccess = async (req, res, next) => {
   try {
     const user = req.user;
     const connectedSellerIds = req.sellerIds;
-    let { sellerId } = req.query;
+    let sellerId = req.query.sellerId ?? req.params.sellerId;
+
     if (user?.role === USER_ROLES.MASTER_ADMIN) {
       if (!sellerId) {
-        sellerId = await Seller.findOne({ isDeleted: false, type: SELLER_TYPE.NORMAL });
+        const seller = await Seller.findOne({ isDeleted: false, type: SELLER_TYPE.NORMAL }).select('_id').lean();
+
+        if (!seller) return Responses.failResponse(res, 'No seller found', 404);
+
+        sellerId = seller._id;
       }
       req.sellerId = new mongoose.Types.ObjectId(sellerId);
       return next();
     }
+
+    if (!sellerId) {
+      return Responses.failResponse(res, 'Seller ID is required', 400);
+    }
+
     if (!Array.isArray(connectedSellerIds)) {
       console.error('Authorization Error: req.sellerIds was not an array. Check preceding middleware.');
       return Responses.errorResponse(res, 'Server configuration error', 500);

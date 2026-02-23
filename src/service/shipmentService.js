@@ -499,6 +499,15 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
         },
       },
       { $unwind: { path: '$deliveryInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'channelengineorders',
+          localField: 'orderId',
+          foreignField: '_id',
+          as: 'orderDetails',
+        },
+      },
+      { $unwind: { path: '$orderDetails', preserveNullAndEmptyArrays: true } },
     ];
 
     // Build OR search conditions
@@ -520,9 +529,9 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     aggregationPipeline.push(
       {
         $project: {
-          orderId: 1,
           createdAt: '$createdAt',
           status: 1,
+          shipmentDate: '$submissionDate',
           airWaybillNo: 1,
           sellerId: 1,
           shipmentMethod: 1,
@@ -531,6 +540,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
             name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
             email: { $ifNull: ['$deliveryInfo.email', '$shipmentMerchantDetails.email'] },
           },
+          orderId: '$orderDetails.orderId',
         },
       },
       { $sort: { createdAt: sortDirection } },
@@ -960,7 +970,7 @@ export const getSingleShipmentService = async (id) => {
   const shipmentData = await Shipment.findOne({ _id: id }, { type: 1, _id: 1 });
 
   if (!shipmentData) {
-    throw new Error('Shipment not found');
+    return null;
   }
   const shipmentType = shipmentData?.type;
   const pipeLine = [{ $match: { _id: new mongoose.Types.ObjectId(id) } }];
@@ -1111,6 +1121,8 @@ export const getSingleShipmentService = async (id) => {
         pickupDetails: 1,
         customerInfo: '$orderDetails.orderCustomer',
         paymentInfo: '$orderDetails.orderPaymentDetails',
+        orderId: '$orderDetails.orderId',
+        orderMongoId: '$orderDetails._id',
       },
     }
   );
@@ -1138,50 +1150,54 @@ const transformShipmentResponse = (response) => {
   const data = response;
 
   // Delivery Address
+  const d = data.deliveryDetails || {};
   const deliveryDetails = {
-    address: [data.deliveryDetails?.address].filter(Boolean).join(', '),
-    city: data.deliveryDetails?.city,
-    region: data.deliveryDetails?.country,
-    zipCode: data.deliveryDetails?.postcode,
-    name: data.deliveryDetails?.name || data.deliveryDetails?.email || 'NA',
-    email: data.deliveryDetails?.email,
-    country: data.deliveryDetails?.country,
-    phoneNumber: data.deliveryDetails?.phone,
+    address: [d.address].filter(Boolean).join(', ') || 'NA',
+    city: d.city ?? 'NA',
+    region: d.country ?? 'NA',
+    zipCode: d.postcode ?? 'NA',
+    name: d.name ?? d.email ?? 'NA',
+    email: d.email ?? 'NA',
+    country: d.country ?? 'NA',
+    phoneNumber: d.phone ?? 'NA',
   };
   // Pickup Address
   const pickUpDetails = {
-    address: data.pickupDetails?.address,
-    city: data.pickupDetails?.city,
-    region: data.pickupDetails?.country,
-    zipCode: data.pickupDetails?.postcode,
-    name: data.pickupDetails?.name || data.pickupDetails?.email || 'NA',
-    email: data.pickupDetails?.email,
-    country: data.pickupDetails?.country,
-    phoneNumber: data.pickupDetails?.phone,
+    address: data.pickupDetails?.address ?? 'NA',
+    city: data.pickupDetails?.city ?? 'NA',
+    region: data.pickupDetails?.country ?? 'NA',
+    zipCode: data.pickupDetails?.postcode ?? 'NA',
+    name: data.pickupDetails?.name ?? data.pickupDetails?.email ?? 'NA',
+    email: data.pickupDetails?.email ?? 'NA',
+    country: data.pickupDetails?.country ?? 'NA',
+    phoneNumber: data.pickupDetails?.phone ?? 'NA',
   };
 
   // Payment Info
   const paymentInfo = {
-    paymentReferenceNo: data.paymentInfo.paymentReferenceNo,
-    paymentMethod: data?.paymentInfo?.paymentMethod,
-    currencyCode: data?.paymentInfo?.currencyCode,
-    vatNo: data?.paymentInfo?.vatNo,
-    orderId: data?.paymentInfo?.orderId,
+    paymentReferenceNo: data?.paymentInfo?.paymentReferenceNo ?? '',
+    paymentMethod: data?.paymentInfo?.paymentMethod ?? 'UNKNOWN',
+    currencyCode: data?.paymentInfo?.currencyCode ?? 'SAR',
+    vatNo: data?.paymentInfo?.vatNo ?? '',
+    orderId: data?.paymentInfo?.orderId ?? null,
   };
 
   // Customer Info
+  const c = data.customerInfo || {};
   const customerInfo = {
-    name: `${data.customerInfo?.firstName || ''} ${data.customerInfo?.lastName || ''}`.trim(),
-    email: data.customerInfo?.email,
-    phoneNo: data.customerInfo?.phone,
+    name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || 'NA',
+    email: c.email ?? 'NA',
+    phoneNo: c.phone ?? 'NA',
   };
 
   return {
     _id: data?._id,
     orderId: data?.orderId,
+    orderMongoId: data?.orderMongoId,
     paymentInfo,
     customerInfo,
     status: data.status,
+    shipmentDate: data?.submissionDate,
     products: data.products,
     airWaybillNo: data.airWaybillNo,
     merchantShipmentNo: data.merchantShipmentNo,
@@ -1989,6 +2005,10 @@ export const createManualShipmentService = async (shipmentData) => {
       submissionDate: new Date(),
       shipmentMethod: 'MANUAL',
       isMerchantCreator: true,
+      shipmentMerchantDetails: {
+        name: method,
+        email: 'NA',
+      },
       ...(description && { description }),
     }).save();
 

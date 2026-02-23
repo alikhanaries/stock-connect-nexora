@@ -69,6 +69,22 @@ const NUMERIC_FIELDS = new Set([
 
 const STRING_NUMERIC_FIELDS = new Set(['shippingTime']);
 
+export const remapExprField = (node, prefix) => {
+  if (node == null) return node;
+  if (typeof node === 'string' && node.startsWith('$')) {
+    const field = node.slice(1);
+    if (STRING_NUMERIC_FIELDS.has(field)) return `$${prefix}.${field}`;
+    return node;
+  }
+  if (Array.isArray(node)) return node.map((x) => remapExprField(x, prefix));
+  if (typeof node === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(node)) out[k] = remapExprField(v, prefix);
+    return out;
+  }
+  return node;
+};
+
 const castNumeric = (field, val) => {
   if (!NUMERIC_FIELDS.has(field)) return val;
   const n = Number(val);
@@ -93,6 +109,13 @@ export const castFilter = (obj) => {
     }
 
     if (STRING_NUMERIC_FIELDS.has(k) && v && typeof v === 'object' && !Array.isArray(v)) {
+      // passing through empty / not-empty filters as-is
+      const passThrough = ['$in', '$nin'];
+      const hasOnlyPassThrough = Object.keys(v).every((op) => passThrough.includes(op));
+      if (hasOnlyPassThrough) {
+        out[k] = v;
+        continue;
+      }
       const exprs = Object.entries(v).map(([op, val]) => buildExprCondition(k, op, val));
       out.$and = out.$and ? out.$and.concat(exprs) : exprs;
       continue;

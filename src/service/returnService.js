@@ -25,6 +25,7 @@ import {
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
 import { syncReturnShipmentStatus } from '#service/shipmentService.js';
+import Channel from '../models/Channel.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 //Fetches returns from ChannelEngine and saves them to the database.
@@ -197,6 +198,16 @@ export const getReturnsFromDatabase = async (query = {}) => {
           },
           quantity: '$totalQuantity',
           totalPrice: { $ifNull: ['$orderTotalPrice', '$totalPrice'] },
+          orderSkus: {
+            $map: {
+              input: { $ifNull: ['$orderInfo.orderSkuList.skuList', []] },
+              as: 'sku',
+              in: {
+                productSku: '$$sku.merchantProductNo',
+                productPrice: '$$sku.originalUnitPriceInclVat',
+              },
+            },
+          },
         },
       }
     );
@@ -229,23 +240,61 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
     pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
-    const [results, countResult] = await Promise.all([Return.aggregate(pipeline), Return.aggregate(countPipeline)]);
+    const [results, countResult, allChannelImage] = await Promise.all([
+      Return.aggregate(pipeline),
+      Return.aggregate(countPipeline),
+      Channel.find().select('-_id channelId channelImageUrl').lean(),
+    ]);
+
+    const channelMap = {};
+    allChannelImage.forEach((channel) => {
+      channelMap[channel.channelId] = channel.channelImageUrl;
+    });
 
     const totalReturns = countResult?.[0]?.total || 0;
 
-    const formattedReturns = results.map((r) => ({
-      _id: r._id,
-      orderID: r.orderID || null,
-      quantity: r.quantity || 0,
-      totalPrice: r.totalPrice || null,
-      customer: r.customer || null,
-      placedOn: r.placedOn,
-      email: r.email || null,
-      phoneNumber: r.phoneNumber || null,
-      status: r.status,
-      platform: r.platform,
-      returnId: r.returnId,
-    }));
+    const formattedReturns = results.map((r) => {
+      const orderSkuMap = new Map((r.orderSkus || []).map((sku) => [sku.productSku, sku]));
+
+      const matchedSkus = (r.products || []).map((p) => {
+        const quantity = p.quantity || 0;
+        const orderSku = orderSkuMap.get(p.productSkuCode);
+
+        let productPrice = 0;
+        if (orderSku && typeof orderSku.productPrice === 'number') {
+          productPrice = orderSku.productPrice;
+        } else if (typeof p.price === 'number') {
+          productPrice = p.price;
+        } else {
+          console.warn(`Missing price for returned product SKU ${p.productSkuCode} in return ${r._id}`);
+        }
+
+        return {
+          productSku: p.productSkuCode,
+          productPrice,
+          quantity,
+          totalPrice: (productPrice || 0) * quantity,
+        };
+      });
+
+      const totalPrice = matchedSkus.reduce((sum, sku) => sum + sku.totalPrice, 0) || 0;
+
+      return {
+        _id: r._id,
+        orderID: r.orderID || null,
+        channelId: r.channelId || null,
+        quantity: r.quantity || 0,
+        totalPrice,
+        customer: r.customer || null,
+        placedOn: r.placedOn,
+        email: r.email || null,
+        phoneNumber: r.phoneNumber || null,
+        status: r.status,
+        platform: r.platform,
+        returnId: r.returnId,
+        channelImage: channelMap[r.channelId],
+      };
+    });
 
     return {
       success: formattedReturns.length > 0,
@@ -495,6 +544,7 @@ export const getReturnById = async (id) => {
       totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
       orderInfo,
       returnLogsData,
+      omniful: returnData.omniful || null,
     };
 
     return formatReturnDetails(aggregatedResult);
@@ -802,6 +852,7 @@ export const getReturnsForWebhook = async (queryParams = {}) => {
     };
   }
 };
+
 export default {
   getReturns,
   getReturnsFromDatabase,

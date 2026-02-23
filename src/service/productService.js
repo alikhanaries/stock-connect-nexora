@@ -17,7 +17,7 @@ import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
-import { buildFilter, castFilter } from '#utils/buildFilter.js';
+import { buildFilter, castFilter, remapExprField } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -130,7 +130,9 @@ const fetchProducts = async (query, sellerId) => {
       .sort(sort)
       .skip((currentPage - 1) * limit)
       .limit(limit)
-      .select('_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId')
+      .select(
+        '_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId noonPrice namshiPrice'
+      )
       .lean(),
 
     Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync'),
@@ -479,6 +481,10 @@ export const pushInActiveProductsToChannel = async (inactiveSkuList = []) => {
   if (!result?.success) {
     throw new Error(result?.message || 'Failed to remove inactive products from ChannelEngine');
   }
+
+  // ---- UPDATE SYNC DATE ONLY IF SUCCESSFUL ----
+  await Product.updateMany({ productSkuCode: { $in: skusToRemove } }, { $set: { syncedAt: new Date() } });
+
   return result;
 };
 
@@ -608,6 +614,12 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
       if (typeof product.price !== 'number' || product.price <= 0) {
         rowErrors.push('Price must be greater than 0 for simple products.');
       }
+      if (typeof product.noonPrice !== 'number' || product.noonPrice <= 0) {
+        rowErrors.push('Noon Price must be greater than 0 for simple products.');
+      }
+      if (typeof product.namshiPrice !== 'number' || product.namshiPrice <= 0) {
+        rowErrors.push('Namshi Price must be greater than 0 for simple products.');
+      }
     }
 
     if (rowErrors.length) {
@@ -735,7 +747,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   if (finalValidProducts.length > 0) {
     await resolveProductTypes(sellerId);
-    await resolveHierarchyStatus(sellerId);
+    await resolveHierarchyStatus(sellerId, productSkuCodes);
   }
 
   return {
@@ -1067,8 +1079,17 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   for (const key in castedBaseFilter) {
     if (key === '$or' || key === '$and') {
       productLevelFilter[key] = castedBaseFilter[key].map((cond) => {
-        const field = Object.keys(cond)[0];
-        return { [`productDetails.${field}`]: cond[field] };
+        const remapped = {};
+        for (const [field, val] of Object.entries(cond)) {
+          if (field === '$expr') {
+            remapped.$expr = remapExprField(val, 'productDetails');
+          } else if (field.startsWith('$')) {
+            remapped[field] = val;
+          } else {
+            remapped[`productDetails.${field}`] = val;
+          }
+        }
+        return remapped;
       });
     } else if (!['sellerId', 'channelId'].includes(key)) {
       productLevelFilter[`productDetails.${key}`] = castedBaseFilter[key];

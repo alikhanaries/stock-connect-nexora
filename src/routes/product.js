@@ -115,16 +115,7 @@ productsRouter.delete(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-productsRouter.get(
-  '/getProduct/:id',
-  getProductByIdValidator,
-  checkLanguage,
-  authMiddleware,
-  verifySellerAccess,
-  getProductById
-);
-
-productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
+productsRouter.get('/getProduct/:id', getProductByIdValidator, checkLanguage, authMiddleware, getProductById);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 /**

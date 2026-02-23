@@ -12,6 +12,8 @@ import {
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
+import { syncAmazonOrders } from '../service/amazonOrderService.js';
+import { config } from '../config/config.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -124,8 +126,10 @@ export const getSyncedOrders = async (req, res) => {
 
     const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
       orderService.processOrders(data, sellerId),
-      getSyncedOrdersOcp(sellerId),
-      orderService.syncAmazonOrders(sellerId, req.locale),
+      config.IS_OCP_ORDER_SYNC_ENABLED
+        ? getSyncedOrdersOcp(sellerId)
+        : Promise.resolve({ success: true, message: 'OCP order sync is disabled' }),
+      syncAmazonOrders(sellerId, req.locale, req.user._id),
     ]);
 
     // Check for rejected promises or failed results

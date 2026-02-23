@@ -22,6 +22,16 @@ const PriceSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    noonPrice: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    namshiPrice: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
     minPrice: {
       type: Number,
     },
