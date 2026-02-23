@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import UserChannelProducts from '../models/UserChannelProducts.js';
+import Product from '../models/Product.js';
 import { escapeCsv } from '../helpers/export.js';
 
 export const exportUserChannelProductsToCSV = async (sellerId, channelId, query, res) => {
@@ -77,6 +78,86 @@ export const exportUserChannelProductsToCSV = async (sellerId, channelId, query,
     }
   } catch (error) {
     console.error('Error in exportUserChannelProductsToCSV:', error);
+    throw error;
+  }
+};
+
+export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, query, res) => {
+  try {
+    const { sortBy = 'name', sortOrder = 'asc' } = query;
+
+    const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
+    const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
+
+    // Get assigned SKU codes for this channel
+    const assignedSku = await UserChannelProducts.findOne(
+      {
+        sellerId: new mongoose.Types.ObjectId(sellerId),
+        channelId: Number(channelId),
+        isActive: true,
+      },
+      { 'skuList.skuCode': 1 }
+    ).lean();
+    const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
+
+    // Build filter: non-removed, non-inactive products not assigned to this channel
+    const filter = {
+      status: { $nin: ['removed', 'inactive'] },
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+    };
+
+    if (assignedSkuCodes.length > 0) {
+      filter.productSkuCode = { $nin: assignedSkuCodes };
+    }
+
+    const sort = { [safeSortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+    const cursor = Product.find(filter).sort(sort).lean().cursor();
+
+    for await (const product of cursor) {
+      const row = [
+        product.grandParentProductSkuCode || '',
+        product.parentProductSkuCode || '',
+        product.productSkuCode || '',
+        product.brand || '',
+        product.categoryTrail || '',
+        product.color || '',
+        product.currentStockCount || 0,
+        product.description || '',
+        product.descriptionAr || '',
+        product.ean || '',
+        product.extraImageUrl1 || '',
+        product.extraImageUrl2 || '',
+        product.extraImageUrl3 || '',
+        product.gender || '',
+        product.hsCodeSA || '',
+        product.hsCodeAE || '',
+        product.imageUrl || '',
+        product.extraImageUrl1 || '',
+        product.extraImageUrl2 || '',
+        product.extraImageUrl3 || '',
+        product.maxPrice || 0,
+        product.minPrice || 0,
+        product.msrp || 0,
+        product.name || '',
+        product.nameAr || '',
+        product.price || 0,
+        product.primaryImageUrl || '',
+        product.purchasePrice || 0,
+        product.shippingCost || 0,
+        product.shippingTime || '',
+        product.size || '',
+        product.sizeType || '',
+        product.vatRateType || '',
+        product.volumetricWeightCm || 0,
+      ];
+
+      if (!res.write(escapeCsv(row) + '\n')) {
+        await new Promise((resolve) => res.once('drain', resolve));
+      }
+    }
+  } catch (error) {
+    console.error('Error in exportUserUnassignedProductsToCSV:', error);
     throw error;
   }
 };

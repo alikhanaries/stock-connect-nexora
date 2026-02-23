@@ -8,7 +8,7 @@ import { PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
-import { exportUserChannelProductsToCSV } from '../service/exportProductService.js';
+import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -472,9 +472,14 @@ export const exportUserChannelProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const { channelId } = req.params;
+    const { type = 'assigned' } = req.query;
 
     if (!channelId) {
       return failResponse(res, req?.locale?.CHANNEL_ID_REQUIRED || 'Channel ID is required', 400);
+    }
+
+    if (!['assigned', 'unassigned'].includes(type)) {
+      return failResponse(res, 'Invalid type. Must be "assigned" or "unassigned"', 400);
     }
 
     const seller = await Seller.findById(sellerId).select('name').lean();
@@ -485,7 +490,8 @@ export const exportUserChannelProducts = async (req, res) => {
 
     const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];
-    const filename = `${sellerName}_ChannelProductExport_${exportDate}.csv`;
+    const label = type === 'unassigned' ? 'UnassignedProductExport' : 'assignedProductExport';
+    const filename = `${sellerName}_${label}_${exportDate}.csv`;
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -496,7 +502,11 @@ export const exportUserChannelProducts = async (req, res) => {
 
     res.write(PRODUCT_EXPORT_HEADERS.join(',') + '\n');
 
-    await exportUserChannelProductsToCSV(sellerId, channelId, req.query, res);
+    if (type === 'unassigned') {
+      await exportUserUnassignedProductsToCSV(sellerId, channelId, req.query, res);
+    } else {
+      await exportUserChannelProductsToCSV(sellerId, channelId, req.query, res);
+    }
 
     return res.end();
   } catch (error) {
