@@ -1521,9 +1521,6 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.hsCodeSA || '',
         product.hsCodeAE || '',
         product.imageUrl || '',
-        product.extraImageUrl1 || '',
-        product.extraImageUrl2 || '',
-        product.extraImageUrl3 || '',
         product.maxPrice || 0,
         product.minPrice || 0,
         product.msrp || 0,
@@ -1535,9 +1532,10 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.shippingCost || 0,
         product.shippingTime || '',
         product.size || '',
-        product.sizeType || '',
         product.vatRateType || '',
         product.volumetricWeightCm || 0,
+        product.namshiPrice || 0,
+        product.noonPrice || 0,
       ];
 
       // Handle backpressure: if buffer is full, wait for drain event
