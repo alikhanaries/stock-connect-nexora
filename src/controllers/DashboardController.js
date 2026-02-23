@@ -117,9 +117,9 @@ export const getInventoryStatus = async (req, res) => {
 export const getTopPerformersProducts = async (req, res) => {
   try {
     const sellerIds = req.sellerIds ?? req.sellerId;
-    const { period, type, startDate, endDate, month, channel } = req.query;
+    const { period, startDate, endDate, month, channel } = req.query;
 
-    const data = await dashboardService.getTopPerformersProducts(sellerIds, period, type, {
+    const data = await dashboardService.getTopPerformersProducts(sellerIds, period, {
       startDate,
       endDate,
       month,
