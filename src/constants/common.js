@@ -156,6 +156,8 @@ export const PRODUCT_EXPORT_HEADERS = [
   'sizeType',
   'vatRateType',
   'volumetricWeightCm',
+  'namshiPrice',
+  'noonPrice',
 ];
 
 export const ORDER_EXPORT_EXCLUDED_COLUMNS = [

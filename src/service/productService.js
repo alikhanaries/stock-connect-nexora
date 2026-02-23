@@ -1538,6 +1538,8 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.sizeType || '',
         product.vatRateType || '',
         product.volumetricWeightCm || 0,
+        product.namshiPrice || 0,
+        product.noonPrice || 0,
       ];
 
       // Handle backpressure: if buffer is full, wait for drain event
