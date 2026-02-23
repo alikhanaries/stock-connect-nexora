@@ -79,15 +79,22 @@ const getAllOrders = async (query, sellerId) => {
     // Base match stage
     const filter = { sellerId: sellerObjectId };
 
-    if (search) {
-      const regex = { $regex: search, $options: 'i' };
+    if (search && search.trim() !== '') {
+      const words = search.trim().split(/\s+/);
 
-      filter.$or = [
-        { orderId: regex },
-        { 'orderCustomer.email': regex },
-        { 'orderCustomer.firstName': regex },
-        { 'orderCustomer.lastName': regex },
-      ];
+      filter.$and = words.map((word) => {
+        const regex = { $regex: word, $options: 'i' };
+
+        return {
+          $or: [
+            { orderId: regex },
+            { 'orderCustomer.email': regex },
+            { 'orderCustomer.firstName': regex },
+            { 'orderCustomer.lastName': regex },
+          ],
+        };
+      });
+
       appliedFilters.search = search;
     }
 

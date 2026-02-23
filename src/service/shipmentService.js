@@ -510,20 +510,27 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
 
     // Build OR search conditions
     if (search && search.trim() !== '') {
-      const searchRegex = new RegExp(search.trim(), 'i'); // case-insensitive search
+      const searchWords = search.trim().split(/\s+/);
 
-      const orConditions = [
-        { 'shipmentMerchantDetails.name': { $regex: searchRegex } },
-        { 'shipmentMerchantDetails.email': { $regex: searchRegex } },
-        { 'deliveryInfo.name': { $regex: searchRegex } },
-        { 'deliveryInfo.email': { $regex: searchRegex } },
-        { airWaybillNo: { $regex: searchRegex } },
-        { status: { $regex: searchRegex } },
-      ];
+      const andConditions = searchWords.map((word) => {
+        const regex = new RegExp(word, 'i');
+        return {
+          $or: [
+            { 'shipmentMerchantDetails.name': { $regex: regex } },
+            { 'shipmentMerchantDetails.email': { $regex: regex } },
+            { 'deliveryInfo.name': { $regex: regex } },
+            { 'deliveryInfo.email': { $regex: regex } },
+            { airWaybillNo: { $regex: regex } },
+            { status: { $regex: regex } },
+            { 'orderDetails.orderId': { $regex: regex } },
+          ],
+        };
+      });
 
-      aggregationPipeline.push({ $match: { $or: orConditions } });
+      aggregationPipeline.push({
+        $match: { $and: andConditions },
+      });
     }
-
     aggregationPipeline.push(
       {
         $project: {
@@ -535,8 +542,8 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
           shipmentMethod: 1,
           shipmentMerchantDetails: 1,
           deliveryCustomer: {
-            name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
-            email: { $ifNull: ['$deliveryInfo.email', '$shipmentMerchantDetails.email'] },
+            name: { $ifNull: ['$deliveryInfo.name', 'NA'] },
+            email: { $ifNull: ['$deliveryInfo.email', 'NA'] },
           },
           orderId: '$orderDetails.orderId',
         },
@@ -682,6 +689,7 @@ export const ayMakanWebHookService = async (data) => {
         airWaybillNo: 1,
         status: 1,
         orderId: 1,
+        submissionDate: 1,
       }
     ).lean();
 
@@ -731,14 +739,21 @@ export const ayMakanWebHookService = async (data) => {
     }
 
     // ---------------- UPDATE SHIPMENT ----------------
-    await Shipment.findByIdAndUpdate(shipmentData._id, {
+    const updateData = {
       status: shipmentStatus,
       trackingInfo: (data.tracking_info || []).map((i) => ({
         statusCode: i.status_code,
         description: i.description,
         createdAt: i.created_at,
       })),
-    });
+    };
+
+    //  Add submissionDate only when status is SHIPPED
+    if (shipmentStatus === 'SHIPPED' && !shipmentData.submissionDate) {
+      updateData.submissionDate = new Date();
+    }
+
+    await Shipment.findByIdAndUpdate(shipmentData._id, updateData);
 
     // SKU BREAKDOWN UPDATE
 
