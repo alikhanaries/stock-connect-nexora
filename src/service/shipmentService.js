@@ -2385,8 +2385,7 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
       bulkOps.push({
         updateOne: {
           filter: {
-            merchantShipmentNo: ceShipment.MerchantShipmentNo,
-            shipmentMethod: 'CHANNEL_ENGINE',
+            merchantShipmentNo: ceShipment.MerchantShipmentNo
           },
           update: {
             $set: {
