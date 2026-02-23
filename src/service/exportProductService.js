@@ -89,7 +89,6 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
     const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
     const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
 
-    // Get assigned SKU codes for this channel
     const assignedSku = await UserChannelProducts.findOne(
       {
         sellerId: new mongoose.Types.ObjectId(sellerId),
@@ -100,7 +99,6 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
     ).lean();
     const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
 
-    // Build filter: non-removed, non-inactive products not assigned to this channel
     const filter = {
       status: { $nin: ['removed', 'inactive'] },
       sellerId: new mongoose.Types.ObjectId(sellerId),
