@@ -2,24 +2,40 @@ import mongoose from 'mongoose';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
-
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function fetchChannelStatusMap({ channelId }) {
   const pageSize = 250;
   let page = 1;
   let total = Infinity;
+  let retryCount = 0;
 
   const map = new Map();
 
   while ((page - 1) * pageSize < total) {
     const url =
       `${CHANNEL_ENGINE_BASE_URL}channels/${channelId}/products` +
-      `?apiKey=${encodeURIComponent(CHANNEL_ENGINE_API_KEY)}`;
+      `?apiKey=${encodeURIComponent(CHANNEL_ENGINE_API_KEY)}` +
+      `&page=${page}&pageSize=${pageSize}`;
 
     const res = await fetch(url);
+
+    // Rate limit handling
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get('retry-after') || 60);
+      if (retryCount >= 3) {
+        throw new Error('ChannelEngine rate limit exceeded. Max retries reached.');
+      }
+      retryCount++;
+      await sleep(retryAfter * 1000);
+      continue;
+    }
+
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       throw new Error(`ChannelEngine failed ${res.status}: ${body}`);
     }
+
+    retryCount = 0;
 
     const data = await res.json();
     const items = Array.isArray(data?.Content) ? data.Content : [];
@@ -61,28 +77,26 @@ export const syncProducts = async ({ sellerId, channel }) => {
 
   let updated = 0;
   const collection = UserChannelProducts.collection;
+  const now = new Date();
 
-  for (const skuBatch of [skuCodes]) {
-    const now = new Date();
+  const ops = skuCodes.map((sku) => {
+    const status = statusMap.has(sku) ? statusMap.get(sku) : null;
 
-    const ops = skuBatch.map((sku) => {
-      const status = statusMap.has(sku) ? statusMap.get(sku) : null;
-
-      return {
-        updateOne: {
-          filter: { sellerId: sellerObjectId, channelId, isActive: true },
-          update: {
-            $set: {
-              'skuList.$[s].channelStatus': status,
-              updatedAt: now,
-              lastStatusSyncedAt: now,
-            },
+    return {
+      updateOne: {
+        filter: { sellerId: sellerObjectId, channelId, isActive: true },
+        update: {
+          $set: {
+            'skuList.$[s].channelStatus': status,
+            updatedAt: now,
           },
-          arrayFilters: [{ 's.skuCode': sku }],
         },
-      };
-    });
+        arrayFilters: [{ 's.skuCode': sku }],
+      },
+    };
+  });
 
+  if (ops.length) {
     const result = await collection.bulkWrite(ops, { ordered: false });
     updated += result?.modifiedCount || 0;
   }
