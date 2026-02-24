@@ -14,6 +14,11 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
 
   const errors = [];
 
+  const parseAmount = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    return Number(String(value).replace(/,/g, ''));
+  };
+
   // ---------- Mandatory fields ----------
 
   // SKU (mandatory)
@@ -26,17 +31,17 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
     errors.push(`${locale.PRICE_MISSING} ${normalized.productskucode}`);
   }
 
-  const price = Number(normalized.price);
+  const price = parseAmount(normalized.price);
   if (normalized.price !== '' && (Number.isNaN(price) || price < 0)) {
     errors.push(`${locale.INVALID_PRICE} ${normalized.productskucode}`);
   }
 
-  const namshiPrice = Number(normalized.namshiprice);
+  const namshiPrice = parseAmount(normalized.namshiprice);
   if (normalized.namshiprice !== '' && (Number.isNaN(namshiPrice) || namshiPrice < 0)) {
     errors.push(`${locale.INVALID_PRICE} ${normalized.productskucode}`);
   }
 
-  const noonPrice = Number(normalized.noonprice);
+  const noonPrice = parseAmount(normalized.noonprice);
   if (normalized.noonprice !== '' && (Number.isNaN(noonPrice) || noonPrice < 0)) {
     errors.push(`${locale.INVALID_PRICE} ${normalized.productskucode}`);
   }
@@ -51,7 +56,7 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
   const parseOptionalNumber = (value, fieldName) => {
     if (value === '' || value === undefined) return undefined;
 
-    const num = Number(value);
+    const num = parseAmount(value);
     if (Number.isNaN(num) || num < 0) {
       errors.push(
         locale.INVALID_PRICE
