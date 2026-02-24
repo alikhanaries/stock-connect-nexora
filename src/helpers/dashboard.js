@@ -396,8 +396,12 @@ export const buildInventoryStatusPipeline = (sellerObjectIds, range, channelIds 
     {
       $project: {
         _id: 0,
-        channelId: 1,
-        skuCode: '$skuList.skuCode',
+        channelStatus: '$skuList.channelStatus',
+      },
+    },
+    {
+      $match: {
+        channelStatus: { $ne: null },
       },
     },
   ];
