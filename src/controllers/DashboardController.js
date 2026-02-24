@@ -104,9 +104,6 @@ export const getInventoryStatus = async (req, res) => {
       type,
     });
 
-    if (!data) {
-      return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
-    }
     return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
   } catch (error) {
     errorLog(error);
@@ -126,9 +123,6 @@ export const getChannelStatus = async (req, res) => {
       channel,
     });
 
-    if (!data) {
-      return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
-    }
     return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
   } catch (error) {
     errorLog(error);

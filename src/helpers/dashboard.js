@@ -661,6 +661,7 @@ export const buildChannelStatusPipeline = (sellerObjectIds, range, channelIds = 
               },
             },
           },
+          { $limit: 1 },
           { $project: { _id: 1 } },
         ],
         as: 'productMatch',
