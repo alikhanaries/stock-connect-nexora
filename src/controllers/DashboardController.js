@@ -104,9 +104,25 @@ export const getInventoryStatus = async (req, res) => {
       type,
     });
 
-    if (!data) {
-      return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
-    }
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const getChannelStatus = async (req, res) => {
+  try {
+    const sellerIds = req.sellerIds ?? req.sellerId;
+    const { period, startDate, endDate, month, channel } = req.query;
+
+    const data = await dashboardService.getChannelStatus(sellerIds, period, {
+      startDate,
+      endDate,
+      month,
+      channel,
+    });
+
     return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
   } catch (error) {
     errorLog(error);

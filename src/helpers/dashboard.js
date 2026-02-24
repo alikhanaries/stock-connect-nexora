@@ -396,8 +396,12 @@ export const buildInventoryStatusPipeline = (sellerObjectIds, range, channelIds 
     {
       $project: {
         _id: 0,
-        channelId: 1,
-        skuCode: '$skuList.skuCode',
+        channelStatus: '$skuList.channelStatus',
+      },
+    },
+    {
+      $match: {
+        channelStatus: { $ne: null },
       },
     },
   ];
@@ -632,6 +636,78 @@ export const pickSelectedGlobalNames = (channel) => {
   return [];
 };
 
+export const buildChannelStatusPipeline = (sellerObjectIds, range, channelIds = []) => {
+  const match = {
+    sellerId: { $in: sellerObjectIds },
+    isActive: true,
+  };
+
+  if (Array.isArray(channelIds) && channelIds.length) {
+    match.channelId = { $in: channelIds };
+  }
+
+  if (range?.start && range?.end) {
+    match.updatedAt = { $gte: range.start, $lte: range.end };
+  }
+
+  return [
+    { $match: match },
+    { $unwind: { path: '$skuList', preserveNullAndEmptyArrays: false } },
+    {
+      $lookup: {
+        from: 'products',
+        let: { sku: '$skuList.skuCode', seller: '$sellerId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [{ $eq: ['$productSkuCode', '$$sku'] }, { $eq: ['$sellerId', '$$seller'] }],
+              },
+            },
+          },
+          { $limit: 1 },
+          { $project: { _id: 1 } },
+        ],
+        as: 'productMatch',
+      },
+    },
+    // keep only matched products
+    {
+      $match: {
+        productMatch: { $ne: [] },
+      },
+    },
+
+    {
+      $project: {
+        _id: 0,
+        channelStatus: { $ifNull: ['$skuList.channelStatus', 'UNKNOWN'] },
+      },
+    },
+
+    {
+      $facet: {
+        totalCount: [{ $count: 'count' }],
+        statusCounts: [
+          {
+            $group: {
+              _id: '$channelStatus',
+              count: { $sum: 1 },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              status: '$_id',
+              count: 1,
+            },
+          },
+        ],
+      },
+    },
+  ];
+};
+
 export default {
   getDateRange,
   getPreviousRange,
@@ -645,4 +721,5 @@ export default {
   prevRevenuePipeline,
   buildGlobalChannelFilter,
   pickSelectedGlobalNames,
+  buildChannelStatusPipeline,
 };
