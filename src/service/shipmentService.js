@@ -2207,7 +2207,7 @@ async function handleShipmentReturnStatusUpdate({ shipment, shipmentStatus, trac
 
 export const getChannelEngineShipmentDetailsService = async (userId) => {
   const pageSize = 100; // ChannelEngine hard limit
-  const MAX_PAGES_PER_RUN = 5; // rate-limit safe
+  const MAX_PAGES_PER_RUN = 3; // rate-limit safe
   const DELAY_MS = 300;
 
   const baseUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`;
@@ -2381,43 +2381,50 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
 
       const products = buildShipmentProducts(lines);
       const pieces = lines.reduce((s, l) => s + (l.Quantity || 0), 0);
+      //  Extract sellerId from matching SKU
+      let shipmentSellerId = null;
 
+      for (const l of lines) {
+        const merchantProductNo = l?.MerchantProductNo;
+
+        if (!merchantProductNo) continue;
+
+        const matchedSku = order?.orderSkuList?.skuList?.find((sku) => sku.merchantProductNo === merchantProductNo);
+
+        if (matchedSku?.sellerId) {
+          shipmentSellerId = matchedSku.sellerId;
+          break; // stop once found
+        }
+      }
+
+      // fallback to order level sellerId if not found
+      if (!shipmentSellerId) {
+        shipmentSellerId = order.sellerId;
+      }
+      console.log('shipmentSellerId', shipmentSellerId);
+      console.log('merchantShipmentNo', ceShipment?.MerchantShipmentNo);
+      console.log('ORDERID', order.orderId);
       bulkOps.push({
         updateOne: {
           filter: {
-            merchantShipmentNo: ceShipment.MerchantShipmentNo
+            merchantShipmentNo: ceShipment.MerchantShipmentNo,
           },
           update: {
             $set: {
-              orderId: order._id,
-              sellerId: order.sellerId,
-              userId,
-
               status: mapCEShipmentStatus(ceShipment),
-              merchantOrderNo: ceShipment.MerchantOrderNo,
 
-              airWaybillNo: ceShipment.AirWaybillNo || ceShipment.TrackTraceNo || ceShipment.MerchantShipmentNo,
-
-              method: ceShipment.Method,
-              shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
-              shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
-
-              isMerchantCreator: ceShipment.IsMerchantCreator ?? true,
-
-              submissionDate: new Date(ceShipment.CreatedAt),
               pickupDate: ceShipment.ShipmentDate ? new Date(ceShipment.ShipmentDate) : null,
               deliveryDate: ceShipment.DeliveredAt ? new Date(ceShipment.DeliveredAt) : null,
-
-              extraData: { channelEngine: ceShipment },
-              deliveryId: deliveryDetails?._id || null,
 
               shipmentMerchantDetails: {
                 name: ceShipment.Method ?? 'NA',
                 email: 'NA',
               },
-              type: 'FORWARD',
             },
             $setOnInsert: {
+              orderId: order._id,
+              sellerId: shipmentSellerId,
+              userId,
               shipmentMethod: 'CHANNEL_ENGINE',
               products,
               pieces,
@@ -2432,6 +2439,20 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
                     },
                   ]
                 : [],
+              merchantOrderNo: ceShipment.MerchantOrderNo,
+
+              airWaybillNo: ceShipment.AirWaybillNo || ceShipment.TrackTraceNo || ceShipment.MerchantShipmentNo,
+
+              method: ceShipment.Method,
+              shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
+              shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
+
+              isMerchantCreator: ceShipment.IsMerchantCreator ?? true,
+
+              submissionDate: new Date(ceShipment.CreatedAt),
+              type: 'FORWARD',
+              extraData: { channelEngine: ceShipment },
+              deliveryId: deliveryDetails?._id || null,
             },
           },
           upsert: true,
