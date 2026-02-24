@@ -134,8 +134,15 @@ export const getAllUsers = async (req, res) => {
       }
     }
     if (search) {
-      const searchRegex = new RegExp(search, 'i');
-      filter.$or = [{ firstName: searchRegex }, { lastName: searchRegex }];
+      const words = search.trim().split(/\s+/);
+
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      filter.$or = words.flatMap((word) => {
+        const regex = new RegExp(escapeRegex(word), 'i');
+
+        return [{ firstName: { $regex: regex } }, { lastName: { $regex: regex } }, { email: { $regex: regex } }];
+      });
     }
 
     const sortDirection = sortOrder.toLowerCase() === 'asc' ? 1 : -1;
