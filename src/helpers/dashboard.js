@@ -541,7 +541,7 @@ export const topFacetPipeline = (sellerObjectIds, range, type, globalChannelFilt
         let: { sku: '$orderSkuList.skuList.merchantProductNo' },
         pipeline: [
           { $match: { $expr: { $eq: ['$productSkuCode', '$$sku'] } } },
-          { $project: { _id: 0, categoryTrail: 1, brand: 1, size: 1 } },
+          { $project: { _id: 0, categoryTrail: 1, brand: 1, size: 1, productSkuCode: 1 } },
           { $limit: 1 },
         ],
         as: 'productMatch',
@@ -562,6 +562,7 @@ export const topFacetPipeline = (sellerObjectIds, range, type, globalChannelFilt
               },
               brand: { $first: { $ifNull: [{ $arrayElemAt: ['$productMatch.brand', 0] }, ''] } },
               size: { $first: { $ifNull: [{ $arrayElemAt: ['$productMatch.size', 0] }, ''] } },
+              productSkuCode: { $first: { $ifNull: [{ $arrayElemAt: ['$productMatch.productSkuCode', 0] }, ''] } },
               ordered: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.quantity', 0] } } },
               revenue: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] } } },
             },

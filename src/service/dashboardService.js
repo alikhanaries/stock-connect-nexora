@@ -351,6 +351,7 @@ export const getTopPerformersProducts = async (
         description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
         size: x?.size || '',
         brand: x?.brand || '',
+        productSkuCode: x?.productSkuCode || '',
         ordered: Number(x?.ordered) || 0,
         revenue: Number(x?.revenue) || 0,
         growth: 0,
