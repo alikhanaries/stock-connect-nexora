@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService from '#service/productService.js';
+import productSyncService from '#service/productSyncService.js';
 import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
@@ -27,6 +28,19 @@ export const getProducts = async (req, res) => {
     return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error fetching products:', error);
+    errorLog(error);
+    return errorResponse(res, error, 500);
+  }
+};
+
+export const syncProducts = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { channel } = req.params;
+    const result = await productSyncService.syncProducts({ sellerId, channel });
+    return successResponse(res, result, 200);
+  } catch (error) {
+    console.error('Error syncing products:', error);
     errorLog(error);
     return errorResponse(res, error, 500);
   }
@@ -556,4 +570,5 @@ export default {
   exportUserChannelProducts,
   searchProducts,
   freezeOrUnfreezeProducts,
+  syncProducts,
 };

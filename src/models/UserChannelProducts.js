@@ -13,6 +13,11 @@ const skuListSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    channelStatus: {
+      type: String,
+      required: true,
+      index: true,
+    },
   },
   { _id: false } // disables auto _id for subdocuments
 );
