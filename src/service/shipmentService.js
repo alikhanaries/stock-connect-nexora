@@ -2401,9 +2401,6 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
       if (!shipmentSellerId) {
         shipmentSellerId = order.sellerId;
       }
-      console.log('shipmentSellerId', shipmentSellerId);
-      console.log('merchantShipmentNo', ceShipment?.MerchantShipmentNo);
-      console.log('ORDERID', order.orderId);
       bulkOps.push({
         updateOne: {
           filter: {
