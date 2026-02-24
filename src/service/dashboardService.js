@@ -556,8 +556,16 @@ export const getChannelStatus = async (sellerId, period, { startDate, endDate, m
     .filter(Boolean)
     .map((id) => new mongoose.Types.ObjectId(id));
 
+  const hasCustomRange = Boolean(startDate || endDate || month);
   const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
-  if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
+  if (period !== 'all') {
+    if (!period && !hasCustomRange) {
+      throw new Error('Missing period or custom date range.');
+    }
+    if (!range) {
+      throw new Error(`Invalid period "${period}"`);
+    }
+  }
 
   const channelIds = pickChannelIdsFromChannel(channel);
   const pipeline = buildChannelStatusPipeline(sellerObjectIds, range, channelIds);
