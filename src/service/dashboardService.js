@@ -349,6 +349,7 @@ export const getTopPerformersProducts = async (
       items.push({
         rank: items.length + 1,
         description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
+        size: x?.size || '',
         brand: x?.brand || '',
         ordered: Number(x?.ordered) || 0,
         revenue: Number(x?.revenue) || 0,
