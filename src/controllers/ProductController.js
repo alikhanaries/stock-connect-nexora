@@ -39,7 +39,7 @@ export const syncProducts = async (req, res) => {
     const result = await productSyncService.syncProducts({ sellerId, channel });
     return successResponse(res, result, 200);
   } catch (error) {
-    console.error('Error fetching products:', error);
+    console.error('Error syncing products:', error);
     errorLog(error);
     return errorResponse(res, error, 500);
   }
