@@ -307,7 +307,6 @@ const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, end
 export const getTopPerformersProducts = async (
   sellerId,
   period = null,
-  type,
   { startDate, endDate, month, channel } = {}
 ) => {
   const ids = Array.isArray(sellerId) ? sellerId : String(sellerId).split(',');
@@ -327,50 +326,60 @@ export const getTopPerformersProducts = async (
 
   const globalChannelFilter = buildGlobalChannelFilter(channel);
 
-  const [agg] = await Order.aggregate(topFacetPipeline(sellerObjectIds, range, type, globalChannelFilter));
-  const top = Array.isArray(agg?.items) ? agg.items : [];
-  const total = agg?.meta?.[0]?.total ?? 0;
+  const [productData, categoryData] = await Promise.all([
+    _getTopPerformersByType('product'),
+    _getTopPerformersByType('category'),
+  ]);
 
-  if (!top.length) return { type, items: [], meta: { shown: 0, total: 0 } };
+  return [productData, categoryData];
 
-  const items = [];
-  const keys = [];
+  async function _getTopPerformersByType(type) {
+    const [agg] = await Order.aggregate(topFacetPipeline(sellerObjectIds, range, type, globalChannelFilter));
+    const top = Array.isArray(agg?.items) ? agg.items : [];
+    const total = agg?.meta?.[0]?.total ?? 0;
 
-  for (const x of top) {
-    const key = x?._id;
-    if (!key) continue;
+    if (!top.length) return { type, items: [], meta: { shown: 0, total: 0 } };
 
-    keys.push(key);
-    items.push({
-      rank: items.length + 1,
-      description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
-      ordered: Number(x?.ordered) || 0,
-      revenue: Number(x?.revenue) || 0,
-      growth: 0,
-      trend: 'neutral',
-      _key: key,
-    });
-  }
+    const items = [];
+    const keys = [];
 
-  if (!keys.length) return { type, items: [], meta: { shown: 0, total: 0 } };
+    for (const x of top) {
+      const key = x?._id;
+      if (!key) continue;
 
-  if (!comparable) {
-    for (const item of items) delete item._key;
+      keys.push(key);
+      items.push({
+        rank: items.length + 1,
+        description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
+        brand: x?.brand || '',
+        ordered: Number(x?.ordered) || 0,
+        revenue: Number(x?.revenue) || 0,
+        growth: 0,
+        trend: 'neutral',
+        _key: key,
+      });
+    }
+
+    if (!keys.length) return { type, items: [], meta: { shown: 0, total: 0 } };
+
+    if (!comparable) {
+      for (const item of items) delete item._key;
+      return { type, items, meta: { shown: items.length, total: +total || 0 } };
+    }
+
+    const prevAgg = await Order.aggregate(prevRevenuePipeline(sellerObjectIds, prevRange, keys, globalChannelFilter));
+    const prevMap = new Map((prevAgg ?? []).map((r) => [String(r._id), +r?.prevRevenue || 0]));
+
+    for (const item of items) {
+      const prev = prevMap.get(String(item._key)) || 0;
+      const { growth, trend } = growthWithTrend(item.revenue, prev);
+      item.growth = growth;
+      item.trend = trend;
+      delete item._key;
+    }
+
     return { type, items, meta: { shown: items.length, total: +total || 0 } };
   }
-
-  const prevAgg = await Order.aggregate(prevRevenuePipeline(sellerObjectIds, prevRange, keys, globalChannelFilter));
-  const prevMap = new Map((prevAgg ?? []).map((r) => [String(r._id), +r?.prevRevenue || 0]));
-
-  for (const item of items) {
-    const prev = prevMap.get(String(item._key)) || 0;
-    const { growth, trend } = growthWithTrend(item.revenue, prev);
-    item.growth = growth;
-    item.trend = trend;
-    delete item._key;
-  }
-
-  return { type, items, meta: { shown: items.length, total: +total || 0 } };
 };
 
 const getInventoryStatus = async (sellerId, period, { startDate, endDate, month, channel, type } = {}) => {
