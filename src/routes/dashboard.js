@@ -5,6 +5,7 @@ import {
   getAnalytics,
   getShipmentAnalytics,
   getInventoryStatus,
+  getChannelStatus,
   getTopPerformersProducts,
   getSalesByChannel,
   getOrdersByChannel,
@@ -19,6 +20,7 @@ import {
   topProductsValidator,
   salesByChannelValidator,
   ordersByChannelValidator,
+  channelStatusValidator,
 } from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
 
@@ -74,6 +76,15 @@ dashboardRoutes.get(
   authMiddleware,
   verifyMultipleSellerAccess,
   getInventoryStatus
+);
+
+dashboardRoutes.get(
+  '/channel-status',
+  channelStatusValidator,
+  checkLanguage,
+  authMiddleware,
+  verifyMultipleSellerAccess,
+  getChannelStatus
 );
 
 dashboardRoutes.get(

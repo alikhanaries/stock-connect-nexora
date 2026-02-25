@@ -27,3 +27,11 @@ export const CHANNEL_KEY_TO_IDS = Object.freeze({
   ocp: [6],
   trendyol: [5],
 });
+
+export const CHANNEL_STATUS_CONFIG = [
+  { label: 'Published', key: 'PUBLISHED' },
+  { label: 'Not Published', key: 'NOT_PUBLISHED' },
+  { label: 'Invalid On Create', key: 'INVALID_ON_CREATE' },
+  { label: 'Under Review', key: 'UNDER_REVIEW' },
+  { label: 'None', key: 'NONE' },
+];

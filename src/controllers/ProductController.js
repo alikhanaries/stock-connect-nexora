@@ -1,6 +1,7 @@
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import mongoose from 'mongoose';
 import productService from '#service/productService.js';
+import productSyncService from '#service/productSyncService.js';
 import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
@@ -8,6 +9,7 @@ import { PRODUCT_STATUSES, PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
+import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -26,6 +28,19 @@ export const getProducts = async (req, res) => {
     return successResponse(res, message, 200, responseData);
   } catch (error) {
     console.error('Error fetching products:', error);
+    errorLog(error);
+    return errorResponse(res, error, 500);
+  }
+};
+
+export const syncProducts = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { channel } = req.params;
+    const result = await productSyncService.syncProducts({ sellerId, channel });
+    return successResponse(res, result, 200);
+  } catch (error) {
+    console.error('Error syncing products:', error);
     errorLog(error);
     return errorResponse(res, error, 500);
   }
@@ -467,6 +482,54 @@ export const exportProducts = async (req, res) => {
   }
 };
 
+export const exportUserChannelProducts = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { channelId } = req.params;
+    const { type = 'assigned' } = req.query;
+
+    if (!channelId) {
+      return failResponse(res, req?.locale?.CHANNEL_ID_REQUIRED || 'Channel ID is required', 400);
+    }
+
+    if (!['assigned', 'unassigned'].includes(type)) {
+      return failResponse(res, 'Invalid type. Must be "assigned" or "unassigned"', 400);
+    }
+
+    const seller = await Seller.findById(sellerId).select('name').lean();
+
+    if (!seller) {
+      return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const label = type === 'unassigned' ? 'UnassignedProductExport' : 'assignedProductExport';
+    const filename = `${sellerName}_${label}_${exportDate}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    res.write('\uFEFF');
+
+    res.write(PRODUCT_EXPORT_HEADERS.join(',') + '\n');
+
+    if (type === 'unassigned') {
+      await exportUserUnassignedProductsToCSV(sellerId, channelId, req.query, res);
+    } else {
+      await exportUserChannelProductsToCSV(sellerId, channelId, req.query, res);
+    }
+
+    return res.end();
+  } catch (error) {
+    console.error('Controller Error: exportUserChannelProducts:', error.message);
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
 export const searchProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId;
@@ -504,6 +567,8 @@ export default {
   addProductsToUserChannel,
   unlinkProductFromChannel,
   exportProducts,
+  exportUserChannelProducts,
   searchProducts,
   freezeOrUnfreezeProducts,
+  syncProducts,
 };
