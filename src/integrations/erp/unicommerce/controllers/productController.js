@@ -30,3 +30,14 @@ export const fetchProductCount = async (req, res) => {
     errorResponse(res, 500, { message: error.message });
   }
 };
+
+export const fetchProducts = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const result = await productService.fetchProducts(sellerId, req.query);
+    return successResponse(res, 200, result);
+  } catch (error) {
+    console.error('fetchProducts error:', error);
+    return errorResponse(res, 500, { message: error.message });
+  }
+};
