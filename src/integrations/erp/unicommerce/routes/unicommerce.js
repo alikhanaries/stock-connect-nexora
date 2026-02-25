@@ -5,10 +5,141 @@ import { fetchProductCount } from '#root/src/integrations/erp/unicommerce/contro
 import { login } from '#root/src/integrations/erp/unicommerce/controllers/authController.js';
 import { loginValidator } from '#root/src/integrations/erp/unicommerce/validations/auth.js';
 import { checkLanguage } from '#middleware/index.js';
+import { getProductCountValidator } from '../validations/products.js';
 
 const UniCommerceRouter = express.Router();
 
-UniCommerceRouter.get('/productsCount', unicommerceAuthMiddleware, verifyUnicommerceSellerAccess, fetchProductCount);
+/**
+ * @openapi
+ * /authToken:
+ *   post:
+ *     tags: [UniCommerce]
+ *     summary: Generate UniCommerce access token
+ *     description: Authenticates user and returns JWT access token with sellerId.
+ *
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         description: Preferred response language
+ *
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 format: email
+ *                 example: seller@example.com
+ *                 description: User email address
+ *               password:
+ *                 type: string
+ *                 minLength: 6
+ *                 maxLength: 128
+ *                 example: Test@123
+ *                 description: User password
+ *
+ *     responses:
+ *       200:
+ *         description: Login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: SUCCESS
+ *                 accessToken:
+ *                   type: string
+ *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *                 sellerId:
+ *                   type: string
+ *                   example: 65f2c9a1b12c3d0012ab45cd
+ *
+ *       400:
+ *         description: Validation error or missing credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: MISSING_CREDENTIALS
+ *
+ *       401:
+ *         description: Invalid credentials
+ *
+ *       404:
+ *         description: Account not found
+ *
+ *       500:
+ *         description: Internal server error
+ */
+
 UniCommerceRouter.post('/authToken', loginValidator, checkLanguage, login);
+
+/**
+ * @openapi
+ * /productsCount:
+ *   get:
+ *     tags: [UniCommerce]
+ *     summary: Get total published product count
+ *     description: Returns count of published products for the authenticated seller.
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         description: Language preference
+ *
+ *       - in: query
+ *         name: publishedStatus
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [PUBLISHED]
+ *         example: PUBLISHED
+ *
+ *     responses:
+ *       200:
+ *         description: Product count fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 count:
+ *                   type: integer
+ *                   example: 125
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/FailResponse"
+ *       500:
+ *         description: Internal server error
+ */
+
+UniCommerceRouter.get(
+  '/productsCount',
+  getProductCountValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  fetchProductCount
+);
 
 export default UniCommerceRouter;
