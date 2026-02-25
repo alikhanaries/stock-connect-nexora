@@ -431,6 +431,11 @@ export const unlinkProductFromChannel = async (req, res) => {
 export const exportProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId || req.sellerId;
+    const filters = req.query.filter
+      ? Array.isArray(req.query.filter)
+        ? req.query.filter
+        : req.query.filter.split(',').filter(Boolean)
+      : [];
 
     // Fetch seller name for filename
     const seller = await Seller.findById(sellerId).select('name').lean();
@@ -438,22 +443,16 @@ export const exportProducts = async (req, res) => {
       return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
     }
 
-    // Parse filter from query params
-    let filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
-
-    // Split comma-separated filters into individual filter strings
-    filters = filters.flatMap((f) => (f.includes(',') ? f.split(',') : f));
-
     // Validate data exists BEFORE setting headers
-    const validation = await productService.validateProductExportData(filters, sellerId);
+    // const validation = await productService.validateProductExportData(filters, sellerId);
 
-    if (!validation.success) {
-      return failResponse(
-        res,
-        req.locale?.NO_PRODUCTS_FOUND || validation.message || 'No products found to export',
-        404
-      );
-    }
+    // if (!validation.success) {
+    //   return failResponse(
+    //     res,
+    //     req.locale?.NO_PRODUCTS_FOUND || validation.message || 'No products found to export',
+    //     404
+    //   );
+    // }
 
     const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];

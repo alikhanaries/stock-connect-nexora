@@ -8,7 +8,7 @@ import {
   validateHierarchyExistenceBatch,
 } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
-import { escapeCsv, validateExportData } from '#helpers/export.js';
+import { escapeCsv } from '#helpers/export.js';
 import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
@@ -1359,76 +1359,76 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
-export const validateProductExportData = async (filters, sellerId) => {
-  try {
-    // Parse filters if they're strings
-    if (Array.isArray(filters) && typeof filters[0] === 'string') {
-      filters = [
-        {
-          conditions: filters.map((f) => {
-            const [field, operator, ...rest] = f.split(':');
-            return {
-              field,
-              operator,
-              value: rest.join(':'),
-            };
-          }),
-        },
-      ];
-    }
+// export const validateProductExportData = async (filters, sellerId) => {
+//   try {
+//     // Parse filters if they're strings
+//     if (Array.isArray(filters) && typeof filters[0] === 'string') {
+//       filters = [
+//         {
+//           conditions: filters.map((f) => {
+//             const [field, operator, ...rest] = f.split(':');
+//             return {
+//               field,
+//               operator,
+//               value: rest.join(':'),
+//             };
+//           }),
+//         },
+//       ];
+//     }
 
-    const orQueries = [];
+//     const orQueries = [];
 
-    for (const group of filters) {
-      if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
+//     for (const group of filters) {
+//       if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
 
-      const andQueries = [];
+//       const andQueries = [];
 
-      for (const cond of group.conditions) {
-        const built = buildCondition(cond.field, cond.operator, cond.value);
-        if (built && Object.keys(built).length) {
-          andQueries.push(built);
-        }
-      }
+//       for (const cond of group.conditions) {
+//         const built = buildCondition(cond.field, cond.operator, cond.value);
+//         if (built && Object.keys(built).length) {
+//           andQueries.push(built);
+//         }
+//       }
 
-      if (andQueries.length === 1) {
-        orQueries.push(andQueries[0]);
-      } else if (andQueries.length > 1) {
-        orQueries.push({ $and: andQueries });
-      }
-    }
+//       if (andQueries.length === 1) {
+//         orQueries.push(andQueries[0]);
+//       } else if (andQueries.length > 1) {
+//         orQueries.push({ $and: andQueries });
+//       }
+//     }
 
-    let finalFilter = {};
+//     let finalFilter = {};
 
-    if (orQueries.length === 1) finalFilter = orQueries[0];
-    else if (orQueries.length > 1) finalFilter = { $or: orQueries };
+//     if (orQueries.length === 1) finalFilter = orQueries[0];
+//     else if (orQueries.length > 1) finalFilter = { $or: orQueries };
 
-    // Check if user already has a status filter
-    const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
+//     // Check if user already has a status filter
+//     const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
 
-    if (hasStatusFilter) {
-      // Merge user's status filter with 'not removed' check using $and
-      finalFilter = {
-        $and: [finalFilter, { status: { $ne: 'removed' } }],
-        sellerId: new mongoose.Types.ObjectId(sellerId),
-      };
-    } else {
-      // No user status filter, just add the default
-      finalFilter = {
-        ...finalFilter,
-        sellerId: new mongoose.Types.ObjectId(sellerId),
-        status: { $ne: 'removed' },
-      };
-    }
+//     if (hasStatusFilter) {
+//       // Merge user's status filter with 'not removed' check using $and
+//       finalFilter = {
+//         $and: [finalFilter, { status: { $ne: 'removed' } }],
+//         sellerId: new mongoose.Types.ObjectId(sellerId),
+//       };
+//     } else {
+//       // No user status filter, just add the default
+//       finalFilter = {
+//         ...finalFilter,
+//         sellerId: new mongoose.Types.ObjectId(sellerId),
+//         status: { $ne: 'removed' },
+//       };
+//     }
 
-    const products = await Product.find(finalFilter).select('_id').limit(1).lean();
+//     const products = await Product.find(finalFilter).select('_id').limit(1).lean();
 
-    return validateExportData(products, 'products');
-  } catch (error) {
-    console.error('Error in validateProductExportData:', error);
-    return { success: false, message: error.message };
-  }
-};
+//     return validateExportData(products, 'products');
+//   } catch (error) {
+//     console.error('Error in validateProductExportData:', error);
+//     return { success: false, message: error.message };
+//   }
+// };
 
 export const exportProductsToCSV = async (filters, sellerId, query, res) => {
   let cursor = null;
@@ -1436,67 +1436,13 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
   try {
     const { sortBy = 'createdAt', sortOrder = 'asc' } = query;
 
-    // Parse filters if they're strings
-    if (Array.isArray(filters) && typeof filters[0] === 'string') {
-      filters = [
-        {
-          conditions: filters.map((f) => {
-            const [field, operator, ...rest] = f.split(':');
-            return {
-              field,
-              operator,
-              value: rest.join(':'),
-            };
-          }),
-        },
-      ];
-    }
-
-    const orQueries = [];
-
-    for (const group of filters) {
-      if (!Array.isArray(group.conditions) || group.conditions.length === 0) continue;
-
-      const andQueries = [];
-
-      for (const cond of group.conditions) {
-        const built = buildCondition(cond.field, cond.operator, cond.value);
-        if (built && Object.keys(built).length) {
-          andQueries.push(built);
-        }
-      }
-
-      if (andQueries.length === 1) {
-        orQueries.push(andQueries[0]);
-      } else if (andQueries.length > 1) {
-        orQueries.push({ $and: andQueries });
-      }
-    }
-
-    let finalFilter = {};
-
-    if (orQueries.length === 1) finalFilter = orQueries[0];
-    else if (orQueries.length > 1) finalFilter = { $or: orQueries };
-
-    // Check if user already has a status filter
-    const hasStatusFilter = finalFilter.status || (finalFilter.$or && finalFilter.$or.some((q) => q.status));
-
-    if (hasStatusFilter) {
-      // Merge user's status filter with 'not removed' check using $and
-      finalFilter = {
-        $and: [finalFilter, { status: { $ne: 'removed' } }],
-        sellerId: new mongoose.Types.ObjectId(sellerId),
-      };
-    } else {
-      // No user status filter, just add the default
-      finalFilter = {
-        ...finalFilter,
-        sellerId: new mongoose.Types.ObjectId(sellerId),
-        status: { $ne: 'removed' },
-      };
-    }
-
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
+
+    const finalFilter = buildFilter({
+      rawFilters: filters,
+      sellerId,
+      buildCondition,
+    });
 
     // Use cursor to stream data batch by batch
     cursor = Product.find(finalFilter).sort(sort).lean().cursor();
@@ -1616,7 +1562,7 @@ export default {
   validateProducts,
   pushActiveProductsToChannel,
   pushInActiveProductsToChannel,
-  validateProductExportData,
+  // validateProductExportData,
   exportProductsToCSV,
   getProductById,
   searchProuctsByFilter,
