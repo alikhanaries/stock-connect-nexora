@@ -5,20 +5,22 @@ import {
   getAnalytics,
   getShipmentAnalytics,
   getInventoryStatus,
+  getChannelStatus,
   getTopPerformersProducts,
   getSalesByChannel,
   getOrdersByChannel,
 } from '#controllers/DashboardController.js';
-import { authMiddleware, checkLanguage, verifySellerAccess, verifyMultipleSellerAccess } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
 import {
   orderFlowStatusValidator,
   orderOverviewValidator,
   orderAnalyticsValidator,
   statusValidator,
   inventoryStatusValidator,
-  topOrdersValidator,
+  topProductsValidator,
   salesByChannelValidator,
   ordersByChannelValidator,
+  channelStatusValidator,
 } from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
 
@@ -54,16 +56,16 @@ dashboardRoutes.get(
   statusValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getShipmentAnalytics
 );
 
 dashboardRoutes.get(
-  '/top-orders',
-  topOrdersValidator,
+  '/top-products',
+  topProductsValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getTopPerformersProducts
 );
 
@@ -72,8 +74,17 @@ dashboardRoutes.get(
   inventoryStatusValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getInventoryStatus
+);
+
+dashboardRoutes.get(
+  '/channel-status',
+  channelStatusValidator,
+  checkLanguage,
+  authMiddleware,
+  verifyMultipleSellerAccess,
+  getChannelStatus
 );
 
 dashboardRoutes.get(

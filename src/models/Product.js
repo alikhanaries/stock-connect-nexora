@@ -19,7 +19,6 @@ const ProductSchema = new mongoose.Schema(
       trim: true,
     },
     brand: { type: String, trim: true },
-    attributes: { type: String, trim: true },
     ean: { type: String, trim: true, unique: false },
     price: { type: Number, required: true },
     noonPrice: { type: Number, required: true },
@@ -42,8 +41,6 @@ const ProductSchema = new mongoose.Schema(
     shippingTime: { type: String },
     isFrozen: { type: Boolean, default: false },
     categoryTrail: { type: String },
-    categoryTrailAmazon: { type: String, default: null },
-    categoryTrailNoon: { type: String, default: null },
     marketPlace: { type: String, trim: true, default: null },
     images: [{ type: String, trim: true }],
     currentStockCount: { type: Number, default: 0 },
@@ -57,11 +54,6 @@ const ProductSchema = new mongoose.Schema(
     extraImageUrl1: { type: String },
     extraImageUrl2: { type: String },
     extraImageUrl3: { type: String },
-    modelName: {
-      type: String,
-      trim: true,
-      index: true,
-    },
     productType: {
       type: String,
       enum: ['simple', 'configurable'],
@@ -69,129 +61,21 @@ const ProductSchema = new mongoose.Schema(
       default: 'simple',
       index: true,
     },
-    gender: {
-      type: String,
-      enum: ['Male', 'Female', 'Unisex'],
-      default: 'Unisex',
-      trim: true,
-    },
     ageRangeDescription: {
       type: String,
       trim: true,
       enum: ['Adult', 'Kids', 'Toddler', 'Infant', 'Newborn'],
       default: 'Adult',
     },
-    sizeType: {
+    gender: {
       type: String,
-      enum: ['Age', 'Alpha', 'Numeric', 'Waist'],
-      default: 'Alpha',
-    },
-    productCareInstructions: {
-      type: String,
+      enum: ['Male', 'Female', 'Unisex'],
+      default: 'Unisex',
       trim: true,
     },
     countryOfOrigin: {
       type: String,
       trim: true,
-    },
-    departmentName: {
-      type: String,
-      trim: true,
-    },
-    fabricType: {
-      type: String,
-      trim: true,
-    },
-    style: {
-      type: String,
-      trim: true,
-    },
-    weaveType: {
-      type: String,
-      trim: true,
-    },
-    dangerousGoodsRegulations: {
-      type: String,
-      trim: true,
-      default: 'not_applicable',
-    },
-
-    skinType: { type: String, trim: true },
-    safetyWarning: { type: String, trim: true },
-    unitCount: { type: Number },
-    unitCountType: { type: String, trim: true },
-    targetAudienceKeyword: { type: String, trim: true },
-    hairType: { type: String, trim: true },
-    ingredientsList: { type: String, trim: true },
-    searchTerms: { type: String, trim: true },
-    scent: { type: String, trim: true },
-    numberOfItems: { type: Number, default: 1 },
-    manufacturer: { type: String, trim: true },
-    lifestyle: { type: String, trim: true },
-    heatSensitive: { type: Boolean, default: false },
-    liquidContents: { type: Boolean, default: false },
-    itemForm: { type: String, trim: true },
-    riseStyle: {
-      type: String,
-      trim: true,
-    },
-    intendedUse: {
-      type: String,
-      trim: true,
-    },
-    productBenefit: {
-      type: String,
-      trim: true,
-    },
-    itemLength: {
-      type: String,
-      trim: true,
-    },
-    itemWidth: {
-      type: String,
-      trim: true,
-    },
-    itemHeight: {
-      type: String,
-      trim: true,
-    },
-    specialFeature: {
-      type: String,
-      trim: true,
-    },
-    bulletPoint: {
-      type: String,
-      trim: true,
-    },
-    apparelSizeBodyType: {
-      type: String,
-      trim: true,
-      default: 'Regular',
-    },
-    specialSize: {
-      type: String,
-      trim: true,
-      default: 'Standard',
-    },
-    material: {
-      type: String,
-      trim: true,
-    },
-    closureType: {
-      type: String,
-      trim: true,
-      default: 'Pull On',
-    },
-    fitType: {
-      type: String,
-      trim: true,
-      default: 'Regular',
-    },
-    bottomsHeightType: {
-      type: String,
-      trim: true,
-      default: 'Regular',
-      enum: ['Regular', 'Short', 'Tall', 'Extra Tall', 'Petite', 'Big & Tall'],
     },
     source: {
       type: String,

@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
-import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS } from '#constants/dashboard.js';
+import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS, CHANNEL_STATUS_CONFIG } from '#constants/dashboard.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
 import Inventory from '#models/Inventory.js';
+import UserChannelProducts from '#models/UserChannelProducts.js';
 import {
   getDateRange,
   getPreviousRange,
@@ -12,10 +13,12 @@ import {
   extractCategoryLabel,
   topFacetPipeline,
   prevRevenuePipeline,
+  pickChannelIdsFromChannel,
   buildInventoryStatusPipeline,
   isComparablePeriod,
   buildGlobalChannelFilter,
   pickSelectedGlobalNames,
+  buildChannelStatusPipeline,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
@@ -218,17 +221,49 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
   ];
 };
 
-const getShipmentAnalytics = async (sellerId, period) => {
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-  const range = getDateRange(period);
+const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+  const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
+  if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
+
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
+  const hasChannel =
+    Array.isArray(globalChannelFilter?.globalChannelName?.$in) && globalChannelFilter.globalChannelName.$in.length > 0;
+  const ordersCollection = Order.collection.name;
   const pipeline = [
     {
       $match: {
-        sellerId: sellerObjectId,
-        updatedAt: { $gte: range.start, $lte: range.end },
+        sellerId: { $in: sellerObjectIds },
         status: { $in: SHIPMENT_STATUS.map((s) => s.key) },
+        ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
       },
     },
+
+    ...(hasChannel
+      ? [
+          {
+            $lookup: {
+              from: ordersCollection,
+              localField: 'orderId',
+              foreignField: '_id',
+              as: 'order',
+              pipeline: [{ $project: { _id: 1, globalChannelName: 1 } }],
+            },
+          },
+          { $unwind: '$order' },
+          {
+            $match: {
+              'order.globalChannelName': { $in: globalChannelFilter.globalChannelName.$in },
+            },
+          },
+        ]
+      : []),
+
     {
       $group: {
         _id: '$status',
@@ -269,79 +304,99 @@ const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, end
   return { metric, data: normalizeSeries(period, rawData, range) };
 };
 
-export const getTopPerformersProducts = async (sellerId, period, type) => {
-  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-    throw new Error('Invalid sellerId');
-  }
-  const range = getDateRange(period);
-  if (!range) throw new Error(`Invalid period "${period}"`);
-
-  const prevRange = getPreviousRange(period, range);
-  if (!prevRange?.start || !prevRange?.end) throw new Error(`Invalid period "${period}"`);
-
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-
-  const [agg] = await Order.aggregate(topFacetPipeline(sellerObjectId, range, type));
-  const top = Array.isArray(agg?.items) ? agg.items : [];
-  const total = agg?.meta?.[0]?.total ?? 0;
-
-  if (!top.length) return { type, items: [], meta: { shown: 0, total: 0 } };
-
-  const items = [];
-  const keys = [];
-
-  for (let i = 0; i < top.length; i++) {
-    const x = top[i];
-    const key = x?._id;
-    if (!key) continue;
-
-    keys.push(key);
-    items.push({
-      rank: items.length + 1,
-      description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
-      ordered: Number(x?.ordered) || 0,
-      revenue: Number(x?.revenue) || 0,
-      growth: 0,
-      trend: 'neutral',
-      _key: key,
+export const getTopPerformersProducts = async (
+  sellerId,
+  period = null,
+  { startDate, endDate, month, channel } = {}
+) => {
+  const ids = Array.isArray(sellerId) ? sellerId : String(sellerId).split(',');
+  const sellerObjectIds = ids
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+    .map((id) => {
+      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
+      return new mongoose.Types.ObjectId(id);
     });
+
+  const range = getDateRange({ period, startDate, endDate, month });
+  if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}"`);
+
+  const comparable = period !== 'all' && (isComparablePeriod(period) || range.kind === 'custom');
+  const prevRange = comparable ? getPreviousRange(period, range) : range;
+
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
+
+  const [productData, categoryData] = await Promise.all([
+    _getTopPerformersByType('product'),
+    _getTopPerformersByType('category'),
+  ]);
+
+  return [productData, categoryData];
+
+  async function _getTopPerformersByType(type) {
+    const [agg] = await Order.aggregate(topFacetPipeline(sellerObjectIds, range, type, globalChannelFilter));
+    const top = Array.isArray(agg?.items) ? agg.items : [];
+    const total = agg?.meta?.[0]?.total ?? 0;
+
+    if (!top.length) return { type, items: [], meta: { shown: 0, total: 0 } };
+
+    const items = [];
+    const keys = [];
+
+    for (const x of top) {
+      const key = x?._id;
+      if (!key) continue;
+
+      keys.push(key);
+      items.push({
+        rank: items.length + 1,
+        description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
+        brand: x?.brand || '',
+        ordered: Number(x?.ordered) || 0,
+        revenue: Number(x?.revenue) || 0,
+        growth: 0,
+        trend: 'neutral',
+        _key: key,
+      });
+    }
+
+    if (!keys.length) return { type, items: [], meta: { shown: 0, total: 0 } };
+
+    if (!comparable) {
+      for (const item of items) delete item._key;
+      return { type, items, meta: { shown: items.length, total: +total || 0 } };
+    }
+
+    const prevAgg = await Order.aggregate(prevRevenuePipeline(sellerObjectIds, prevRange, keys, globalChannelFilter));
+    const prevMap = new Map((prevAgg ?? []).map((r) => [String(r._id), +r?.prevRevenue || 0]));
+
+    for (const item of items) {
+      const prev = prevMap.get(String(item._key)) || 0;
+      const { growth, trend } = growthWithTrend(item.revenue, prev);
+      item.growth = growth;
+      item.trend = trend;
+      delete item._key;
+    }
+
+    return { type, items, meta: { shown: items.length, total: +total || 0 } };
   }
-
-  if (!keys.length) return { type, items: [], meta: { shown: 0, total: 0 } };
-
-  const prevAgg = await Order.aggregate(prevRevenuePipeline(sellerObjectId, prevRange, keys));
-  const prevMap = new Map((Array.isArray(prevAgg) ? prevAgg : []).map((r) => [String(r._id), +r?.prevRevenue || 0]));
-
-  for (const item of items) {
-    const prev = prevMap.get(String(item._key)) || 0;
-    const { growth, trend } = growthWithTrend(item.revenue, prev);
-    item.growth = growth;
-    item.trend = trend;
-    delete item._key;
-  }
-
-  return {
-    type,
-    items,
-    meta: { shown: items.length, total: +total || 0 },
-  };
 };
 
-const getInventoryStatus = async (sellerId, period) => {
-  if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-    throw new Error('Invalid sellerId');
-  }
-  const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-  const range = period ? getDateRange(period) : null;
+const getInventoryStatus = async (sellerId, period, { startDate, endDate, month, channel, type } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
-  if (period && !range) {
-    throw new Error(`Invalid period "${period}"`);
-  }
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
 
-  const pipeline = buildInventoryStatusPipeline(sellerObjectId, range);
-  if (!Array.isArray(pipeline) || pipeline.length === 0) {
-    throw new Error('Invalid aggregation pipeline');
-  }
+  const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
+  if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
+
+  const channelIds = pickChannelIdsFromChannel(channel);
+  const pipeline = buildInventoryStatusPipeline(sellerObjectIds, range, channelIds);
+  if (!Array.isArray(pipeline) || pipeline.length === 0) throw new Error('Invalid aggregation pipeline');
+
   const result = await Inventory.aggregate(pipeline).allowDiskUse(true);
   const agg = result?.[0] ?? {};
 
@@ -350,20 +405,44 @@ const getInventoryStatus = async (sellerId, period) => {
   const statusMap = new Map(statusCounts.map((r) => [r.status, r.count]));
   const freezeMap = new Map(freezeCounts.map((r) => [r.status, r.count]));
 
-  const activeCount = statusMap.get('active') ?? 0;
   const total = agg?.totalCount?.[0]?.count ?? 0;
+  const activeCount = statusMap.get('active') ?? 0;
   const activePercentage = total === 0 ? 0 : Number(((activeCount / total) * 100).toFixed(1));
+
+  const normalizedType = String(type ?? '').toLowerCase();
+
+  if (normalizedType === 'state') {
+    return {
+      total,
+      breakdown: [
+        { key: 'unfreeze', value: freezeMap.get('unfreeze') ?? 0 },
+        { key: 'freeze', value: freezeMap.get('freeze') ?? 0 },
+      ],
+    };
+  }
+
+  if (normalizedType === 'status') {
+    return {
+      total,
+      activePercentage,
+      breakdown: [
+        { key: 'active', value: statusMap.get('active') ?? 0 },
+        { key: 'inactive', value: statusMap.get('inactive') ?? 0 },
+      ],
+    };
+  }
 
   return {
     total,
     activePercentage,
-    breakdown: [
-      { status: 'active', count: statusMap.get('active') ?? 0 },
-      { status: 'inactive', count: statusMap.get('inactive') ?? 0 },
-      { status: 'other', count: statusMap.get('other') ?? 0 },
-      { status: 'unfreeze', count: freezeMap.get('unfreeze') ?? 0 },
-      { status: 'freeze', count: freezeMap.get('freeze') ?? 0 },
-    ],
+    statusBreakdown: {
+      active: statusMap.get('active') ?? 0,
+      inactive: statusMap.get('inactive') ?? 0,
+    },
+    stateBreakdown: {
+      unfreeze: freezeMap.get('unfreeze') ?? 0,
+      freeze: freezeMap.get('freeze') ?? 0,
+    },
   };
 };
 
@@ -469,6 +548,44 @@ const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate,
   return Array.isArray(data) ? data : [];
 };
 
+export const getChannelStatus = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const hasCustomRange = Boolean(startDate || endDate || month);
+  const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
+  if (period !== 'all') {
+    if (!period && !hasCustomRange) {
+      throw new Error('Missing period or custom date range.');
+    }
+    if (!range) {
+      throw new Error(`Invalid period "${period}"`);
+    }
+  }
+
+  const channelIds = pickChannelIdsFromChannel(channel);
+  const pipeline = buildChannelStatusPipeline(sellerObjectIds, range, channelIds);
+
+  const result = await UserChannelProducts.aggregate(pipeline).allowDiskUse(true);
+  const agg = result?.[0] ?? {};
+
+  const total = agg?.totalCount?.[0]?.count ?? 0;
+  const statusCounts = Array.isArray(agg?.statusCounts) ? agg.statusCounts : [];
+  const statusMap = new Map(statusCounts.map((r) => [String(r.status).toUpperCase(), r.count]));
+
+  return {
+    total,
+    breakdown: CHANNEL_STATUS_CONFIG.map(({ label, key }) => ({
+      key: label,
+      value: statusMap.get(key) ?? 0,
+    })),
+  };
+};
+
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,
@@ -478,4 +595,5 @@ export default {
   getInventoryStatus,
   getSalesByChannel,
   getOrdersByChannel,
+  getChannelStatus,
 };

@@ -17,7 +17,7 @@ import Seller from '#models/Seller.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
-import { buildFilter, castFilter } from '#utils/buildFilter.js';
+import { buildFilter, castFilter, remapExprField } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import mongoose from 'mongoose';
@@ -1081,7 +1081,9 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
       productLevelFilter[key] = castedBaseFilter[key].map((cond) => {
         const remapped = {};
         for (const [field, val] of Object.entries(cond)) {
-          if (field.startsWith('$')) {
+          if (field === '$expr') {
+            remapped.$expr = remapExprField(val, 'productDetails');
+          } else if (field.startsWith('$')) {
             remapped[field] = val;
           } else {
             remapped[`productDetails.${field}`] = val;
@@ -1519,9 +1521,6 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.hsCodeSA || '',
         product.hsCodeAE || '',
         product.imageUrl || '',
-        product.extraImageUrl1 || '',
-        product.extraImageUrl2 || '',
-        product.extraImageUrl3 || '',
         product.maxPrice || 0,
         product.minPrice || 0,
         product.msrp || 0,
@@ -1533,9 +1532,10 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.shippingCost || 0,
         product.shippingTime || '',
         product.size || '',
-        product.sizeType || '',
         product.vatRateType || '',
         product.volumetricWeightCm || 0,
+        product.namshiPrice || 0,
+        product.noonPrice || 0,
       ];
 
       // Handle backpressure: if buffer is full, wait for drain event

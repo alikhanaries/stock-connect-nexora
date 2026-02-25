@@ -714,3 +714,18 @@ export const exportProductsValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+
+export const syncProductsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    channel: z
+      .string({
+        required_error: 'channelId is required',
+        invalid_type_error: 'channelId must be a string',
+      })
+      .regex(/^\d+$/, 'channelId must be a number string')
+      .transform((val) => parseInt(val, 10)),
+  });
+  paramsSchema.parse(req.params);
+});

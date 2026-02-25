@@ -1,4 +1,4 @@
-import { CHANNEL_TO_GLOBAL_NAMES } from '#constants/dashboard.js';
+import { CHANNEL_TO_GLOBAL_NAMES, CHANNEL_KEY_TO_IDS } from '#constants/dashboard.js';
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -366,41 +366,87 @@ export const normalizeSeries = (period, raw = [], range) => {
   }));
 };
 
-export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
+export const pickChannelIdsFromChannel = (channel) => {
+  const keys = String(channel ?? '')
+    .split(',')
+    .map((v) => v.trim().toLowerCase())
+    .filter(Boolean);
+
+  const ids = keys.flatMap((k) => CHANNEL_KEY_TO_IDS[k] ?? []);
+  return [...new Set(ids)].filter((n) => Number.isFinite(n));
+};
+
+export const buildInventoryStatusPipeline = (sellerObjectIds, range, channelIds = []) => {
   const match = {
-    sellerId: sellerObjectId,
+    sellerId: { $in: sellerObjectIds },
     productSkuCode: { $type: 'string', $ne: '' },
     ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
   };
 
-  return [
-    { $match: match },
-    { $group: { _id: '$productSkuCode' } },
+  const ucpLookupPipeline = [
+    {
+      $match: {
+        sellerId: { $in: sellerObjectIds },
+        channelId: { $in: channelIds },
+      },
+    },
+    { $unwind: '$skuList' },
+    { $match: { $expr: { $eq: ['$skuList.skuCode', '$$sku'] } } },
+    { $limit: 1 },
+    {
+      $project: {
+        _id: 0,
+        channelStatus: '$skuList.channelStatus',
+      },
+    },
+    {
+      $match: {
+        channelStatus: { $ne: null },
+      },
+    },
+  ];
+
+  const productLookupPipeline = [{ $project: { _id: 0, status: 1, isFrozen: 1 } }];
+
+  const pipeline = [{ $match: match }, { $group: { _id: '$productSkuCode' } }];
+
+  if (channelIds.length) {
+    pipeline.push(
+      {
+        $lookup: {
+          from: 'userchannelproducts',
+          let: { sku: '$_id' },
+          pipeline: ucpLookupPipeline,
+          as: 'ucp',
+        },
+      },
+      { $match: { $expr: { $gt: [{ $size: '$ucp' }, 0] } } },
+      { $addFields: { matchedChannelId: { $first: '$ucp.channelId' } } }
+    );
+  }
+
+  pipeline.push(
     {
       $lookup: {
         from: 'products',
         localField: '_id',
         foreignField: 'productSkuCode',
         as: 'product',
-        pipeline: [{ $project: { _id: 0, status: 1, isFrozen: 1 } }],
+        pipeline: productLookupPipeline,
       },
     },
     {
       $addFields: {
+        skuCode: '$_id',
         finalStatus: {
           $cond: [
-            { $eq: [{ $size: '$product' }, 0] },
-            'other',
+            { $gt: [{ $size: '$product' }, 0] },
             {
               $let: {
                 vars: {
                   s: {
                     $toLower: {
-                      $trim: {
-                        input: {
-                          $toString: { $first: '$product.status' },
-                        },
-                      },
+                      $trim: { input: { $toString: { $first: '$product.status' } } },
                     },
                   },
                 },
@@ -408,13 +454,12 @@ export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
                   $cond: [
                     { $eq: ['$$s', 'active'] },
                     'active',
-                    {
-                      $cond: [{ $eq: ['$$s', 'inactive'] }, 'inactive', 'other'],
-                    },
+                    { $cond: [{ $eq: ['$$s', 'inactive'] }, 'inactive', '$$REMOVE'] },
                   ],
                 },
               },
             },
+            '$$REMOVE',
           ],
         },
 
@@ -424,9 +469,7 @@ export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
             {
               $cond: [
                 { $eq: [{ $type: { $first: '$product.isFrozen' } }, 'bool'] },
-                {
-                  $cond: [{ $eq: [{ $first: '$product.isFrozen' }, true] }, 'freeze', 'unfreeze'],
-                },
+                { $cond: [{ $eq: [{ $first: '$product.isFrozen' }, true] }, 'freeze', 'unfreeze'] },
                 '$$REMOVE',
               ],
             },
@@ -439,6 +482,7 @@ export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
       $facet: {
         totalCount: [{ $count: 'count' }],
         statusCounts: [
+          { $match: { finalStatus: { $in: ['active', 'inactive'] } } },
           { $group: { _id: '$finalStatus', count: { $sum: 1 } } },
           { $project: { _id: 0, status: '$_id', count: 1 } },
         ],
@@ -448,8 +492,10 @@ export const buildInventoryStatusPipeline = (sellerObjectId, range) => {
           { $project: { _id: 0, status: '$_id', count: 1 } },
         ],
       },
-    },
-  ];
+    }
+  );
+
+  return pipeline;
 };
 
 export const growthWithTrend = (curr, prev) => {
@@ -480,11 +526,17 @@ export const extractCategoryLabel = (trail = '') => {
   return parts[parts.length - 1] || '';
 };
 
-export const topFacetPipeline = (sellerObjectId, range, type) => {
+export const topFacetPipeline = (sellerObjectIds, range, type, globalChannelFilter = {}) => {
   const isCategory = type === 'category';
 
   return [
-    { $match: { sellerId: sellerObjectId, orderDate: { $gte: range.start, $lte: range.end } } },
+    {
+      $match: {
+        sellerId: { $in: sellerObjectIds },
+        ...globalChannelFilter,
+        orderDate: { $gte: range.start, $lte: range.end },
+      },
+    },
     { $unwind: '$orderSkuList.skuList' },
     { $match: { 'orderSkuList.skuList.merchantProductNo': { $type: 'string', $ne: '' } } },
     {
@@ -493,7 +545,7 @@ export const topFacetPipeline = (sellerObjectId, range, type) => {
         let: { sku: '$orderSkuList.skuList.merchantProductNo' },
         pipeline: [
           { $match: { $expr: { $eq: ['$productSkuCode', '$$sku'] } } },
-          { $project: { _id: 0, categoryTrail: 1 } },
+          { $project: { _id: 0, categoryTrail: 1, brand: 1 } },
           { $limit: 1 },
         ],
         as: 'productMatch',
@@ -512,6 +564,7 @@ export const topFacetPipeline = (sellerObjectId, range, type) => {
                   ? { $ifNull: [{ $arrayElemAt: ['$productMatch.categoryTrail', 0] }, 'Uncategorized'] }
                   : { $ifNull: ['$orderSkuList.skuList.description', ''] },
               },
+              brand: { $first: { $ifNull: [{ $arrayElemAt: ['$productMatch.brand', 0] }, ''] } },
               ordered: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.quantity', 0] } } },
               revenue: { $sum: { $toDouble: { $ifNull: ['$orderSkuList.skuList.lineTotalInclVat', 0] } } },
             },
@@ -525,8 +578,14 @@ export const topFacetPipeline = (sellerObjectId, range, type) => {
   ];
 };
 
-export const prevRevenuePipeline = (sellerObjectId, prevRange, keys = []) => [
-  { $match: { sellerId: sellerObjectId, orderDate: { $gte: prevRange.start, $lte: prevRange.end } } },
+export const prevRevenuePipeline = (sellerObjectIds, prevRange, keys = [], globalChannelFilter = {}) => [
+  {
+    $match: {
+      sellerId: { $in: sellerObjectIds },
+      ...globalChannelFilter,
+      orderDate: { $gte: prevRange.start, $lte: prevRange.end },
+    },
+  },
   { $unwind: '$orderSkuList.skuList' },
 
   { $match: { 'orderSkuList.skuList.merchantProductNo': { $in: keys } } },
@@ -577,11 +636,84 @@ export const pickSelectedGlobalNames = (channel) => {
   return [];
 };
 
+export const buildChannelStatusPipeline = (sellerObjectIds, range, channelIds = []) => {
+  const match = {
+    sellerId: { $in: sellerObjectIds },
+    isActive: true,
+  };
+
+  if (Array.isArray(channelIds) && channelIds.length) {
+    match.channelId = { $in: channelIds };
+  }
+
+  if (range?.start && range?.end) {
+    match.updatedAt = { $gte: range.start, $lte: range.end };
+  }
+
+  return [
+    { $match: match },
+    { $unwind: { path: '$skuList', preserveNullAndEmptyArrays: false } },
+    {
+      $lookup: {
+        from: 'products',
+        let: { sku: '$skuList.skuCode', seller: '$sellerId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [{ $eq: ['$productSkuCode', '$$sku'] }, { $eq: ['$sellerId', '$$seller'] }],
+              },
+            },
+          },
+          { $limit: 1 },
+          { $project: { _id: 1 } },
+        ],
+        as: 'productMatch',
+      },
+    },
+    // keep only matched products
+    {
+      $match: {
+        productMatch: { $ne: [] },
+      },
+    },
+
+    {
+      $project: {
+        _id: 0,
+        channelStatus: { $ifNull: ['$skuList.channelStatus', 'UNKNOWN'] },
+      },
+    },
+
+    {
+      $facet: {
+        totalCount: [{ $count: 'count' }],
+        statusCounts: [
+          {
+            $group: {
+              _id: '$channelStatus',
+              count: { $sum: 1 },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              status: '$_id',
+              count: 1,
+            },
+          },
+        ],
+      },
+    },
+  ];
+};
+
 export default {
   getDateRange,
   getPreviousRange,
   normalizeSeries,
   buildAggregationPipeline,
+  pickChannelIdsFromChannel,
   buildInventoryStatusPipeline,
   growthWithTrend,
   extractCategoryLabel,
@@ -589,4 +721,5 @@ export default {
   prevRevenuePipeline,
   buildGlobalChannelFilter,
   pickSelectedGlobalNames,
+  buildChannelStatusPipeline,
 };
