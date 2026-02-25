@@ -443,17 +443,6 @@ export const exportProducts = async (req, res) => {
       return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
     }
 
-    // Validate data exists BEFORE setting headers
-    // const validation = await productService.validateProductExportData(filters, sellerId);
-
-    // if (!validation.success) {
-    //   return failResponse(
-    //     res,
-    //     req.locale?.NO_PRODUCTS_FOUND || validation.message || 'No products found to export',
-    //     404
-    //   );
-    // }
-
     const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];
     const filename = `${sellerName}_ProductExport_${exportDate}.csv`;
