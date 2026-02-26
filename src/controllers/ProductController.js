@@ -431,28 +431,16 @@ export const unlinkProductFromChannel = async (req, res) => {
 export const exportProducts = async (req, res) => {
   try {
     const sellerId = req.params.sellerId || req.sellerId;
+    const filters = req.query.filter
+      ? Array.isArray(req.query.filter)
+        ? req.query.filter
+        : req.query.filter.split(',').filter(Boolean)
+      : [];
 
     // Fetch seller name for filename
     const seller = await Seller.findById(sellerId).select('name').lean();
     if (!seller) {
       return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
-    }
-
-    // Parse filter from query params
-    let filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
-
-    // Split comma-separated filters into individual filter strings
-    filters = filters.flatMap((f) => (f.includes(',') ? f.split(',') : f));
-
-    // Validate data exists BEFORE setting headers
-    const validation = await productService.validateProductExportData(filters, sellerId);
-
-    if (!validation.success) {
-      return failResponse(
-        res,
-        req.locale?.NO_PRODUCTS_FOUND || validation.message || 'No products found to export',
-        404
-      );
     }
 
     const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
@@ -487,6 +475,11 @@ export const exportUserChannelProducts = async (req, res) => {
     const sellerId = req.sellerId;
     const { channelId } = req.params;
     const { type = 'assigned' } = req.query;
+    const filters = req.query.filter
+      ? Array.isArray(req.query.filter)
+        ? req.query.filter
+        : req.query.filter.split(',')
+      : [];
 
     if (!channelId) {
       return failResponse(res, req?.locale?.CHANNEL_ID_REQUIRED || 'Channel ID is required', 400);
@@ -519,7 +512,7 @@ export const exportUserChannelProducts = async (req, res) => {
     if (type === 'unassigned') {
       await exportUserUnassignedProductsToCSV(sellerId, channelId, req.query, res);
     } else {
-      await exportUserChannelProductsToCSV(sellerId, channelId, req.query, res);
+      await exportUserChannelProductsToCSV(filters, sellerId, channelId, req.query, res);
     }
 
     return res.end();
