@@ -478,7 +478,7 @@ export const exportUserChannelProducts = async (req, res) => {
     const filters = req.query.filter
       ? Array.isArray(req.query.filter)
         ? req.query.filter
-        : req.query.filter.split(',').filter(Boolean)
+        : req.query.filter.split(',')
       : [];
 
     if (!channelId) {
