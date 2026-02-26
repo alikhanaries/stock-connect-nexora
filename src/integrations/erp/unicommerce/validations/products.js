@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { validate } from '#root/src/validations/validate.js';
-import { headerSchema } from './auth.js';
+import { headerSchema, validate } from './auth.js';
 
 export const getProductsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
