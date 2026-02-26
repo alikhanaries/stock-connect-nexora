@@ -30,6 +30,11 @@ export const getProductsValidator = validate(async (req) => {
         }),
 
       skus: z.string().optional(),
+      sellerId: z
+        .string()
+        .length(24, 'sellerId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
+        .optional(),
     })
     .passthrough();
 

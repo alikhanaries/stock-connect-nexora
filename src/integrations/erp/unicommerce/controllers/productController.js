@@ -34,10 +34,13 @@ export const fetchProductCount = async (req, res) => {
 export const fetchProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    if (!sellerId) {
+      return failResponse(res, 400, { message: 'sellerId is missing' });
+    }
     const result = await productService.fetchProducts(sellerId, req.query);
     return successResponse(res, 200, result);
   } catch (error) {
-    console.error('fetchProducts error:', error);
+    console.error('fetchProducts error:', error.message, error.stack);
     return errorResponse(res, 500, { message: error.message });
   }
 };
