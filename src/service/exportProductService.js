@@ -2,12 +2,20 @@ import mongoose from 'mongoose';
 import UserChannelProducts from '../models/UserChannelProducts.js';
 import Product from '../models/Product.js';
 import { escapeCsv } from '../helpers/export.js';
+import { buildFilter } from '../util/buildFilter.js';
+import { buildCondition } from '../helpers/productFilters.js';
 
-export const exportUserChannelProductsToCSV = async (sellerId, channelId, query, res) => {
+const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
+export const exportUserChannelProductsToCSV = async (filters, sellerId, channelId, query, res) => {
   try {
     const { sortBy = 'name', sortOrder = 'asc' } = query;
 
-    const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
+    const finalFilter = buildFilter({
+      rawFilters: filters,
+      sellerId,
+      buildCondition,
+    });
+
     const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
 
     const pipeline = [
@@ -30,6 +38,7 @@ export const exportUserChannelProductsToCSV = async (sellerId, channelId, query,
       { $match: { 'productDetails.status': { $ne: 'removed' } } },
       { $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 } },
       { $replaceRoot: { newRoot: '$productDetails' } },
+      { $match: finalFilter },
     ];
 
     const cursor = UserChannelProducts.aggregate(pipeline, { allowDiskUse: true }).cursor();
@@ -84,7 +93,6 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
   try {
     const { sortBy = 'name', sortOrder = 'asc' } = query;
 
-    const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
     const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
 
     const assignedSku = await UserChannelProducts.findOne(
