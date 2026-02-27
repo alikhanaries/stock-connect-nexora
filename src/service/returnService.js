@@ -40,6 +40,8 @@ export const getReturns = async (queryParams = {}) => {
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
     const responseData = await response.json();
 
+    console.log('+++++++++++++++++++++++++++++++++++++++++++++++++', responseData);
+
     if (!response.ok) {
       return { success: false, message: `ChannelEngine API error: ${response.status}`, error: responseData };
     }
@@ -60,6 +62,14 @@ export const getReturns = async (queryParams = {}) => {
 
       const simplifiedReturnDocument = sanitizationResult.data;
 
+      // DEBUG: Log the reason field from API and sanitized data
+      console.log(
+        `[SYNC DEBUG] Return ${returnData.Id} - API Reason: "${returnData.Reason}" -> Sanitized reason: "${simplifiedReturnDocument.reason}"`
+      );
+      console.log(
+        `[SYNC DEBUG] Return ${returnData.Id} - customerComment: "${simplifiedReturnDocument.customerComment}", merchantComment: "${simplifiedReturnDocument.merchantComment}"`
+      );
+
       // Add bulk upsert operation
       bulkOps.push({
         updateOne: {
@@ -73,9 +83,13 @@ export const getReturns = async (queryParams = {}) => {
     let upsertedCount = 0;
     let modifiedCount = 0;
     if (bulkOps.length > 0) {
+      console.log(`[SYNC DEBUG] Running bulkWrite with ${bulkOps.length} operations`);
       const result = await Return.bulkWrite(bulkOps);
       upsertedCount = result.upsertedCount || 0;
       modifiedCount = result.modifiedCount || 0;
+      console.log(
+        `[SYNC DEBUG] bulkWrite result - upserted: ${upsertedCount}, modified: ${modifiedCount}, matched: ${result.matchedCount || 0}`
+      );
     }
 
     return {
@@ -301,6 +315,9 @@ export const getReturnsFromDatabase = async (query = {}) => {
         status: r.status,
         platform: r.platform,
         returnId: r.returnId,
+        reason: r.reason || null,
+        customerComment: r.customerComment || null,
+        merchantComment: r.merchantComment || null,
         channelImage: channelMap[r.channelId],
       };
     });
