@@ -77,11 +77,10 @@ export const getAdminOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const sellerId = req.query.sellerId ?? null;
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
-    const order = await orderService.getOrderById(id, sellerId);
+    const order = await orderService.getOrderById(id);
     if (!order) {
       return Responses.failResponse(res, req.locale.NO_ORDERS_FOUND, 404);
     }
@@ -174,7 +173,6 @@ export const getSyncedOrders = async (req, res) => {
       .catch((error) => {
         console.error(' ChannelEngine shipment sync failed:', error);
       });
-
     return Responses.successResponse(res, message, 200);
   } catch (error) {
     errorLog(error);
