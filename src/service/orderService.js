@@ -1043,7 +1043,9 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
-    const filter = { sellerId: sellerId };
+    const filter = {
+      sellerIds: { $in: sellerId },
+    };
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
@@ -1062,33 +1064,47 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     if (status) {
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
-
-      // Validate against enum
-      const validStatuses = Object.values(ORDER_STATUS_MAP);
-      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
-
-      if (invalid.length > 0) {
-        console.warn(`Invalid status values ignored: ${invalid.join(', ')}`);
-      }
-
-      // Build Mongo filter (case-insensitive) - only use valid statuses
-      const validStatusArray = statusArray.filter((s) => validStatuses.includes(s));
-
-      if (validStatusArray.length > 0) {
-        filter.status = {
-          $in: validStatusArray.map((s) => new RegExp(`^${s}$`, 'i')),
-        };
-      }
+      filter.status = { $in: statusArray };
     }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const [orders, totalCount] = await Promise.all([
-      Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
-      Order.countDocuments(filter),
-    ]);
+    const orders = await Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean();
+    const totalCount = await Order.countDocuments(filter);
 
-    // Validate export data
+    if (!orders.length) {
+      return {
+        success: false,
+        message: 'No orders found',
+      };
+    }
+
+    //  Filter SKUs inside each order
+    const filteredOrders = orders
+      .map((order) => {
+        const filteredSkus = (order.orderSkuList.skuList || []).filter(
+          (sku) => String(sku.sellerId) === String(sellerId)
+        );
+
+        if (!filteredSkus.length) return null;
+
+        return {
+          ...order,
+          orderSkuList: {
+            orderId: order.orderSkuList.orderId,
+            skuList: filteredSkus,
+          },
+        };
+      })
+      .filter(Boolean);
+
+    if (!filteredOrders.length) {
+      return {
+        success: false,
+        message: 'No matching SKUs found for seller',
+      };
+    }
+
     const validation = validateExportData(orders, 'orders');
     if (!validation.success) {
       return validation;
