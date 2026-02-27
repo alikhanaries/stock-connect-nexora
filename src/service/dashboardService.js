@@ -609,12 +609,13 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   const pipeline = buildReturnsStatusPipeline(sellerObjectIds, range, channelIds);
 
-  const data = await Return.aggregate(pipeline);
+  const [result] = await Return.aggregate(pipeline);
 
-  const breakdown = data ?? [];
-  const total = breakdown.reduce((sum, s) => sum + (s.value || 0), 0);
+  const reasons = result?.reasons ?? [];
+  const statusSummary = result?.statusSummary ?? [];
+  const total = statusSummary.reduce((sum, s) => sum + (s.value || 0), 0);
 
-  return { total, breakdown };
+  return { total, reasons, statusSummary };
 };
 
 export default {
