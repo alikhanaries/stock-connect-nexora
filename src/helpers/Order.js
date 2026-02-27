@@ -1,5 +1,6 @@
 import Order from '#models/Orders.js';
 import Product from '../models/Product.js';
+import Seller from '#models/Seller.js';
 import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
 
@@ -398,6 +399,19 @@ const sanitizeOrdersData = async (orders) => {
   const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
   const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
 
+  //  Collect unique sellerIds
+  const sellerIds = [...new Set(productsDb.map((p) => p.sellerId?.toString()).filter(Boolean))];
+
+  //  Fetch seller names
+  const sellersDb = await Seller.find({ _id: { $in: sellerIds } }, { name: 1, companyName: 1 }).lean();
+
+  const sellerNameMap = new Map(
+    sellersDb.map((s) => [
+      s._id.toString(),
+      (s.companyName || s.name || '').replace(/\s+/g, ''), // remove spaces for clean ID
+    ])
+  );
+
   // Step 3: map orders into bulkWrite operations
   return orders.map((data) => {
     const existingOrder = existingOrdersMap.get(String(data.Id));
@@ -408,24 +422,33 @@ const sanitizeOrdersData = async (orders) => {
       const firstSku = data.Lines[0].MerchantProductNo;
       if (firstSku) finalSellerId = productSellerMap.get(firstSku) || null;
     }
-
-    // Build SKU list with normalized statuses & preserved fields
+    const sellerIdSet = new Set();
+    // Build SKU list with normalized statuses & preserved fields  (with sellerId per SKU)
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+          const sellerId = productSellerMap.get(line.MerchantProductNo) || null;
+
+          let sellerName = 'UNKNOWN';
+
+          if (sellerId) {
+            sellerName = sellerNameMap.get(sellerId.toString()) || 'UNKNOWN';
+            sellerIdSet.add(String(sellerId));
+            sellerIdSet.add(String(sellerId));
+          }
+
+          //  Create SKU OrderId
+          const skuOrderId = `${data.Id}_${sellerName}`;
 
           return {
             // ---------- REQUIRED ----------
             id: line.Id,
+            orderId: skuOrderId,
+            sellerId,
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
             unitPriceInclVat: line.UnitPriceInclVat ?? 0,
-
-            // ---------- STATUS ----------
-            status: ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
-              ? existingSku.status
-              : normalizeSkuStatus(line.Status),
-
+            status: normalizeSkuStatus(line.Status),
             statusBreakdown: buildStatusBreakdown({
               line,
               existingSku,
@@ -494,11 +517,13 @@ const sanitizeOrdersData = async (orders) => {
       : [];
 
     // Build update payload
+    const sellerIds = Array.from(sellerIdSet);
     const updatePayload = {
-      orderId: data.Id,
+      orderId: data.Id?.toString(),
       channelOrderNumber: data.ChannelOrderNo,
       channelId: data.ChannelId,
       sellerId: finalSellerId,
+      sellerIds, //  multi-seller support
       channelName: data.ChannelName,
       globalChannelName: data.GlobalChannelName,
       globalChannelId: data.GlobalChannelId,
@@ -583,10 +608,7 @@ const sanitizeOrdersData = async (orders) => {
         region: data?.BillingAddress?.Region ?? 'NA',
         countryIso: data?.BillingAddress?.CountryIso ?? 'NA',
       },
-
-      status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
-        ? existingOrder.status
-        : normalizeOrderStatus(data?.Status),
+      status: normalizeOrderStatus(data?.Status),
     };
 
     return {
