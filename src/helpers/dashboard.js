@@ -1,4 +1,5 @@
 import { CHANNEL_TO_GLOBAL_NAMES, CHANNEL_KEY_TO_IDS } from '#constants/dashboard.js';
+import Order from '#models/Orders.js';
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -710,6 +711,53 @@ export const buildChannelStatusPipeline = (sellerObjectIds, range, channelIds = 
   ];
 };
 
+export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = []) => {
+  const match = {
+    ...(range?.start && range?.end ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
+  };
+
+  if (Array.isArray(channelIds) && channelIds.length) {
+    match.channelId = { $in: channelIds };
+  }
+  const ordersCollection = Order.collection.name;
+  return [
+    { $match: match },
+
+    {
+      $lookup: {
+        from: ordersCollection,
+        let: { mo: '$merchantOrderNo' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$merchantOrderNo', '$$mo'] } } },
+          { $project: { sellerIds: 1 } },
+          { $limit: 1 },
+        ],
+        as: 'order',
+      },
+    },
+
+    { $unwind: { path: '$order', preserveNullAndEmptyArrays: false } },
+
+    {
+      $match: {
+        $expr: {
+          $gt: [
+            {
+              $size: {
+                $setIntersection: [{ $ifNull: ['$order.sellerIds', []] }, sellerObjectIds],
+              },
+            },
+            0,
+          ],
+        },
+      },
+    },
+
+    { $group: { _id: '$status', value: { $sum: 1 } } },
+    { $project: { _id: 0, key: '$_id', value: 1 } },
+    { $sort: { key: 1 } },
+  ];
+};
 export default {
   getDateRange,
   getPreviousRange,
@@ -724,4 +772,5 @@ export default {
   buildGlobalChannelFilter,
   pickSelectedGlobalNames,
   buildChannelStatusPipeline,
+  buildReturnsStatusPipeline,
 };
