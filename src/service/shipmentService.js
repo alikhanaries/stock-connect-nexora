@@ -273,7 +273,7 @@ export const createPartialShipmentService = async (shipmentData) => {
     const order = await Order.findById(id);
     if (!order) return { success: false, message: 'Order not found.' };
 
-    if (sellerId !== order.sellerId.toString()) {
+    if (!order.sellerIds.map(String).includes(String(sellerId))) {
       return { success: false, message: 'Wrong seller Id.' };
     }
     const { orderSkuList, merchantOrderNo, orderId } = order;
@@ -1908,7 +1908,9 @@ export const createManualShipmentService = async (shipmentData) => {
     if (existingAwb) throw new Error(`AWB number '${airWaybillNo}' already exists`);
     if (!order) throw new Error(`Order with ID ${orderId} not found`);
     if (!user) throw new Error(`User with ID ${userId} not found`);
-
+    if (!order.sellerIds.map(String).includes(String(sellerId))) {
+      return { success: false, message: 'Wrong seller Id.' };
+    }
     /* -------------------- ORDER SKU MAP -------------------- */
     const orderSkuMap = new Map();
     order.orderSkuList?.skuList?.forEach((sku) => {

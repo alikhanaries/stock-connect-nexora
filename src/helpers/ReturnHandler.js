@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import { RETURN_STATUS } from '#root/src/constants/common.js';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
@@ -32,12 +31,13 @@ export const getOrderDataByOrderLineIds = async (orderLineIds, Order, projection
   }
 };
 
-export const sanitizeReturnData = async (returnData, Order = null) => {
+export const sanitizeReturnData = async (returnData, OrderModel = null) => {
   try {
     if (!returnData) {
       throw new Error('Return data is required');
     }
 
+    // Step 1: Build initial product array
     const products = Array.isArray(returnData.Lines)
       ? returnData.Lines.map((line) => ({
           productSkuCode: line.MerchantProductNo,
@@ -46,12 +46,39 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
           acceptedQuantity: line.AcceptedQuantity || 0,
           rejectedQuantity: line.RejectedQuantity || 0,
           price: line.OrderLine?.UnitPriceInclVat || 0,
+          sellerId: null,
         }))
       : [];
 
-    // Extract orderLineIds and find the corresponding orderId
-    const orderLineIds = products.map((p) => p.orderLineId).filter(Boolean);
-    const orderData = Order ? await getOrderDataByOrderLineIds(orderLineIds, Order) : null;
+    let orderData = null;
+    const sellerIdSet = new Set();
+
+    if (OrderModel && returnData.MerchantOrderNo) {
+      orderData = await OrderModel.findOne({
+        merchantOrderNo: returnData.MerchantOrderNo,
+      }).lean();
+
+      if (orderData?.orderSkuList?.skuList?.length) {
+        // Create fast lookup map for merchantProductNo -> sellerId
+        const skuSellerMap = new Map();
+
+        for (const sku of orderData.orderSkuList.skuList) {
+          if (sku.merchantProductNo && sku.sellerId) {
+            skuSellerMap.set(String(sku.merchantProductNo), sku.sellerId);
+          }
+        }
+
+        // Assign sellerId inside each product
+        for (const product of products) {
+          const sellerId = skuSellerMap.get(String(product.productSkuCode));
+
+          if (sellerId) {
+            product.sellerId = sellerId;
+            sellerIdSet.add(String(sellerId));
+          }
+        }
+      }
+    }
 
     const sanitizedData = {
       returnId: returnData.Id?.toString(),
@@ -61,12 +88,13 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
       channelReturnNo: returnData.ChannelReturnNo,
       channelId: returnData.ChannelId,
       orderId: orderData?.orderId || null,
+      sellerIds: Array.from(sellerIdSet), // Return-level sellerIds
       totalPrice: returnData.RefundInclVat || 0,
       placedOn: returnData.CreatedAt ? new Date(returnData.CreatedAt) : null,
       acknowledgeDate: returnData.AcknowledgedDate ? new Date(returnData.AcknowledgedDate) : null,
       status: returnData.Status,
       platform: returnData.ChannelName,
-      products: products,
+      products, // Now contains sellerId inside each product
       returnDate: returnData?.ReturnDate || null,
     };
 
@@ -180,6 +208,7 @@ export const buildReturnAggregationPipeline = () => {
         updatedAt: 1,
         orderInfo: 1,
         shipmentData: 1,
+        sellerIds: 1,
       },
     },
   ];
@@ -192,7 +221,7 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
 };
 
 export const buildReturnMatchAndPipeline = (query = {}) => {
-  const { status, platform, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
+  const { status, platform, channelId, returnId, orderID, search, dateFrom, dateTo } = query;
 
   const matchConditions = {};
 
@@ -226,8 +255,6 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
 
   addFilter(matchConditions, 'returnId', returnId);
   addFilter(matchConditions, 'orderId', orderID);
-
-  addFilter(matchConditions, 'orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
 
   // Search Filter
   if (search) {
@@ -345,9 +372,7 @@ export const addStatusManipulationStages = () => {
 };
 
 export const formatReturnDetails = (aggregatedResult) => {
-  if (!aggregatedResult) {
-    return null;
-  }
+  if (!aggregatedResult) return null;
 
   const returnData = aggregatedResult;
   const orderInfo = aggregatedResult.orderInfo;
@@ -357,6 +382,7 @@ export const formatReturnDetails = (aggregatedResult) => {
       _id: returnData._id,
       returnId: returnData.returnId || null,
       orderId: null,
+      orderDbId: null,
       paymentInfo: {
         channelName: returnData.platform || null,
         paymentMethod: null,
@@ -368,67 +394,46 @@ export const formatReturnDetails = (aggregatedResult) => {
         phoneNo: null,
       },
       shippingAddress: {
-        address: null,
-        city: null,
-        region: null,
-        zipCode: null,
+        address: 'NA',
+        city: 'NA',
+        region: 'NA',
+        zipCode: 'NA',
       },
-      products:
-        returnData.products?.map((product, index) => ({
-          id: index + 1,
-          orderLineId: product.orderLineId,
-          merchantProductNo: product.productSkuCode,
-          channelProductNo: null,
-          name: 'Product',
-          imageUrl: null,
-          unitPriceInclVat: 0,
-          unitPriceExclVat: 0,
-          unitVat: 0,
-          lineTotalInclVat: 0,
-          lineTotalExclVat: 0,
-          lineVat: 0,
-          quantity: product.quantity || 0,
-          acceptedQuantity: product.acceptedQuantity || 0,
-          rejectedQuantity: product.rejectedQuantity || 0,
-        })) || [],
+      products: [],
       omniful: returnData.omniful || null,
-      status: returnData.status || null,
+      status: returnData.status || 'UNKNOWN',
       subtotal: 0,
       tax: 0,
       total: 0,
       shippingFee: 0,
+      trackingNumber: null,
+      shipmentStatus: null,
+      logsDetails: returnData?.returnLogsData || [],
+      orderLogsData: returnData?.returnLogsData || [],
     };
   }
 
   const returnedSkus = returnData.products || [];
   const orderSkus = orderInfo.orderSkuList?.skuList || [];
 
-  // Calculate shipping and total quantities
-  const totalReturnQuantity = returnedSkus.reduce((sum, product) => sum + (product.quantity || 0), 0);
-  const totalOrderQuantity = orderSkus.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
-  const returnProportion = totalOrderQuantity > 0 ? totalReturnQuantity / totalOrderQuantity : 0;
+  let subtotal = 0;
+  let tax = 0;
 
-  // Calculate proportional costs
-  const proportionalSubtotalExclVat = (orderInfo.subTotalExclVat || 0) * returnProportion;
-  const proportionalSubtotalVat = (orderInfo.subTotalVat || 0) * returnProportion;
-  const proportionalShippingExclVat = (orderInfo.shippingCostsExclVat || 0) * returnProportion;
-  const proportionalShippingVat = (orderInfo.shippingCostsVat || 0) * returnProportion;
-
-  // Calculate totals
-  const subtotal = proportionalSubtotalExclVat;
-  const tax = proportionalSubtotalVat + proportionalShippingVat;
-  const shippingFee = proportionalShippingExclVat;
-  const total = subtotal + tax + shippingFee;
-
-  // Map returned items to products format - now using orderLineId matching
   const products = returnedSkus.map((returnProduct, index) => {
-    // Match by orderLineId instead of merchantProductNo
-    const matchingSku = orderSkus.find((sku) => sku.id === returnProduct.orderLineId);
+    const matchingSku = orderSkus.find((sku) => Number(sku.id) === Number(returnProduct.orderLineId));
+
+    const quantity = returnProduct.quantity || 0;
 
     const unitPriceExclVat = matchingSku?.unitPriceExclVat || 0;
     const unitVat = matchingSku?.unitVat || 0;
     const unitPriceInclVat = unitPriceExclVat + unitVat;
-    const quantity = returnProduct.quantity || 0;
+
+    const lineTotalExclVat = unitPriceExclVat * quantity;
+    const lineVat = unitVat * quantity;
+    const lineTotalInclVat = unitPriceInclVat * quantity;
+
+    subtotal += lineTotalExclVat;
+    tax += lineVat;
 
     return {
       id: index + 1,
@@ -437,19 +442,23 @@ export const formatReturnDetails = (aggregatedResult) => {
       channelProductNo: matchingSku?.channelProductNo || null,
       name: matchingSku?.description || 'Product',
       imageUrl: null,
-      unitPriceInclVat: unitPriceInclVat,
-      unitPriceExclVat: unitPriceExclVat,
-      unitVat: unitVat,
-      lineTotalInclVat: unitPriceInclVat * quantity,
-      lineTotalExclVat: unitPriceExclVat * quantity,
-      lineVat: unitVat * quantity,
-      quantity: quantity,
+      unitPriceInclVat,
+      unitPriceExclVat,
+      unitVat,
+      lineTotalInclVat,
+      lineTotalExclVat,
+      lineVat,
+      quantity,
       acceptedQuantity: returnProduct.acceptedQuantity || 0,
       rejectedQuantity: returnProduct.rejectedQuantity || 0,
+      sellerId: returnProduct.sellerId || null,
     };
   });
 
-  // Build shipping address
+  // Seller-safe shipping logic (optional)
+  let shippingFee = 0;
+  const total = subtotal + tax + shippingFee;
+
   const shippingAddress = orderInfo.orderShippingAddress
     ? {
         address: [
