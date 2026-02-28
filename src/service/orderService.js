@@ -109,29 +109,28 @@ const getAllOrders = async (query, sellerId) => {
     const filter = {
       sellerIds: { $in: [sellerObjectId] },
     };
-// Escape special regex characters
-const escapeRegex = (str) =>
-  str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Escape special regex characters
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (search && search.trim() !== '') {
-    const words = search.trim().split(/\s+/);
+      const words = search.trim().split(/\s+/);
 
-  filter.$and = words.map((word) => {
-    const safeWord = escapeRegex(word);
+      filter.$and = words.map((word) => {
+        const safeWord = escapeRegex(word);
 
-    const regex = {
-      $regex: safeWord,
-      $options: 'i',
-    };
+        const regex = {
+          $regex: safeWord,
+          $options: 'i',
+        };
 
-    return {
-      $or: [
-        { orderId: regex },
-        { 'orderCustomer.email': regex },
-        { 'orderCustomer.firstName': regex },
-        { 'orderCustomer.lastName': regex },
-      ],
- };
-  });
+        return {
+          $or: [
+            { orderId: regex },
+            { 'orderCustomer.email': regex },
+            { 'orderCustomer.firstName': regex },
+            { 'orderCustomer.lastName': regex },
+          ],
+        };
+      });
       appliedFilters.search = search;
     }
 

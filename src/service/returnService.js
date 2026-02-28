@@ -211,25 +211,18 @@ export const getReturnsFromDatabase = async (query = {}) => {
         },
       }
     );
-
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (query.search && isNameOrEmailSearch(query.search)) {
-  const words = query.search.trim().split(/\s+/);
+      const words = query.search.trim().split(/\s+/);
 
-  const andConditions = words.map((word) => {
-    const safeWord = escapeRegex(word);
-    const regex = new RegExp(safeWord, 'i');
+      const andConditions = words.map((word) => {
+        const safeWord = escapeRegex(word);
+        const regex = new RegExp(safeWord, 'i');
 
-    return {
-      $or: [
-        { customer: { $regex: regex } },
-        { email: { $regex: regex } },
-        { orderID: { $regex: regex } },
-      ],
-    };
-  });
-
-  filter.$and = andConditions;
-}
+        return {
+          $or: [{ customer: { $regex: regex } }, { email: { $regex: regex } }, { orderID: { $regex: regex } }],
+        };
+      });
 
       pipeline.push({
         $match: { $and: andConditions },

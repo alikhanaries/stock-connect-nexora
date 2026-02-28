@@ -133,15 +133,21 @@ export const getAllUsers = async (req, res) => {
         filter.active = active === 'true';
       }
     }
-    if (search) {
+    if (search && search.trim() !== '') {
       const words = search.trim().split(/\s+/);
 
       const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-      filter.$or = words.flatMap((word) => {
-        const regex = new RegExp(escapeRegex(word), 'i');
+      filter.$and = words.map((word) => {
+        const safeWord = escapeRegex(word);
 
-        return [{ firstName: { $regex: regex } }, { lastName: { $regex: regex } }, { email: { $regex: regex } }];
+        return {
+          $or: [
+            { firstName: { $regex: safeWord, $options: 'i' } },
+            { lastName: { $regex: safeWord, $options: 'i' } },
+            { email: { $regex: safeWord, $options: 'i' } },
+          ],
+        };
       });
     }
 
