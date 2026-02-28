@@ -2347,6 +2347,10 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
 
     // ---- 4️ Process shipments
     for (const ceShipment of channelEngineShipments) {
+      if (!ceShipment?.MerchantShipmentNo?.trim()) {
+        console.warn('Skipping shipment without MerchantShipmentNo');
+        continue;
+      }
       const lines = ceShipment.Lines || [];
       if (!lines.length) continue;
 
@@ -2400,9 +2404,6 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
       if (!shipmentSellerId) {
         shipmentSellerId = order.sellerId;
       }
-      console.log('shipmentSellerId', shipmentSellerId);
-      console.log('merchantShipmentNo', ceShipment?.MerchantShipmentNo);
-      console.log('ORDERID', order.orderId);
       bulkOps.push({
         updateOne: {
           filter: {
