@@ -748,7 +748,7 @@ export const ayMakanWebHookService = async (data) => {
       })),
     };
 
-    //  Add submissionDate only when status is SHIPPED
+    // Add submissionDate only when status is SHIPPED and submissionDate is not already set
     if (shipmentStatus === 'SHIPPED' && !shipmentData.submissionDate) {
       updateData.submissionDate = new Date();
     }
