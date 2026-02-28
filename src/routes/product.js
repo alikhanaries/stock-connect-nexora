@@ -2,6 +2,7 @@ import {
   deleteMultipleProducts,
   deleteProduct,
   getProducts,
+  syncProducts,
   getProductById,
   getTopSellingProduct,
   getUserUnassignedProducts,
@@ -37,6 +38,7 @@ import {
   getProductByIdValidator,
   getTopSellingProductValidator,
   updateProductStatusValidator,
+  syncProductsValidator,
 } from '#validations/products.js';
 import upload from '#helpers/FileHandler.js'; // the above multer setup
 
@@ -117,6 +119,15 @@ productsRouter.delete(
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
 productsRouter.get('/getProduct/:id', getProductByIdValidator, checkLanguage, authMiddleware, getProductById);
+
+productsRouter.get(
+  '/product-sync/:channel',
+  syncProductsValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  syncProducts
+);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 /**
