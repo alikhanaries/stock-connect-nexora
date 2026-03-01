@@ -133,9 +133,22 @@ export const getAllUsers = async (req, res) => {
         filter.active = active === 'true';
       }
     }
-    if (search) {
-      const searchRegex = new RegExp(search, 'i');
-      filter.$or = [{ firstName: searchRegex }, { lastName: searchRegex }];
+    if (search && search.trim() !== '') {
+      const words = search.trim().split(/\s+/);
+
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      filter.$and = words.map((word) => {
+        const safeWord = escapeRegex(word);
+
+        return {
+          $or: [
+            { firstName: { $regex: safeWord, $options: 'i' } },
+            { lastName: { $regex: safeWord, $options: 'i' } },
+            { email: { $regex: safeWord, $options: 'i' } },
+          ],
+        };
+      });
     }
 
     const sortDirection = sortOrder.toLowerCase() === 'asc' ? 1 : -1;

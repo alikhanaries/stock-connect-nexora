@@ -73,17 +73,31 @@ const getAllOrders = async (query, sellerId) => {
     const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
 
     // Base match stage
-    const filter = { sellerId: sellerObjectId };
+    const filter = {
+      sellerId: sellerObjectId,
+    };
+    // Escape special regex characters
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (search && search.trim() !== '') {
+      const words = search.trim().split(/\s+/);
 
-    if (search) {
-      const regex = { $regex: search, $options: 'i' };
+      filter.$and = words.map((word) => {
+        const safeWord = escapeRegex(word);
 
-      filter.$or = [
-        { orderId: regex },
-        { 'orderCustomer.email': regex },
-        { 'orderCustomer.firstName': regex },
-        { 'orderCustomer.lastName': regex },
-      ];
+        const regex = {
+          $regex: safeWord,
+          $options: 'i',
+        };
+
+        return {
+          $or: [
+            { orderId: regex },
+            { 'orderCustomer.email': regex },
+            { 'orderCustomer.firstName': regex },
+            { 'orderCustomer.lastName': regex },
+          ],
+        };
+      });
       appliedFilters.search = search;
     }
 

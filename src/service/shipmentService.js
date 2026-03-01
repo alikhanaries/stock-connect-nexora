@@ -480,10 +480,14 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     // Applied filters object
     const appliedFilters = {};
 
+    // Escape regex helper (ReDoS safe)
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Status filter (case-insensitive exact match)
     if (status) {
-      const statusArray = status.split(',').map((s) => s.trim()); // ['pending','closed','open']
+      const statusArray = status.split(',').map((s) => s.trim());
       matchStage.status = {
-        $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+        $in: statusArray.map((s) => new RegExp(`^${escapeRegex(s)}$`, 'i')),
       };
       appliedFilters.status = status;
     }
@@ -512,24 +516,38 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
 
     // Build OR search conditions
     if (search && search.trim() !== '') {
-      const searchRegex = new RegExp(search.trim(), 'i'); // case-insensitive search
+      const words = search.trim().split(/\s+/);
 
-      const orConditions = [
-        { 'shipmentMerchantDetails.name': { $regex: searchRegex } },
-        { 'shipmentMerchantDetails.email': { $regex: searchRegex } },
-        { 'deliveryInfo.name': { $regex: searchRegex } },
-        { 'deliveryInfo.email': { $regex: searchRegex } },
-        { airWaybillNo: { $regex: searchRegex } },
-        { status: { $regex: searchRegex } },
-      ];
+      const andConditions = words.map((word) => {
+        const safeWord = escapeRegex(word);
 
-      aggregationPipeline.push({ $match: { $or: orConditions } });
+        return {
+          $or: [
+            { 'shipmentMerchantDetails.name': { $regex: safeWord, $options: 'i' } },
+            { 'shipmentMerchantDetails.email': { $regex: safeWord, $options: 'i' } },
+            { 'deliveryInfo.name': { $regex: safeWord, $options: 'i' } },
+            { 'deliveryInfo.email': { $regex: safeWord, $options: 'i' } },
+            { airWaybillNo: { $regex: safeWord, $options: 'i' } },
+            { status: { $regex: safeWord, $options: 'i' } },
+            { 'orderDetails.orderId': { $regex: safeWord, $options: 'i' } },
+          ],
+        };
+      });
+
+      aggregationPipeline.push({
+        $match: { $and: andConditions },
+      });
+
+      appliedFilters.search = search;
     }
 
-    aggregationPipeline.push(
+    // Data Pipeline
+
+    const dataPipeline = [
+      ...aggregationPipeline,
       {
         $project: {
-          createdAt: '$createdAt',
+          createdAt: 1,
           status: 1,
           shipmentDate: '$submissionDate',
           airWaybillNo: 1,
@@ -537,33 +555,27 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
           shipmentMethod: 1,
           shipmentMerchantDetails: 1,
           deliveryCustomer: {
-            name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
-            email: { $ifNull: ['$deliveryInfo.email', '$shipmentMerchantDetails.email'] },
+            name: { $ifNull: ['$deliveryInfo.name', 'NA'] },
+            email: { $ifNull: ['$deliveryInfo.email', 'NA'] },
           },
           orderId: '$orderDetails.orderId',
         },
       },
       { $sort: { createdAt: sortDirection } },
-      { $skip: skip }, // skip for pagination
-      { $limit: perPage } // limit for pagination
-    );
+      { $skip: skip },
+      { $limit: perPage },
+    ];
 
-    const shipmentData = await Shipment.aggregate(aggregationPipeline);
+    // Count Pipeline
 
-    // Total count with same filters (without skip/limit)
-    const totalCountMatch = { ...matchStage };
-    if (search && search.trim() !== '') {
-      const searchRegex = new RegExp(search.trim(), 'i');
-      totalCountMatch.$or = [
-        { 'shipmentMerchantDetails.name': { $regex: searchRegex } },
-        { 'shipmentMerchantDetails.email': { $regex: searchRegex } },
-        { 'deliveryInfo.name': { $regex: searchRegex } },
-        { 'deliveryInfo.email': { $regex: searchRegex } },
-        { airWaybillNo: { $regex: searchRegex } },
-        { status: { $regex: searchRegex } },
-      ];
-    }
-    const total = await Shipment.countDocuments(totalCountMatch);
+    const countPipeline = [...aggregationPipeline, { $count: 'total' }];
+    // Execute in parallel
+    const [shipmentData, countResult] = await Promise.all([
+      Shipment.aggregate(dataPipeline),
+      Shipment.aggregate(countPipeline),
+    ]);
+
+    const total = countResult[0]?.total || 0;
 
     return {
       shipments: shipmentData,
@@ -646,8 +658,8 @@ export const getAllShipmentsAdminService = async ({
         sellerId: 1,
         shipmentMerchantDetails: 1,
         deliveryCustomer: {
-          name: { $ifNull: ['$deliveryInfo.name', '$shipmentMerchantDetails.name'] },
-          email: { $ifNull: ['$deliveryInfo.email', '$shipmentMerchantDetails.email'] },
+          name: { $ifNull: ['$deliveryInfo.name', 'NA'] },
+          email: { $ifNull: ['$deliveryInfo.email', 'NA'] },
         },
       },
     },
@@ -684,6 +696,7 @@ export const ayMakanWebHookService = async (data) => {
         airWaybillNo: 1,
         status: 1,
         orderId: 1,
+        submissionDate: 1,
       }
     ).lean();
 
@@ -733,14 +746,21 @@ export const ayMakanWebHookService = async (data) => {
     }
 
     // ---------------- UPDATE SHIPMENT ----------------
-    await Shipment.findByIdAndUpdate(shipmentData._id, {
+    const updateData = {
       status: shipmentStatus,
       trackingInfo: (data.tracking_info || []).map((i) => ({
         statusCode: i.status_code,
         description: i.description,
         createdAt: i.created_at,
       })),
-    });
+    };
+
+    // Add submissionDate only when status is SHIPPED and submissionDate is not already set
+    if (shipmentStatus === 'SHIPPED' && !shipmentData.submissionDate) {
+      updateData.submissionDate = new Date();
+    }
+
+    await Shipment.findByIdAndUpdate(shipmentData._id, updateData);
 
     // SKU BREAKDOWN UPDATE
 
