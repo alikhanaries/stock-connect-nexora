@@ -567,7 +567,6 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     // Count Pipeline
 
     const countPipeline = [...aggregationPipeline, { $count: 'total' }];
-    console.log('dataPipeline', dataPipeline);
     // Execute in parallel
     const [shipmentData, countResult] = await Promise.all([
       Shipment.aggregate(dataPipeline),
