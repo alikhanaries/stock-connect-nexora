@@ -14,6 +14,7 @@ import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
 import { syncAmazonOrders } from '../service/amazonOrderService.js';
 import { config } from '../config/config.js';
+import shipmentService from '../service/shipmentService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -165,15 +166,14 @@ export const getSyncedOrders = async (req, res) => {
     if (newOrdersToAcknowledge.length > 0) {
       orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge);
     }
-    orderService
-      ?.syncChannelEngineShipment(userId)
+    shipmentService
+      ?.getChannelEngineShipmentDetailsService(userId)
       .then(() => {
         console.log(' ChannelEngine shipment sync completed successfully');
       })
       .catch((error) => {
         console.error(' ChannelEngine shipment sync failed:', error);
       });
-
     return Responses.successResponse(res, message, 200);
   } catch (error) {
     errorLog(error);

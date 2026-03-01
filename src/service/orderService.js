@@ -18,11 +18,7 @@ import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
-import {
-  formatShipmentTrackingInfo,
-  getChannelEngineShipmentDetailsService,
-  createShipmentsFromChannelEngine,
-} from '#service/shipmentService.js';
+import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { formatDateTime } from '#helpers/Common.js';
 import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
@@ -1174,39 +1170,6 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
   }
 };
 
-// Fetch CE shipment details
-export const syncChannelEngineShipment = async (userId) => {
-  try {
-    let channelEngineShipments = [];
-
-    try {
-      const ceResponse = await getChannelEngineShipmentDetailsService();
-
-      //  Successful API response
-      if (ceResponse?.success && Array.isArray(ceResponse.data)) {
-        channelEngineShipments = ceResponse.data;
-      } else {
-        console.warn('ChannelEngine shipment fetch failed (ignored):', ceResponse?.message);
-      }
-    } catch (err) {
-      console.warn('ChannelEngine shipment fetch error (ignored):', err.message);
-    }
-    const shippedData = channelEngineShipments.filter((s) => s.MerchantShipmentNo !== null);
-
-    // Create shipments only if CE returned data
-
-    if (shippedData.length > 0) {
-      try {
-        await createShipmentsFromChannelEngine(shippedData, userId);
-      } catch (err) {
-        console.error('Shipment creation failed (ignored):', err.message);
-      }
-    }
-  } catch (err) {
-    console.error('Shipment creation failed (ignored):', err.message);
-  }
-};
-
 export default {
   getAllOrders,
   getAdminOrders,
@@ -1221,5 +1184,4 @@ export default {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrdersToCSV,
-  syncChannelEngineShipment,
 };
