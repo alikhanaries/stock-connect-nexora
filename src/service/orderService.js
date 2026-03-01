@@ -78,7 +78,7 @@ const getAllOrders = async (query, sellerId) => {
 
     // Base match stage
     const filter = {
-      sellerIds: { $in: [sellerObjectId] },
+      sellerId: sellerObjectId,
     };
     // Escape special regex characters
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
