@@ -55,9 +55,9 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
 
     const sanitizedData = {
       returnId: returnData.Id?.toString(),
-      reason: returnData.Reason,
-      customerComment: returnData.CustomerComment,
-      merchantComment: returnData.MerchantComment,
+      reason: returnData.Reason || '',
+      customerComment: returnData.CustomerComment || '',
+      merchantComment: returnData.MerchantComment || '',
       merchantReturnNo: returnData.MerchantReturnNo,
       merchantOrderNo: returnData.MerchantOrderNo,
       channelOrderNo: returnData.ChannelOrderNo,
