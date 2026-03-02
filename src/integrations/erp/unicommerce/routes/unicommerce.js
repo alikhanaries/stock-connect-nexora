@@ -9,6 +9,8 @@ import { login } from '#root/src/integrations/erp/unicommerce/controllers/authCo
 import { loginValidator } from '#root/src/integrations/erp/unicommerce/validations/auth.js';
 import { checkLanguage } from '#middleware/index.js';
 import { getProductCountValidator, getProductsValidator } from '../validations/products.js';
+import { getOrderStatusValidator } from '../validations/orders.js';
+import { getOrderStatus } from '../controllers/orderController.js';
 
 const UniCommerceRouter = express.Router();
 
@@ -214,5 +216,84 @@ UniCommerceRouter.get(
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
   fetchProducts
+);
+
+/**
+ * @openapi
+ * /orders:
+ *   get:
+ *     tags: [UniCommerce]
+ *     summary: Get Order Status
+ *     description: Fetch latest active status of specific marketplace order for Uniware OMS.
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         description: Language preference
+ *
+ *       - in: header
+ *         name: accessToken
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Access token received from authentication API
+ *
+ *       - in: query
+ *         name: pageNumber
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         example: 1
+ *
+ *       - in: query
+ *         name: pageSize
+ *         required: true
+ *         schema:
+ *           type: integer
+ *           enum: [5]
+ *         example: 5
+ *
+ *       - in: query
+ *         name: orderIds
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Single order ID per API call
+ *         example: 12345
+ *
+ *     responses:
+ *       200:
+ *         description: Order status fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 orders:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/FailResponse"
+ *
+ *       500:
+ *         description: Internal server error
+ */
+
+UniCommerceRouter.get(
+  '/orders',
+  getOrderStatusValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  getOrderStatus
 );
 export default UniCommerceRouter;
