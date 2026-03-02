@@ -321,7 +321,7 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
   }
 };
 
-async function sendStockBatch(stockUpdates, retries = MAX_RETRIES) {
+export async function sendStockBatch(stockUpdates, retries = MAX_RETRIES) {
   try {
     const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}offer/stock?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
       method: 'PUT',

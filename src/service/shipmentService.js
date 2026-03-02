@@ -26,6 +26,8 @@ import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
+import { decreaseStock, increaseStock } from '../helpers/inventoryHandler.js';
+import Seller from '#models/Seller.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
@@ -273,7 +275,9 @@ export const createFullShipmentService = async (shipmentData) => {
     }
 
     //  Step 2: Fetch order as a Mongoose document (no .lean())
-    const order = await Order.findById(id);
+    const [order, sellerDoc] = await Promise.all([Order.findById(id), Seller.findById(sellerId).select('name').lean()]);
+    const sellerName = sellerDoc?.name || '';
+
     if (!order) return { success: false, message: 'Order not found.' };
 
     if (sellerId !== order.sellerId.toString()) {
@@ -362,6 +366,17 @@ export const createFullShipmentService = async (shipmentData) => {
         return {
           success: false,
           message: `Cannot ship ${product.quantity} units of product ${orderLineId}, only ${remainingQty} units available.`,
+        };
+      }
+
+      const shippedQty = Number(product.quantity || 0);
+
+      const stockResult = await decreaseStock(product.merchantProductNo, shippedQty, sellerName, 'CE');
+
+      if (!stockResult.success) {
+        return {
+          success: false,
+          message: stockResult.message,
         };
       }
     }
@@ -1283,8 +1298,13 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     // STEP 4: Fetch order (mongoose doc, not lean)
 
-    const order = await Order.findById(orderId);
+    const [order, sellerDoc] = await Promise.all([
+      Order.findById(orderId),
+      Seller.findById(shipment.sellerId).select('name').lean(),
+    ]);
     if (!order) throw new Error('Order not found');
+
+    const sellerName = sellerDoc?.name || '';
 
     // STEP 5: REVERT SKU STATUS BREAKDOWN
 
@@ -1315,6 +1335,8 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
       // SKU status correction
       sku.status = sku.statusBreakdown.confirmed === sku.quantity ? 'NEW' : 'IN_PROGRESS';
+
+      await increaseStock(product.merchantProductNo, product.quantity, sellerName, 'CE');
     }
 
     await order.save();
@@ -1950,11 +1972,13 @@ export const createManualShipmentService = async (shipmentData) => {
     }
 
     /* -------------------- PARALLEL FETCH -------------------- */
-    const [existingMerchantShipment, existingAwb, user] = await Promise.all([
+    const [existingMerchantShipment, existingAwb, user, sellerDoc] = await Promise.all([
       Shipment.findOne({ merchantShipmentNo }),
       Shipment.findOne({ airWaybillNo }),
       User.findById(userId).lean(),
+      Seller.findById(sellerId).lean().select('name'),
     ]);
+    const sellerName = sellerDoc?.name || '';
 
     if (existingMerchantShipment) throw new Error(`Merchant shipment number '${merchantShipmentNo}' already exists`);
     if (existingAwb) throw new Error(`AWB number '${airWaybillNo}' already exists`);
@@ -2010,6 +2034,10 @@ export const createManualShipmentService = async (shipmentData) => {
         quantity: product.quantity,
         hsCode: orderSku.hsCode || '1111111',
       });
+
+      const stockResult = await decreaseStock(product.merchantProductNo, product.quantity, sellerName, 'CE');
+
+      if (!stockResult.success) throw new Error(` unable to create shipment ${stockResult.message}`);
     }
 
     /* -------------------- PICKUP & DELIVERY -------------------- */
