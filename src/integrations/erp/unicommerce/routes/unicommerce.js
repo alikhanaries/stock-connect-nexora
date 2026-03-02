@@ -10,7 +10,7 @@ import { loginValidator } from '#root/src/integrations/erp/unicommerce/validatio
 import { checkLanguage } from '#middleware/index.js';
 import { getProductCountValidator, getProductsValidator } from '../validations/products.js';
 import { updateInventoryValidator } from '../validations/inventory.js';
-import { updateInventory } from '../controllers/inventoryControlle.js';
+import { updateInventory } from '../controllers/inventoryController.js';
 
 const UniCommerceRouter = express.Router();
 
@@ -235,11 +235,11 @@ UniCommerceRouter.get(
  *         description: Language preference
  *
  *       - in: header
- *         name: apiKey
+ *         name: Authorization
  *         required: true
  *         schema:
  *           type: string
- *         description: Access token obtained from Get Authentication API
+ *         description: Bearer access token obtained from Get Authentication API (format: "Authorization: Bearer &lt;token&gt;")
  *
  *     requestBody:
  *       required: true
