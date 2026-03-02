@@ -14,29 +14,22 @@ export const increaseStock = async (sku, quantity, sellerName, type) => {
     }
 
     const [inventory, product] = await Promise.all([
-      Inventory.findOne({ productSkuCode: sku }).select('currentStockCount'),
-      Product.findOne({ productSkuCode: sku }).select('currentStockCount updatedAt status'),
+      Inventory.findOneAndUpdate({ productSkuCode: sku }, { $inc: { currentStockCount: qty } }, { new: true }),
+      Product.findOneAndUpdate(
+        { productSkuCode: sku },
+        { $inc: { currentStockCount: qty }, $set: { updatedAt: new Date() } },
+        { new: true }
+      ),
     ]);
 
     if (!inventory || !product) {
       return { success: false, message: 'Inventory or product not found' };
     }
 
-    inventory.currentStockCount += qty;
-    product.currentStockCount += qty;
-    product.updatedAt = new Date();
-
     const prodStatus = getProductStatus(sellerName, product.currentStockCount);
 
     if (prodStatus !== product.status) {
-      product.status = prodStatus;
-    }
-
-    try {
-      await Promise.all([inventory.save(), product.save()]);
-    } catch (err) {
-      console.error('Service increaseStock error:', err);
-      return { success: false, message: 'Failed to update stock in db' };
+      await Product.updateOne({ productSkuCode: sku }, { $set: { status: prodStatus } });
     }
 
     const payload = {
