@@ -1336,7 +1336,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       // SKU status correction
       sku.status = sku.statusBreakdown.confirmed === sku.quantity ? 'NEW' : 'IN_PROGRESS';
 
-      await increaseStock(product.merchantProductNo, product.quantity, sellerName, 'CE');
+      await increaseStock(product.merchantProductNo, qty, sellerName, 'CE');
     }
 
     await order.save();

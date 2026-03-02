@@ -5,6 +5,14 @@ import { getProductStatus } from '#utils/mapRowToInventory.js';
 
 export const increaseStock = async (sku, quantity, sellerName, type) => {
   try {
+    const qty = Number(quantity);
+    if (isNaN(qty) || qty < 0) {
+      return { success: false, message: 'Invalid quantity provided' };
+    }
+    if (qty === 0) {
+      return { success: true, message: 'Quantity is zero, no changes needed' };
+    }
+
     const [inventory, product] = await Promise.all([
       Inventory.findOne({ productSkuCode: sku }).select('currentStockCount'),
       Product.findOne({ productSkuCode: sku }).select('currentStockCount updatedAt status'),
@@ -14,8 +22,8 @@ export const increaseStock = async (sku, quantity, sellerName, type) => {
       return { success: false, message: 'Inventory or product not found' };
     }
 
-    inventory.currentStockCount += quantity;
-    product.currentStockCount += quantity;
+    inventory.currentStockCount += qty;
+    product.currentStockCount += qty;
     product.updatedAt = new Date();
 
     const prodStatus = getProductStatus(sellerName, product.currentStockCount);
@@ -53,6 +61,14 @@ export const increaseStock = async (sku, quantity, sellerName, type) => {
 
 export const decreaseStock = async (sku, quantity, sellerName, type) => {
   try {
+    const qty = Number(quantity);
+    if (isNaN(qty) || qty < 0) {
+      return { success: false, message: 'Invalid quantity provided' };
+    }
+    if (qty === 0) {
+      return { success: true, message: 'Quantity is zero, no changes needed' };
+    }
+
     const [inventory, product] = await Promise.all([
       Inventory.findOne({ productSkuCode: sku }).select('currentStockCount'),
       Product.findOne({ productSkuCode: sku }).select('currentStockCount updatedAt status'),
@@ -66,12 +82,12 @@ export const decreaseStock = async (sku, quantity, sellerName, type) => {
       return { success: false, message: 'Inventory stock is zero' };
     }
 
-    if (inventory.currentStockCount < quantity || product.currentStockCount < quantity) {
+    if (inventory.currentStockCount < qty || product.currentStockCount < qty) {
       return { success: false, message: 'Inventory stock is less than quantity' };
     }
 
-    inventory.currentStockCount -= quantity;
-    product.currentStockCount -= quantity;
+    inventory.currentStockCount -= qty;
+    product.currentStockCount -= qty;
     product.updatedAt = new Date();
 
     const prodStatus = getProductStatus(sellerName, product.currentStockCount);
