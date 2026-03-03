@@ -148,6 +148,15 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
               ],
             },
           },
+          canceledTotal: {
+            $sum: {
+              $multiply: [
+                { $ifNull: ['$orderSkuList.skuList.statusBreakdown.canceled', 0] },
+                { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+              ],
+            },
+          },
+
           totalProducts: {
             $sum: '$orderSkuList.skuList.quantity',
           },
@@ -160,9 +169,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalDeliveredSales: { $sum: '$deliveredTotal' },
           totalOrderValue: { $sum: '$totalOrderValue' },
 
-          cancellationValue: {
-            $sum: { $cond: [{ $eq: ['$status', 'CANCELED'] }, '$totalOrderValue', 0] },
-          },
+          cancellationValue: { $sum: '$canceledTotal' },
 
           avgProductsPerOrder: { $avg: '$totalProducts' },
         },
@@ -231,8 +238,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
     buildMetric(
       'avgProductsPerOrder',
       'Avg Products per Order',
-      Math.round(current.avgProductsPerOrder),
-      Math.round(previous.avgProductsPerOrder)
+      current.avgProductsPerOrder,
+      previous.avgProductsPerOrder
     ),
   ];
 };
