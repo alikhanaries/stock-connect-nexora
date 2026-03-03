@@ -1,7 +1,22 @@
 const mapOrderLevelStatus = (order) => {
-  if (order.status === 'CANCELLED') return 'CANCELLED';
-  if (order.status === 'COMPLETE') return 'COMPLETE';
-  return 'CREATED';
+  const status = order?.status;
+  switch (status) {
+    case 'NEW':
+    case 'IN_PROGRESS':
+      return 'CREATED';
+    case 'SHIPPED':
+    case 'CLOSED':
+    case 'RETURNED':
+      return 'COMPLETE';
+    case 'CANCELED':
+      return 'CANCELLED';
+    case 'CANCELLED':
+      return 'CANCELLED';
+    case 'COMPLETE':
+      return 'COMPLETE';
+    default:
+      return 'CREATED';
+  }
 };
 const mapItemStatus = (item) => {
   switch (item.status) {

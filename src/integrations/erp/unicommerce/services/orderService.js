@@ -6,11 +6,15 @@ export const fetchOrderStatus = async (sellerId, pageNumber, pageSize, orderIds)
     const page = Math.max(Number(pageNumber) || 1, 1);
     const limit = Number(pageSize) || 5;
     const skip = (page - 1) * limit;
-
+    const normalizedOrderId =
+      typeof orderIds === 'string' ? orderIds.trim() : orderIds != null ? String(orderIds).trim() : null;
     const query = {
       sellerId: new ObjectId(sellerId),
-      orderId: Number(orderIds),
     };
+    if (normalizedOrderId) {
+      query.orderId = normalizedOrderId;
+    }
+
     const orders = await Order.find(query).skip(skip).limit(limit).lean();
 
     if (!orders.length) {

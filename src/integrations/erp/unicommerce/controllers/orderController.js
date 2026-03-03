@@ -17,6 +17,6 @@ export const getOrderStatus = async (req, res) => {
     return successResponse(res, 200, data);
   } catch (error) {
     console.error('getOrderStatus error:', error);
-    return errorResponse(res, 500, 'Internal server error');
+    return errorResponse(res, 500, { message: 'Internal server error' });
   }
 };
