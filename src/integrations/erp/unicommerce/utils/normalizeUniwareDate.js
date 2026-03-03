@@ -6,7 +6,7 @@ export const normalizeUniwareDate = (dateStr) => {
 
   const d = new Date(normalized);
   if (isNaN(d.getTime())) {
-    throw new Error('Invalid date format');
+    throw new Error(`Invalid date format: "${dateStr}"`);
   }
 
   return d;

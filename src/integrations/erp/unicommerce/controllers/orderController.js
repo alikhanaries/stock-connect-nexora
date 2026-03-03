@@ -23,6 +23,6 @@ export const getOrders = async (req, res) => {
     return successResponse(res, 200, data);
   } catch (err) {
     console.error('unicommerce getOrders error:', err);
-    return errorResponse(res, 500, err.message);
+    return errorResponse(res, 500, { message: err.message });
   }
 };
