@@ -26,3 +26,19 @@ export const getOrders = async (req, res) => {
     return errorResponse(res, 500, { message: err.message });
   }
 };
+
+export const getOrderStatus = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    if (!sellerId) {
+      return failResponse(res, 400, { message: 'sellerId is missing' });
+    }
+    const { pageNumber = 1, pageSize = 5, orderIds } = req.query;
+    const data = await orderService.fetchOrderStatus(sellerId, pageNumber, pageSize, orderIds);
+
+    return successResponse(res, 200, data);
+  } catch (error) {
+    console.error('getOrderStatus error:', error);
+    return errorResponse(res, 500, { message: 'Internal server error' });
+  }
+};
