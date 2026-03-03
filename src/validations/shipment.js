@@ -101,7 +101,7 @@ export const createManualShipmentValidator = validate(async (req) => {
   const bodySchema = z.object({
     orderId: mongoIdField('orderId', { required: true }),
     sellerId: mongoIdField('sellerId', { required: true }),
-    pickUpId: mongoIdField('pickUpId', { required: true }),
+    pickUpId: mongoIdField('pickUpId', { required: false }).nullable().optional(),
 
     airWaybillNo: notNullString('airWaybillNo', undefined, { required: true }),
     merchantShipmentNo: notNullString('merchantShipmentNo', undefined, { required: true }),

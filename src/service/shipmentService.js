@@ -1893,7 +1893,7 @@ export const createManualShipmentService = async (shipmentData) => {
       orderId,
       sellerId,
       userId,
-      pickUpId,
+      pickUpId = null,
       airWaybillNo,
       merchantShipmentNo,
       method,
@@ -1908,7 +1908,6 @@ export const createManualShipmentService = async (shipmentData) => {
     if (!orderId) missingFields.push('orderId');
     if (!sellerId) missingFields.push('sellerId');
     if (!userId) missingFields.push('userId');
-    if (!pickUpId) missingFields.push('pickUpId');
     if (!airWaybillNo) missingFields.push('airWaybillNo');
     if (!merchantShipmentNo) missingFields.push('merchantShipmentNo');
     if (!method) missingFields.push('method');
@@ -1983,8 +1982,16 @@ export const createManualShipmentService = async (shipmentData) => {
     }
 
     /* -------------------- PICKUP & DELIVERY -------------------- */
-    const pickupData = await getPickUpAddress(pickUpId);
-    if (!pickupData) throw new Error('Invalid pickup address ID');
+
+    let pickupData = null;
+
+    if (pickUpId) {
+      pickupData = await getPickUpAddress(pickUpId);
+
+      if (!pickupData) {
+        throw new Error('Invalid pickup address ID');
+      }
+    }
 
     let deliveryId;
     const existingDelivery = await DeliveryAddress.findOne({ orderId }).lean();
@@ -2008,12 +2015,26 @@ export const createManualShipmentService = async (shipmentData) => {
     /* -------------------- CREATE SHIPMENT -------------------- */
     const totalPieces = validatedProducts.reduce((s, p) => s + p.quantity, 0);
 
+    /* -------------------- CHANNEL ENGINE -------------------- */
+    await createShipmentWithChannelEngine({
+      merchantShipmentNo,
+      merchantOrderNo: order.merchantOrderNo || order.orderId,
+      lines: validatedProducts,
+      trackTraceNo: airWaybillNo,
+      trackTraceUrl,
+      method,
+      shippedFromCountryCode,
+      shipmentDate: new Date(),
+      isMerchantCreator: true,
+      airWaybillNo,
+    });
+
     const shipment = await new Shipment({
       orderId,
       sellerId,
       userId,
       deliveryId,
-      pickUpId: pickupData._id,
+      ...(pickupData && { pickUpId: pickupData._id }), // ✅ optional
       airWaybillNo,
       merchantShipmentNo,
       merchantOrderNo: order.merchantOrderNo || order.orderId,
@@ -2031,20 +2052,6 @@ export const createManualShipmentService = async (shipmentData) => {
       },
       ...(description && { description }),
     }).save();
-
-    /* -------------------- CHANNEL ENGINE -------------------- */
-    await createShipmentWithChannelEngine({
-      merchantShipmentNo,
-      merchantOrderNo: order.merchantOrderNo || order.orderId,
-      lines: validatedProducts,
-      trackTraceNo: airWaybillNo,
-      trackTraceUrl,
-      method,
-      shippedFromCountryCode,
-      shipmentDate: new Date(),
-      isMerchantCreator: true,
-      airWaybillNo,
-    });
 
     /* -------------------- ORDER STATUS LOGIC -------------------- */
     const updatedOrder = await Order.findById(orderId).lean();
