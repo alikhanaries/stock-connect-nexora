@@ -55,6 +55,9 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
 
     const sanitizedData = {
       returnId: returnData.Id?.toString(),
+      reason: returnData.Reason || '',
+      customerComment: returnData.CustomerComment || '',
+      merchantComment: returnData.MerchantComment || '',
       merchantReturnNo: returnData.MerchantReturnNo,
       merchantOrderNo: returnData.MerchantOrderNo,
       channelOrderNo: returnData.ChannelOrderNo,
@@ -169,6 +172,9 @@ export const buildReturnAggregationPipeline = () => {
         channelReturnNo: 1,
         channelId: 1,
         orderId: 1,
+        reason: 1,
+        customerComment: 1,
+        merchantComment: 1,
         placedOn: 1,
         acknowledgeDate: 1,
         platform: 1,
@@ -476,6 +482,9 @@ export const formatReturnDetails = (aggregatedResult) => {
   return {
     _id: returnData._id,
     returnId: returnData.returnId || null,
+    reason: returnData.reason || null,
+    customerComment: returnData.customerComment || null,
+    merchantComment: returnData.merchantComment || null,
     orderId: orderInfo.orderId || null,
     orderDbId: orderInfo._id || null,
     paymentInfo: {

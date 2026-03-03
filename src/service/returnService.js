@@ -301,6 +301,9 @@ export const getReturnsFromDatabase = async (query = {}) => {
         status: r.status,
         platform: r.platform,
         returnId: r.returnId,
+        reason: r.reason || null,
+        customerComment: r.customerComment || null,
+        merchantComment: r.merchantComment || null,
         channelImage: channelMap[r.channelId],
       };
     });
