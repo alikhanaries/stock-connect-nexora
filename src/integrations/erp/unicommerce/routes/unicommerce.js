@@ -11,6 +11,8 @@ import { checkLanguage } from '#middleware/index.js';
 import { getProductCountValidator, getProductsValidator } from '../validations/products.js';
 import { getOrderStatusValidator } from '../validations/orders.js';
 import { getOrderStatus } from '../controllers/orderController.js';
+import { updateInventoryValidator } from '../validations/inventory.js';
+import { updateInventory } from '../controllers/inventoryController.js';
 
 const UniCommerceRouter = express.Router();
 
@@ -220,6 +222,140 @@ UniCommerceRouter.get(
 
 /**
  * @openapi
+ * /updateInventory:
+ *   post:
+ *     tags: [UniCommerce]
+ *     summary: Update inventory for products
+ *     description: Updates inventory for one or more product variants for the authenticated seller.
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         description: Language preference
+ *
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer access token obtained from Get Authentication API (format: "Authorization: Bearer &lt;token&gt;")
+ *
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - inventoryList
+ *             properties:
+ *               inventoryList:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - productId
+ *                     - variantId
+ *                     - inventory
+ *                   properties:
+ *                     productId:
+ *                       type: string
+ *                       example: "979"
+ *                     variantId:
+ *                       type: string
+ *                       example: "4726"
+ *                     inventory:
+ *                       oneOf:
+ *                         - type: string
+ *                         - type: number
+ *                       example: 10
+ *                     hsnCode:
+ *                       type: string
+ *                       example: "610910"
+ *                     facilityCode:
+ *                       type: string
+ *                       example: "ChWhCode"
+ *
+ *     responses:
+ *       200:
+ *         description: Inventory update result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required:
+ *                 - status
+ *                 - failedProductList
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [SUCCESS, FAILED, PARTIAL_SUCCESS]
+ *                   example: SUCCESS
+ *                 failedProductList:
+ *                   type: array
+ *                   description: Present when some or all SKUs fail
+ *                   items:
+ *                     type: object
+ *                     required:
+ *                       - productId
+ *                       - variantId
+ *                       - message
+ *                     properties:
+ *                       productId:
+ *                         type: string
+ *                         example: "979"
+ *                       variantId:
+ *                         type: string
+ *                         example: "4726"
+ *                       message:
+ *                         type: string
+ *                         example: Mismatch
+ *
+ *       400:
+ *         description: Validation handled in Uniware format
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [FAILED]
+ *                   example: FAILED
+ *                 failedProductList:
+ *                   type: array
+ *                   example:
+ *                     - productId: "979"
+ *                       variantId: "4726"
+ *                       message: Validation failed
+ *
+ *       500:
+ *         description: Internal error in Uniware format
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: FAILED
+ *                 failedProductList:
+ *                   type: array
+ */
+UniCommerceRouter.post(
+  '/updateInventory',
+  updateInventoryValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  updateInventory
+);
+
+/**
+ * @openapi
  * /orders:
  *   get:
  *     tags: [UniCommerce]
@@ -235,11 +371,11 @@ UniCommerceRouter.get(
  *         description: Language preference
  *
  *       - in: header
- *         name: accessToken
+ *         name: Authorization
  *         required: true
  *         schema:
  *           type: string
- *         description: Access token received from authentication API
+ *         description: Bearer access token received from authentication API (format "Bearer &lt;token&gt;")
  *
  *       - in: query
  *         name: pageNumber
