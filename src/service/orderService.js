@@ -298,17 +298,74 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     return { success: false, message: err.message };
   }
 };
-export const getOrderById = async (id) => {
+export const getOrderById = async (id, sellerId) => {
   try {
+    let sellerObjectId = null;
+    let sellerName = '';
+
+    // ---------------- OPTIONAL SELLER LOGIC ----------------
+    if (sellerId) {
+      sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+
+      const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
+
+      if (!seller) {
+        throw new Error('Seller not found');
+      }
+
+      sellerName = seller.companyName || seller.name || '';
+    }
+
+    // ---------------- FETCH ORDER ----------------
     const order = await Order.findById(id).lean();
     if (!order) return false;
-    const shipments = await Shipment.find({
+
+    // SECURITY CHECK – only if sellerId provided
+    if (sellerObjectId) {
+      if (!order.sellerIds?.some((s) => s.toString() === sellerObjectId.toString())) {
+        throw new Error('Unauthorized access to this order');
+      }
+    }
+
+    // ---------------- FILTER SKUS ----------------
+    const allOrderSkus =
+      order.orderSkuList?.skuList?.filter((sku) =>
+        sellerObjectId ? sku.sellerId?.toString() === sellerObjectId.toString() : true
+      ) || [];
+
+    let sellerMap = {};
+
+    if (!sellerObjectId) {
+      // collect unique sellerIds
+      const sellerIds = [
+        ...new Set(
+          allOrderSkus
+            .map((s) => s.sellerId)
+            .filter(Boolean)
+            .map((id) => id.toString())
+        ),
+      ];
+
+      const sellers = await Seller.find({ _id: { $in: sellerIds } }, { name: 1, companyName: 1 }).lean();
+
+      sellerMap = sellers.reduce((acc, s) => {
+        acc[s._id.toString()] = s.companyName || s.name || '';
+        return acc;
+      }, {});
+    }
+
+    // ---------------- FETCH SHIPMENTS ----------------
+    const shipmentQuery = {
       orderId: id,
       type: 'FORWARD',
       status: { $ne: 'CANCELED' },
-    }).lean();
+    };
 
-    const allOrderSkus = order.orderSkuList?.skuList || [];
+    if (sellerObjectId) {
+      shipmentQuery.sellerId = sellerObjectId;
+    }
+
+    const shipments = await Shipment.find(shipmentQuery).lean();
 
     // ---------------- PRODUCT IMAGE MAP ----------------
     const merchantNos = allOrderSkus.map((s) => s.merchantProductNo);
@@ -337,10 +394,13 @@ export const getOrderById = async (id) => {
       const image = productsMap[sku.merchantProductNo]?.image || null;
       const hsCode = productsMap[sku.merchantProductNo]?.hsCode || sku.merchantProductNo;
 
-      // ---------- CANCELLED ----------
+      // const dynamicSellerName = sellerName || sku.sellerName || '';
+      const dynamicSellerName = sellerObjectId ? sellerName : sellerMap[sku.sellerId?.toString()] || '';
+      // CANCELLED
       if (b.canceled > 0) {
         cancelledItems.push({
           id: sku.id,
+          skuOrderId: sku.orderId,
           merchantProductNo: sku.merchantProductNo,
           channelProductNo: sku.channelProductNo,
           name: sku.description,
@@ -348,6 +408,8 @@ export const getOrderById = async (id) => {
           quantity: b.canceled,
           status: 'CANCELED',
           hsCode,
+          sellerId: sku.sellerId,
+          sellerName: dynamicSellerName,
         });
       }
 
@@ -357,13 +419,16 @@ export const getOrderById = async (id) => {
       if (pendingQty > 0) {
         unshippedItems.push({
           id: sku.id,
+          skuOrderId: sku.orderId,
           merchantProductNo: sku.merchantProductNo,
           channelProductNo: sku.channelProductNo,
           name: sku.description,
           imageUrl: image,
           quantity: pendingQty,
-          status: sku.status, // stays IN_PROGRESS
+          status: sku.status,
           hsCode,
+          sellerId: sku.sellerId,
+          sellerName: dynamicSellerName,
         });
       }
     });
@@ -384,8 +449,12 @@ export const getOrderById = async (id) => {
           shipment.products?.map((p) => {
             const sku = allOrderSkus.find((s) => s.merchantProductNo === p.merchantProductNo);
 
+            const dynamicSellerName = sellerName || sku?.sellerName || '';
+
             return {
               id: sku?.id,
+              skuOrderId: sku.orderId,
+              sellerName: dynamicSellerName,
               merchantProductNo: p.merchantProductNo,
               channelProductNo: sku?.channelProductNo,
               name: sku?.description,
@@ -402,14 +471,24 @@ export const getOrderById = async (id) => {
 
     // ---------------- FINAL RESPONSE ----------------
     const filteredData = transformOrderResponse(order);
+    let orderLogsDetails;
 
-    const orderLogsDetails = await OrderLogs.findOne({ orderId: id }).lean();
+    const filter = { orderId: id };
+
+    if (sellerObjectId) {
+      filter.sellerId = sellerObjectId;
+    }
+
+    orderLogsDetails = await OrderLogs.findOne(filter).lean();
+
     const orderLogsData = orderLogsDetails?.details?.length ? formatOrderTrackingInf(orderLogsDetails.details) : [];
     const productsStatusDetails = allOrderSkus.map((sku) => {
       const b = sku.statusBreakdown || {};
+      const dynamicSellerName = sellerName || sku.sellerName || '';
 
       return {
         id: sku.id,
+        skuOrderId: sku.orderId,
         productCode: sku.merchantProductNo,
         totalQty: sku.quantity,
         confirmed: b.confirmed || 0,
@@ -418,11 +497,22 @@ export const getOrderById = async (id) => {
         delivered: b.delivered || 0,
         returned: b.returned || 0,
         canceled: b.canceled || 0,
+        sellerId: sku.sellerId,
+        sellerName: dynamicSellerName,
       };
     });
 
+    let skuOrderId = null;
+
+    if (sellerObjectId) {
+      // Seller specific → all SKUs same seller
+      skuOrderId = allOrderSkus?.[0]?.orderId || null;
+    }
     return {
       ...filteredData,
+      sellerName: sellerObjectId ? sellerName : null,
+      sellerId,
+      skuOrderId,
       shippedItems,
       deliveredItems,
       unshippedItems,
@@ -452,20 +542,20 @@ const getOrderStats = async (sellerId) => {
 
 export const processOrders = async (orders, sellerId) => {
   try {
-    // Prepare bulk operations
-    const operations = await orderhelper.sanitizeOrdersData(orders, sellerId);
+    const operations = await orderhelper.sanitizeOrdersData(orders);
 
-    // Execute the bulk write
     const result = await Order.bulkWrite(operations);
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
     const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
 
-    // Build log entries for each newly created order
-    const orderLogs = upsertedIndexes.map((index, i) => {
+    const orderLogs = [];
+
+    for (let i = 0; i < upsertedIndexes.length; i++) {
+      const index = upsertedIndexes[i];
       const order = orders[index];
       const orderId = upsertedOrderIds[i];
-
+      const latestOrderData = await Order.findOne({ _id: orderId }, { _id: 1, orderId: 1, sellerIds: 1 }).lean();
       const logDetails = [
         {
           status: 'CREATED',
@@ -474,15 +564,20 @@ export const processOrders = async (orders, sellerId) => {
         },
       ];
 
-      return {
-        orderId,
-        details: logDetails,
-      };
-    });
+      //  IMPORTANT: create log per seller
+      const sellerIds = latestOrderData?.sellerIds?.length ? latestOrderData.sellerIds : [sellerId]; // fallback if single seller
 
-    // Insert logs only for newly created orders
+      for (const sId of sellerIds) {
+        orderLogs.push({
+          orderId,
+          sellerId: sId,
+          details: logDetails,
+        });
+      }
+    }
+
     if (orderLogs.length > 0) {
-      await OrderLogs.insertMany(orderLogs);
+      await OrderLogs.insertMany(orderLogs, { ordered: false });
       console.log('Inserted order logs:', orderLogs.length);
     } else {
       console.log('No new orders created — skipping log insertion');
@@ -834,8 +929,18 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
       description: 'Order Canceled',
       createdAt: new Date(),
     };
-    await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
 
+    const sellerIds = order.sellerIds || [];
+
+    const bulkOps = sellerIds.map((sId) => ({
+      updateOne: {
+        filter: { orderId, sellerId: sId },
+        update: { $push: { details: logEntry } },
+        upsert: true,
+      },
+    }));
+
+    await OrderLogs.bulkWrite(bulkOps);
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
@@ -843,11 +948,13 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
   }
 };
 
-export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
+export const cancelPartialOrder = async (orderId, products, reason = 'NA', sellerId) => {
   try {
     // ----------------------------------------------------
     // FETCH ORDER
     // ----------------------------------------------------
+
+    const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
     const order = await Order.findById(orderId).lean();
     if (!order) {
       return { success: false, error: { message: 'Order not found', status: 404 } };
@@ -896,8 +1003,10 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
     for (const item of products) {
       const lineId = item.orderLineId.toString();
 
-      const sku = order.orderSkuList.skuList.find((s) => s.id.toString() === lineId);
-
+      const sellerSkus = order.orderSkuList.skuList.filter(
+        (sku) => sku.sellerId.toString() === sellerObjectId.toString()
+      );
+      const sku = sellerSkus.find((s) => s.id.toString() === lineId);
       if (!sku) {
         return {
           success: false,
@@ -1007,7 +1116,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
     // LOG
     // ----------------------------------------------------
     await OrderLogs.updateOne(
-      { orderId },
+      { orderId, sellerId: sellerObjectId },
       {
         $push: {
           details: {
