@@ -371,11 +371,11 @@ UniCommerceRouter.post(
  *         description: Language preference
  *
  *       - in: header
- *         name: accessToken
+ *         name: Authorization
  *         required: true
  *         schema:
  *           type: string
- *         description: Access token received from authentication API
+ *         description: Authorization header in the format "Bearer &lt;access token&gt;" received from authentication API
  *
  *       - in: query
  *         name: pageNumber
