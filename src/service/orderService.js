@@ -95,6 +95,7 @@ const getAllOrders = async (query, sellerId) => {
             { 'orderCustomer.email': regex },
             { 'orderCustomer.firstName': regex },
             { 'orderCustomer.lastName': regex },
+            { channelOrderNumber: regex },
           ],
         };
       });
