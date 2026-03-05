@@ -26,7 +26,8 @@ import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
-import { decreaseStock, increaseStock } from '../helpers/inventoryHandler.js';
+import { decreaseStock, increaseStock, validateStockAvailability } from '../helpers/inventoryHandler.js';
+import { sendStockBatch } from '../service/InventoryService.js';
 import Seller from '#models/Seller.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
@@ -258,7 +259,10 @@ export const saveDeliveryAddress = async (data) => {
     throw new Error(error.message);
   }
 };
+
 export const createFullShipmentService = async (shipmentData) => {
+  const session = await mongoose.startSession();
+  let trackingNumber = null;
   try {
     const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
 
@@ -305,7 +309,7 @@ export const createFullShipmentService = async (shipmentData) => {
       return validation;
     }
 
-    // Parse invoice data
+    // Step 4: Parse invoice data
     let taxData = null;
     let productsData = null;
     const invoiceData = await parseInvoiceData(id);
@@ -334,7 +338,7 @@ export const createFullShipmentService = async (shipmentData) => {
       'products.orderLineId': { $in: productLineIds },
     }).lean();
 
-    //  Step 4: Build shipped quantity map
+    // Step 6: Build shipped quantity map
     const shippedQtyMap = {};
     for (const shipment of existingShipments || []) {
       if (!['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'].includes(shipment.status)) continue;
@@ -368,21 +372,15 @@ export const createFullShipmentService = async (shipmentData) => {
           message: `Cannot ship ${product.quantity} units of product ${orderLineId}, only ${remainingQty} units available.`,
         };
       }
-
-      const shippedQty = Number(product.quantity || 0);
-
-      const stockResult = await decreaseStock(product.merchantProductNo, shippedQty, sellerName, 'CE');
-
-      if (!stockResult.success) {
-        return {
-          success: false,
-          message: stockResult.message,
-        };
-      }
     }
 
-    // STEP 8: Delivery & Pickup
+    // Step 8: Pre-validate stock availability (before calling Aymakan)
+    const stockValidation = await validateStockAvailability(validProducts);
+    if (!stockValidation.success) {
+      return stockValidation;
+    }
 
+    // Step 9: Delivery & Pickup
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
     const deliveryDetails = await saveDeliveryAddress(deliveryData);
@@ -390,8 +388,7 @@ export const createFullShipmentService = async (shipmentData) => {
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
 
-    // STEP 9: Create shipment (Aymakan)
-
+    // Step 10: Create shipment via Aymakan (external, before transaction)
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
@@ -405,10 +402,10 @@ export const createFullShipmentService = async (shipmentData) => {
       return { success: false, message: 'Shipment by Aymakan encountered an error.' };
     }
 
-    const trackingNumber = aymakanResult.shipping.tracking_number;
+    trackingNumber = aymakanResult.shipping.tracking_number;
     const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
 
-    //  Step 8: Track shipment for initial status info
+    // Step 11: Track shipment for initial status info
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo = Array.isArray(aymakanTrackingResult?.trackingInfo)
       ? aymakanTrackingResult.trackingInfo.map((info) => ({
@@ -422,7 +419,25 @@ export const createFullShipmentService = async (shipmentData) => {
         }))
       : [];
 
-    //  Step 9: Prepare & save shipment document
+    session.startTransaction();
+
+    // Step 12: Decrease stock (within transaction)
+    const stockPayloads = [];
+    for (const product of validProducts) {
+      const shippedQty = Number(product.quantity || 0);
+      const stockResult = await decreaseStock(product.merchantProductNo, shippedQty, sellerName, 'CE', session);
+
+      if (!stockResult?.success) {
+        await session.abortTransaction();
+        return {
+          success: false,
+          message: stockResult?.message || 'Stock decrease failed',
+        };
+      }
+      if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
+    }
+
+    // Step 13: Create shipment document
     const shipmentDocument = new Shipment({
       orderId: new mongoose.Types.ObjectId(id),
       sellerId: new mongoose.Types.ObjectId(sellerId),
@@ -445,8 +460,9 @@ export const createFullShipmentService = async (shipmentData) => {
       type: 'FORWARD',
     });
 
-    await shipmentDocument.save();
-    // STEP 11: SKU STATUS BREAKDOWN UPDATE
+    await shipmentDocument.save({ session });
+
+    // STEP 14: SKU STATUS BREAKDOWN UPDATE
 
     for (const product of validProducts) {
       const sku = orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
@@ -468,10 +484,11 @@ export const createFullShipmentService = async (shipmentData) => {
       sku.airWaybillNo = trackingNumber;
       sku.status = 'IN_PROGRESS';
     }
-    // STEP 12: Order update
 
+    // Step 15: Order update
     order.status = 'IN_PROGRESS';
-    await order.save();
+    await order.save({ session });
+
     const qtyMessage = validProducts.map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
 
     const logEntry = {
@@ -481,10 +498,32 @@ export const createFullShipmentService = async (shipmentData) => {
     };
 
     await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true });
+
+    await session.commitTransaction();
+
+    if (stockPayloads.length > 0) {
+      sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
+    }
+
     return { success: true, shipmentId: shipmentDocument._id };
+
   } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    // Compensating cancel: if Aymakan shipment was created but DB transaction failed
+    if (trackingNumber) {
+      try {
+        await cancelAymakanShipment(trackingNumber);
+        console.warn(`Compensating cancel sent for AWB ${trackingNumber} after transaction failure`);
+      } catch (cancelErr) {
+        console.error(`Failed to cancel Aymakan shipment ${trackingNumber}:`, cancelErr.message);
+      }
+    }
     console.error('Error in createPartialShipmentService:', error);
     throw error;
+  } finally {
+    session.endSession();
   }
 };
 
@@ -1267,6 +1306,7 @@ export const formatShipmentTrackingInfo = (data) => {
 
 // CANCEL SHIPMENT STARTS HERE
 export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
+  const session = await mongoose.startSession();
   try {
     const cancelReason = reason?.trim() || 'NA';
 
@@ -1289,15 +1329,6 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     await cancelAymakanShipment(airWaybillNo);
 
-    // STEP 3: Mark shipment as CANCELED
-
-    await Shipment.findByIdAndUpdate(shipmentId, {
-      status: 'CANCELED',
-      cancelReason,
-    });
-
-    // STEP 4: Fetch order (mongoose doc, not lean)
-
     const [order, sellerDoc] = await Promise.all([
       Order.findById(orderId),
       Seller.findById(shipment.sellerId).select('name').lean(),
@@ -1306,8 +1337,17 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     const sellerName = sellerDoc?.name || '';
 
-    // STEP 5: REVERT SKU STATUS BREAKDOWN
+    session.startTransaction();
 
+    await Shipment.findByIdAndUpdate(
+      shipmentId,
+      {
+        status: 'CANCELED',
+        cancelReason,
+      },
+      { session }
+    );
+    const stockPayloads = [];
     for (const product of products || []) {
       const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
 
@@ -1336,24 +1376,23 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       // SKU status correction
       sku.status = sku.statusBreakdown.confirmed === sku.quantity ? 'NEW' : 'IN_PROGRESS';
 
-      await increaseStock(product.merchantProductNo, qty, sellerName, 'CE');
+      const stockResult = await increaseStock(product.merchantProductNo, qty, sellerName, 'CE', session);
+      if (!stockResult?.success) {
+        throw new Error(`Unable to cancel shipment: ${stockResult?.message || 'unknown error'}`);
+      }
+      if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }
 
-    await order.save();
-
-    // Rule 2: Any active shipment forces IN_PROGRESS
+    // Step 6: Determine final order status and save order in one operation
     const hasActiveShipment = await Shipment.exists({
       orderId,
       status: { $ne: 'CANCELED' },
-    });
+    }).session(session);
 
-    const finalOrderStatus = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
+    order.status = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
+    await order.save({ session });
 
-    await Order.findByIdAndUpdate(orderId, {
-      status: finalOrderStatus,
-    });
-
-    // 7️ Order logs
+    // Order logs
     const qtyMessage = (products || []).map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
     await OrderLogs.updateOne(
       { orderId },
@@ -1366,8 +1405,14 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
           },
         },
       },
-      { upsert: true }
+      { upsert: true, session }
     );
+
+    await session.commitTransaction();
+
+    if (stockPayloads.length > 0) {
+      sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
+    }
 
     return {
       success: true,
@@ -1375,8 +1420,13 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       shipmentId,
     };
   } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     console.error('cancelShipmentService error:', error);
     throw error;
+  } finally {
+    session.endSession();
   }
 };
 
@@ -1917,6 +1967,7 @@ export const createReverseShipmentService = async (shipmentData) => {
   }
 };
 export const createManualShipmentService = async (shipmentData) => {
+  const session = await mongoose.startSession();
   try {
     const {
       orderId,
@@ -2034,10 +2085,6 @@ export const createManualShipmentService = async (shipmentData) => {
         quantity: product.quantity,
         hsCode: orderSku.hsCode || '1111111',
       });
-
-      const stockResult = await decreaseStock(product.merchantProductNo, product.quantity, sellerName, 'CE');
-
-      if (!stockResult.success) throw new Error(` unable to create shipment ${stockResult.message}`);
     }
 
     /* -------------------- PICKUP & DELIVERY -------------------- */
@@ -2069,6 +2116,17 @@ export const createManualShipmentService = async (shipmentData) => {
         postcode: order.orderShippingAddress?.zipCode || '',
       });
       deliveryId = savedDelivery._id;
+    }
+
+    session.startTransaction();
+
+    const stockPayloads = [];
+    for (const product of validatedProducts) {
+      const stockResult = await decreaseStock(product.merchantProductNo, product.quantity, sellerName, 'CE', session);
+
+      if (!stockResult?.success)
+        throw new Error(`Unable to create shipment: ${stockResult?.message || 'unknown error'}`);
+      if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }
 
     /* -------------------- CREATE SHIPMENT -------------------- */
@@ -2110,15 +2168,17 @@ export const createManualShipmentService = async (shipmentData) => {
         email: 'NA',
       },
       ...(description && { description }),
-    }).save();
+    }).save({ session });
 
     /* -------------------- ORDER STATUS LOGIC -------------------- */
-    const updatedOrder = await Order.findById(orderId).lean();
+    const updatedOrder = await Order.findById(orderId).lean().session(session);
 
     const allShipments = await Shipment.find({
       orderId,
-      status: { $ne: 'CANCELED' }, //  ignore cancelled shipments
-    }).lean();
+      status: { $ne: 'CANCELED' },
+    })
+      .lean()
+      .session(session);
 
     /* --------- TOTAL SHIPPED QTY PER LINE --------- */
     const totalShippedMap = {};
@@ -2152,9 +2212,9 @@ export const createManualShipmentService = async (shipmentData) => {
       });
 
     if (allShipped) {
-      await Order.findByIdAndUpdate(orderId, { status: 'SHIPPED' });
+      await Order.findByIdAndUpdate(orderId, { status: 'SHIPPED' }, { session });
     } else if (partiallyShipped) {
-      await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' });
+      await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' }, { session });
     }
 
     const updatedSkuList = updatedOrder.orderSkuList.skuList.map((sku) => {
@@ -2178,9 +2238,13 @@ export const createManualShipmentService = async (shipmentData) => {
       };
     });
 
-    await Order.findByIdAndUpdate(orderId, {
-      'orderSkuList.skuList': updatedSkuList,
-    });
+    await Order.findByIdAndUpdate(
+      orderId,
+      {
+        'orderSkuList.skuList': updatedSkuList,
+      },
+      { session }
+    );
 
     /* -------------------- LOGS -------------------- */
     await OrderLogs.updateOne(
@@ -2194,8 +2258,27 @@ export const createManualShipmentService = async (shipmentData) => {
           },
         },
       },
-      { upsert: true }
+      { upsert: true, session }
     );
+
+    await session.commitTransaction();
+
+    if (stockPayloads.length > 0) {
+      sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
+    }
+
+    await createShipmentWithChannelEngine({
+      merchantShipmentNo,
+      merchantOrderNo: order.merchantOrderNo || order.orderId,
+      lines: validatedProducts,
+      trackTraceNo: airWaybillNo,
+      trackTraceUrl,
+      method,
+      shippedFromCountryCode,
+      shipmentDate: new Date(),
+      isMerchantCreator: true,
+      airWaybillNo,
+    });
 
     return {
       success: true,
@@ -2205,8 +2288,13 @@ export const createManualShipmentService = async (shipmentData) => {
       merchantShipmentNo,
     };
   } catch (error) {
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     console.error('createManualShipmentService error:', error);
     throw new Error(error.message || 'Failed to create MANUAL shipment');
+  } finally {
+    session.endSession();
   }
 };
 export const syncReturnShipmentStatus = async (returnId) => {
