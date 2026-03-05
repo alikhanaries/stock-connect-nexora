@@ -372,17 +372,6 @@ export const createFullShipmentService = async (shipmentData) => {
           message: `Cannot ship ${product.quantity} units of product ${orderLineId}, only ${remainingQty} units available.`,
         };
       }
-
-      const shippedQty = Number(product.quantity || 0);
-
-      const stockResult = await decreaseStock(product.merchantProductNo, shippedQty, sellerName, 'CE');
-
-      if (!stockResult.success) {
-        return {
-          success: false,
-          message: stockResult.message,
-        };
-      }
     }
 
     // Step 8: Pre-validate stock availability (before calling Aymakan)
@@ -508,7 +497,7 @@ export const createFullShipmentService = async (shipmentData) => {
       createdAt: new Date(),
     };
 
-    await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true });
+    await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true, session });
 
     if (session.inTransaction()) {
       await session.commitTransaction();
@@ -2102,10 +2091,6 @@ export const createManualShipmentService = async (shipmentData) => {
         quantity: product.quantity,
         hsCode: orderSku.hsCode || '1111111',
       });
-
-      const stockResult = await decreaseStock(product.merchantProductNo, product.quantity, sellerName, 'CE');
-
-      if (!stockResult.success) throw new Error(` unable to create shipment ${stockResult.message}`);
     }
 
     /* -------------------- PICKUP & DELIVERY -------------------- */
