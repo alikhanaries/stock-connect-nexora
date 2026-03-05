@@ -209,8 +209,11 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     const appliedFilters = {};
     const filter = {};
 
+    let sellerObjectId = null;
+
     if (sellerId) {
-      filter.sellerIds = { $in: [sellerId] };
+      sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+      filter.sellerIds = { $in: [sellerObjectId] };
       appliedFilters.sellerId = sellerId;
     }
 
@@ -441,7 +444,7 @@ export const getOrderById = async (id, sellerId) => {
 
             return {
               id: sku?.id,
-              skuOrderId: sku.orderId,
+              skuOrderId: sku?.orderId || null,
               sellerName: dynamicSellerName,
               merchantProductNo: p.merchantProductNo,
               channelProductNo: sku?.channelProductNo,
@@ -509,12 +512,12 @@ export const getOrderById = async (id, sellerId) => {
 const getOrderStats = async (sellerId) => {
   try {
     const statuses = Object.keys(ORDER_STATUS_MAP);
-
+    const sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
     const counts = await Promise.all(
       statuses.map((status) =>
         Order.countDocuments({
           status,
-          sellerIds: sellerId, // matches inside array automatically
+          sellerIds: [sellerObjectId], // matches inside array automatically
         })
       )
     );
@@ -1132,7 +1135,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
     const filter = {
-      sellerIds: { $in: sellerId },
+      sellerIds: { $in: [sellerId] },
     };
 
     if (search) {
