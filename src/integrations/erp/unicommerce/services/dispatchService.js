@@ -3,7 +3,6 @@ import OrderLogs from '#root/src/models/OrderLogs.js';
 import Order from '#root/src/models/Orders.js';
 import DeliveryAddress from '#root/src/models/Shipment/DeliveryAdress.js';
 import Shipment from '#root/src/models/Shipment/Shipment.js';
-import User from '#root/src/models/User.js';
 import {
   createShipmentWithChannelEngine,
   getPickUpAddress,
@@ -150,17 +149,16 @@ export const createManualShipmentService = async (shipmentData) => {
     }
 
     /* -------------------- PARALLEL FETCH -------------------- */
-    const [existingMerchantShipment, existingAwb, order, user] = await Promise.all([
+
+    const order = await Order.findById(orderId).lean();
+    if (!order) throw new Error(`Order with ID ${orderId} not found`);
+    const [existingMerchantShipment, existingAwb] = await Promise.all([
       Shipment.findOne({ merchantShipmentNo }),
       Shipment.findOne({ airWaybillNo }),
-      Order.findById(orderId).lean(),
-      User.findById(userId).lean(),
     ]);
 
     if (existingMerchantShipment) throw new Error(`Merchant shipment number '${merchantShipmentNo}' already exists`);
     if (existingAwb) throw new Error(`AWB number '${airWaybillNo}' already exists`);
-    if (!order) throw new Error(`Order with ID ${orderId} not found`);
-    if (!user) throw new Error(`User with ID ${userId} not found`);
 
     /* -------------------- ORDER SKU MAP -------------------- */
     const orderSkuMap = new Map();
@@ -250,7 +248,7 @@ export const createManualShipmentService = async (shipmentData) => {
     /* -------------------- CHANNEL ENGINE -------------------- */
     await createShipmentWithChannelEngine({
       merchantShipmentNo,
-      merchantOrderNo: order.merchantOrderNo || order.orderId,
+      merchantOrderNo: order.merchantOrderNo,
       lines: validatedProducts,
       trackTraceNo: airWaybillNo,
       trackTraceUrl,
