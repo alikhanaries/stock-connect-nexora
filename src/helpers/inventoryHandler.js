@@ -5,7 +5,6 @@ import { getProductStatus } from '#utils/mapRowToInventory.js';
 
 export const increaseStock = async (sku, quantity, sellerName, type, session = null) => {
   try {
-    console.log(sku, '++++++++?????????????????');
     const qty = Number(quantity);
     if (isNaN(qty) || qty < 0) {
       return { success: false, message: 'Invalid quantity provided' };
@@ -26,8 +25,6 @@ export const increaseStock = async (sku, quantity, sellerName, type, session = n
       { $inc: { currentStockCount: qty }, $set: { updatedAt: new Date() } },
       opts
     );
-
-    console.log(inventory, product, '+++++++++++++++++++++++++++++++++++++++++');
 
     if (!inventory || !product) {
       return { success: false, message: 'Inventory or product not found' };
