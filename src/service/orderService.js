@@ -28,14 +28,43 @@ import Seller from '../models/Seller.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
-const formatOrder = (order, channelImage) => {
-  const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const totalPrice = order.totalInclVat
-    ? order.totalInclVat
-    : order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
+const formatOrder = async (order, channelImage, sellerId) => {
+  let sellerName = '';
+  let sellerObjectId = null;
+
+  if (sellerId) {
+    sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+
+    const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
+
+    if (seller) {
+      sellerName = seller.companyName || seller.name || '';
+    }
+  }
+
+  // Filter SKUs seller-wise (if sellerId provided)
+  const sellerSkus = sellerObjectId
+    ? order.orderSkuList?.skuList?.filter((sku) => sku.sellerId?.toString() === sellerObjectId.toString()) || []
+    : order.orderSkuList?.skuList || [];
+
+  const totalQuantity = sellerSkus.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
+
+  const totalPrice = sellerSkus.reduce((sum, sku) => sum + (sku.originalLineTotalInclVat || 0), 0);
+
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
+  let skuOrderId = null;
+
+  if (sellerObjectId && sellerSkus.length > 0) {
+    skuOrderId = sellerSkus[0].orderId;
+  }
+
   return {
     _id: order._id,
+    skuOrderId,
+    //  Added seller details
+    sellerId: sellerObjectId || null,
+    sellerName,
+
     channelNo: order.channelId || 1,
     orderID: order.orderId,
     quantity: totalQuantity,
@@ -74,7 +103,7 @@ const getAllOrders = async (query, sellerId) => {
 
     // Base match stage
     const filter = {
-      sellerId: sellerObjectId,
+      sellerIds: { $in: [sellerObjectId] },
     };
     // Escape special regex characters
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -122,44 +151,7 @@ const getAllOrders = async (query, sellerId) => {
     // Build aggregation pipeline
     const pipeline = [{ $match: filter }];
 
-    if (status && status.toUpperCase().includes('DELIVERED')) {
-      appliedFilters.status = 'DELIVERED';
-
-      // Filter delivered SKUs using $filter to keep skuList as an array
-      pipeline.push({
-        $addFields: {
-          'orderSkuList.skuList': {
-            $filter: {
-              input: '$orderSkuList.skuList',
-              as: 'sku',
-              cond: {
-                $and: [
-                  { $eq: ['$$sku.statusBreakdown.confirmed', 0] },
-                  { $eq: ['$$sku.statusBreakdown.shipped', 0] },
-                  { $eq: ['$$sku.statusBreakdown.returned', 0] },
-                  {
-                    $eq: [
-                      {
-                        $add: ['$$sku.statusBreakdown.delivered', '$$sku.statusBreakdown.canceled'],
-                      },
-                      '$$sku.quantity',
-                    ],
-                  },
-                  { $gt: ['$$sku.statusBreakdown.delivered', 0] }, //  delivered must be > 0
-                ],
-              },
-            },
-          },
-        },
-      });
-
-      // Remove orders that have no delivered SKUs
-      pipeline.push({
-        $match: {
-          'orderSkuList.skuList.0': { $exists: true },
-        },
-      });
-    } else if (status) {
+    if (status) {
       // Normal status filter
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
       const validStatuses = Object.values(ORDER_STATUS_MAP);
@@ -197,10 +189,12 @@ const getAllOrders = async (query, sellerId) => {
     });
 
     return {
-      data: orders.map((order) => {
-        const matchingChannel = channelMap[order.channelId] || null;
-        return formatOrder(order, matchingChannel);
-      }),
+      data: await Promise.all(
+        orders.map((order) => {
+          const matchingChannel = channelMap[order.channelId] || null;
+          return formatOrder(order, matchingChannel, sellerObjectId);
+        })
+      ),
       appliedFilters: appliedFilters,
       latestOrderSyncDate: sellerSync.lastOrderSync || null,
       pagination: getPagination(totalOrders, page, size),
@@ -223,8 +217,11 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     const appliedFilters = {};
     const filter = {};
 
+    let sellerObjectId = null;
+
     if (sellerId) {
-      filter.sellerId = sellerId;
+      sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+      filter.sellerIds = { $in: [sellerObjectId] };
       appliedFilters.sellerId = sellerId;
     }
 
@@ -287,10 +284,12 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     });
 
     return {
-      data: orders.map((order) => {
-        const matchingChannel = channelMap[order.channelId] || null;
-        return formatOrder(order, matchingChannel);
-      }),
+      data: await Promise.all(
+        orders.map((order) => {
+          const matchingChannel = channelMap[order.channelId] || null;
+          return formatOrder(order, matchingChannel, sellerId);
+        })
+      ),
       appliedFilters,
       pagination: getPagination(totalOrders, page, size),
     };
@@ -298,17 +297,74 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     return { success: false, message: err.message };
   }
 };
-export const getOrderById = async (id) => {
+export const getOrderById = async (id, sellerId) => {
   try {
+    let sellerObjectId = null;
+    let sellerName = '';
+
+    // ---------------- OPTIONAL SELLER LOGIC ----------------
+    if (sellerId) {
+      sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+
+      const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
+
+      if (!seller) {
+        throw new Error('Seller not found');
+      }
+
+      sellerName = seller.companyName || seller.name || '';
+    }
+
+    // ---------------- FETCH ORDER ----------------
     const order = await Order.findById(id).lean();
     if (!order) return false;
-    const shipments = await Shipment.find({
+
+    // SECURITY CHECK – only if sellerId provided
+    if (sellerObjectId) {
+      if (!order.sellerIds?.some((s) => s.toString() === sellerObjectId.toString())) {
+        throw new Error('Unauthorized access to this order');
+      }
+    }
+
+    // ---------------- FILTER SKUS ----------------
+    const allOrderSkus =
+      order.orderSkuList?.skuList?.filter((sku) =>
+        sellerObjectId ? sku.sellerId?.toString() === sellerObjectId.toString() : true
+      ) || [];
+
+    let sellerMap = {};
+
+    if (!sellerObjectId) {
+      // collect unique sellerIds
+      const sellerIds = [
+        ...new Set(
+          allOrderSkus
+            .map((s) => s.sellerId)
+            .filter(Boolean)
+            .map((id) => id.toString())
+        ),
+      ];
+
+      const sellers = await Seller.find({ _id: { $in: sellerIds } }, { name: 1, companyName: 1 }).lean();
+
+      sellerMap = sellers.reduce((acc, s) => {
+        acc[s._id.toString()] = s.companyName || s.name || '';
+        return acc;
+      }, {});
+    }
+
+    // ---------------- FETCH SHIPMENTS ----------------
+    const shipmentQuery = {
       orderId: id,
       type: 'FORWARD',
       status: { $ne: 'CANCELED' },
-    }).lean();
+    };
 
-    const allOrderSkus = order.orderSkuList?.skuList || [];
+    if (sellerObjectId) {
+      shipmentQuery.sellerId = sellerObjectId;
+    }
+
+    const shipments = await Shipment.find(shipmentQuery).lean();
 
     // ---------------- PRODUCT IMAGE MAP ----------------
     const merchantNos = allOrderSkus.map((s) => s.merchantProductNo);
@@ -337,10 +393,13 @@ export const getOrderById = async (id) => {
       const image = productsMap[sku.merchantProductNo]?.image || null;
       const hsCode = productsMap[sku.merchantProductNo]?.hsCode || sku.merchantProductNo;
 
-      // ---------- CANCELLED ----------
+      // const dynamicSellerName = sellerName || sku.sellerName || '';
+      const dynamicSellerName = sellerObjectId ? sellerName : sellerMap[sku.sellerId?.toString()] || '';
+      // CANCELLED
       if (b.canceled > 0) {
         cancelledItems.push({
           id: sku.id,
+          skuOrderId: sku.orderId,
           merchantProductNo: sku.merchantProductNo,
           channelProductNo: sku.channelProductNo,
           name: sku.description,
@@ -348,6 +407,8 @@ export const getOrderById = async (id) => {
           quantity: b.canceled,
           status: 'CANCELED',
           hsCode,
+          sellerId: sku.sellerId,
+          sellerName: dynamicSellerName,
         });
       }
 
@@ -357,13 +418,16 @@ export const getOrderById = async (id) => {
       if (pendingQty > 0) {
         unshippedItems.push({
           id: sku.id,
+          skuOrderId: sku.orderId,
           merchantProductNo: sku.merchantProductNo,
           channelProductNo: sku.channelProductNo,
           name: sku.description,
           imageUrl: image,
           quantity: pendingQty,
-          status: sku.status, // stays IN_PROGRESS
+          status: sku.status,
           hsCode,
+          sellerId: sku.sellerId,
+          sellerName: dynamicSellerName,
         });
       }
     });
@@ -384,8 +448,12 @@ export const getOrderById = async (id) => {
           shipment.products?.map((p) => {
             const sku = allOrderSkus.find((s) => s.merchantProductNo === p.merchantProductNo);
 
+            const dynamicSellerName = sellerName || sku?.sellerName || '';
+
             return {
               id: sku?.id,
+              skuOrderId: sku?.orderId || null,
+              sellerName: dynamicSellerName,
               merchantProductNo: p.merchantProductNo,
               channelProductNo: sku?.channelProductNo,
               name: sku?.description,
@@ -407,9 +475,11 @@ export const getOrderById = async (id) => {
     const orderLogsData = orderLogsDetails?.details?.length ? formatOrderTrackingInf(orderLogsDetails.details) : [];
     const productsStatusDetails = allOrderSkus.map((sku) => {
       const b = sku.statusBreakdown || {};
+      const dynamicSellerName = sellerName || sku.sellerName || '';
 
       return {
         id: sku.id,
+        skuOrderId: sku.orderId,
         productCode: sku.merchantProductNo,
         totalQty: sku.quantity,
         confirmed: b.confirmed || 0,
@@ -418,11 +488,22 @@ export const getOrderById = async (id) => {
         delivered: b.delivered || 0,
         returned: b.returned || 0,
         canceled: b.canceled || 0,
+        sellerId: sku.sellerId,
+        sellerName: dynamicSellerName,
       };
     });
 
+    let skuOrderId = null;
+
+    if (sellerObjectId) {
+      // Seller specific → all SKUs same seller
+      skuOrderId = allOrderSkus?.[0]?.orderId || null;
+    }
     return {
       ...filteredData,
+      sellerName: sellerObjectId ? sellerName : null,
+      sellerId,
+      skuOrderId,
       shippedItems,
       deliveredItems,
       unshippedItems,
@@ -439,7 +520,15 @@ export const getOrderById = async (id) => {
 const getOrderStats = async (sellerId) => {
   try {
     const statuses = Object.keys(ORDER_STATUS_MAP);
-    const counts = await Promise.all(statuses.map((status) => Order.countDocuments({ status, sellerId: sellerId })));
+    const sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+    const counts = await Promise.all(
+      statuses.map((status) =>
+        Order.countDocuments({
+          status,
+          sellerIds: [sellerObjectId], // matches inside array automatically
+        })
+      )
+    );
     const stats = statuses.reduce((acc, status, i) => {
       acc[status] = counts[i];
       return acc;
@@ -1053,7 +1142,9 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
-    const filter = { sellerId: sellerId };
+    const filter = {
+      sellerIds: { $in: [sellerId] },
+    };
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
