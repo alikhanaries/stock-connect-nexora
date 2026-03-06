@@ -511,15 +511,6 @@ export const createFullShipmentService = async (shipmentData) => {
     if (session.inTransaction()) {
       await session.abortTransaction();
     }
-    // Compensating cancel: if Aymakan shipment was created but DB transaction failed
-    if (trackingNumber) {
-      try {
-        await cancelAymakanShipment(trackingNumber);
-        console.warn(`Compensating cancel sent for AWB ${trackingNumber} after transaction failure`);
-      } catch (cancelErr) {
-        console.error(`Failed to cancel Aymakan shipment ${trackingNumber}:`, cancelErr.message);
-      }
-    }
     console.error('Error in createPartialShipmentService:', error);
     throw error;
   } finally {
