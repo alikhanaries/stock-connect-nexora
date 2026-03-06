@@ -427,15 +427,15 @@ const sanitizeOrdersData = async (orders) => {
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
-          const sellerId = productSellerMap.get(line.MerchantProductNo) || null;
 
-          let sellerName = 'UNKNOWN';
+          const sellerIdFromMap = productSellerMap.get(line.MerchantProductNo) || null;
+          const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
 
-          if (sellerId) {
-            sellerName = sellerNameMap.get(sellerId.toString()) || 'UNKNOWN';
-            sellerIdSet.add(String(sellerId));
-            sellerIdSet.add(String(sellerId));
-          }
+          //  Skip SKU if sellerId is null
+          if (!sellerId) return null;
+
+          let sellerName = sellerNameMap.get(sellerId.toString()) || 'UNKNOWN';
+          sellerIdSet.add(String(sellerId));
 
           //  Create SKU OrderId
           const skuOrderId = `${data.Id}_${sellerName}`;
@@ -513,17 +513,17 @@ const sanitizeOrdersData = async (orders) => {
             expectedShipmentDate: line.ExpectedShipmentDate,
             latestShipmentDate: line.LatestShipmentDate,
           };
-        })
+        }).filter(Boolean) //  removes skipped SKUs
       : [];
 
     // Build update payload
-    const sellerIds = Array.from(sellerIdSet);
+    const orderSellerIds = Array.from(sellerIdSet);
     const updatePayload = {
       orderId: data.Id?.toString(),
       channelOrderNumber: data.ChannelOrderNo,
       channelId: data.ChannelId,
       sellerId: finalSellerId,
-      sellerIds, //  multi-seller support
+      sellerIds: orderSellerIds, //  multi-seller support
       channelName: data.ChannelName,
       globalChannelName: data.GlobalChannelName,
       globalChannelId: data.GlobalChannelId,
