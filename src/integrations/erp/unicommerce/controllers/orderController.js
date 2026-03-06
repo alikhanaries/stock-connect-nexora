@@ -3,6 +3,7 @@ import {
   failResponse,
   successResponse,
 } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
+import dispatchService from '../services/dispatchService.js';
 import orderService from '../services/orderService.js';
 
 export const getOrders = async (req, res) => {
@@ -40,5 +41,23 @@ export const getOrderStatus = async (req, res) => {
   } catch (error) {
     console.error('getOrderStatus error:', error);
     return errorResponse(res, 500, { message: 'Internal server error' });
+  }
+};
+
+export const orderDispatch = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const userId = req.user?._id;
+    if (!sellerId) {
+      return failResponse(res, 400, { message: 'sellerId is missing' });
+    }
+    if (!userId) {
+      return failResponse(res, 400, { message: 'userId is missing' });
+    }
+    const result = await dispatchService.orderDispatch(sellerId, userId, req.body);
+    return successResponse(res, 200, result);
+  } catch (error) {
+    console.error('orderDispatch error:', error.message, error.stack);
+    return errorResponse(res, 500, { message: error.message });
   }
 };
