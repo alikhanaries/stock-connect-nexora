@@ -211,12 +211,21 @@ export const getReturnsFromDatabase = async (query = {}) => {
         },
       }
     );
-
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (query.search && isNameOrEmailSearch(query.search)) {
+      const words = query.search.trim().split(/\s+/);
+
+      const andConditions = words.map((word) => {
+        const safeWord = escapeRegex(word);
+        const regex = new RegExp(safeWord, 'i');
+
+        return {
+          $or: [{ customer: { $regex: regex } }, { email: { $regex: regex } }, { orderID: { $regex: regex } }],
+        };
+      });
+
       pipeline.push({
-        $match: {
-          $or: [{ customer: { $ne: null } }, { email: { $ne: null } }, { orderID: { $ne: null } }],
-        },
+        $match: { $and: andConditions },
       });
     }
 
@@ -292,6 +301,9 @@ export const getReturnsFromDatabase = async (query = {}) => {
         status: r.status,
         platform: r.platform,
         returnId: r.returnId,
+        reason: r.reason || null,
+        customerComment: r.customerComment || null,
+        merchantComment: r.merchantComment || null,
         channelImage: channelMap[r.channelId],
       };
     });
