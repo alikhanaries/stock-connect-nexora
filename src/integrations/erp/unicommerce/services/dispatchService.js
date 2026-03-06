@@ -135,7 +135,6 @@ export const createManualShipmentService = async (shipmentData) => {
       shippedFromCountryCode = 'SA',
       description = '',
     } = shipmentData;
-    console.log(shipmentData, 'shipmentData');
 
     /* -------------------- VALIDATION -------------------- */
     const missingFields = [];
