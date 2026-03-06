@@ -475,6 +475,11 @@ export const exportUserChannelProducts = async (req, res) => {
     const sellerId = req.sellerId;
     const { channelId } = req.params;
     const { type = 'assigned' } = req.query;
+    const filters = req.query.filter
+      ? Array.isArray(req.query.filter)
+        ? req.query.filter
+        : req.query.filter.split(',')
+      : [];
 
     if (!channelId) {
       return failResponse(res, req?.locale?.CHANNEL_ID_REQUIRED || 'Channel ID is required', 400);
@@ -507,7 +512,7 @@ export const exportUserChannelProducts = async (req, res) => {
     if (type === 'unassigned') {
       await exportUserUnassignedProductsToCSV(sellerId, channelId, req.query, res);
     } else {
-      await exportUserChannelProductsToCSV(sellerId, channelId, req.query, res);
+      await exportUserChannelProductsToCSV(filters, sellerId, channelId, req.query, res);
     }
 
     return res.end();
