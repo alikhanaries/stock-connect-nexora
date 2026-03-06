@@ -2124,8 +2124,12 @@ export const createManualShipmentService = async (shipmentData) => {
     for (const product of validatedProducts) {
       const stockResult = await decreaseStock(product.merchantProductNo, product.quantity, sellerName, 'CE', session);
 
-      if (!stockResult?.success)
+      if (!stockResult?.success) {
+        if (session.inTransaction()) {
+          await session.abortTransaction();
+        }
         throw new Error(`Unable to create shipment: ${stockResult?.message || 'unknown error'}`);
+      }
       if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }
 
@@ -2261,7 +2265,9 @@ export const createManualShipmentService = async (shipmentData) => {
       { upsert: true, session }
     );
 
-    await session.commitTransaction();
+    if (session.inTransaction()) {
+      await session.commitTransaction();
+    }
 
     if (stockPayloads.length > 0) {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));

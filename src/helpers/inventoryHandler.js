@@ -5,6 +5,7 @@ import { getProductStatus } from '#utils/mapRowToInventory.js';
 
 export const increaseStock = async (sku, quantity, sellerName, type, session = null) => {
   try {
+    console.log(sku, '++++++++?????????????????');
     const qty = Number(quantity);
     if (isNaN(qty) || qty < 0) {
       return { success: false, message: 'Invalid quantity provided' };
@@ -15,14 +16,18 @@ export const increaseStock = async (sku, quantity, sellerName, type, session = n
 
     const opts = session ? { new: true, session } : { new: true };
 
-    const [inventory, product] = await Promise.all([
-      Inventory.findOneAndUpdate({ productSkuCode: sku }, { $inc: { currentStockCount: qty } }, opts),
-      Product.findOneAndUpdate(
-        { productSkuCode: sku },
-        { $inc: { currentStockCount: qty }, $set: { updatedAt: new Date() } },
-        opts
-      ),
-    ]);
+    const inventory = await Inventory.findOneAndUpdate(
+      { productSkuCode: sku },
+      { $inc: { currentStockCount: qty } },
+      opts
+    );
+    const product = await Product.findOneAndUpdate(
+      { productSkuCode: sku },
+      { $inc: { currentStockCount: qty }, $set: { updatedAt: new Date() } },
+      opts
+    );
+
+    console.log(inventory, product, '+++++++++++++++++++++++++++++++++++++++++');
 
     if (!inventory || !product) {
       return { success: false, message: 'Inventory or product not found' };
@@ -70,18 +75,16 @@ export const decreaseStock = async (sku, quantity, sellerName, type, session = n
 
     const opts = session ? { new: true, session } : { new: true };
 
-    const [inventory, product] = await Promise.all([
-      Inventory.findOneAndUpdate(
-        { productSkuCode: sku, currentStockCount: { $gte: qty } },
-        { $inc: { currentStockCount: -qty } },
-        opts
-      ),
-      Product.findOneAndUpdate(
-        { productSkuCode: sku, currentStockCount: { $gte: qty } },
-        { $inc: { currentStockCount: -qty }, $set: { updatedAt: new Date() } },
-        opts
-      ),
-    ]);
+    const inventory = await Inventory.findOneAndUpdate(
+      { productSkuCode: sku, currentStockCount: { $gte: qty } },
+      { $inc: { currentStockCount: -qty } },
+      opts
+    );
+    const product = await Product.findOneAndUpdate(
+      { productSkuCode: sku, currentStockCount: { $gte: qty } },
+      { $inc: { currentStockCount: -qty }, $set: { updatedAt: new Date() } },
+      opts
+    );
 
     if (!inventory || !product) {
       return { success: false, message: 'Inventory or product not found or insufficient stock' };
