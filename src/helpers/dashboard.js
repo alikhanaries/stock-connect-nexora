@@ -710,6 +710,34 @@ export const buildChannelStatusPipeline = (sellerObjectIds, range, channelIds = 
   ];
 };
 
+export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = []) => {
+  const match = {
+    ...(range?.start && range?.end ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
+    sellerIds: { $in: sellerObjectIds },
+  };
+
+  if (Array.isArray(channelIds) && channelIds.length) {
+    match.channelId = { $in: channelIds };
+  }
+  return [
+    { $match: match },
+
+    {
+      $facet: {
+        reasons: [
+          { $group: { _id: '$reason', value: { $sum: 1 } } },
+          { $project: { _id: 0, key: '$_id', value: 1 } },
+          { $sort: { value: -1 } },
+        ],
+        statusSummary: [
+          { $group: { _id: '$status', value: { $sum: 1 } } },
+          { $project: { _id: 0, key: '$_id', value: 1 } },
+          { $sort: { key: 1 } },
+        ],
+      },
+    },
+  ];
+};
 export default {
   getDateRange,
   getPreviousRange,
@@ -724,4 +752,5 @@ export default {
   buildGlobalChannelFilter,
   pickSelectedGlobalNames,
   buildChannelStatusPipeline,
+  buildReturnsStatusPipeline,
 };

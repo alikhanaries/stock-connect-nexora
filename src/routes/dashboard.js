@@ -9,6 +9,7 @@ import {
   getTopPerformersProducts,
   getSalesByChannel,
   getOrdersByChannel,
+  getReturnsOverview,
 } from '#controllers/DashboardController.js';
 import { authMiddleware, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
 import {
@@ -21,6 +22,7 @@ import {
   salesByChannelValidator,
   ordersByChannelValidator,
   channelStatusValidator,
+  returnStatusValidator,
 } from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
 
@@ -105,4 +107,12 @@ dashboardRoutes.get(
   getOrdersByChannel
 );
 
+dashboardRoutes.get(
+  '/returns-overview',
+  returnStatusValidator,
+  checkLanguage,
+  authMiddleware,
+  verifyMultipleSellerAccess,
+  getReturnsOverview
+);
 export default dashboardRoutes;
