@@ -4,6 +4,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
 import Inventory from '#models/Inventory.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
+import Return from '../models/Return.js';
 import {
   getDateRange,
   getPreviousRange,
@@ -19,6 +20,7 @@ import {
   buildGlobalChannelFilter,
   pickSelectedGlobalNames,
   buildChannelStatusPipeline,
+  buildReturnsStatusPipeline,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
@@ -148,6 +150,15 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
               ],
             },
           },
+          canceledTotal: {
+            $sum: {
+              $multiply: [
+                { $ifNull: ['$orderSkuList.skuList.statusBreakdown.canceled', 0] },
+                { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+              ],
+            },
+          },
+
           totalProducts: {
             $sum: '$orderSkuList.skuList.quantity',
           },
@@ -160,9 +171,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalDeliveredSales: { $sum: '$deliveredTotal' },
           totalOrderValue: { $sum: '$totalOrderValue' },
 
-          cancellationValue: {
-            $sum: { $cond: [{ $eq: ['$status', 'CANCELED'] }, '$totalOrderValue', 0] },
-          },
+          cancellationValue: { $sum: '$canceledTotal' },
 
           avgProductsPerOrder: { $avg: '$totalProducts' },
         },
@@ -231,8 +240,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
     buildMetric(
       'avgProductsPerOrder',
       'Avg Products per Order',
-      Math.round(current.avgProductsPerOrder),
-      Math.round(previous.avgProductsPerOrder)
+      current.avgProductsPerOrder,
+      previous.avgProductsPerOrder
     ),
   ];
 };
@@ -604,6 +613,34 @@ export const getChannelStatus = async (sellerId, period, { startDate, endDate, m
   };
 };
 
+export const getReturnsOverview = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
+
+  const sellerObjectIds = ids
+    .map(String)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((id) => {
+      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
+      return new mongoose.Types.ObjectId(id);
+    });
+
+  const range = getDateRange({ period, startDate, endDate, month });
+  if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}"`);
+
+  const channelIds = pickChannelIdsFromChannel(channel);
+
+  const pipeline = buildReturnsStatusPipeline(sellerObjectIds, range, channelIds);
+
+  const [result] = await Return.aggregate(pipeline);
+
+  const reasons = result?.reasons ?? [];
+  const statusSummary = result?.statusSummary ?? [];
+  const total = statusSummary.reduce((sum, s) => sum + (s.value || 0), 0);
+
+  return { total, reasons, statusSummary };
+};
+
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,
@@ -614,4 +651,5 @@ export default {
   getSalesByChannel,
   getOrdersByChannel,
   getChannelStatus,
+  getReturnsOverview,
 };
