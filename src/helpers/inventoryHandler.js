@@ -3,7 +3,7 @@ import Product from '../models/Product.js';
 import { sendStockBatch } from '../service/InventoryService.js';
 import { getProductStatus } from '#utils/mapRowToInventory.js';
 
-export const increaseStock = async (sku, quantity, sellerName, type, session = null) => {
+export const increaseStock = async (sku, quantity, sellerId, sellerName, type, session = null) => {
   try {
     const qty = Number(quantity);
     if (isNaN(qty) || qty < 0) {
@@ -16,12 +16,12 @@ export const increaseStock = async (sku, quantity, sellerName, type, session = n
     const opts = session ? { new: true, session } : { new: true };
 
     const inventory = await Inventory.findOneAndUpdate(
-      { productSkuCode: sku },
+      { productSkuCode: sku, sellerId },
       { $inc: { currentStockCount: qty } },
       opts
     );
     const product = await Product.findOneAndUpdate(
-      { productSkuCode: sku },
+      { productSkuCode: sku, sellerId },
       { $inc: { currentStockCount: qty }, $set: { updatedAt: new Date() } },
       opts
     );
@@ -33,7 +33,11 @@ export const increaseStock = async (sku, quantity, sellerName, type, session = n
     const prodStatus = getProductStatus(sellerName, product.currentStockCount);
 
     if (prodStatus !== product.status) {
-      await Product.updateOne({ productSkuCode: sku }, { $set: { status: prodStatus } }, session ? { session } : {});
+      await Product.updateOne(
+        { productSkuCode: sku, sellerId },
+        { $set: { status: prodStatus } },
+        session ? { session } : {}
+      );
     }
 
     const payload = {
@@ -60,7 +64,7 @@ export const increaseStock = async (sku, quantity, sellerName, type, session = n
   }
 };
 
-export const decreaseStock = async (sku, quantity, sellerName, type, session = null) => {
+export const decreaseStock = async (sku, quantity, sellerId, sellerName, type, session = null) => {
   try {
     const qty = Number(quantity);
     if (isNaN(qty) || qty < 0) {
@@ -73,12 +77,12 @@ export const decreaseStock = async (sku, quantity, sellerName, type, session = n
     const opts = session ? { new: true, session } : { new: true };
 
     const inventory = await Inventory.findOneAndUpdate(
-      { productSkuCode: sku, currentStockCount: { $gte: qty } },
+      { productSkuCode: sku, sellerId, currentStockCount: { $gte: qty } },
       { $inc: { currentStockCount: -qty } },
       opts
     );
     const product = await Product.findOneAndUpdate(
-      { productSkuCode: sku, currentStockCount: { $gte: qty } },
+      { productSkuCode: sku, sellerId, currentStockCount: { $gte: qty } },
       { $inc: { currentStockCount: -qty }, $set: { updatedAt: new Date() } },
       opts
     );
@@ -89,7 +93,11 @@ export const decreaseStock = async (sku, quantity, sellerName, type, session = n
 
     const prodStatus = getProductStatus(sellerName, product.currentStockCount);
     if (prodStatus !== product.status) {
-      await Product.updateOne({ productSkuCode: sku }, { $set: { status: prodStatus } }, session ? { session } : {});
+      await Product.updateOne(
+        { productSkuCode: sku, sellerId },
+        { $set: { status: prodStatus } },
+        session ? { session } : {}
+      );
     }
 
     const stockPayload = {
@@ -116,13 +124,15 @@ export const decreaseStock = async (sku, quantity, sellerName, type, session = n
   }
 };
 
-export const validateStockAvailability = async (products) => {
+export const validateStockAvailability = async (products, sellerId) => {
   for (const product of products) {
     const qty = Number(product.quantity || 0);
     const inventory = await Inventory.findOne({
       productSkuCode: product.merchantProductNo,
+      sellerId,
       currentStockCount: { $gte: qty },
     }).lean();
+
     if (!inventory) {
       return {
         success: false,

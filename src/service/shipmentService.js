@@ -375,7 +375,7 @@ export const createFullShipmentService = async (shipmentData) => {
     }
 
     // Step 8: Pre-validate stock availability (before calling Aymakan)
-    const stockValidation = await validateStockAvailability(validProducts);
+    const stockValidation = await validateStockAvailability(validProducts, sellerId);
     if (!stockValidation.success) {
       return stockValidation;
     }
@@ -1367,7 +1367,14 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       // SKU status correction
       sku.status = sku.statusBreakdown.confirmed === sku.quantity ? 'NEW' : 'IN_PROGRESS';
 
-      const stockResult = await increaseStock(product.merchantProductNo, qty, sellerName, 'CE', session);
+      const stockResult = await increaseStock(
+        product.merchantProductNo,
+        qty,
+        shipment.sellerId,
+        sellerName,
+        'CE',
+        session
+      );
       if (!stockResult?.success) {
         await session.abortTransaction();
         return {
@@ -2117,7 +2124,14 @@ export const createManualShipmentService = async (shipmentData) => {
 
     const stockPayloads = [];
     for (const product of validatedProducts) {
-      const stockResult = await decreaseStock(product.merchantProductNo, product.quantity, sellerName, 'CE', session);
+      const stockResult = await decreaseStock(
+        product.merchantProductNo,
+        product.quantity,
+        sellerId,
+        sellerName,
+        'CE',
+        session
+      );
 
       if (!stockResult?.success) {
         if (session.inTransaction()) {
