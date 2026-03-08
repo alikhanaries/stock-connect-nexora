@@ -1369,7 +1369,11 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
       const stockResult = await increaseStock(product.merchantProductNo, qty, sellerName, 'CE', session);
       if (!stockResult?.success) {
-        throw new Error(`Unable to cancel shipment: ${stockResult?.message || 'unknown error'}`);
+        await session.abortTransaction();
+        return {
+          success: false,
+          message: `Unable to cancel shipment: ${stockResult?.message || 'unknown error'}`,
+        };
       }
       if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }

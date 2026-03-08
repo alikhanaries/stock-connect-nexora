@@ -56,7 +56,7 @@ export const increaseStock = async (sku, quantity, sellerName, type, session = n
     };
   } catch (error) {
     console.error('Service increaseStock error:', error);
-    throw error;
+    return { success: false, message: 'server error' };
   }
 };
 
