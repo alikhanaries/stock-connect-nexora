@@ -1,9 +1,9 @@
 import InventoryStatus from '#models/InventoryStatus.js';
 import Inventory from '#models/Inventory.js';
-import buildInventoryStatusPipeline from '#helpers/dashboard.js';
+import { buildInventorySkuStatusPipeline } from '../helpers/dashboard.js';
 
 export const getInventorySkuStatus = async () => {
-  const pipeline = buildInventoryStatusPipeline();
+  const pipeline = buildInventorySkuStatusPipeline();
   const docs = await Inventory.aggregate(pipeline).allowDiskUse(true);
   if (!docs.length) {
     return {

@@ -498,7 +498,7 @@ export const buildInventoryStatusPipeline = (sellerObjectIds, range, channelIds 
   return pipeline;
 };
 
-const buildInventorySkuStatusPipeline = () => [
+export const buildInventorySkuStatusPipeline = () => [
   {
     $match: {
       sellerId: { $exists: true },
