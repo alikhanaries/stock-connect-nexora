@@ -45,4 +45,5 @@ app.use((req, res) => {
 });
 // Run cron jobs
 cronJob.fetchReturnsCron();
+cronJob.fetchInventoryStatusCron();
 export default app;
