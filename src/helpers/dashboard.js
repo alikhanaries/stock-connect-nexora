@@ -537,18 +537,26 @@ export const buildInventorySkuStatusPipeline = () => [
             },
           },
         },
-        { $unwind: '$skuList' },
-        {
-          $match: {
-            $expr: {
-              $eq: ['$skuList.skuCode', '$$sku'],
-            },
-          },
-        },
         {
           $project: {
             _id: 0,
             channelId: 1,
+            skuList: {
+              $filter: {
+                input: '$skuList',
+                as: 'skuItem',
+                cond: {
+                  $eq: ['$$skuItem.skuCode', '$$sku'],
+                },
+              },
+            },
+          },
+        },
+        {
+          $match: {
+            $expr: {
+              $gt: [{ $size: '$skuList' }, 0],
+            },
           },
         },
       ],
