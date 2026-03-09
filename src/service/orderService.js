@@ -549,8 +549,7 @@ const getOrderStats = async (sellerId) => {
 
 export const processOrders = async (orders, sellerId) => {
   try {
-    const operations = await orderhelper.sanitizeOrdersData(orders);
-
+    const operations = await orderhelper.sanitizeOrdersData(orders, sellerId);
     const result = await Order.bulkWrite(operations);
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});

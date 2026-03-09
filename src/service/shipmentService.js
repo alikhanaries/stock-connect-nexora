@@ -966,7 +966,7 @@ export const ayMakanWebHookService = async (data) => {
 
       // Status-based meaning
       if (finalOrderStatus === 'CLOSED') {
-        descriptionParts.push('All actions completed; the order has been closed');
+        descriptionParts.push('All actions completed; the order has been closed.');
       } else if (finalOrderStatus === 'DELIVERED' && deliveredDelta === 0) {
         descriptionParts.push('All items delivered');
       } else if (finalOrderStatus === 'CANCELED' && canceledDelta === 0) {
