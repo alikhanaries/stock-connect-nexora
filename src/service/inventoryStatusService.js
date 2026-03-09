@@ -4,21 +4,24 @@ import { buildInventorySkuStatusPipeline } from '../helpers/dashboard.js';
 
 export const getInventorySkuStatus = async () => {
   const pipeline = buildInventorySkuStatusPipeline();
-  const docs = await Inventory.aggregate(pipeline).allowDiskUse(true);
-  if (!docs.length) {
-    return {
-      success: true,
-      message: 'No data found',
-      count: 0,
-    };
-  }
-  await InventoryStatus.deleteMany({});
   const batchSize = 1000;
+  const cursor = Inventory.aggregate(pipeline).allowDiskUse(true).cursor({ batchSize });
 
-  for (let i = 0; i < docs.length; i += batchSize) {
-    const batch = docs.slice(i, i + batchSize);
+  const ops = [];
+  let count = 0;
+  let hasDocs = false;
+  let cleared = false;
 
-    const ops = batch.map((doc) => ({
+  for await (const doc of cursor) {
+    if (!cleared) {
+      await InventoryStatus.deleteMany({});
+      cleared = true;
+    }
+
+    hasDocs = true;
+    count += 1;
+
+    ops.push({
       updateOne: {
         filter: {
           sellerId: doc.sellerId,
@@ -37,13 +40,30 @@ export const getInventorySkuStatus = async () => {
         },
         upsert: true,
       },
-    }));
+    });
+
+    if (ops.length === batchSize) {
+      await InventoryStatus.bulkWrite(ops, { ordered: false });
+      ops.length = 0;
+    }
+  }
+
+  if (!hasDocs) {
+    await InventoryStatus.deleteMany({});
+    return {
+      success: true,
+      message: 'No data found',
+      count: 0,
+    };
+  }
+
+  if (ops.length) {
     await InventoryStatus.bulkWrite(ops, { ordered: false });
   }
   return {
     success: true,
     message: 'Cache rebuilt successfully',
-    count: docs.length,
+    count,
   };
 };
 
