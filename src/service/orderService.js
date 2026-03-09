@@ -1167,9 +1167,10 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const orders = await Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean();
-
-    const totalCount = await Order.countDocuments(filter);
+    const [orders, totalCount] = await Promise.all([
+      Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
+      Order.countDocuments(filter),
+    ]);
 
     if (!orders.length) {
       return {
