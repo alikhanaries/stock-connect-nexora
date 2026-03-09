@@ -453,7 +453,7 @@ export const getOrderById = async (id, sellerId) => {
 
             return {
               id: sku?.id,
-              skuOrderId: sku.orderId,
+              skuOrderId: sku?.orderId,
               sellerName: dynamicSellerName,
               merchantProductNo: p.merchantProductNo,
               channelProductNo: sku?.channelProductNo,
@@ -1291,6 +1291,17 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     console.error('Error exporting orders:', error.message);
     throw error;
   }
+};
+
+export const addOrderLog = async (orderId, sellerId, log) => {
+  await OrderLogs.updateOne(
+    { orderId, sellerId },
+    {
+      $push: { details: log },
+      $setOnInsert: { orderId, sellerId },
+    },
+    { upsert: true }
+  );
 };
 
 export default {
