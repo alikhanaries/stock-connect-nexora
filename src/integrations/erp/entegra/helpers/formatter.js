@@ -100,7 +100,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       name: `${p.name}`,
       description: htmlToPlainText(p.description),
       descriptionAr: p.descriptionAr || '',
-      brand: p.brand || '',
+      brand: 'manijero',
 
       price: gpPrice,
       minPrice: gpSpecial,
@@ -157,7 +157,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         name: `${p.name}`,
         description: htmlToPlainText(p.description),
         descriptionAr: p.descriptionAr || '',
-        brand: p.brand || '',
+        brand: 'manijero',
         ean: v.barcode || v.gtin || '',
 
         price: childPrice,
