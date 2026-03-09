@@ -9,10 +9,8 @@ import { login } from '#root/src/integrations/erp/unicommerce/controllers/authCo
 import { loginValidator } from '#root/src/integrations/erp/unicommerce/validations/auth.js';
 import { checkLanguage } from '#middleware/index.js';
 import { getProductCountValidator, getProductsValidator } from '../validations/products.js';
-import { getOrderStatusValidator } from '../validations/orders.js';
-import { getOrderStatus } from '../controllers/orderController.js';
-import { getOrders } from '../controllers/orderController.js';
-import { getOrdersValidator } from '../validations/orders.js';
+import { getOrders, getOrderStatus, orderDispatch } from '../controllers/orderController.js';
+import { getOrderStatusValidator, getOrdersValidator, orderDispatchValidator } from '../validations/orders.js';
 import { updateInventoryValidator } from '../validations/inventory.js';
 import { updateInventory } from '../controllers/inventoryController.js';
 
@@ -527,6 +525,138 @@ UniCommerceRouter.get(
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
   getOrderStatus
+);
+
+/**
+ * @openapi
+ * /orders/dispatch:
+ *   post:
+ *     tags: [UniCommerce]
+ *     summary: Dispatch Order Items
+ *     description: Mark order items as dispatched and create shipment for Uniware OMS.
+ *
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         description: Language preference
+ *
+ *       - in: header
+ *         name: accessToken
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Access token received from authentication API
+ *
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orderItems
+ *               - selfShipping
+ *             properties:
+ *               orderItems:
+ *                 type: array
+ *                 description: List of order items to dispatch
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - orderItemId
+ *                     - quantity
+ *                   properties:
+ *                     orderItemId:
+ *                       type: string
+ *                       description: Order Item ID
+ *                       example: "47123"
+ *
+ *                     quantity:
+ *                       type: integer
+ *                       description: Quantity to dispatch
+ *                       example: 1
+ *
+ *               selfShipping:
+ *                 type: object
+ *                 required:
+ *                   - trackingId
+ *                 properties:
+ *                   deliveryPartner:
+ *                     type: string
+ *                     description: Courier or delivery partner name
+ *                     example: DHL
+ *
+ *                   dispatchDate:
+ *                     type: string
+ *                     format: date-time
+ *                     description: Dispatch date of shipment
+ *                     example: 2026-03-06T10:30:00Z
+ *
+ *                   invoiceNumber:
+ *                     type: string
+ *                     description: Invoice number for shipment
+ *                     example: INV-1001
+ *
+ *                   trackingId:
+ *                     type: string
+ *                     description: Shipment tracking ID / AWB number
+ *                     example: AWB123456789
+ *
+ *                   trackingURL:
+ *                     type: string
+ *                     description: Shipment tracking URL
+ *                     example: https://tracking.dhl.com/AWB123456789
+ *
+ *     responses:
+ *       200:
+ *         description: Dispatch processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   description: Status of the request
+ *                   enum: [SUCCESS, FAILED, PARTIAL_SUCCESS]
+ *                   example: SUCCESS
+ *
+ *                 orderItems:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       orderItemId:
+ *                         type: string
+ *                         description: Order item ID processed
+ *                         example: "47123"
+ *
+ *                       errorMessage:
+ *                         type: string
+ *                         description: Error message if dispatch failed
+ *                         example: ""
+ *
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/FailResponse"
+ *
+ *       500:
+ *         description: Internal server error
+ */
+
+UniCommerceRouter.post(
+  '/orders/dispatch',
+  orderDispatchValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  orderDispatch
 );
 
 export default UniCommerceRouter;
