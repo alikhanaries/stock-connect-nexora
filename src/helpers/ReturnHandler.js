@@ -186,6 +186,7 @@ export const buildReturnAggregationPipeline = () => {
         updatedAt: 1,
         orderInfo: 1,
         shipmentData: 1,
+        sellerIds: 1,
       },
     },
   ];
@@ -233,9 +234,34 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
   addFilter(matchConditions, 'returnId', returnId);
   addFilter(matchConditions, 'orderId', orderID);
 
-  addFilter(matchConditions, 'orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
+  // Date filter
+  if (dateFrom || dateTo) {
+    matchConditions.createdAt = {};
+    if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
+  }
 
-  // Search Filter
+  // Seller filter (return document level)
+  if (sellerId && mongoose.Types.ObjectId.isValid(sellerId)) {
+    const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
+
+    matchConditions.$or = [
+      { sellerIds: sellerObjectId },
+      { sellerIds: { $exists: false } }, // support old records
+    ];
+  }
+
+  // Start pipeline
+  const pipeline = [];
+
+  if (Object.keys(matchConditions).length > 0) {
+    pipeline.push({ $match: matchConditions });
+  }
+
+  // Main aggregation pipeline
+  pipeline.push(...buildReturnAggregationPipeline());
+
+  // Search filter (after lookup because it uses orderInfo)
   if (search) {
     const searchRegex = new RegExp(search, 'i');
     const searchConditions = [
@@ -246,7 +272,6 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
       { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
     ];
 
-    // Handle full name searches
     const searchTerms = search.trim().split(/\s+/);
     if (searchTerms.length > 1) {
       const [firstTerm, ...rest] = searchTerms;
@@ -270,21 +295,7 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
       );
     }
 
-    matchConditions.$or = searchConditions;
-  }
-
-  // Date Filter
-  if (dateFrom || dateTo) {
-    matchConditions.createdAt = {};
-    if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
-    if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
-  }
-
-  // Build Aggregation
-  const pipeline = buildReturnAggregationPipeline();
-
-  if (Object.keys(matchConditions).length > 0) {
-    pipeline.push({ $match: matchConditions });
+    pipeline.push({ $match: { $or: searchConditions } });
   }
 
   return { pipeline, matchConditions };
