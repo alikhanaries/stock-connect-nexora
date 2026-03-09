@@ -1,35 +1,48 @@
-import { ROLES_BASED_USER_FETCHING, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
-import mongoose from 'mongoose';
+import { SELLER_TYPE } from '#constants/common.js';
 import Seller from '#models/Seller.js';
 import { failResponse, errorResponse } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
 
 export const verifyUnicommerceSellerAccess = async (req, res, next) => {
   try {
-    const user = req.user;
-    const connectedSellerIds = req.sellerIds;
-    let { sellerId } = req.query;
-    if (user?.role === USER_ROLES.MASTER_ADMIN) {
-      if (!sellerId) {
-        sellerId = await Seller.findOne({ isDeleted: false, type: SELLER_TYPE.NORMAL });
-      }
-      req.sellerId = new mongoose.Types.ObjectId(sellerId);
-      return next();
-    }
-    if (!Array.isArray(connectedSellerIds)) {
-      console.error('Authorization Error: req.sellerIds was not an array. Check preceding middleware.');
-      errorResponse(res, 500, { message: 'Server configuration error' });
+    const sellerIds = req.sellerIds;
+
+    /* -------- VALIDATE SELLER IDS -------- */
+
+    if (!Array.isArray(sellerIds)) {
+      return errorResponse(res, 500, {
+        message: 'Server configuration error: sellerIds must be an array',
+      });
     }
 
-    if (ROLES_BASED_USER_FETCHING[user.role]) {
-      if (connectedSellerIds.includes(sellerId)) {
-        req.sellerId = new mongoose.Types.ObjectId(sellerId);
-        return next();
-      } else {
-        failResponse(res, 400, { message: 'You do not have access to this seller' });
-      }
+    if (sellerIds.length === 0) {
+      return failResponse(res, 403, {
+        message: 'No seller connected to this user',
+      });
     }
+
+    /* -------- FIND NORMAL SELLER -------- */
+
+    const seller = await Seller.findOne({
+      _id: { $in: sellerIds },
+      type: SELLER_TYPE.NORMAL,
+      isDeleted: false,
+    }).select('_id');
+
+    if (!seller) {
+      return failResponse(res, 403, {
+        message: 'User does not have access to a NORMAL seller',
+      });
+    }
+
+    /* -------- AUTHORIZE -------- */
+
+    req.sellerId = seller._id;
+
+    return next();
   } catch (error) {
-    console.error('Error in verifySellerAccess middleware:', error.message);
-    errorResponse(res, 500, { message: 'An internal server error occurred during authorization.' });
+    console.error('verifyUnicommerceSellerAccess error:', error);
+    return errorResponse(res, 500, {
+      message: 'Internal server error during authorization',
+    });
   }
 };
