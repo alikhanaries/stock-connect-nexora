@@ -123,7 +123,6 @@ export const getSyncedOrders = async (req, res) => {
     if (!success) {
       return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
     }
-
     if (data.length === 0) {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }

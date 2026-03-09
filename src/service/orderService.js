@@ -28,14 +28,43 @@ import Seller from '../models/Seller.js';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
-const formatOrder = (order, channelImage) => {
-  const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
-  const totalPrice = order.totalInclVat
-    ? order.totalInclVat
-    : order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
+const formatOrder = async (order, channelImage, sellerId) => {
+  let sellerName = '';
+  let sellerObjectId = null;
+
+  if (sellerId) {
+    sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+
+    const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
+
+    if (seller) {
+      sellerName = seller.companyName || seller.name || '';
+    }
+  }
+
+  // Filter SKUs seller-wise (if sellerId provided)
+  const sellerSkus = sellerObjectId
+    ? order.orderSkuList?.skuList?.filter((sku) => sku.sellerId?.toString() === sellerObjectId.toString()) || []
+    : order.orderSkuList?.skuList || [];
+
+  const totalQuantity = sellerSkus.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
+
+  const totalPrice = sellerSkus.reduce((sum, sku) => sum + (sku.originalLineTotalInclVat || 0), 0);
+
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
+  let skuOrderId = null;
+
+  if (sellerObjectId && sellerSkus.length > 0) {
+    skuOrderId = sellerSkus[0].orderId;
+  }
+
   return {
     _id: order._id,
+    skuOrderId,
+    //  Added seller details
+    sellerId: sellerObjectId || null,
+    sellerName,
+
     channelNo: order.channelId || 1,
     orderID: order.orderId,
     quantity: totalQuantity,
@@ -74,7 +103,7 @@ const getAllOrders = async (query, sellerId) => {
 
     // Base match stage
     const filter = {
-      sellerId: sellerObjectId,
+      sellerIds: { $in: [sellerObjectId] },
     };
     // Escape special regex characters
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -122,44 +151,7 @@ const getAllOrders = async (query, sellerId) => {
     // Build aggregation pipeline
     const pipeline = [{ $match: filter }];
 
-    if (status && status.toUpperCase().includes('DELIVERED')) {
-      appliedFilters.status = 'DELIVERED';
-
-      // Filter delivered SKUs using $filter to keep skuList as an array
-      pipeline.push({
-        $addFields: {
-          'orderSkuList.skuList': {
-            $filter: {
-              input: '$orderSkuList.skuList',
-              as: 'sku',
-              cond: {
-                $and: [
-                  { $eq: ['$$sku.statusBreakdown.confirmed', 0] },
-                  { $eq: ['$$sku.statusBreakdown.shipped', 0] },
-                  { $eq: ['$$sku.statusBreakdown.returned', 0] },
-                  {
-                    $eq: [
-                      {
-                        $add: ['$$sku.statusBreakdown.delivered', '$$sku.statusBreakdown.canceled'],
-                      },
-                      '$$sku.quantity',
-                    ],
-                  },
-                  { $gt: ['$$sku.statusBreakdown.delivered', 0] }, //  delivered must be > 0
-                ],
-              },
-            },
-          },
-        },
-      });
-
-      // Remove orders that have no delivered SKUs
-      pipeline.push({
-        $match: {
-          'orderSkuList.skuList.0': { $exists: true },
-        },
-      });
-    } else if (status) {
+    if (status) {
       // Normal status filter
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
       const validStatuses = Object.values(ORDER_STATUS_MAP);
@@ -197,10 +189,12 @@ const getAllOrders = async (query, sellerId) => {
     });
 
     return {
-      data: orders.map((order) => {
-        const matchingChannel = channelMap[order.channelId] || null;
-        return formatOrder(order, matchingChannel);
-      }),
+      data: await Promise.all(
+        orders.map((order) => {
+          const matchingChannel = channelMap[order.channelId] || null;
+          return formatOrder(order, matchingChannel, sellerObjectId);
+        })
+      ),
       appliedFilters: appliedFilters,
       latestOrderSyncDate: sellerSync.lastOrderSync || null,
       pagination: getPagination(totalOrders, page, size),
@@ -223,8 +217,11 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     const appliedFilters = {};
     const filter = {};
 
+    let sellerObjectId = null;
+
     if (sellerId) {
-      filter.sellerId = sellerId;
+      sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+      filter.sellerIds = { $in: [sellerObjectId] };
       appliedFilters.sellerId = sellerId;
     }
 
@@ -287,10 +284,12 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     });
 
     return {
-      data: orders.map((order) => {
-        const matchingChannel = channelMap[order.channelId] || null;
-        return formatOrder(order, matchingChannel);
-      }),
+      data: await Promise.all(
+        orders.map((order) => {
+          const matchingChannel = channelMap[order.channelId] || null;
+          return formatOrder(order, matchingChannel, sellerId);
+        })
+      ),
       appliedFilters,
       pagination: getPagination(totalOrders, page, size),
     };
@@ -453,7 +452,7 @@ export const getOrderById = async (id, sellerId) => {
 
             return {
               id: sku?.id,
-              skuOrderId: sku?.orderId,
+              skuOrderId: sku?.orderId || null,
               sellerName: dynamicSellerName,
               merchantProductNo: p.merchantProductNo,
               channelProductNo: sku?.channelProductNo,
@@ -529,7 +528,15 @@ export const getOrderById = async (id, sellerId) => {
 const getOrderStats = async (sellerId) => {
   try {
     const statuses = Object.keys(ORDER_STATUS_MAP);
-    const counts = await Promise.all(statuses.map((status) => Order.countDocuments({ status, sellerId: sellerId })));
+    const sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+    const counts = await Promise.all(
+      statuses.map((status) =>
+        Order.countDocuments({
+          status,
+          sellerIds: [sellerObjectId], // matches inside array automatically
+        })
+      )
+    );
     const stats = statuses.reduce((acc, status, i) => {
       acc[status] = counts[i];
       return acc;
@@ -1152,7 +1159,6 @@ export const formatOrderTrackingInf = (data) => {
 
 export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '') => {
   try {
-    // Validate sellerId is provided
     if (!sellerId) {
       return {
         success: false,
@@ -1162,7 +1168,9 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
-    const filter = { sellerId: sellerId };
+    const filter = {
+      sellerIds: { $in: [sellerId] },
+    };
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
@@ -1181,23 +1189,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     if (status) {
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
-
-      // Validate against enum
-      const validStatuses = Object.values(ORDER_STATUS_MAP);
-      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
-
-      if (invalid.length > 0) {
-        console.warn(`Invalid status values ignored: ${invalid.join(', ')}`);
-      }
-
-      // Build Mongo filter (case-insensitive) - only use valid statuses
-      const validStatusArray = statusArray.filter((s) => validStatuses.includes(s));
-
-      if (validStatusArray.length > 0) {
-        filter.status = {
-          $in: validStatusArray.map((s) => new RegExp(`^${s}$`, 'i')),
-        };
-      }
+      filter.status = { $in: statusArray };
     }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
@@ -1207,12 +1199,52 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       Order.countDocuments(filter),
     ]);
 
-    // Validate export data
-    const validation = validateExportData(orders, 'orders');
+    if (!orders.length) {
+      return {
+        success: false,
+        message: 'No orders found',
+      };
+    }
+
+    /*
+      FILTER SKUs FOR SELLER
+    */
+    const filteredOrders = orders
+      .map((order) => {
+        const filteredSkus = (order.orderSkuList?.skuList || []).filter(
+          (sku) => String(sku.sellerId) === String(sellerId)
+        );
+
+        if (!filteredSkus.length) return null;
+
+        return {
+          ...order,
+          orderSkuList: {
+            orderId: order.orderSkuList?.orderId,
+            skuList: filteredSkus,
+          },
+        };
+      })
+      .filter(Boolean);
+
+    if (!filteredOrders.length) {
+      return {
+        success: false,
+        message: 'No matching SKUs found for seller',
+      };
+    }
+
+    /*
+      VALIDATION
+    */
+    const validation = validateExportData(filteredOrders, 'orders');
     if (!validation.success) {
       return validation;
     }
 
+    /*
+      HEADERS
+    */
     const dynamicHeaders = generateDynamicHeaders(Order, [
       'orderSkuList',
       'orderCustomer',
@@ -1221,20 +1253,19 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       'orderBillingAddress',
     ]);
 
-    // Get a sample order to determine aggregated headers structure
-    const sampleOrder = orders[0];
+    const sampleOrder = filteredOrders[0];
+
     const { customerHeaders, paymentHeaders, shippingHeaders, billingHeaders, skuHeaders } =
       getAggregatedOrderHeaders(sampleOrder);
 
     const filteredDynamicHeaders = dynamicHeaders.filter(
       (header) =>
         !header.startsWith('orderSkuList') &&
-        !(header.includes('orderId') && header.includes('_')) && // <-- allow top-level 'orderId'
+        !(header.includes('orderId') && header.includes('_')) &&
         !header.includes('createdAt') &&
         !header.includes('updatedAt')
     );
 
-    // Combine all headers in the desired order
     const combinedHeaders = [
       ...filteredDynamicHeaders,
       ...skuHeaders,
@@ -1246,46 +1277,42 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       'updatedAt',
     ];
 
-    // Remove any duplicate headers
     const deduplicatedHeaders = [...new Set(combinedHeaders)];
 
-    // Filter out excluded columns
     const organizedHeaders = deduplicatedHeaders.filter((header) => !ORDER_EXPORT_EXCLUDED_COLUMNS.includes(header));
 
-    // Create CSV with organized headers
     const csvRows = [organizedHeaders.join(',')];
 
-    // Process orders in chunks for better performance
+    /*
+      CHUNK PROCESSING
+    */
     const chunks = [];
-    for (let i = 0; i < orders.length; i += EXPORT_CHUNK_SIZE) {
-      chunks.push(orders.slice(i, i + EXPORT_CHUNK_SIZE));
+    for (let i = 0; i < filteredOrders.length; i += EXPORT_CHUNK_SIZE) {
+      chunks.push(filteredOrders.slice(i, i + EXPORT_CHUNK_SIZE));
     }
 
-    // Process each chunk
     const processChunk = async (chunk) => {
       return chunk.map((order) => {
-        // Flatten the aggregated order data
         const flattenedOrder = flattenAggregatedOrder(order);
-
-        // Get organized row data
         const rowData = getOrganizedOrderRowData(flattenedOrder, organizedHeaders);
-
         return escapeCsv(rowData);
       });
     };
 
-    // Process all chunks in parallel
     const processedChunks = await Promise.all(chunks.map(processChunk));
+
     csvRows.push(...processedChunks.flat());
 
-    // Generate filename with seller name
+    /*
+      FILENAME
+    */
     const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];
     const filename = `${sanitizedSellerName}_OrderExport_${exportDate}.csv`;
 
     return {
-      ...createCSVExportResponse(csvRows, filename, orders.length),
-      totalCount,
+      ...createCSVExportResponse(csvRows, filename, filteredOrders.length),
+      totalCount, // total orders matching filter
     };
   } catch (error) {
     console.error('Error exporting orders:', error.message);
