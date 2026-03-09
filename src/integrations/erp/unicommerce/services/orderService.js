@@ -35,19 +35,15 @@ export const fetchOrderStatus = async (sellerId, pageNumber, pageSize, orderIds)
 
 export const fetchOrders = async (sellerId, query = {}) => {
   try {
-    const { pageNumber = 1, pageSize = 50, orderDateFrom, orderDateTo, orderStatus } = query;
+    const { pageNumber = 1, pageSize = 50, orderDateFrom, orderDateTo } = query;
     const page = Math.max(parseInt(pageNumber) || 1, 1);
     const limit = parseInt(pageSize) || 50;
     const skip = (page - 1) * limit;
 
     const filter = {
       sellerId,
+      status: 'IN_PROGRESS',
     };
-
-    // status filter
-    if (orderStatus) {
-      filter.status = orderStatus;
-    }
 
     // date range filter
     if (orderDateFrom || orderDateTo) {
