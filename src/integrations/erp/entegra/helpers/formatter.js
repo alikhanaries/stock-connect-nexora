@@ -1,4 +1,4 @@
-import { safeNumber } from './commonHelper.js';
+import { safeNumber, convertCodeFormat } from './commonHelper.js';
 import { canonicalProductMapper } from './canonicalProductMapper.js'; // <-- IMPORT CANONICAL MAPPER
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
@@ -55,7 +55,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   const hasApiImages = baseImages.length > 0;
 
   // ================= META =================
-  const grandParentSku = `${p.productCode}`;
+  const grandParentSku = `${convertCodeFormat(p.productCode)}`;
   const currency = p.currencyType === 'TRL' ? 'TRY' : p.currencyType || 'USD';
   const gender = /Kadın/i.test(p.name) ? 'Female' : /Erkek/i.test(p.name) ? 'Male' : 'Unisex';
 
@@ -63,49 +63,14 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   const gpPrice = await priceConverter(currency, parseFloat(p.namshi_fiyat) || 0);
   const gpSpecial = await priceConverter(currency, parseFloat(p.site_indirimli_fiyat) || 0);
 
-  const grandParentObject = {
-    sellerId,
-    productType: hasVariants ? 'configurable' : 'simple',
-    productSkuCode: grandParentSku,
-    grandParentProductSkuCode: null,
-    parentProductSkuCode: null,
-
-    name: p.name?.trim(),
-    description: htmlToPlainText(p.description),
-    descriptionAr: p.descriptionAr || '',
-    brand: p.brand || '',
-
-    price: gpPrice,
-    minPrice: gpSpecial,
-    maxPrice: gpPrice,
-    msrp: gpPrice,
-
-    status: p.status === '1' ? 'active' : 'inactive',
-    currentStockCount: safeNumber(p.quantity),
-
-    volumetricWeightCm: safeNumber(p.desi, 1),
-    hsCodeAE: '6403',
-    hsCodeSA: '6403',
-
-    categoryTrail: categoryName,
-    gender,
-    ageRangeDescription: 'Adult',
-    manufacturer: p.supplier || '',
-    modelName: p.mpn || '',
-    source: 'MANUAL',
-  };
-
   let grandParentImages = [];
 
   if (isImageUpdate === true && hasApiImages === true) {
     grandParentImages = await safeProcessImages(baseImages, sellerId);
-    attachImages(grandParentObject, grandParentImages);
   }
 
-  const grandParent = canonicalProductMapper(grandParentObject, sellerId);
-
   if (!hasVariants) {
-    return { grandParent, parents: [], children: [] };
+    return { parents: [], children: [] };
   }
 
   // ================= NORMALIZE VARIANTS =================
@@ -124,26 +89,23 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
   // ================= PARENTS & CHILDREN =================
   for (const [color, colorVariants] of Object.entries(variantsByColor)) {
-    const parentSku = `${grandParentSku}_${color.replace(/\s+/g, '_')}`.slice(0, 64);
-
-    const parentPrice = await priceConverter(currency, parseFloat(colorVariants[0]?.namshi_fiyat) || 0);
-    const parentSpecial = await priceConverter(currency, parseFloat(colorVariants[0]?.site_indirimli_fiyat) || 0);
+    const parentSku = `${convertCodeFormat(grandParentSku)}`;
 
     const parentObject = {
       sellerId,
       productType: 'configurable',
       productSkuCode: parentSku,
-      grandParentProductSkuCode: grandParentSku,
+      grandParentProductSkuCode: null,
 
-      name: `${p.name} - ${colorVariants[0]?.originalColor || color}`,
+      name: `${p.name}`,
       description: htmlToPlainText(p.description),
       descriptionAr: p.descriptionAr || '',
       brand: p.brand || '',
 
-      price: parentPrice,
-      minPrice: parentSpecial,
-      maxPrice: parentPrice,
-      msrp: parentPrice,
+      price: gpPrice,
+      minPrice: gpSpecial,
+      maxPrice: gpPrice,
+      msrp: gpPrice,
 
       status: p.status === '1' ? 'active' : 'inactive',
 
@@ -155,6 +117,8 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       categoryTrail: categoryName,
       gender,
       modelName: p.mpn || '',
+
+      currentStockCount: safeNumber(p.quantity),
     };
 
     // ---------- PARENT IMAGES ----------
@@ -179,9 +143,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
     // ---------- CHILDREN ----------
     for (const v of colorVariants) {
-      const safeColor = (v.originalColor || 'NA').trim().replace(/\s+/g, '_').toUpperCase();
-
-      const childSku = `${v.productCode}_${safeColor}`.slice(0, 64);
+      const childSku = convertCodeFormat(v.productCode);
 
       const childPrice = await priceConverter(currency, parseFloat(v.namshi_fiyat) || 0);
       const childSpecial = await priceConverter(currency, parseFloat(v.site_indirimli_fiyat) || 0);
@@ -192,7 +154,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         productSkuCode: childSku,
         parentProductSkuCode: parentSku,
 
-        name: `${p.name} - ${v.originalColor} - ${v.normalizedSize}`,
+        name: `${p.name}`,
         description: htmlToPlainText(p.description),
         descriptionAr: p.descriptionAr || '',
         brand: p.brand || '',
@@ -225,5 +187,5 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     }
   }
 
-  return { grandParent, parents, children };
+  return { parents, children };
 };

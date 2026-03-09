@@ -48,7 +48,6 @@ const normalizeDisplay = (value = '') => value.toString().trim().replace(/\s+/g,
 const extractVariantSpec = (varationspec = []) => {
   let originalSize = '';
   let originalColor = '';
-
   for (const spec of varationspec) {
     const key = cleanName(spec.name);
 
@@ -99,3 +98,8 @@ export const mapImageUrls = (images = []) => ({
 export const resolveImages = (preferred = [], fallback = []) =>
   Array.isArray(preferred) && preferred.length > 0 ? preferred : fallback;
 // Normalize variant specs (deterministic)
+
+export const convertCodeFormat = (value = '') => {
+  if (!value) return value;
+  return value.replace(/[.\-_]+/g, '_');
+};
