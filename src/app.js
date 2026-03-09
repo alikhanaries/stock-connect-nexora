@@ -44,6 +44,5 @@ app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 // Run cron jobs
-cronJob.fetchReturnsCron();
-cronJob.fetchInventoryStatusCron();
+cronJob.scheduledCronJobs();
 export default app;
