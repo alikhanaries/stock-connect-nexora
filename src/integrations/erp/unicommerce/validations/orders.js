@@ -113,3 +113,16 @@ export const orderDispatchValidator = validate(async (req) => {
 
   req.body = bodySchema.parse(req.body);
 });
+
+export const ordersValidator = async (req, res, next) => {
+  try {
+    // If orderIds exists → Order Status API
+    if (req.query.orderIds) {
+      return getOrderStatusValidator(req, res, next);
+    }
+    // Otherwise → Get Orders API
+    return getOrdersValidator(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};

@@ -6,40 +6,19 @@ import {
 import dispatchService from '../services/dispatchService.js';
 import orderService from '../services/orderService.js';
 
-export const getOrders = async (req, res) => {
+export const ordersController = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    if (!sellerId) {
-      return failResponse(res, 400, { message: 'sellerId is missing' });
+    const { orderIds, pageNumber, pageSize } = req.query;
+    let result;
+    if (orderIds) {
+      result = await orderService.fetchOrderStatus(sellerId, pageNumber, pageSize, orderIds);
+    } else {
+      result = await orderService.fetchOrders(sellerId, req.query);
     }
-    const { pageNumber = 1, pageSize = 50, orderDateFrom, orderDateTo, orderStatus } = req.query;
-    const data = await orderService.fetchOrders(sellerId, {
-      pageNumber,
-      pageSize,
-      orderDateFrom,
-      orderDateTo,
-      orderStatus,
-    });
-
-    return successResponse(res, 200, data);
-  } catch (err) {
-    console.error('unicommerce getOrders error:', err);
-    return errorResponse(res, 500, { message: err.message });
-  }
-};
-
-export const getOrderStatus = async (req, res) => {
-  try {
-    const sellerId = req.sellerId;
-    if (!sellerId) {
-      return failResponse(res, 400, { message: 'sellerId is missing' });
-    }
-    const { pageNumber = 1, pageSize = 5, orderIds } = req.query;
-    const data = await orderService.fetchOrderStatus(sellerId, pageNumber, pageSize, orderIds);
-
-    return successResponse(res, 200, data);
+    return successResponse(res, 200, result);
   } catch (error) {
-    console.error('getOrderStatus error:', error);
+    console.error('ordersController error:', error);
     return errorResponse(res, 500, { message: 'Internal server error' });
   }
 };

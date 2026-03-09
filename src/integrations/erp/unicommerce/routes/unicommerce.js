@@ -9,8 +9,8 @@ import { login } from '#root/src/integrations/erp/unicommerce/controllers/authCo
 import { loginValidator } from '#root/src/integrations/erp/unicommerce/validations/auth.js';
 import { checkLanguage } from '#middleware/index.js';
 import { getProductCountValidator, getProductsValidator } from '../validations/products.js';
-import { getOrders, getOrderStatus, orderDispatch } from '../controllers/orderController.js';
-import { getOrderStatusValidator, getOrdersValidator, orderDispatchValidator } from '../validations/orders.js';
+import { ordersController, orderDispatch } from '../controllers/orderController.js';
+import { orderDispatchValidator, ordersValidator } from '../validations/orders.js';
 import { updateInventoryValidator } from '../validations/inventory.js';
 import { updateInventory } from '../controllers/inventoryController.js';
 
@@ -359,8 +359,21 @@ UniCommerceRouter.post(
  * /orders:
  *   get:
  *     tags: [UniCommerce]
- *     summary: Get orders list
- *     description: Returns paginated list of marketplace orders for Uniware OMS.
+ *     summary: Get Orders or Order Status
+ *     description: |
+ *       This endpoint supports two use cases for Uniware OMS:
+ *
+ *       **1. Get Orders API**
+ *       Fetch new marketplace orders.
+ *       Requires: `orderDateFrom`, `orderDateTo`, `orderStatus`
+ *       `pageSize` must be **50**
+ *
+ *       **2. Get Order Status API**
+ *       Fetch the latest status of an existing order.
+ *       Requires: `orderIds`
+ *       `pageSize` must be **5**
+ *
+ *       The behavior is determined by the query parameters provided.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -375,7 +388,7 @@ UniCommerceRouter.post(
  *         required: true
  *         schema:
  *           type: string
- *         description: Authorization header in the format "Bearer &lt;access token&gt;" received from authentication API
+ *         description: Authorization header in the format "Bearer <access token>"
  *
  *       - in: query
  *         name: pageNumber
@@ -390,32 +403,46 @@ UniCommerceRouter.post(
  *         required: true
  *         schema:
  *           type: integer
- *           enum: [50]
+ *           enum: [5, 50]
  *         example: 50
+ *         description: |
+ *           50 → Get Orders API
+ *           5 → Get Order Status API
  *
  *       - in: query
  *         name: orderDateFrom
- *         required: true
+ *         required: false
  *         schema:
  *           type: string
  *           format: date-time
  *         example: 2025-11-26T00:00:00+00:00
+ *         description: Required for Get Orders API
  *
  *       - in: query
  *         name: orderDateTo
- *         required: true
+ *         required: false
  *         schema:
  *           type: string
  *           format: date-time
  *         example: 2025-11-30T23:59:59+00:00
+ *         description: Required for Get Orders API
  *
  *       - in: query
  *         name: orderStatus
- *         required: true
+ *         required: false
  *         schema:
  *           type: string
  *           enum: [CREATED, PENDING_VERIFICATION]
  *         example: CREATED
+ *         description: Required for Get Orders API
+ *
+ *       - in: query
+ *         name: orderIds
+ *         required: false
+ *         schema:
+ *           type: string
+ *         example: ORD12345
+ *         description: Required for Get Order Status API
  *
  *     responses:
  *       200:
@@ -442,91 +469,11 @@ UniCommerceRouter.post(
  */
 UniCommerceRouter.get(
   '/orders',
-  getOrdersValidator,
+  ordersValidator,
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
-  getOrders
+  ordersController
 );
-
-/**
- * @openapi
- * /orders:
- *   get:
- *     tags: [UniCommerce]
- *     summary: Get Order Status
- *     description: Fetch latest active status of specific marketplace order for Uniware OMS.
- *     parameters:
- *       - in: header
- *         name: Accept-Language
- *         required: true
- *         schema:
- *           type: string
- *           enum: [en, ar, zh-CN, tr]
- *         description: Language preference
- *
- *       - in: header
- *         name: accessToken
- *         required: true
- *         schema:
- *           type: string
- *         description: Access token received from authentication API
- *
- *       - in: query
- *         name: pageNumber
- *         required: true
- *         schema:
- *           type: integer
- *           minimum: 1
- *         example: 1
- *
- *       - in: query
- *         name: pageSize
- *         required: true
- *         schema:
- *           type: integer
- *           enum: [5]
- *         example: 5
- *
- *       - in: query
- *         name: orderIds
- *         required: true
- *         schema:
- *           type: string
- *         description: Single order ID per API call
- *         example: 12345
- *
- *     responses:
- *       200:
- *         description: Order status fetched successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 orders:
- *                   type: array
- *                   items:
- *                     type: object
- *
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: "#/components/schemas/FailResponse"
- *
- *       500:
- *         description: Internal server error
- */
-
-UniCommerceRouter.get(
-  '/orders',
-  getOrderStatusValidator,
-  unicommerceAuthMiddleware,
-  verifyUnicommerceSellerAccess,
-  getOrderStatus
-);
-
 /**
  * @openapi
  * /orders/dispatch:
