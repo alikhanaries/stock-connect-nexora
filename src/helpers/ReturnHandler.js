@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { RETURN_STATUS } from '#root/src/constants/common.js';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
@@ -83,6 +84,9 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
     products = products.filter((p) => p.sellerId);
     const sanitizedData = {
       returnId: returnData.Id?.toString(),
+      reason: returnData.Reason || '',
+      customerComment: returnData.CustomerComment || '',
+      merchantComment: returnData.MerchantComment || '',
       merchantReturnNo: returnData.MerchantReturnNo,
       merchantOrderNo: returnData.MerchantOrderNo,
       channelOrderNo: returnData.ChannelOrderNo,
@@ -198,6 +202,9 @@ export const buildReturnAggregationPipeline = () => {
         channelReturnNo: 1,
         channelId: 1,
         orderId: 1,
+        reason: 1,
+        customerComment: 1,
+        merchantComment: 1,
         placedOn: 1,
         acknowledgeDate: 1,
         platform: 1,
@@ -222,7 +229,7 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
 };
 
 export const buildReturnMatchAndPipeline = (query = {}) => {
-  const { status, platform, channelId, returnId, orderID, search, dateFrom, dateTo } = query;
+  const { status, platform, channelId, returnId, orderID, search, dateFrom, dateTo, sellerId } = query;
 
   const matchConditions = {};
 
@@ -257,7 +264,34 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
   addFilter(matchConditions, 'returnId', returnId);
   addFilter(matchConditions, 'orderId', orderID);
 
-  // Search Filter
+  // Date filter
+  if (dateFrom || dateTo) {
+    matchConditions.createdAt = {};
+    if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
+  }
+
+  // Seller filter (return document level)
+  if (sellerId && mongoose.Types.ObjectId.isValid(sellerId)) {
+    const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
+
+    matchConditions.$or = [
+      { sellerIds: sellerObjectId },
+      { sellerIds: { $exists: false } }, // support old records
+    ];
+  }
+
+  // Start pipeline
+  const pipeline = [];
+
+  if (Object.keys(matchConditions).length > 0) {
+    pipeline.push({ $match: matchConditions });
+  }
+
+  // Main aggregation pipeline
+  pipeline.push(...buildReturnAggregationPipeline());
+
+  // Search filter (after lookup because it uses orderInfo)
   if (search) {
     const searchRegex = new RegExp(search, 'i');
     const searchConditions = [
@@ -268,7 +302,6 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
       { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
     ];
 
-    // Handle full name searches
     const searchTerms = search.trim().split(/\s+/);
     if (searchTerms.length > 1) {
       const [firstTerm, ...rest] = searchTerms;
@@ -292,21 +325,7 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
       );
     }
 
-    matchConditions.$or = searchConditions;
-  }
-
-  // Date Filter
-  if (dateFrom || dateTo) {
-    matchConditions.createdAt = {};
-    if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
-    if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
-  }
-
-  // Build Aggregation
-  const pipeline = buildReturnAggregationPipeline();
-
-  if (Object.keys(matchConditions).length > 0) {
-    pipeline.push({ $match: matchConditions });
+    pipeline.push({ $match: { $or: searchConditions } });
   }
 
   return { pipeline, matchConditions };
@@ -486,6 +505,9 @@ export const formatReturnDetails = (aggregatedResult) => {
   return {
     _id: returnData._id,
     returnId: returnData.returnId || null,
+    reason: returnData.reason || null,
+    customerComment: returnData.customerComment || null,
+    merchantComment: returnData.merchantComment || null,
     orderId: orderInfo.orderId || null,
     orderDbId: orderInfo._id || null,
     paymentInfo: {

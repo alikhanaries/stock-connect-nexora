@@ -19,6 +19,15 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
+    reason: {
+      type: String,
+    },
+    customerComment: {
+      type: String,
+    },
+    merchantComment: {
+      type: String,
+    },
     merchantOrderNo: {
       type: String,
       index: true,
