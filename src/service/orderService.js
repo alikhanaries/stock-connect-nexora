@@ -1132,7 +1132,6 @@ export const formatOrderTrackingInf = (data) => {
 
 export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '') => {
   try {
-    // Validate sellerId is provided
     if (!sellerId) {
       return {
         success: false,
@@ -1163,23 +1162,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     if (status) {
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
-
-      // Validate against enum
-      const validStatuses = Object.values(ORDER_STATUS_MAP);
-      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
-
-      if (invalid.length > 0) {
-        console.warn(`Invalid status values ignored: ${invalid.join(', ')}`);
-      }
-
-      // Build Mongo filter (case-insensitive) - only use valid statuses
-      const validStatusArray = statusArray.filter((s) => validStatuses.includes(s));
-
-      if (validStatusArray.length > 0) {
-        filter.status = {
-          $in: validStatusArray.map((s) => new RegExp(`^${s}$`, 'i')),
-        };
-      }
+      filter.status = { $in: statusArray };
     }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
@@ -1189,12 +1172,52 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       Order.countDocuments(filter),
     ]);
 
-    // Validate export data
-    const validation = validateExportData(orders, 'orders');
+    if (!orders.length) {
+      return {
+        success: false,
+        message: 'No orders found',
+      };
+    }
+
+    /*
+      FILTER SKUs FOR SELLER
+    */
+    const filteredOrders = orders
+      .map((order) => {
+        const filteredSkus = (order.orderSkuList?.skuList || []).filter(
+          (sku) => String(sku.sellerId) === String(sellerId)
+        );
+
+        if (!filteredSkus.length) return null;
+
+        return {
+          ...order,
+          orderSkuList: {
+            orderId: order.orderSkuList?.orderId,
+            skuList: filteredSkus,
+          },
+        };
+      })
+      .filter(Boolean);
+
+    if (!filteredOrders.length) {
+      return {
+        success: false,
+        message: 'No matching SKUs found for seller',
+      };
+    }
+
+    /*
+      VALIDATION
+    */
+    const validation = validateExportData(filteredOrders, 'orders');
     if (!validation.success) {
       return validation;
     }
 
+    /*
+      HEADERS
+    */
     const dynamicHeaders = generateDynamicHeaders(Order, [
       'orderSkuList',
       'orderCustomer',
@@ -1203,20 +1226,19 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       'orderBillingAddress',
     ]);
 
-    // Get a sample order to determine aggregated headers structure
-    const sampleOrder = orders[0];
+    const sampleOrder = filteredOrders[0];
+
     const { customerHeaders, paymentHeaders, shippingHeaders, billingHeaders, skuHeaders } =
       getAggregatedOrderHeaders(sampleOrder);
 
     const filteredDynamicHeaders = dynamicHeaders.filter(
       (header) =>
         !header.startsWith('orderSkuList') &&
-        !(header.includes('orderId') && header.includes('_')) && // <-- allow top-level 'orderId'
+        !(header.includes('orderId') && header.includes('_')) &&
         !header.includes('createdAt') &&
         !header.includes('updatedAt')
     );
 
-    // Combine all headers in the desired order
     const combinedHeaders = [
       ...filteredDynamicHeaders,
       ...skuHeaders,
@@ -1228,46 +1250,42 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       'updatedAt',
     ];
 
-    // Remove any duplicate headers
     const deduplicatedHeaders = [...new Set(combinedHeaders)];
 
-    // Filter out excluded columns
     const organizedHeaders = deduplicatedHeaders.filter((header) => !ORDER_EXPORT_EXCLUDED_COLUMNS.includes(header));
 
-    // Create CSV with organized headers
     const csvRows = [organizedHeaders.join(',')];
 
-    // Process orders in chunks for better performance
+    /*
+      CHUNK PROCESSING
+    */
     const chunks = [];
-    for (let i = 0; i < orders.length; i += EXPORT_CHUNK_SIZE) {
-      chunks.push(orders.slice(i, i + EXPORT_CHUNK_SIZE));
+    for (let i = 0; i < filteredOrders.length; i += EXPORT_CHUNK_SIZE) {
+      chunks.push(filteredOrders.slice(i, i + EXPORT_CHUNK_SIZE));
     }
 
-    // Process each chunk
     const processChunk = async (chunk) => {
       return chunk.map((order) => {
-        // Flatten the aggregated order data
         const flattenedOrder = flattenAggregatedOrder(order);
-
-        // Get organized row data
         const rowData = getOrganizedOrderRowData(flattenedOrder, organizedHeaders);
-
         return escapeCsv(rowData);
       });
     };
 
-    // Process all chunks in parallel
     const processedChunks = await Promise.all(chunks.map(processChunk));
+
     csvRows.push(...processedChunks.flat());
 
-    // Generate filename with seller name
+    /*
+      FILENAME
+    */
     const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];
     const filename = `${sanitizedSellerName}_OrderExport_${exportDate}.csv`;
 
     return {
-      ...createCSVExportResponse(csvRows, filename, orders.length),
-      totalCount,
+      ...createCSVExportResponse(csvRows, filename, filteredOrders.length),
+      totalCount, // total orders matching filter
     };
   } catch (error) {
     console.error('Error exporting orders:', error.message);
