@@ -49,50 +49,61 @@ export const orderDispatch = async (sellerId, userId, payload) => {
 
     /* ----------- PROCESS EACH ITEM ----------- */
 
+    const products = [];
+    const shippableOrderItemIds = [];
+    const skuList = order?.orderSkuList?.skuList || [];
+    const skuMap = new Map(skuList.map((sku) => [String(sku.id), sku]));
+
     for (const item of orderItems) {
+      const sku = skuMap.get(String(item.orderItemId));
+      if (!sku) {
+        responseItems.push({
+          orderItemId: item.orderItemId,
+          errorMessage: 'Order item not found',
+        });
+        continue;
+      }
+      products.push({
+        merchantProductNo: sku.merchantProductNo,
+        orderLineId: sku.id,
+        quantity: item.quantity,
+      });
+      shippableOrderItemIds.push(item.orderItemId);
+    }
+    if (products.length) {
+      const shipmentData = {
+        orderId: order._id,
+        sellerId,
+        userId,
+        airWaybillNo: trackingId,
+        merchantShipmentNo: invoiceNumber || `MS-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        method: deliveryPartner,
+        description: `Invoice ${invoiceNumber || ''}`,
+        products,
+        shipmentDate: dispatchDate ? new Date(dispatchDate) : new Date(),
+      };
       try {
-        const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(item.orderItemId));
-
-        if (!sku) {
-          throw new Error('Order item not found');
-        }
-
-        const shipmentData = {
-          orderId: order._id,
-          sellerId,
-          userId,
-          airWaybillNo: trackingId,
-          merchantShipmentNo: invoiceNumber || `MS-${Date.now()}`,
-          method: deliveryPartner,
-          description: `Invoice ${invoiceNumber || ''}`,
-          products: [
-            {
-              merchantProductNo: sku.merchantProductNo,
-              orderLineId: sku.id,
-              quantity: item.quantity,
-            },
-          ],
-          shipmentDate: dispatchDate ? new Date(dispatchDate) : new Date(),
-        };
-
         await createManualShipmentService(shipmentData);
-
-        responseItems.push({
-          orderItemId: item.orderItemId,
-          errorMessage: '',
-        });
+        for (const orderItemId of shippableOrderItemIds) {
+          responseItems.push({
+            orderItemId,
+            errorMessage: '',
+          });
+        }
       } catch (err) {
-        responseItems.push({
-          orderItemId: item.orderItemId,
-          errorMessage: err.message || 'Dispatch failed',
-        });
+        const errorMessage = err?.message || 'Dispatch failed';
+        for (const orderItemId of shippableOrderItemIds) {
+          responseItems.push({
+            orderItemId,
+            errorMessage,
+          });
+        }
       }
     }
 
     /* ----------- FINAL STATUS ----------- */
 
-    const successCount = responseItems.filter((i) => !i.errorMessage).length;
-
+    const successCount = responseItems.filter((i) => i.errorMessage === '').length;
     let status = 'FAILED';
 
     if (successCount === orderItems.length) {
@@ -254,7 +265,7 @@ export const createManualShipmentService = async (shipmentData) => {
       trackTraceUrl,
       method,
       shippedFromCountryCode,
-      shipmentDate: new Date(),
+      shipmentDate: shipmentData?.shipmentDate || new Date(),
       isMerchantCreator: true,
       airWaybillNo,
     });
