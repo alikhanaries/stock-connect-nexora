@@ -275,6 +275,9 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
         quantity: totalQuantity,
         totalPrice,
         sellerId,
+        reason: r.reason || null,
+        customerComment: r.customerComment || null,
+        merchantComment: r.merchantComment || null,
       };
     });
 

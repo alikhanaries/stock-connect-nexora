@@ -138,6 +138,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
       {
         $group: {
           _id: '$_id',
+          status: { $first: '$status' },
           totalOrderValue: { $first: { $ifNull: ['$originalTotalInclVat', 0] } },
           deliveredTotal: {
             $sum: {
@@ -158,6 +159,11 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalOrders: { $sum: 1 },
           totalDeliveredSales: { $sum: '$deliveredTotal' },
           totalOrderValue: { $sum: '$totalOrderValue' },
+
+          cancellationValue: {
+            $sum: { $cond: [{ $eq: ['$status', 'CANCELED'] }, '$totalOrderValue', 0] },
+          },
+
           avgProductsPerOrder: { $avg: '$totalProducts' },
         },
       },
@@ -168,6 +174,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
         totalOrders: 0,
         totalDeliveredSales: 0,
         totalOrderValue: 0,
+        cancellationValue: 0,
         avgProductsPerOrder: 0,
       }
     );
@@ -202,6 +209,9 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const prevAvgOrderValue = previous.totalOrders > 0 ? previous.totalOrderValue / previous.totalOrders : 0;
 
+  const currNetGmv = current.totalOrderValue - current.cancellationValue;
+  const prevNetGmv = previous.totalOrderValue - previous.cancellationValue;
+
   return [
     buildMetric(
       'totalSales',
@@ -209,7 +219,13 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
       current.totalDeliveredSales,
       previous.totalDeliveredSales
     ),
-    buildMetric('totalRevenue', 'Total sales by Order', current.totalOrderValue, previous.totalOrderValue),
+    buildMetric(
+      'totalRevenue',
+      'Total GMV (Gross Merchandise Value)',
+      current.totalOrderValue,
+      previous.totalOrderValue
+    ),
+    buildMetric('netGmv', 'Net GMV', currNetGmv, prevNetGmv),
     buildMetric('orders', 'Orders', current.totalOrders, previous.totalOrders),
     buildMetric('avgOrderValue', 'Avg Order Value', currAvgOrderValue, prevAvgOrderValue),
     buildMetric(
