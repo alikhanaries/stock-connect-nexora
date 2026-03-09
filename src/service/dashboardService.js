@@ -437,6 +437,7 @@ const getInventoryStatus = async (sellerId, period, { startDate, endDate, month,
           { $project: { _id: 0, status: '$_id', count: 1 } },
         ],
         freezeCounts: [
+          { $match: { isFrozen: { $in: [true, false] } } },
           {
             $project: {
               freezeStatus: {
