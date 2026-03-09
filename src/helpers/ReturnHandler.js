@@ -38,7 +38,7 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
     }
 
     // Step 1: Build initial product array
-    const products = Array.isArray(returnData.Lines)
+    let products = Array.isArray(returnData.Lines)
       ? returnData.Lines.map((line) => ({
           productSkuCode: line.MerchantProductNo,
           orderLineId: line.OrderLine?.Id || null,
@@ -79,7 +79,8 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
         }
       }
     }
-
+    // Remove products where sellerId is null
+    products = products.filter((p) => p.sellerId);
     const sanitizedData = {
       returnId: returnData.Id?.toString(),
       merchantReturnNo: returnData.MerchantReturnNo,
