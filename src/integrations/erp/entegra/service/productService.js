@@ -77,10 +77,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
   let page = 1;
   let totalImported = 0;
   const categories = await fetchCategories(AUTH_TOKEN);
-  //('result---------------1', categories);
   while (true) {
-    console.log(` Fetching page ${page}...`);
-
     let result;
 
     try {
@@ -97,8 +94,6 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
       break;
     }
 
-    console.log(` Page ${page} contains ${list.length} products.`);
-
     let importedThisPage = 0;
 
     for (const product of list) {
@@ -107,7 +102,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
         importedThisPage++;
         totalImported++;
       } catch (err) {
-        console.error(` Error saving product ${product.productCode ?? 'unknown'}:`, err.message);
+        console.error(`Error saving product ${product.productCode ?? 'unknown'}:`, err.message);
       }
     }
     console.log(` Successfully imported ${importedThisPage} products from page ${page}`);
@@ -131,16 +126,7 @@ export const createOrUpdateProduct = async (sellerId, product, categories, isIma
   // ---------------------------------------------
   // Map product to DB structure
   // ---------------------------------------------
-  const { grandParent, parents, children } = await mapProductToDB(sellerId, product, categoryTrail, isImageUpdate);
-
-  // ---------------------------------------------
-  // Upsert grandparent
-  // ---------------------------------------------
-  const grandParentDoc = await Product.findOneAndUpdate({ productSkuCode: grandParent.productSkuCode }, grandParent, {
-    upsert: true,
-    new: true,
-    setDefaultsOnInsert: true,
-  });
+  const { parents, children } = await mapProductToDB(sellerId, product, categoryTrail, isImageUpdate);
 
   // ---------------------------------------------
   // Upsert parents
@@ -172,5 +158,5 @@ export const createOrUpdateProduct = async (sellerId, product, categories, isIma
     );
   }
 
-  return grandParentDoc;
+  return true;
 };
