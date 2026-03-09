@@ -174,9 +174,9 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
     });
 
     //  Filter by sellerId
-    if (sellerId) {
+    if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
       const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
-      console.log('sellerObjectId', sellerObjectId);
+
       pipeline.push({
         $match: {
           $or: [
