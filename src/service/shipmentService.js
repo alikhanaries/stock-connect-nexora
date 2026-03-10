@@ -19,6 +19,7 @@ import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
+import { validateFullShipmentProducts } from '#util/validateShipmentProductQuantity.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
 import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
@@ -255,7 +256,7 @@ export const saveDeliveryAddress = async (data) => {
     throw new Error(error.message);
   }
 };
-export const createPartialShipmentService = async (shipmentData) => {
+export const createFullShipmentService = async (shipmentData) => {
   try {
     const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
 
@@ -292,6 +293,12 @@ export const createPartialShipmentService = async (shipmentData) => {
 
     if (!validProducts.length) {
       return { success: false, message: 'No valid SKUs found in order.' };
+    }
+
+    const validation = validateFullShipmentProducts(orderSkuList.skuList, validProducts);
+
+    if (!validation.success) {
+      return validation;
     }
 
     // Parse invoice data
@@ -1916,12 +1923,34 @@ export const createManualShipmentService = async (shipmentData) => {
     if (missingFields.length > 0) {
       throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
+    const order = await Order.findById(orderId).lean();
+
+    const { orderSkuList } = order;
+
+    if (!orderSkuList?.skuList?.length) {
+      return { success: false, message: 'Order has empty line items.' };
+    }
+
+    // STEP 3: Filter valid SKUs
+
+    const validProducts = products.filter((p) =>
+      orderSkuList.skuList.some((s) => String(s.id) === String(p.orderLineId))
+    );
+
+    if (!validProducts.length) {
+      return { success: false, message: 'No valid SKUs found in order.' };
+    }
+
+    const validation = validateFullShipmentProducts(orderSkuList.skuList, validProducts);
+
+    if (!validation.success) {
+      return validation;
+    }
 
     /* -------------------- PARALLEL FETCH -------------------- */
-    const [existingMerchantShipment, existingAwb, order, user] = await Promise.all([
+    const [existingMerchantShipment, existingAwb, user] = await Promise.all([
       Shipment.findOne({ merchantShipmentNo }),
       Shipment.findOne({ airWaybillNo }),
-      Order.findById(orderId).lean(),
       User.findById(userId).lean(),
     ]);
 
@@ -2640,7 +2669,7 @@ export default {
   ayMakanWebHookService,
   getAllShipmentsService,
   getAllShipmentsAdminService,
-  createPartialShipmentService,
+  createFullShipmentService,
   saveDeliveryAddress,
   getPickUpAddress,
   updateShipmentDeliveryStateChannelEngine,
