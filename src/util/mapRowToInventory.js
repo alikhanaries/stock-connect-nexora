@@ -50,7 +50,8 @@ export const getSellerNameById = async (sellerId) => {
 };
 
 export const getProductStatus = (sellerName, currentStockCount) => {
-  const isLowStockThresholdSeller = LOW_STOCK_THRESHOLD_SELLERS.includes(sellerName);
+  const trimedSellerName = sellerName.toLowerCase().trim();
+  const isLowStockThresholdSeller = LOW_STOCK_THRESHOLD_SELLERS.includes(trimedSellerName);
 
   return (isLowStockThresholdSeller ? currentStockCount >= LOW_STOCK_THRESHOLD : currentStockCount > 0)
     ? ACTIVE

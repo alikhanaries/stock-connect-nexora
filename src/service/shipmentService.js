@@ -1990,15 +1990,23 @@ export const createReverseShipmentService = async (shipmentData) => {
     }
 
     // ACKNOWLDGE CHANNEL ENGINE ABOUT APPROVAL
-    const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
-    await fetch(ceUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ReturnId: returnData?.returnId,
-        MerchantReturnNo: returnData?.merchantReturnNo,
-      }),
-    });
+    try {
+      const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
+      const ceResponse = await fetch(ceUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ReturnId: returnData?.returnId,
+          MerchantReturnNo: returnData?.merchantReturnNo,
+        }),
+      });
+
+      if (!ceResponse.ok) {
+        console.error(`ChannelEngine return-acknowledge failed with status ${ceResponse.status}`);
+      }
+    } catch (error) {
+      console.error('Network error during ChannelEngine return-acknowledge:', error.message);
+    }
 
     return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
@@ -2073,7 +2081,7 @@ export const createManualShipmentService = async (shipmentData) => {
       Shipment.findOne({ merchantShipmentNo }),
       Shipment.findOne({ airWaybillNo }),
       User.findById(userId).lean(),
-      Seller.findById(sellerId).lean().select('name'),
+      Seller.findById(sellerId).select('name').lean(),
     ]);
     const sellerName = sellerDoc?.name || '';
 
@@ -2326,18 +2334,26 @@ export const createManualShipmentService = async (shipmentData) => {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
     }
 
-    await createShipmentWithChannelEngine({
-      merchantShipmentNo,
-      merchantOrderNo: order.merchantOrderNo || order.orderId,
-      lines: validatedProducts,
-      trackTraceNo: airWaybillNo,
-      trackTraceUrl,
-      method,
-      shippedFromCountryCode,
-      shipmentDate: new Date(),
-      isMerchantCreator: true,
-      airWaybillNo,
-    });
+    try {
+      const ceResult = await createShipmentWithChannelEngine({
+        merchantShipmentNo,
+        merchantOrderNo: order.merchantOrderNo || order.orderId,
+        lines: validatedProducts,
+        trackTraceNo: airWaybillNo,
+        trackTraceUrl,
+        method,
+        shippedFromCountryCode,
+        shipmentDate: new Date(),
+        isMerchantCreator: true,
+        airWaybillNo,
+      });
+
+      if (!ceResult?.success) {
+        console.error(`ChannelEngine create shipment failed: ${ceResult?.message}`);
+      }
+    } catch (error) {
+      console.error(`CE create shipment failed due to ${error.message}`);
+    }
 
     return {
       success: true,
