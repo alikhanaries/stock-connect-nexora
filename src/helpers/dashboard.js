@@ -537,26 +537,19 @@ export const buildInventorySkuStatusPipeline = () => [
             },
           },
         },
+        { $unwind: '$skuList' },
         {
-          $project: {
-            _id: 0,
-            channelId: 1,
-            skuList: {
-              $filter: {
-                input: '$skuList',
-                as: 'skuItem',
-                cond: {
-                  $eq: ['$$skuItem.skuCode', '$$sku'],
-                },
-              },
+          $match: {
+            $expr: {
+              $eq: ['$skuList.skuCode', '$$sku'],
             },
           },
         },
         {
-          $match: {
-            $expr: {
-              $gt: [{ $size: '$skuList' }, 0],
-            },
+          $project: {
+            _id: 0,
+            channelId: 1,
+            skuList: ['$skuList'],
           },
         },
       ],
@@ -604,7 +597,13 @@ export const buildInventorySkuStatusPipeline = () => [
                   { $eq: ['$$s', 'active'] },
                   'active',
                   {
-                    $cond: [{ $eq: ['$$s', 'inactive'] }, 'inactive', '$$REMOVE'],
+                    $cond: [
+                      { $eq: ['$$s', 'inactive'] },
+                      'inactive',
+                      {
+                        $cond: [{ $eq: ['$$s', 'removed'] }, 'removed', '$$REMOVE'],
+                      },
+                    ],
                   },
                 ],
               },

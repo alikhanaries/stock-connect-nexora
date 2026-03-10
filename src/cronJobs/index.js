@@ -14,7 +14,7 @@ const scheduledCronJobs = () => {
         await getInventorySkuStatus();
         console.log('Inventory status data fetched');
       } catch (err) {
-        console.error('Error scheduling cron:', err.message);
+        console.error('Error executing scheduled cron job:', err.message);
       }
     });
   } catch (error) {
