@@ -618,12 +618,8 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   const sellerObjectIds = ids
     .map(String)
-    .map((s) => s.trim())
     .filter(Boolean)
-    .map((id) => {
-      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
-      return new mongoose.Types.ObjectId(id);
-    });
+    .map((id) => new mongoose.Types.ObjectId(id));
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}"`);

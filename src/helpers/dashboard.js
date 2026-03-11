@@ -713,7 +713,6 @@ export const buildChannelStatusPipeline = (sellerObjectIds, range, channelIds = 
 export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = []) => {
   const match = {
     ...(range?.start && range?.end ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
-    sellerIds: { $in: sellerObjectIds },
   };
 
   if (Array.isArray(channelIds) && channelIds.length) {
@@ -721,6 +720,36 @@ export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = 
   }
   return [
     { $match: match },
+
+    {
+      $lookup: {
+        from: 'channelengineorders',
+        let: {
+          returnChannelOrderNo: '$channelOrderNo',
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$channelOrderNumber', '$$returnChannelOrderNo'] },
+                  { $in: ['$sellerId', sellerObjectIds] },
+                ],
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              sellerId: 1,
+            },
+          },
+        ],
+        as: 'order',
+      },
+    },
+
+    { $unwind: '$order' },
 
     {
       $facet: {
@@ -738,6 +767,7 @@ export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = 
     },
   ];
 };
+
 export default {
   getDateRange,
   getPreviousRange,
