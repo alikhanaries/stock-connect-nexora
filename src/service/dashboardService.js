@@ -373,18 +373,23 @@ export const getTopPerformersProducts = async (
       if (!key) continue;
 
       keys.push(key);
-      items.push({
+      const item = {
         rank: items.length + 1,
         description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
-        size: x?.size || '',
         brand: x?.brand || '',
-        productSkuCode: x?.productSkuCode || '',
         ordered: Number(x?.ordered) || 0,
         revenue: Number(x?.revenue) || 0,
         growth: 0,
         trend: 'neutral',
         _key: key,
-      });
+      };
+
+      if (type !== 'category') {
+        item.size = x?.size || '';
+        item.productSkuCode = x?.productSkuCode || '';
+      }
+
+      items.push(item);
     }
 
     if (!keys.length) return { type, items: [], meta: { shown: 0, total: 0 } };
