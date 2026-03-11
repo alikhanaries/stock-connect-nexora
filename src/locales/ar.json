@@ -52,6 +52,7 @@
   "ORDERS_FETCHED_SUCCESSFULLY": "تم جلب الطلبات بنجاح",
   "ORDER_FETCHED_SUCCESSFULLY": "تم جلب الطلب بنجاح",
   "INVALID_ORDER_ID_FORMAT": "تنسيق معرف الطلب غير صالح",
+  "INVALID_SELLER_ID_FORMAT": "تنسيق معرف البائع غير صالح",
   "FAILED_TO_GET_ORDER_STATUS": "فشل في جلب حالة الطلب",
   "ORDER_STATUS_STATS_FETCHED_SUCCESSFULLY": "تم جلب إحصائيات حالة الطلب بنجاح",
   "ALREADY_UP_TO_DATE": "محدث بالفعل",
