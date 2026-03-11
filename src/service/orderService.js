@@ -1,17 +1,8 @@
 import Order from '#models/Orders.js';
 import mongoose from 'mongoose';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import {
-  ORDER_STATUS_MAP,
-  SELECTED_FIELDS,
-  BLOCKED_STATUSES,
-  ORDER_EXPORT_EXCLUDED_COLUMNS,
-} from '#constants/common.js';
-import orderhelper, {
-  flattenAggregatedOrder,
-  getAggregatedOrderHeaders,
-  getOrganizedOrderRowData,
-} from '#helpers/Order.js';
+import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
+import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
@@ -20,7 +11,7 @@ import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { formatDateTime } from '#helpers/Common.js';
-import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
+import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
@@ -1221,10 +1212,7 @@ export const formatOrderTrackingInf = (data) => {
 export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '') => {
   try {
     if (!sellerId) {
-      return {
-        success: false,
-        message: 'Seller ID is required for export',
-      };
+      return { success: false, message: 'Seller ID is required for export' };
     }
 
     const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
@@ -1235,7 +1223,6 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
-
       filter.$or = [
         { orderId: regex },
         { 'orderCustomer.email': regex },
@@ -1255,132 +1242,93 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const [orders, totalCount] = await Promise.all([
-      Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
-      Order.countDocuments(filter),
-    ]);
+    const headers = ORDER_EXPORT_HEADERS;
+    const csvRows = [headers.join(',')];
 
-    if (!orders.length) {
-      return {
-        success: false,
-        message: 'No orders found',
-      };
-    }
+    let processed = 0;
+    let skip = 0;
 
-    /*
-      FILTER SKUs FOR SELLER
-    */
-    const filteredOrders = orders
-      .map((order) => {
-        const filteredSkus = (order.orderSkuList?.skuList || []).filter(
+    while (processed < size) {
+      const orders = await Order.find(filter)
+        .sort(sort)
+        .skip(skip)
+        .limit(Math.min(EXPORT_CHUNK_SIZE, size - processed))
+        .lean();
+
+      if (!orders.length) break;
+
+      for (const order of orders) {
+        /*
+        FILTER SELLER SKUS
+        */
+        const sellerSkus = (order.orderSkuList?.skuList || []).filter(
           (sku) => String(sku.sellerId) === String(sellerId)
         );
 
-        if (!filteredSkus.length) return null;
+        if (!sellerSkus.length) continue;
 
-        return {
-          ...order,
-          orderSkuList: {
-            orderId: order.orderSkuList?.orderId,
-            skuList: filteredSkus,
-          },
+        /*
+        CALCULATE SELLER TOTALS
+        */
+        const sellerTotals = {
+          subTotalInclVat: sellerSkus.reduce((s, sku) => s + (sku.lineTotalInclVat || 0), 0),
+          subTotalVat: sellerSkus.reduce((s, sku) => s + (sku.lineVat || 0), 0),
         };
-      })
-      .filter(Boolean);
 
-    if (!filteredOrders.length) {
-      return {
-        success: false,
-        message: 'No matching SKUs found for seller',
-      };
+        sellerTotals.totalInclVat = sellerTotals.subTotalInclVat;
+        sellerTotals.totalVat = sellerTotals.subTotalVat;
+        sellerTotals.subTotalExclVat = sellerTotals.subTotalInclVat - sellerTotals.subTotalVat;
+        sellerTotals.totalExclVat = sellerTotals.subTotalExclVat;
+
+        /*
+        CREATE ROW PER SKU
+        */
+        for (let i = 0; i < sellerSkus.length; i++) {
+          const sku = sellerSkus[i];
+
+          const rowObject = buildExportOrderRow(order, sku, sellerTotals);
+
+          /*
+          SHOW ORDERID ONLY FIRST ROW
+          */
+          if (i > 0) {
+            rowObject.orderId = '';
+          }
+
+          const row = headers.map((header) => {
+            const value = rowObject?.[header];
+            const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+
+            return `"${safeValue}"`;
+          });
+
+          csvRows.push(row.join(','));
+        }
+      }
+
+      processed += orders.length;
+      skip += orders.length;
     }
 
-    /*
-      VALIDATION
-    */
-    const validation = validateExportData(filteredOrders, 'orders');
-    if (!validation.success) {
-      return validation;
+    if (csvRows.length === 1) {
+      return { success: false, message: 'No orders found' };
     }
 
-    /*
-      HEADERS
-    */
-    const dynamicHeaders = generateDynamicHeaders(Order, [
-      'orderSkuList',
-      'orderCustomer',
-      'orderPaymentDetails',
-      'orderShippingAddress',
-      'orderBillingAddress',
-    ]);
-
-    const sampleOrder = filteredOrders[0];
-
-    const { customerHeaders, paymentHeaders, shippingHeaders, billingHeaders, skuHeaders } =
-      getAggregatedOrderHeaders(sampleOrder);
-
-    const filteredDynamicHeaders = dynamicHeaders.filter(
-      (header) =>
-        !header.startsWith('orderSkuList') &&
-        !(header.includes('orderId') && header.includes('_')) &&
-        !header.includes('createdAt') &&
-        !header.includes('updatedAt')
-    );
-
-    const combinedHeaders = [
-      ...filteredDynamicHeaders,
-      ...skuHeaders,
-      ...shippingHeaders,
-      ...billingHeaders,
-      ...customerHeaders,
-      ...paymentHeaders,
-      'createdAt',
-      'updatedAt',
-    ];
-
-    const deduplicatedHeaders = [...new Set(combinedHeaders)];
-
-    const organizedHeaders = deduplicatedHeaders.filter((header) => !ORDER_EXPORT_EXCLUDED_COLUMNS.includes(header));
-
-    const csvRows = [organizedHeaders.join(',')];
-
-    /*
-      CHUNK PROCESSING
-    */
-    const chunks = [];
-    for (let i = 0; i < filteredOrders.length; i += EXPORT_CHUNK_SIZE) {
-      chunks.push(filteredOrders.slice(i, i + EXPORT_CHUNK_SIZE));
-    }
-
-    const processChunk = async (chunk) => {
-      return chunk.map((order) => {
-        const flattenedOrder = flattenAggregatedOrder(order);
-        const rowData = getOrganizedOrderRowData(flattenedOrder, organizedHeaders);
-        return escapeCsv(rowData);
-      });
-    };
-
-    const processedChunks = await Promise.all(chunks.map(processChunk));
-
-    csvRows.push(...processedChunks.flat());
-
-    /*
-      FILENAME
-    */
     const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];
     const filename = `${sanitizedSellerName}_OrderExport_${exportDate}.csv`;
 
     return {
-      ...createCSVExportResponse(csvRows, filename, filteredOrders.length),
-      totalCount, // total orders matching filter
+      success: true,
+      filename,
+      data: csvRows.join('\n'),
+      count: csvRows.length - 1,
     };
   } catch (error) {
     console.error('Error exporting orders:', error.message);
     throw error;
   }
 };
-
 export const addOrderLog = async (orderId, sellerId, log) => {
   await OrderLogs.updateOne(
     { orderId, sellerId },
