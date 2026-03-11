@@ -17,8 +17,6 @@ import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErro
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
 
-const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
-
 const formatOrder = async (order, channelImage, sellerId) => {
   let sellerName = '';
   let sellerObjectId = null;
@@ -1242,76 +1240,66 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
+    const orders = await Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean();
+
+    if (!orders.length) {
+      return { success: false, message: 'No orders found' };
+    }
+
     const headers = ORDER_EXPORT_HEADERS;
     const csvRows = [headers.join(',')];
 
-    let processed = 0;
-    let skip = 0;
+    for (const order of orders) {
+      /*
+      FILTER SELLER SKUS
+      */
+      const sellerSkus = (order.orderSkuList?.skuList || []).filter((sku) => {
+        console.log('passed sellerId:', sellerId);
+        console.log('sku sellerId:', sku);
 
-    while (processed < size) {
-      const orders = await Order.find(filter)
-        .sort(sort)
-        .skip(skip)
-        .limit(Math.min(EXPORT_CHUNK_SIZE, size - processed))
-        .lean();
+        return String(sku.sellerId) === String(sellerId);
+      });
 
-      if (!orders.length) break;
+      console.log('sellerSkus', sellerSkus);
+      if (!sellerSkus.length) continue;
 
-      for (const order of orders) {
+      /*
+      CALCULATE SELLER TOTALS
+      */
+      const sellerTotals = {
+        subTotalInclVat: sellerSkus.reduce((s, sku) => s + (sku.lineTotalInclVat || 0), 0),
+        subTotalVat: sellerSkus.reduce((s, sku) => s + (sku.lineVat || 0), 0),
+      };
+
+      sellerTotals.totalInclVat = sellerTotals.subTotalInclVat;
+      sellerTotals.totalVat = sellerTotals.subTotalVat;
+      sellerTotals.subTotalExclVat = sellerTotals.subTotalInclVat - sellerTotals.subTotalVat;
+      sellerTotals.totalExclVat = sellerTotals.subTotalExclVat;
+
+      /*
+      CREATE ROW PER SKU
+      */
+      for (let i = 0; i < sellerSkus.length; i++) {
+        const sku = sellerSkus[i];
+
+        const rowObject = buildExportOrderRow(order, sku, sellerTotals);
+
         /*
-        FILTER SELLER SKUS
+        SHOW ORDERID ONLY FIRST ROW
         */
-        const sellerSkus = (order.orderSkuList?.skuList || []).filter(
-          (sku) => String(sku.sellerId) === String(sellerId)
-        );
-
-        if (!sellerSkus.length) continue;
-
-        /*
-        CALCULATE SELLER TOTALS
-        */
-        const sellerTotals = {
-          subTotalInclVat: sellerSkus.reduce((s, sku) => s + (sku.lineTotalInclVat || 0), 0),
-          subTotalVat: sellerSkus.reduce((s, sku) => s + (sku.lineVat || 0), 0),
-        };
-
-        sellerTotals.totalInclVat = sellerTotals.subTotalInclVat;
-        sellerTotals.totalVat = sellerTotals.subTotalVat;
-        sellerTotals.subTotalExclVat = sellerTotals.subTotalInclVat - sellerTotals.subTotalVat;
-        sellerTotals.totalExclVat = sellerTotals.subTotalExclVat;
-
-        /*
-        CREATE ROW PER SKU
-        */
-        for (let i = 0; i < sellerSkus.length; i++) {
-          const sku = sellerSkus[i];
-
-          const rowObject = buildExportOrderRow(order, sku, sellerTotals);
-
-          /*
-          SHOW ORDERID ONLY FIRST ROW
-          */
-          if (i > 0) {
-            rowObject.orderId = '';
-          }
-
-          const row = headers.map((header) => {
-            const value = rowObject?.[header];
-            const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
-
-            return `"${safeValue}"`;
-          });
-
-          csvRows.push(row.join(','));
+        if (i > 0) {
+          rowObject.orderId = '';
         }
+
+        const row = headers.map((header) => {
+          const value = rowObject?.[header];
+          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+
+          return `"${safeValue}"`;
+        });
+
+        csvRows.push(row.join(','));
       }
-
-      processed += orders.length;
-      skip += orders.length;
-    }
-
-    if (csvRows.length === 1) {
-      return { success: false, message: 'No orders found' };
     }
 
     const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
