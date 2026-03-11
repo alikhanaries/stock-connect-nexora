@@ -1,17 +1,8 @@
 import Order from '#models/Orders.js';
 import mongoose from 'mongoose';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import {
-  ORDER_STATUS_MAP,
-  SELECTED_FIELDS,
-  BLOCKED_STATUSES,
-  ORDER_EXPORT_EXCLUDED_COLUMNS,
-} from '#constants/common.js';
-import orderhelper, {
-  flattenAggregatedOrder,
-  getAggregatedOrderHeaders,
-  getOrganizedOrderRowData,
-} from '#helpers/Order.js';
+import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
+import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
@@ -20,13 +11,11 @@ import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { formatDateTime } from '#helpers/Common.js';
-import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
+import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
-
-const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
 const formatOrder = async (order, channelImage, sellerId) => {
   let sellerName = '';
@@ -469,7 +458,8 @@ export const getOrderById = async (id, sellerId) => {
     });
 
     // ---------------- FINAL RESPONSE ----------------
-    const filteredData = transformOrderResponse(order);
+
+    const filteredData = transformOrderResponse(order, allOrderSkus);
     let orderLogsDetails;
 
     const filter = { orderId: id };
@@ -780,9 +770,29 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
   }
 };
 
-const transformOrderResponse = (response) => {
+const transformOrderResponse = (response, allOrderSkus = []) => {
   if (!response) return null;
+
   const data = response;
+
+  // ---- Calculate totals from SKUs ----
+  const totals = allOrderSkus.reduce(
+    (acc, sku) => {
+      const shippableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+
+      const unitExclVat = sku.unitPriceExclVat || 0;
+      const unitVat = sku.unitVat || 0;
+      const unitInclVat = sku.unitPriceInclVat || 0;
+
+      acc.subtotal += unitExclVat * shippableQty;
+      acc.tax += unitVat * shippableQty;
+      acc.total += unitInclVat * shippableQty;
+
+      return acc;
+    },
+    { subtotal: 0, tax: 0, total: 0 }
+  );
+
   // Payment Info
   const paymentInfo = {
     channelName: data.channelName,
@@ -816,22 +826,43 @@ const transformOrderResponse = (response) => {
     customerInfo,
     shippingAddress,
     status: data.status,
-    subtotal: data.totalExclVat,
-    tax: data.totalVat,
-    total: data.totalInclVat,
-    shippingFee: data.shippingCostsInclVat,
+
+    // Calculated values
+    subtotal: totals.subtotal,
+    tax: totals.tax,
+    total: totals.total,
+
+    shippingFee: data.shippingCostsInclVat || 0,
   };
 };
 
-const cancelFullOrder = async (orderId, order, reason = 'NA') => {
+const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
   try {
-    const lines = order.orderSkuList.skuList
+    // Filter SKUs for this seller
+    const sellerSkus = order.orderSkuList.skuList.filter((sku) => sku.sellerId.toString() === sellerId.toString());
+
+    if (!sellerSkus.length) {
+      return {
+        success: false,
+        error: { message: 'No SKUs found for this seller', status: 400 },
+      };
+    }
+
+    // Prepare ChannelEngine cancellation lines
+    const lines = sellerSkus
       .map((item) => ({
         MerchantProductNo: item.merchantProductNo,
         OrderLineId: item.id,
         Quantity: Math.max(0, parseInt(item.quantity) - parseInt(item.cancellationRequestedQuantity || 0)),
       }))
       .filter((line) => line.Quantity > 0);
+
+    if (!lines.length) {
+      return {
+        success: false,
+        error: { message: 'Nothing to cancel', status: 400 },
+      };
+    }
 
     const cancelPayload = {
       MerchantCancellationNo: randomBytes(6).toString('hex'),
@@ -845,6 +876,7 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
     // Check if order has any shipped shipments
     const shippedShipments = await Shipment.find({
       orderId,
+      sellerId,
       status: { $in: ['SHIPPED', 'DELIVERED'] },
     }).lean();
 
@@ -852,14 +884,16 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
       return {
         success: false,
         error: {
-          message: 'Order has been shipped, cannot cancel now',
+          message: 'Seller shipment already shipped, cannot cancel',
           status: 400,
         },
       };
     }
 
+    // Cancel seller shipments
     const shipments = await Shipment.find({
       orderId,
+      sellerId,
       status: { $nin: ['CANCELED', 'DELIVERED', 'SHIPPED'] },
     }).lean();
 
@@ -896,43 +930,56 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
         data: null,
       };
     }
-    const updatedOrder = await Order.findByIdAndUpdate(
-      orderId,
-      [
-        {
-          $set: {
-            status: ORDER_STATUS_MAP.CANCELED,
-            'orderSkuList.skuList': {
-              $map: {
-                input: '$orderSkuList.skuList',
-                as: 'sku',
-                in: {
-                  $mergeObjects: [
-                    '$$sku',
-                    {
-                      status: ORDER_STATUS_MAP.CANCELED,
-                      statusBreakdown: {
-                        confirmed: 0,
-                        shipped: 0,
-                        delivered: 0,
-                        returned: 0,
-                        canceled: '$$sku.quantity',
+
+    // Update only seller SKUs
+    await Order.updateOne({ _id: orderId }, [
+      {
+        $set: {
+          'orderSkuList.skuList': {
+            $map: {
+              input: '$orderSkuList.skuList',
+              as: 'sku',
+              in: {
+                $cond: [
+                  { $eq: ['$$sku.sellerId', new mongoose.Types.ObjectId(sellerId)] },
+                  {
+                    $mergeObjects: [
+                      '$$sku',
+                      {
+                        status: ORDER_STATUS_MAP.CANCELED,
+                        cancellationRequestedQuantity: '$$sku.quantity', // ✅ mark all remaining qty as cancelled
+                        statusBreakdown: {
+                          confirmed: 0,
+                          shipped: 0,
+                          delivered: 0,
+                          returned: 0,
+                          canceled: '$$sku.quantity',
+                        },
                       },
-                    },
-                  ],
-                },
+                    ],
+                  },
+                  '$$sku',
+                ],
               },
             },
           },
         },
-      ],
-      { new: true }
-    );
+      },
+    ]);
+    const updatedOrder = await Order.findById(orderId);
 
-    // ORDER LOG ENTRY
+    // Check if all SKUs are canceled
+    const allCancelled = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === ORDER_STATUS_MAP.CANCELED);
+
+    if (allCancelled) {
+      updatedOrder.status = ORDER_STATUS_MAP.CANCELED;
+      await updatedOrder.save();
+    }
+
+    // ORDER LOG
     const logEntry = {
       status: 'CANCELED',
-      description: 'Order Canceled',
+      description: `Seller ${sellerId} canceled items`,
       createdAt: new Date(),
     };
 
@@ -950,7 +997,11 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
-    return { success: false, error: { message: error.message } };
+
+    return {
+      success: false,
+      error: { message: error.message },
+    };
   }
 };
 
@@ -1159,10 +1210,7 @@ export const formatOrderTrackingInf = (data) => {
 export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '') => {
   try {
     if (!sellerId) {
-      return {
-        success: false,
-        message: 'Seller ID is required for export',
-      };
+      return { success: false, message: 'Seller ID is required for export' };
     }
 
     const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
@@ -1173,7 +1221,6 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
-
       filter.$or = [
         { orderId: regex },
         { 'orderCustomer.email': regex },
@@ -1193,132 +1240,93 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const [orders, totalCount] = await Promise.all([
-      Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
-      Order.countDocuments(filter),
-    ]);
+    const orders = await Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean();
 
     if (!orders.length) {
-      return {
-        success: false,
-        message: 'No orders found',
-      };
+      return { success: false, message: 'No orders found' };
     }
 
-    /*
-      FILTER SKUs FOR SELLER
-    */
-    const filteredOrders = orders
-      .map((order) => {
-        const filteredSkus = (order.orderSkuList?.skuList || []).filter(
-          (sku) => String(sku.sellerId) === String(sellerId)
-        );
+    const headers = ORDER_EXPORT_HEADERS;
+    const csvRows = [headers.join(',')];
 
-        if (!filteredSkus.length) return null;
+    for (const order of orders) {
+      /*
+      FILTER SELLER SKUS AND REMOVE FULLY CANCELLED
+      */
+      const sellerSkus = (order.orderSkuList?.skuList || []).filter((sku) => {
+        const cancelledQty = sku.cancellationRequestedQuantity || 0;
+        const effectiveQty = (sku.quantity || 0) - cancelledQty;
 
-        return {
-          ...order,
-          orderSkuList: {
-            orderId: order.orderSkuList?.orderId,
-            skuList: filteredSkus,
-          },
-        };
-      })
-      .filter(Boolean);
-
-    if (!filteredOrders.length) {
-      return {
-        success: false,
-        message: 'No matching SKUs found for seller',
-      };
-    }
-
-    /*
-      VALIDATION
-    */
-    const validation = validateExportData(filteredOrders, 'orders');
-    if (!validation.success) {
-      return validation;
-    }
-
-    /*
-      HEADERS
-    */
-    const dynamicHeaders = generateDynamicHeaders(Order, [
-      'orderSkuList',
-      'orderCustomer',
-      'orderPaymentDetails',
-      'orderShippingAddress',
-      'orderBillingAddress',
-    ]);
-
-    const sampleOrder = filteredOrders[0];
-
-    const { customerHeaders, paymentHeaders, shippingHeaders, billingHeaders, skuHeaders } =
-      getAggregatedOrderHeaders(sampleOrder);
-
-    const filteredDynamicHeaders = dynamicHeaders.filter(
-      (header) =>
-        !header.startsWith('orderSkuList') &&
-        !(header.includes('orderId') && header.includes('_')) &&
-        !header.includes('createdAt') &&
-        !header.includes('updatedAt')
-    );
-
-    const combinedHeaders = [
-      ...filteredDynamicHeaders,
-      ...skuHeaders,
-      ...shippingHeaders,
-      ...billingHeaders,
-      ...customerHeaders,
-      ...paymentHeaders,
-      'createdAt',
-      'updatedAt',
-    ];
-
-    const deduplicatedHeaders = [...new Set(combinedHeaders)];
-
-    const organizedHeaders = deduplicatedHeaders.filter((header) => !ORDER_EXPORT_EXCLUDED_COLUMNS.includes(header));
-
-    const csvRows = [organizedHeaders.join(',')];
-
-    /*
-      CHUNK PROCESSING
-    */
-    const chunks = [];
-    for (let i = 0; i < filteredOrders.length; i += EXPORT_CHUNK_SIZE) {
-      chunks.push(filteredOrders.slice(i, i + EXPORT_CHUNK_SIZE));
-    }
-
-    const processChunk = async (chunk) => {
-      return chunk.map((order) => {
-        const flattenedOrder = flattenAggregatedOrder(order);
-        const rowData = getOrganizedOrderRowData(flattenedOrder, organizedHeaders);
-        return escapeCsv(rowData);
+        return String(sku.sellerId) === String(sellerId) && effectiveQty > 0;
       });
-    };
 
-    const processedChunks = await Promise.all(chunks.map(processChunk));
+      if (!sellerSkus.length) continue;
 
-    csvRows.push(...processedChunks.flat());
+      /*
+      CALCULATE SELLER TOTALS USING EFFECTIVE QUANTITY
+      */
+      const sellerTotals = sellerSkus.reduce(
+        (totals, sku) => {
+          const cancelledQty = sku.cancellationRequestedQuantity || 0;
+          const effectiveQty = Math.max((sku.quantity || 0) - cancelledQty, 0);
 
-    /*
-      FILENAME
-    */
+          const unitPriceInclVat = sku.unitPriceInclVat || 0;
+          const unitVat = sku.unitVat || 0;
+
+          totals.subTotalInclVat += unitPriceInclVat * effectiveQty;
+          totals.subTotalVat += unitVat * effectiveQty;
+
+          return totals;
+        },
+        { subTotalInclVat: 0, subTotalVat: 0 }
+      );
+
+      sellerTotals.totalInclVat = sellerTotals.subTotalInclVat;
+      sellerTotals.totalVat = sellerTotals.subTotalVat;
+      sellerTotals.subTotalExclVat = sellerTotals.subTotalInclVat - sellerTotals.subTotalVat;
+      sellerTotals.totalExclVat = sellerTotals.subTotalExclVat;
+
+      /*
+      CREATE ROW PER SKU
+      */
+      for (let i = 0; i < sellerSkus.length; i++) {
+        const sku = sellerSkus[i];
+
+        const rowObject = buildExportOrderRow(order, sku, sellerTotals);
+
+        /*
+        SHOW ORDERID ONLY FIRST ROW
+        */
+        if (i > 0) {
+          rowObject.orderId = '';
+        }
+
+        const row = headers.map((header) => {
+          const value = rowObject?.[header];
+          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+
+          return `"${safeValue}"`;
+        });
+
+        csvRows.push(row.join(','));
+      }
+    }
+
     const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];
     const filename = `${sanitizedSellerName}_OrderExport_${exportDate}.csv`;
 
     return {
-      ...createCSVExportResponse(csvRows, filename, filteredOrders.length),
-      totalCount, // total orders matching filter
+      success: true,
+      filename,
+      data: csvRows.join('\n'),
+      count: csvRows.length - 1,
     };
   } catch (error) {
     console.error('Error exporting orders:', error.message);
     throw error;
   }
 };
-
 export const addOrderLog = async (orderId, sellerId, log) => {
   await OrderLogs.updateOne(
     { orderId, sellerId },
