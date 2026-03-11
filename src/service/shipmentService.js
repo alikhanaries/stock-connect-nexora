@@ -1924,7 +1924,9 @@ export const createManualShipmentService = async (shipmentData) => {
       throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
     const order = await Order.findById(orderId).lean();
-
+    if (!order) {
+      return { success: false, message: 'No order found' };
+    }
     const { orderSkuList } = order;
 
     if (!orderSkuList?.skuList?.length) {
@@ -1966,7 +1968,7 @@ export const createManualShipmentService = async (shipmentData) => {
     });
 
     /* -------------------- EXISTING SHIPMENTS -------------------- */
-    const productLineIds = products.map((p) => String(p.orderLineId));
+    const productLineIds = validProducts.map((p) => String(p.orderLineId));
 
     const existingShipments = await Shipment.find({
       orderId,
@@ -1985,7 +1987,7 @@ export const createManualShipmentService = async (shipmentData) => {
     /* -------------------- PRODUCT VALIDATION -------------------- */
     const validatedProducts = [];
 
-    for (const product of products) {
+    for (const product of validProducts) {
       const orderSku = orderSkuMap.get(product.merchantProductNo.toLowerCase());
       if (!orderSku) throw new Error(`Product ${product.merchantProductNo} not found in order`);
 
