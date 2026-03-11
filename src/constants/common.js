@@ -173,6 +173,26 @@ export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
   'orderPaymentDetails_currencyCode',
 ];
 
+export const SHIPMENT_EXPORT_HEADERS = [
+  'merchantProductNo',
+  'airWaybillNo',
+  'merchantOrderNo',
+  'merchantShipmentNo',
+  'orderLineId',
+  'quantity',
+  'hsCode',
+  'status',
+  'method',
+  'type',
+  'userName',
+  'userEmail',
+  'pieces',
+  'isMerchantCreator',
+  'tracking_description',
+  'tracking_status',
+  'tracking_date',
+];
+
 export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
 
 export const LOW_STOCK_THRESHOLD_SELLERS = ['kip', 'ramsey'];

@@ -9,6 +9,7 @@ import {
   cancelShipment,
   createManualShipment,
   createReverseShipment,
+  exportShipmentController,
 } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -18,6 +19,7 @@ import {
   cancelShipmentValidator,
   createManualShipmentValidator,
   createReverseShipmentValidator,
+  exportShipmentValidator,
 } from '#validations/shipment.js';
 
 const router = express.Router();
@@ -347,5 +349,7 @@ router.post(
   authMiddleware,
   createReverseShipment
 );
+
+router.get('/exportShipment', exportShipmentValidator, authMiddleware, verifySellerAccess, exportShipmentController);
 
 export default router;
