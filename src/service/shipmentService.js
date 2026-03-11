@@ -19,6 +19,7 @@ import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
+import { validateFullShipmentProducts } from '#util/validateShipmentProductQuantity.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
 import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
@@ -255,7 +256,7 @@ export const saveDeliveryAddress = async (data) => {
     throw new Error(error.message);
   }
 };
-export const createPartialShipmentService = async (shipmentData) => {
+export const createFullShipmentService = async (shipmentData) => {
   try {
     const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
 
@@ -292,6 +293,12 @@ export const createPartialShipmentService = async (shipmentData) => {
 
     if (!validProducts.length) {
       return { success: false, message: 'No valid SKUs found in order.' };
+    }
+
+    const validation = validateFullShipmentProducts(orderSkuList.skuList, validProducts);
+
+    if (!validation.success) {
+      return validation;
     }
 
     // Parse invoice data
@@ -1893,7 +1900,7 @@ export const createManualShipmentService = async (shipmentData) => {
       orderId,
       sellerId,
       userId,
-      pickUpId,
+      pickUpId = null,
       airWaybillNo,
       merchantShipmentNo,
       method,
@@ -1908,7 +1915,6 @@ export const createManualShipmentService = async (shipmentData) => {
     if (!orderId) missingFields.push('orderId');
     if (!sellerId) missingFields.push('sellerId');
     if (!userId) missingFields.push('userId');
-    if (!pickUpId) missingFields.push('pickUpId');
     if (!airWaybillNo) missingFields.push('airWaybillNo');
     if (!merchantShipmentNo) missingFields.push('merchantShipmentNo');
     if (!method) missingFields.push('method');
@@ -1917,12 +1923,36 @@ export const createManualShipmentService = async (shipmentData) => {
     if (missingFields.length > 0) {
       throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
     }
+    const order = await Order.findById(orderId).lean();
+    if (!order) {
+      return { success: false, message: 'No order found' };
+    }
+    const { orderSkuList } = order;
+
+    if (!orderSkuList?.skuList?.length) {
+      return { success: false, message: 'Order has empty line items.' };
+    }
+
+    // STEP 3: Filter valid SKUs
+
+    const validProducts = products.filter((p) =>
+      orderSkuList.skuList.some((s) => String(s.id) === String(p.orderLineId))
+    );
+
+    if (!validProducts.length) {
+      return { success: false, message: 'No valid SKUs found in order.' };
+    }
+
+    const validation = validateFullShipmentProducts(orderSkuList.skuList, validProducts);
+
+    if (!validation.success) {
+      return validation;
+    }
 
     /* -------------------- PARALLEL FETCH -------------------- */
-    const [existingMerchantShipment, existingAwb, order, user] = await Promise.all([
+    const [existingMerchantShipment, existingAwb, user] = await Promise.all([
       Shipment.findOne({ merchantShipmentNo }),
       Shipment.findOne({ airWaybillNo }),
-      Order.findById(orderId).lean(),
       User.findById(userId).lean(),
     ]);
 
@@ -1938,7 +1968,7 @@ export const createManualShipmentService = async (shipmentData) => {
     });
 
     /* -------------------- EXISTING SHIPMENTS -------------------- */
-    const productLineIds = products.map((p) => String(p.orderLineId));
+    const productLineIds = validProducts.map((p) => String(p.orderLineId));
 
     const existingShipments = await Shipment.find({
       orderId,
@@ -1957,7 +1987,7 @@ export const createManualShipmentService = async (shipmentData) => {
     /* -------------------- PRODUCT VALIDATION -------------------- */
     const validatedProducts = [];
 
-    for (const product of products) {
+    for (const product of validProducts) {
       const orderSku = orderSkuMap.get(product.merchantProductNo.toLowerCase());
       if (!orderSku) throw new Error(`Product ${product.merchantProductNo} not found in order`);
 
@@ -1983,8 +2013,16 @@ export const createManualShipmentService = async (shipmentData) => {
     }
 
     /* -------------------- PICKUP & DELIVERY -------------------- */
-    const pickupData = await getPickUpAddress(pickUpId);
-    if (!pickupData) throw new Error('Invalid pickup address ID');
+
+    let pickupData = null;
+
+    if (pickUpId) {
+      pickupData = await getPickUpAddress(pickUpId);
+
+      if (!pickupData) {
+        throw new Error('Invalid pickup address ID');
+      }
+    }
 
     let deliveryId;
     const existingDelivery = await DeliveryAddress.findOne({ orderId }).lean();
@@ -2008,12 +2046,26 @@ export const createManualShipmentService = async (shipmentData) => {
     /* -------------------- CREATE SHIPMENT -------------------- */
     const totalPieces = validatedProducts.reduce((s, p) => s + p.quantity, 0);
 
+    /* -------------------- CHANNEL ENGINE -------------------- */
+    await createShipmentWithChannelEngine({
+      merchantShipmentNo,
+      merchantOrderNo: order.merchantOrderNo || order.orderId,
+      lines: validatedProducts,
+      trackTraceNo: airWaybillNo,
+      trackTraceUrl,
+      method,
+      shippedFromCountryCode,
+      shipmentDate: new Date(),
+      isMerchantCreator: true,
+      airWaybillNo,
+    });
+
     const shipment = await new Shipment({
       orderId,
       sellerId,
       userId,
       deliveryId,
-      pickUpId: pickupData._id,
+      ...(pickupData && { pickUpId: pickupData._id }), // ✅ optional
       airWaybillNo,
       merchantShipmentNo,
       merchantOrderNo: order.merchantOrderNo || order.orderId,
@@ -2031,20 +2083,6 @@ export const createManualShipmentService = async (shipmentData) => {
       },
       ...(description && { description }),
     }).save();
-
-    /* -------------------- CHANNEL ENGINE -------------------- */
-    await createShipmentWithChannelEngine({
-      merchantShipmentNo,
-      merchantOrderNo: order.merchantOrderNo || order.orderId,
-      lines: validatedProducts,
-      trackTraceNo: airWaybillNo,
-      trackTraceUrl,
-      method,
-      shippedFromCountryCode,
-      shipmentDate: new Date(),
-      isMerchantCreator: true,
-      airWaybillNo,
-    });
 
     /* -------------------- ORDER STATUS LOGIC -------------------- */
     const updatedOrder = await Order.findById(orderId).lean();
@@ -2633,7 +2671,7 @@ export default {
   ayMakanWebHookService,
   getAllShipmentsService,
   getAllShipmentsAdminService,
-  createPartialShipmentService,
+  createFullShipmentService,
   saveDeliveryAddress,
   getPickUpAddress,
   updateShipmentDeliveryStateChannelEngine,
