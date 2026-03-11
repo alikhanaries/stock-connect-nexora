@@ -320,7 +320,14 @@ router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, verifyS
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMiddleware, cancelFullOrder);
+router.put(
+  '/cancelFullOrder',
+  cancelFullOrderValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  cancelFullOrder
+);
 // /* CANCEL PARTIAL ORDER (PARTIAL CANCELLATION) */
 /**
  * @swagger

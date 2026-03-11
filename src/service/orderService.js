@@ -469,7 +469,8 @@ export const getOrderById = async (id, sellerId) => {
     });
 
     // ---------------- FINAL RESPONSE ----------------
-    const filteredData = transformOrderResponse(order);
+
+    const filteredData = transformOrderResponse(order, allOrderSkus);
     let orderLogsDetails;
 
     const filter = { orderId: id };
@@ -780,9 +781,29 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
   }
 };
 
-const transformOrderResponse = (response) => {
+const transformOrderResponse = (response, allOrderSkus = []) => {
   if (!response) return null;
+
   const data = response;
+
+  // ---- Calculate totals from SKUs ----
+  const totals = allOrderSkus.reduce(
+    (acc, sku) => {
+      const shippableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+
+      const unitExclVat = sku.unitPriceExclVat || 0;
+      const unitVat = sku.unitVat || 0;
+      const unitInclVat = sku.unitPriceInclVat || 0;
+
+      acc.subtotal += unitExclVat * shippableQty;
+      acc.tax += unitVat * shippableQty;
+      acc.total += unitInclVat * shippableQty;
+
+      return acc;
+    },
+    { subtotal: 0, tax: 0, total: 0 }
+  );
+
   // Payment Info
   const paymentInfo = {
     channelName: data.channelName,
@@ -816,22 +837,43 @@ const transformOrderResponse = (response) => {
     customerInfo,
     shippingAddress,
     status: data.status,
-    subtotal: data.totalExclVat,
-    tax: data.totalVat,
-    total: data.totalInclVat,
-    shippingFee: data.shippingCostsInclVat,
+
+    // Calculated values
+    subtotal: totals.subtotal,
+    tax: totals.tax,
+    total: totals.total,
+
+    shippingFee: data.shippingCostsInclVat || 0,
   };
 };
 
-const cancelFullOrder = async (orderId, order, reason = 'NA') => {
+const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
   try {
-    const lines = order.orderSkuList.skuList
+    // Filter SKUs for this seller
+    const sellerSkus = order.orderSkuList.skuList.filter((sku) => sku.sellerId.toString() === sellerId.toString());
+
+    if (!sellerSkus.length) {
+      return {
+        success: false,
+        error: { message: 'No SKUs found for this seller', status: 400 },
+      };
+    }
+
+    // Prepare ChannelEngine cancellation lines
+    const lines = sellerSkus
       .map((item) => ({
         MerchantProductNo: item.merchantProductNo,
         OrderLineId: item.id,
         Quantity: Math.max(0, parseInt(item.quantity) - parseInt(item.cancellationRequestedQuantity || 0)),
       }))
       .filter((line) => line.Quantity > 0);
+
+    if (!lines.length) {
+      return {
+        success: false,
+        error: { message: 'Nothing to cancel', status: 400 },
+      };
+    }
 
     const cancelPayload = {
       MerchantCancellationNo: randomBytes(6).toString('hex'),
@@ -845,6 +887,7 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
     // Check if order has any shipped shipments
     const shippedShipments = await Shipment.find({
       orderId,
+      sellerId,
       status: { $in: ['SHIPPED', 'DELIVERED'] },
     }).lean();
 
@@ -852,14 +895,16 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
       return {
         success: false,
         error: {
-          message: 'Order has been shipped, cannot cancel now',
+          message: 'Seller shipment already shipped, cannot cancel',
           status: 400,
         },
       };
     }
 
+    // Cancel seller shipments
     const shipments = await Shipment.find({
       orderId,
+      sellerId,
       status: { $nin: ['CANCELED', 'DELIVERED', 'SHIPPED'] },
     }).lean();
 
@@ -896,43 +941,56 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
         data: null,
       };
     }
-    const updatedOrder = await Order.findByIdAndUpdate(
-      orderId,
-      [
-        {
-          $set: {
-            status: ORDER_STATUS_MAP.CANCELED,
-            'orderSkuList.skuList': {
-              $map: {
-                input: '$orderSkuList.skuList',
-                as: 'sku',
-                in: {
-                  $mergeObjects: [
-                    '$$sku',
-                    {
-                      status: ORDER_STATUS_MAP.CANCELED,
-                      statusBreakdown: {
-                        confirmed: 0,
-                        shipped: 0,
-                        delivered: 0,
-                        returned: 0,
-                        canceled: '$$sku.quantity',
+
+    // Update only seller SKUs
+    await Order.updateOne({ _id: orderId }, [
+      {
+        $set: {
+          'orderSkuList.skuList': {
+            $map: {
+              input: '$orderSkuList.skuList',
+              as: 'sku',
+              in: {
+                $cond: [
+                  { $eq: ['$$sku.sellerId', new mongoose.Types.ObjectId(sellerId)] },
+                  {
+                    $mergeObjects: [
+                      '$$sku',
+                      {
+                        status: ORDER_STATUS_MAP.CANCELED,
+                        statusBreakdown: {
+                          confirmed: 0,
+                          shipped: 0,
+                          delivered: 0,
+                          returned: 0,
+                          canceled: '$$sku.quantity',
+                        },
                       },
-                    },
-                  ],
-                },
+                    ],
+                  },
+                  '$$sku',
+                ],
               },
             },
           },
         },
-      ],
-      { new: true }
-    );
+      },
+    ]);
 
-    // ORDER LOG ENTRY
+    const updatedOrder = await Order.findById(orderId);
+
+    // Check if all SKUs are canceled
+    const allCancelled = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === ORDER_STATUS_MAP.CANCELED);
+
+    if (allCancelled) {
+      updatedOrder.status = ORDER_STATUS_MAP.CANCELED;
+      await updatedOrder.save();
+    }
+
+    // ORDER LOG
     const logEntry = {
       status: 'CANCELED',
-      description: 'Order Canceled',
+      description: `Seller ${sellerId} canceled items`,
       createdAt: new Date(),
     };
 
@@ -950,7 +1008,11 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
-    return { success: false, error: { message: error.message } };
+
+    return {
+      success: false,
+      error: { message: error.message },
+    };
   }
 };
 

@@ -239,6 +239,11 @@ export const merchantCancelById = async (req, res) => {
 export const cancelFullOrder = async (req, res) => {
   try {
     const { orderId, reason } = req.body;
+    const sellerId = req.sellerId;
+
+    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+      return Responses.failResponse(res, req.locale.INVALID_SELLER_ID_FORMAT, 400);
+    }
 
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
@@ -261,7 +266,7 @@ export const cancelFullOrder = async (req, res) => {
     if (order.channelName === 'OCP') {
       orderResponse = await cancelFullOrderOcp(orderId, order, reason);
     } else {
-      orderResponse = await orderService.cancelFullOrder(orderId, order, reason);
+      orderResponse = await orderService.cancelFullOrder(orderId, order, sellerId, reason);
     }
 
     if (!orderResponse.success) {
