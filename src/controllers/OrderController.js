@@ -8,13 +8,12 @@ import {
   cancelPartialOrderOcp,
   getSyncedOrdersOcp,
 } from '../integrations/erp/ocp/services/orderServices.js';
-
+import shipmentService from '../service/shipmentService.js';
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
 import { syncAmazonOrders } from '../service/amazonOrderService.js';
 import { config } from '../config/config.js';
-import shipmentService from '../service/shipmentService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -78,7 +77,10 @@ export const getAdminOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const sellerId = req.query.sellerId ?? null;
+    const sellerId = req.sellerId;
+    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+      return Responses.failResponse(res, 'Invalid sellerid', 400);
+    }
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
@@ -247,11 +249,13 @@ export const cancelFullOrder = async (req, res) => {
     }
 
     const order = await Order.findById(orderId)
-      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .select('orderSkuList orderId merchantOrderNo status sellerId channelName sellerIds')
       .lean();
 
     if (!order) return Responses.failResponse(res, 'Order not found', 404);
-
+    if (order.status?.toUpperCase() === 'CANCELED') {
+      return Responses.failResponse(res, 'Order is already canceled', 400);
+    }
     let orderResponse;
 
     if (order.channelName === 'OCP') {
@@ -277,10 +281,12 @@ export const cancelFullOrder = async (req, res) => {
 };
 export const cancelPartialOrder = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
+    if (!sellerId) return Responses.failResponse(res, 'Seller id is missing', 404);
     const { orderId, reason, products } = req.body;
 
     const order = await Order.findById(orderId)
-      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .select('orderSkuList orderId merchantOrderNo status sellerIds channelName')
       .lean();
 
     if (!order) return Responses.failResponse(res, 'Order not found', 404);
@@ -290,7 +296,7 @@ export const cancelPartialOrder = async (req, res) => {
     if (order.channelName === 'OCP') {
       orderResponse = await cancelPartialOrderOcp(orderId, order, reason, products);
     } else {
-      orderResponse = await orderService.cancelPartialOrder(orderId, products, reason, order);
+      orderResponse = await orderService.cancelPartialOrder(orderId, products, reason, sellerId);
     }
 
     if (!orderResponse.success) {

@@ -470,8 +470,16 @@ export const getOrderById = async (id, sellerId) => {
 
     // ---------------- FINAL RESPONSE ----------------
     const filteredData = transformOrderResponse(order);
+    let orderLogsDetails;
 
-    const orderLogsDetails = await OrderLogs.findOne({ orderId: id }).lean();
+    const filter = { orderId: id };
+
+    if (sellerObjectId) {
+      filter.sellerId = sellerObjectId;
+    }
+
+    orderLogsDetails = await OrderLogs.findOne(filter).lean();
+
     const orderLogsData = orderLogsDetails?.details?.length ? formatOrderTrackingInf(orderLogsDetails.details) : [];
     const productsStatusDetails = allOrderSkus.map((sku) => {
       const b = sku.statusBreakdown || {};
@@ -541,20 +549,19 @@ const getOrderStats = async (sellerId) => {
 
 export const processOrders = async (orders, sellerId) => {
   try {
-    // Prepare bulk operations
     const operations = await orderhelper.sanitizeOrdersData(orders, sellerId);
-
-    // Execute the bulk write
     const result = await Order.bulkWrite(operations);
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
     const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
 
-    // Build log entries for each newly created order
-    const orderLogs = upsertedIndexes.map((index, i) => {
+    const orderLogs = [];
+
+    for (let i = 0; i < upsertedIndexes.length; i++) {
+      const index = upsertedIndexes[i];
       const order = orders[index];
       const orderId = upsertedOrderIds[i];
-
+      const latestOrderData = await Order.findOne({ _id: orderId }, { _id: 1, orderId: 1, sellerIds: 1 }).lean();
       const logDetails = [
         {
           status: 'CREATED',
@@ -563,15 +570,20 @@ export const processOrders = async (orders, sellerId) => {
         },
       ];
 
-      return {
-        orderId,
-        details: logDetails,
-      };
-    });
+      //  IMPORTANT: create log per seller
+      const sellerIds = latestOrderData?.sellerIds?.length ? latestOrderData.sellerIds : [sellerId]; // fallback if single seller
 
-    // Insert logs only for newly created orders
+      for (const sId of sellerIds) {
+        orderLogs.push({
+          orderId,
+          sellerId: sId,
+          details: logDetails,
+        });
+      }
+    }
+
     if (orderLogs.length > 0) {
-      await OrderLogs.insertMany(orderLogs);
+      await OrderLogs.insertMany(orderLogs, { ordered: false });
       console.log('Inserted order logs:', orderLogs.length);
     } else {
       console.log('No new orders created — skipping log insertion');
@@ -923,8 +935,18 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
       description: 'Order Canceled',
       createdAt: new Date(),
     };
-    await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
 
+    const sellerIds = order.sellerIds || [];
+
+    const bulkOps = sellerIds.map((sId) => ({
+      updateOne: {
+        filter: { orderId, sellerId: sId },
+        update: { $push: { details: logEntry } },
+        upsert: true,
+      },
+    }));
+
+    await OrderLogs.bulkWrite(bulkOps);
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
@@ -932,11 +954,13 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
   }
 };
 
-export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
+export const cancelPartialOrder = async (orderId, products, reason = 'NA', sellerId) => {
   try {
     // ----------------------------------------------------
     // FETCH ORDER
     // ----------------------------------------------------
+
+    const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
     const order = await Order.findById(orderId).lean();
     if (!order) {
       return { success: false, error: { message: 'Order not found', status: 404 } };
@@ -985,8 +1009,10 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
     for (const item of products) {
       const lineId = item.orderLineId.toString();
 
-      const sku = order.orderSkuList.skuList.find((s) => s.id.toString() === lineId);
-
+      const sellerSkus = order.orderSkuList.skuList.filter(
+        (sku) => sku.sellerId.toString() === sellerObjectId.toString()
+      );
+      const sku = sellerSkus.find((s) => s.id.toString() === lineId);
       if (!sku) {
         return {
           success: false,
@@ -1096,7 +1122,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
     // LOG
     // ----------------------------------------------------
     await OrderLogs.updateOne(
-      { orderId },
+      { orderId, sellerId: sellerObjectId },
       {
         $push: {
           details: {
@@ -1291,6 +1317,17 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     console.error('Error exporting orders:', error.message);
     throw error;
   }
+};
+
+export const addOrderLog = async (orderId, sellerId, log) => {
+  await OrderLogs.updateOne(
+    { orderId, sellerId },
+    {
+      $push: { details: log },
+      $setOnInsert: { orderId, sellerId },
+    },
+    { upsert: true }
+  );
 };
 
 export default {
