@@ -947,6 +947,7 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
                       '$$sku',
                       {
                         status: ORDER_STATUS_MAP.CANCELED,
+                        cancellationRequestedQuantity: '$$sku.quantity', // ✅ mark all remaining qty as cancelled
                         statusBreakdown: {
                           confirmed: 0,
                           shipped: 0,
@@ -965,7 +966,6 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
         },
       },
     ]);
-
     const updatedOrder = await Order.findById(orderId);
 
     // Check if all SKUs are canceled
@@ -1251,25 +1251,35 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     for (const order of orders) {
       /*
-      FILTER SELLER SKUS
+      FILTER SELLER SKUS AND REMOVE FULLY CANCELLED
       */
       const sellerSkus = (order.orderSkuList?.skuList || []).filter((sku) => {
-        console.log('passed sellerId:', sellerId);
-        console.log('sku sellerId:', sku);
+        const cancelledQty = sku.cancellationRequestedQuantity || 0;
+        const effectiveQty = (sku.quantity || 0) - cancelledQty;
 
-        return String(sku.sellerId) === String(sellerId);
+        return String(sku.sellerId) === String(sellerId) && effectiveQty > 0;
       });
 
-      console.log('sellerSkus', sellerSkus);
       if (!sellerSkus.length) continue;
 
       /*
-      CALCULATE SELLER TOTALS
+      CALCULATE SELLER TOTALS USING EFFECTIVE QUANTITY
       */
-      const sellerTotals = {
-        subTotalInclVat: sellerSkus.reduce((s, sku) => s + (sku.lineTotalInclVat || 0), 0),
-        subTotalVat: sellerSkus.reduce((s, sku) => s + (sku.lineVat || 0), 0),
-      };
+      const sellerTotals = sellerSkus.reduce(
+        (totals, sku) => {
+          const cancelledQty = sku.cancellationRequestedQuantity || 0;
+          const effectiveQty = Math.max((sku.quantity || 0) - cancelledQty, 0);
+
+          const unitPriceInclVat = sku.unitPriceInclVat || 0;
+          const unitVat = sku.unitVat || 0;
+
+          totals.subTotalInclVat += unitPriceInclVat * effectiveQty;
+          totals.subTotalVat += unitVat * effectiveQty;
+
+          return totals;
+        },
+        { subTotalInclVat: 0, subTotalVat: 0 }
+      );
 
       sellerTotals.totalInclVat = sellerTotals.subTotalInclVat;
       sellerTotals.totalVat = sellerTotals.subTotalVat;
