@@ -21,6 +21,7 @@ import {
   pickSelectedGlobalNames,
   buildChannelStatusPipeline,
   buildReturnsStatusPipeline,
+  formatLabel,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
@@ -635,8 +636,16 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   const [result] = await Return.aggregate(pipeline);
 
-  const reasons = result?.reasons ?? [];
-  const statusSummary = result?.statusSummary ?? [];
+  const reasons = (result?.reasons ?? []).map((r) => ({
+    value: r.value,
+    key: r.key ? formatLabel(r.key) : null,
+  }));
+
+  const statusSummary = (result?.statusSummary ?? []).map((s) => ({
+    value: s.value,
+    key: formatLabel(s.key),
+  }));
+
   const total = statusSummary.reduce((sum, s) => sum + (s.value || 0), 0);
 
   return { total, reasons, statusSummary };
