@@ -262,7 +262,7 @@ export const saveDeliveryAddress = async (data) => {
 
 export const createFullShipmentService = async (shipmentData) => {
   const session = await mongoose.startSession();
-  let trackingNumber = null;
+  // let trackingNumber = null;
   try {
     const { id, sellerId, userId, pickUpId, products = [], pieces = 0 } = shipmentData;
 
@@ -402,7 +402,7 @@ export const createFullShipmentService = async (shipmentData) => {
       return { success: false, message: 'Shipment by Aymakan encountered an error.' };
     }
 
-    trackingNumber = aymakanResult.shipping.tracking_number;
+    const trackingNumber = aymakanResult.shipping.tracking_number;
     const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
 
     // Step 11: Track shipment for initial status info
@@ -499,7 +499,9 @@ export const createFullShipmentService = async (shipmentData) => {
 
     await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true });
 
-    await session.commitTransaction();
+    if (session.inTransaction()) {
+      await session.commitTransaction();
+    }
 
     if (stockPayloads.length > 0) {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
@@ -1410,7 +1412,9 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       { upsert: true, session }
     );
 
-    await session.commitTransaction();
+    if (session.inTransaction()) {
+      await session.commitTransaction();
+    }
 
     if (stockPayloads.length > 0) {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
