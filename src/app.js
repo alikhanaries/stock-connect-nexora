@@ -28,7 +28,7 @@ app.use(
   })
 );
 
-app.use('/api-docs-unicommerce', swaggerUi.serve, swaggerUi.setup(uniSwaggerDocument));
+app.use('/unicommerce-docs', swaggerUi.serve, swaggerUi.setup(uniSwaggerDocument));
 app.use(express.json());
 app.use(cors(corsOptions));
 
