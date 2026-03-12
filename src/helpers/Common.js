@@ -53,4 +53,4 @@ export default {
   formatCustomerName,
 };
 
-export const truncate = (num) => Math.floor(num * 100) / 100;
+export const truncate = (num) => Math.trunc(num * 100) / 100;
