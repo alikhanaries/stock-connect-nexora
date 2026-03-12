@@ -10,7 +10,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
-import { formatDateTime } from '#helpers/Common.js';
+import { formatDateTime, truncate } from '#helpers/Common.js';
 import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
@@ -600,7 +600,7 @@ export async function getNewOrders() {
     let allOrders = [];
     let hasMore = true;
 
-    while (hasMore && page <= 3) {
+    while (hasMore && page <= 5) {
       const response = await fetch(
         `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
       );
@@ -779,8 +779,8 @@ const transformOrderResponse = (response, allOrderSkus = []) => {
   // ---- Calculate totals from SKUs ----
   const totals = allOrderSkus.reduce(
     (acc, sku) => {
-      const shippableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
-
+      //    const shippableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+      const shippableQty = sku.quantity || 0;
       const unitExclVat = sku.unitPriceExclVat || 0;
       const unitVat = sku.unitVat || 0;
       const unitInclVat = sku.unitPriceInclVat || 0;
@@ -829,11 +829,11 @@ const transformOrderResponse = (response, allOrderSkus = []) => {
     status: data.status,
 
     // Calculated values
-    subtotal: totals.subtotal,
-    tax: totals.tax,
-    total: totals.total,
+    subtotal: truncate(totals.subtotal),
+    tax: truncate(totals.tax),
+    total: truncate(totals.total),
 
-    shippingFee: data.shippingCostsInclVat || 0,
+    shippingFee: Number(data.shippingCostsInclVat) || 0,
   };
 };
 
@@ -980,21 +980,20 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
     // ORDER LOG
     const logEntry = {
       status: 'CANCELED',
-      description: `Seller ${sellerId} canceled items`,
+      description: `Canceled all items`,
       createdAt: new Date(),
     };
 
-    const sellerIds = order.sellerIds || [];
-
-    const bulkOps = sellerIds.map((sId) => ({
-      updateOne: {
-        filter: { orderId, sellerId: sId },
-        update: { $push: { details: logEntry } },
-        upsert: true,
+    await OrderLogs.updateOne(
+      { orderId, sellerId: sellerId },
+      {
+        $push: {
+          details: logEntry,
+        },
       },
-    }));
+      { upsert: true }
+    );
 
-    await OrderLogs.bulkWrite(bulkOps);
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
@@ -1054,6 +1053,9 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
         }
       });
     });
+    const sellerSkus = order.orderSkuList.skuList.filter(
+      (sku) => sku.sellerId.toString() === sellerObjectId.toString()
+    );
 
     // ----------------------------------------------------
     // VALIDATION
@@ -1061,9 +1063,6 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
     for (const item of products) {
       const lineId = item.orderLineId.toString();
 
-      const sellerSkus = order.orderSkuList.skuList.filter(
-        (sku) => sku.sellerId.toString() === sellerObjectId.toString()
-      );
       const sku = sellerSkus.find((s) => s.id.toString() === lineId);
       if (!sku) {
         return {
@@ -1116,21 +1115,33 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
 
     const updatedSkuList = order.orderSkuList.skuList.map((sku) => {
       const lineId = sku.id.toString();
+
+      // check if this SKU belongs to payload seller
+      if (sku.sellerId.toString() !== sellerObjectId.toString()) {
+        return sku;
+      }
+
+      // check if this SKU exists in cancel payload
       const cancelItem = products.find((p) => p.orderLineId.toString() === lineId);
 
+      if (!cancelItem) {
+        return sku;
+      }
+
+      const orderedQty = sku.quantity || 0;
+      const prevCanceled = sku.cancellationRequestedQuantity || 0;
       const shippedQty = shippedQtyMap[lineId] || 0;
       const deliveredQty = deliveredQtyMap[lineId] || 0;
       const shipmentCreatedQty = sku?.statusBreakdown?.shipmentCreated || 0;
-      const prevCanceled = sku.cancellationRequestedQuantity || 0;
-      const newlyCanceled = cancelItem ? cancelItem.quantity : 0;
 
+      const newlyCanceled = cancelItem.quantity;
       const canceledQty = prevCanceled + newlyCanceled;
 
-      const confirmedQty = sku.quantity - canceledQty - shippedQty - deliveredQty - shipmentCreatedQty;
+      const confirmedQty = orderedQty - canceledQty - shippedQty - deliveredQty - shipmentCreatedQty;
 
       return {
         ...sku,
-        status: canceledQty === sku.quantity ? ORDER_STATUS_MAP.CANCELED : ORDER_STATUS_MAP.IN_PROGRESS,
+        status: canceledQty === orderedQty ? ORDER_STATUS_MAP.CANCELED : ORDER_STATUS_MAP.IN_PROGRESS,
 
         cancellationRequestedQuantity: canceledQty,
 
@@ -1293,7 +1304,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       for (let i = 0; i < sellerSkus.length; i++) {
         const sku = sellerSkus[i];
 
-        const rowObject = buildExportOrderRow(order, sku, sellerTotals);
+        const rowObject = buildExportOrderRow(order, sku, sellerTotals, sellerId);
 
         /*
         SHOW ORDERID ONLY FIRST ROW
