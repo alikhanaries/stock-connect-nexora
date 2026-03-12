@@ -11,9 +11,10 @@ import unicommerceRoutes from './integrations/erp/unicommerce/routes/api.js';
 import cronJob from './cronJobs/index.js';
 
 import swaggerUi from 'swagger-ui-express';
-import { loadSwagger } from './util/swagger.js';
+import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
 
 const swaggerDocument = loadSwagger();
+const uniSwaggerDocument = loadUniCommerceSwagger();
 
 const app = express();
 app.use(
@@ -27,6 +28,7 @@ app.use(
   })
 );
 
+app.use('/unicommerce-docs', swaggerUi.serve, swaggerUi.setup(uniSwaggerDocument));
 app.use(express.json());
 app.use(cors(corsOptions));
 
