@@ -7,9 +7,8 @@ export const validateFullShipmentProducts = (orderSkuList = [], products = []) =
     return { success: false, message: 'Shipment products are required.' };
   }
 
+  // Build map of all order SKUs with shippable quantities
   const orderSkuMap = new Map();
-
-  // Build map with only shippable lines
   for (const sku of orderSkuList) {
     const orderedQty = Number(sku.quantity || 0);
     const cancelledQty = Number(sku.cancellationRequestedQuantity || 0);
@@ -20,18 +19,11 @@ export const validateFullShipmentProducts = (orderSkuList = [], products = []) =
     }
   }
 
-  const shippableSkuCount = orderSkuMap.size;
-
-  // Ensure shipment only contains shippable items
-  if (products.length !== shippableSkuCount) {
-    return {
-      success: false,
-      message: 'Partial shipment not allowed. All shippable order products must be included.',
-    };
-  }
-
+  // Validate only products in input
   for (const product of products) {
     const orderQty = orderSkuMap.get(product.merchantProductNo);
+
+    const requestQty = Number(product.quantity || 0);
 
     if (orderQty === undefined) {
       return {
@@ -39,8 +31,6 @@ export const validateFullShipmentProducts = (orderSkuList = [], products = []) =
         message: `Product ${product.merchantProductNo} is not shippable or not found in order.`,
       };
     }
-
-    const requestQty = Number(product.quantity || 0);
 
     if (requestQty !== orderQty) {
       return {
