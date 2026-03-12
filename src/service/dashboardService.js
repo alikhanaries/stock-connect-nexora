@@ -643,7 +643,7 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   const statusSummary = (result?.statusSummary ?? []).map((s) => ({
     value: s.value,
-    key: formatLabel(s.key),
+    key: s.key ? formatLabel(s.key) : null,
   }));
 
   const total = statusSummary.reduce((sum, s) => sum + (s.value || 0), 0);
