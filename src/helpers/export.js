@@ -192,8 +192,9 @@ export const formatAddressForCSV = (address) => {
   ];
 };
 
-export const buildExportOrderRow = (order, sku, sellerTotal) => {
+export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
   return {
+    sellerId,
     orderId: order.orderId,
     channelOrderNumber: order.channelOrderNumber,
     status: order.status,
@@ -209,18 +210,11 @@ export const buildExportOrderRow = (order, sku, sellerTotal) => {
     totalInclVat: sellerTotal.totalInclVat,
     totalVat: sellerTotal.totalVat,
 
-    originalSubTotalInclVat: order.originalSubTotalInclVat,
-    originalSubTotalVat: order.originalSubTotalVat,
     originalShippingCostsVat: order.originalShippingCostsVat,
-    originalTotalInclVat: order.originalTotalInclVat,
-    originalTotalVat: order.originalTotalVat,
 
-    subTotalExclVat: sellerTotal.subTotalExclVat,
     totalExclVat: sellerTotal.totalExclVat,
     shippingCostsExclVat: order.shippingCostsExclVat,
-    originalSubTotalExclVat: order.originalSubTotalExclVat,
     originalShippingCostsExclVat: order.originalShippingCostsExclVat,
-    originalTotalExclVat: order.originalTotalExclVat,
 
     subTotalFee: order.subTotalFee,
     orderFee: order.orderFee,
@@ -290,6 +284,7 @@ export const buildExportOrderRow = (order, sku, sellerTotal) => {
 };
 
 export const ORDER_EXPORT_HEADERS = [
+  'sellerId',
   'orderId',
   'channelOrderNumber',
   'status',
@@ -297,23 +292,11 @@ export const ORDER_EXPORT_HEADERS = [
   'orderDate',
   'merchantOrderNo',
   'isBusinessOrder',
-  'subTotalInclVat',
-  'subTotalVat',
   'shippingCostsInclVat',
   'shippingCostsVat',
-  'totalInclVat',
-  'totalVat',
-  'originalSubTotalInclVat',
-  'originalSubTotalVat',
   'originalShippingCostsVat',
-  'originalTotalInclVat',
-  'originalTotalVat',
-  'subTotalExclVat',
-  'totalExclVat',
   'shippingCostsExclVat',
-  'originalSubTotalExclVat',
   'originalShippingCostsExclVat',
-  'originalTotalExclVat',
   'subTotalFee',
   'orderFee',
   'orderSkuList_skuList_count',
