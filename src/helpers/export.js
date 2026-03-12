@@ -194,8 +194,8 @@ export const formatAddressForCSV = (address) => {
 
 export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
   return {
-    sellerId,
     orderId: order.orderId,
+    sellerId,
     channelOrderNumber: order.channelOrderNumber,
     status: order.status,
     channelName: order.channelName,
@@ -203,16 +203,9 @@ export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
     merchantOrderNo: order.merchantOrderNo,
     isBusinessOrder: order.isBusinessOrder,
 
-    subTotalInclVat: sellerTotal.subTotalInclVat,
-    subTotalVat: sellerTotal.subTotalVat,
     shippingCostsInclVat: order.shippingCostsInclVat,
     shippingCostsVat: order.shippingCostsVat,
-    totalInclVat: sellerTotal.totalInclVat,
-    totalVat: sellerTotal.totalVat,
-
     originalShippingCostsVat: order.originalShippingCostsVat,
-
-    totalExclVat: sellerTotal.totalExclVat,
     shippingCostsExclVat: order.shippingCostsExclVat,
     originalShippingCostsExclVat: order.originalShippingCostsExclVat,
 
@@ -284,8 +277,8 @@ export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
 };
 
 export const ORDER_EXPORT_HEADERS = [
-  'sellerId',
   'orderId',
+  'sellerId',
   'channelOrderNumber',
   'status',
   'channelName',
