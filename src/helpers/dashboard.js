@@ -498,6 +498,148 @@ export const buildInventoryStatusPipeline = (sellerObjectIds, range, channelIds 
   return pipeline;
 };
 
+export const buildInventorySkuStatusPipeline = () => [
+  {
+    $match: {
+      sellerId: { $exists: true },
+      productSkuCode: { $type: 'string', $ne: '' },
+    },
+  },
+  {
+    $group: {
+      _id: {
+        sellerId: '$sellerId',
+        productSkuCode: '$productSkuCode',
+      },
+      updatedAt: { $max: '$updatedAt' },
+    },
+  },
+  {
+    $project: {
+      _id: 0,
+      sellerId: '$_id.sellerId',
+      productSkuCode: '$_id.productSkuCode',
+      updatedAt: 1,
+    },
+  },
+  {
+    $lookup: {
+      from: 'userchannelproducts',
+      let: {
+        sku: '$productSkuCode',
+        sellerId: '$sellerId',
+      },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $eq: ['$sellerId', '$$sellerId'],
+            },
+          },
+        },
+        { $unwind: '$skuList' },
+        {
+          $match: {
+            $expr: {
+              $eq: ['$skuList.skuCode', '$$sku'],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            channelId: 1,
+            skuList: ['$skuList'],
+          },
+        },
+      ],
+      as: 'ucp',
+    },
+  },
+  {
+    $unwind: '$ucp',
+  },
+  {
+    $lookup: {
+      from: 'products',
+      localField: 'productSkuCode',
+      foreignField: 'productSkuCode',
+      pipeline: [
+        {
+          $project: {
+            _id: 0,
+            status: 1,
+            isFrozen: 1,
+          },
+        },
+      ],
+      as: 'product',
+    },
+  },
+  {
+    $addFields: {
+      status: {
+        $cond: [
+          { $gt: [{ $size: '$product' }, 0] },
+          {
+            $let: {
+              vars: {
+                s: {
+                  $toLower: {
+                    $trim: {
+                      input: { $toString: { $first: '$product.status' } },
+                    },
+                  },
+                },
+              },
+              in: {
+                $cond: [
+                  { $eq: ['$$s', 'active'] },
+                  'active',
+                  {
+                    $cond: [
+                      { $eq: ['$$s', 'inactive'] },
+                      'inactive',
+                      {
+                        $cond: [{ $eq: ['$$s', 'removed'] }, 'removed', '$$REMOVE'],
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+          '$$REMOVE',
+        ],
+      },
+      isFrozen: {
+        $cond: [
+          { $gt: [{ $size: '$product' }, 0] },
+          {
+            $cond: [
+              { $eq: [{ $type: { $first: '$product.isFrozen' } }, 'bool'] },
+              { $first: '$product.isFrozen' },
+              '$$REMOVE',
+            ],
+          },
+          '$$REMOVE',
+        ],
+      },
+      channelId: '$ucp.channelId',
+    },
+  },
+  {
+    $project: {
+      sellerId: 1,
+      productSkuCode: 1,
+      channelId: 1,
+      status: 1,
+      isFrozen: 1,
+      updatedAt: 1,
+    },
+  },
+];
+
 export const growthWithTrend = (curr, prev) => {
   const c = Number(curr) || 0;
   const p = Number(prev) || 0;
@@ -782,6 +924,7 @@ export default {
   buildAggregationPipeline,
   pickChannelIdsFromChannel,
   buildInventoryStatusPipeline,
+  buildInventorySkuStatusPipeline,
   growthWithTrend,
   extractCategoryLabel,
   topFacetPipeline,
