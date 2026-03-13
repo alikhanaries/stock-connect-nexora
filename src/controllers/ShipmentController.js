@@ -238,12 +238,6 @@ export const exportShipmentController = async (req, res) => {
     if (sortOrder) filters.sortOrder = sortOrder;
     if (search) filters.search = search;
 
-    Object.keys(filters).forEach((key) => {
-      if (!filters[key]) {
-        delete filters[key];
-      }
-    });
-
     const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];
     const label = 'shipmentData';
@@ -264,6 +258,18 @@ export const exportShipmentController = async (req, res) => {
   } catch (error) {
     console.error('Controller Error: exportShipmentController:', error.message);
     errorLog(error);
+
+    if (res.headersSent) {
+      try {
+        if (typeof res.end === 'function' && !res.writableEnded) {
+          res.end();
+        }
+      } catch (endError) {
+        console.error('Error while ending response after export failure:', endError.message);
+      }
+      return;
+    }
+
     return errorResponse(res, error.message, 500);
   }
 };

@@ -16,11 +16,14 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
     }
 
     if (search) {
+      const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const safeSearch = escapeRegex(search);
+
       query.$or = [
-        { airWaybillNo: { $regex: search, $options: 'i' } },
-        { merchantShipmentNo: { $regex: search, $options: 'i' } },
-        { merchantOrderNo: { $regex: search, $options: 'i' } },
-        { 'shipmentMerchantDetails.name': { $regex: search, $options: 'i' } },
+        { airWaybillNo: { $regex: safeSearch, $options: 'i' } },
+        { merchantShipmentNo: { $regex: safeSearch, $options: 'i' } },
+        { merchantOrderNo: { $regex: safeSearch, $options: 'i' } },
+        { 'shipmentMerchantDetails.name': { $regex: safeSearch, $options: 'i' } },
       ];
     }
 
@@ -29,7 +32,13 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
     const pipeline = [
       { $match: query },
       { $unwind: '$products' },
-      { $unwind: { path: '$trackingInfo', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          trackingInfo: {
+            $arrayElemAt: ['$trackingInfo', -1],
+          },
+        },
+      },
       { $sort: sort },
     ];
 
