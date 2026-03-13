@@ -224,7 +224,8 @@ UniCommerceRouter.get(
  * @openapi
  * /erp/unicommerce/updateInventory:
  *   post:
- *     tags: [UniCommerce]
+ *     tags:
+ *       - UniCommerce
  *     summary: Update inventory for products
  *     description: Updates inventory for one or more product variants for the authenticated seller.
  *     parameters:
@@ -241,7 +242,7 @@ UniCommerceRouter.get(
  *         required: true
  *         schema:
  *           type: string
- *         description: Bearer access token obtained from Get Authentication API (format: "Authorization: Bearer &lt;token&gt;")
+ *         description: Bearer access token obtained from Get Authentication API
  *
  *     requestBody:
  *       required: true
@@ -254,7 +255,7 @@ UniCommerceRouter.get(
  *             properties:
  *               inventoryList:
  *                 type: array
- *                 minItems: 1
+ *
  *                 items:
  *                   type: object
  *                   required:
@@ -269,9 +270,7 @@ UniCommerceRouter.get(
  *                       type: string
  *                       example: "4726"
  *                     inventory:
- *                       oneOf:
- *                         - type: string
- *                         - type: number
+ *                       type: number
  *                       example: 10
  *                     hsnCode:
  *                       type: string
