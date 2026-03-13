@@ -376,6 +376,148 @@ export const pickChannelIdsFromChannel = (channel) => {
   return [...new Set(ids)].filter((n) => Number.isFinite(n));
 };
 
+export const buildInventorySkuStatusPipeline = () => [
+  {
+    $match: {
+      sellerId: { $exists: true },
+      productSkuCode: { $type: 'string', $ne: '' },
+    },
+  },
+  {
+    $group: {
+      _id: {
+        sellerId: '$sellerId',
+        productSkuCode: '$productSkuCode',
+      },
+      updatedAt: { $max: '$updatedAt' },
+    },
+  },
+  {
+    $project: {
+      _id: 0,
+      sellerId: '$_id.sellerId',
+      productSkuCode: '$_id.productSkuCode',
+      updatedAt: 1,
+    },
+  },
+  {
+    $lookup: {
+      from: 'userchannelproducts',
+      let: {
+        sku: '$productSkuCode',
+        sellerId: '$sellerId',
+      },
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $eq: ['$sellerId', '$$sellerId'],
+            },
+          },
+        },
+        { $unwind: '$skuList' },
+        {
+          $match: {
+            $expr: {
+              $eq: ['$skuList.skuCode', '$$sku'],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            channelId: 1,
+            skuList: ['$skuList'],
+          },
+        },
+      ],
+      as: 'ucp',
+    },
+  },
+  {
+    $unwind: '$ucp',
+  },
+  {
+    $lookup: {
+      from: 'products',
+      localField: 'productSkuCode',
+      foreignField: 'productSkuCode',
+      pipeline: [
+        {
+          $project: {
+            _id: 0,
+            status: 1,
+            isFrozen: 1,
+          },
+        },
+      ],
+      as: 'product',
+    },
+  },
+  {
+    $addFields: {
+      status: {
+        $cond: [
+          { $gt: [{ $size: '$product' }, 0] },
+          {
+            $let: {
+              vars: {
+                s: {
+                  $toLower: {
+                    $trim: {
+                      input: { $toString: { $first: '$product.status' } },
+                    },
+                  },
+                },
+              },
+              in: {
+                $cond: [
+                  { $eq: ['$$s', 'active'] },
+                  'active',
+                  {
+                    $cond: [
+                      { $eq: ['$$s', 'inactive'] },
+                      'inactive',
+                      {
+                        $cond: [{ $eq: ['$$s', 'removed'] }, 'removed', '$$REMOVE'],
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+          '$$REMOVE',
+        ],
+      },
+      isFrozen: {
+        $cond: [
+          { $gt: [{ $size: '$product' }, 0] },
+          {
+            $cond: [
+              { $eq: [{ $type: { $first: '$product.isFrozen' } }, 'bool'] },
+              { $first: '$product.isFrozen' },
+              '$$REMOVE',
+            ],
+          },
+          '$$REMOVE',
+        ],
+      },
+      channelId: '$ucp.channelId',
+    },
+  },
+  {
+    $project: {
+      sellerId: 1,
+      productSkuCode: 1,
+      channelId: 1,
+      status: 1,
+      isFrozen: 1,
+      updatedAt: 1,
+    },
+  },
+];
+
 export const growthWithTrend = (curr, prev) => {
   const c = Number(curr) || 0;
   const p = Number(prev) || 0;
@@ -590,8 +732,7 @@ export const buildChannelStatusPipeline = (sellerObjectIds, range, channelIds = 
 
 export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = []) => {
   const match = {
-    ...(range?.start && range?.end ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
-    sellerIds: { $in: sellerObjectIds },
+    ...(range?.start && range?.end ? { placedOn: { $gte: range.start, $lte: range.end } } : {}),
   };
 
   if (Array.isArray(channelIds) && channelIds.length) {
@@ -599,6 +740,36 @@ export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = 
   }
   return [
     { $match: match },
+
+    {
+      $lookup: {
+        from: 'channelengineorders',
+        let: {
+          returnChannelOrderNo: '$channelOrderNo',
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$channelOrderNumber', '$$returnChannelOrderNo'] },
+                  { $in: ['$sellerId', sellerObjectIds] },
+                ],
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              sellerId: 1,
+            },
+          },
+        ],
+        as: 'order',
+      },
+    },
+
+    { $unwind: '$order' },
 
     {
       $facet: {
@@ -616,12 +787,21 @@ export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = 
     },
   ];
 };
+
+export const formatLabel = (status = '') =>
+  status
+    ?.toLowerCase()
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+
 export default {
   getDateRange,
   getPreviousRange,
   normalizeSeries,
   buildAggregationPipeline,
   pickChannelIdsFromChannel,
+  buildInventorySkuStatusPipeline,
   growthWithTrend,
   extractCategoryLabel,
   topFacetPipeline,
@@ -630,4 +810,5 @@ export default {
   pickSelectedGlobalNames,
   buildChannelStatusPipeline,
   buildReturnsStatusPipeline,
+  formatLabel,
 };

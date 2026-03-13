@@ -1,5 +1,5 @@
 import {
-  createPartialShipmentService,
+  createFullShipmentService,
   getAllShipmentsService,
   getAllShipmentsAdminService,
   ayMakanWebHookService,
@@ -22,7 +22,7 @@ export const createShipment = async (req, res) => {
       return errorResponse(res, 'Shipment data is required', 400);
     }
 
-    const result = await createPartialShipmentService(shipmentData);
+    const result = await createFullShipmentService(shipmentData);
 
     if (!result.success) {
       // This can happen if service returns false for invalid inputs
