@@ -9,6 +9,7 @@ import {
   merchantCancelById,
   cancelFullOrder,
   cancelPartialOrder,
+  generateDocumentId,
   exportOrders,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
@@ -22,7 +23,9 @@ import {
   cancelFullOrderValidator,
   cancelPartialOrderValidator,
   exportOrdersValidator,
+  generateDocumentIdValidator,
 } from '#validations/orders.js';
+import upload from '#helpers/FileHandler.js';
 const router = express.Router();
 
 /**
@@ -371,5 +374,15 @@ router.put(
   authMiddleware,
   verifySellerAccess,
   cancelPartialOrder
+);
+
+router.post(
+  '/generate-documentId',
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  upload.single('file'),
+  generateDocumentIdValidator,
+  generateDocumentId
 );
 export default router;

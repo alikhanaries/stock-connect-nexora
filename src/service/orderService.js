@@ -8,7 +8,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
-import { cancelAymakanShipment } from '#service/aymakanService.js';
+import { cancelAymakanShipment, createAymakanDocumentId } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { formatDateTime, truncate } from '#helpers/Common.js';
 import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
@@ -16,6 +16,8 @@ import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
+import fs from 'fs';
+import path from 'path';
 
 const formatOrder = async (order, channelImage, sellerId) => {
   let sellerName = '';
@@ -1350,6 +1352,66 @@ export const addOrderLog = async (orderId, sellerId, log) => {
   );
 };
 
+export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
+  // Normalize from-data inputs
+  const normalizedOrderId = String(orderId)
+    .replace(/^"+|"+$/g, '')
+    .trim();
+  const normalizedSkuCodes = Array.isArray(skuCodes)
+    ? skuCodes.map((s) =>
+        String(s)
+          .replace(/^"+|"+$/g, '')
+          .trim()
+      )
+    : [
+        String(skuCodes)
+          .replace(/^"+|"+$/g, '')
+          .trim(),
+      ];
+
+  // Find the order
+  const order = await Order.findOne({ orderId: normalizedOrderId });
+  if (!order) throw new Error(`Order not found: ${normalizedOrderId}`);
+
+  // Check all requested SKUs exist
+  const skuList = order.orderSkuList?.skuList;
+  const missingSkus = normalizedSkuCodes.filter((sku) => !skuList.some((item) => item.merchantProductNo === sku));
+  if (missingSkus.length > 0) {
+    throw new Error(`The following SKU(s) are not in the order: ${missingSkus.join(', ')}`);
+  }
+
+  // Check if documentId already exists for any requested SKU
+  const skusWithDoc = skuList.filter((item) => normalizedSkuCodes.includes(item.merchantProductNo) && item.documentId);
+  if (skusWithDoc.length > 0) {
+    const existingSkus = skusWithDoc.map((i) => i.merchantProductNo).join(', ');
+    throw new Error(`Document already exists for SKU(s): ${existingSkus}`);
+  }
+
+  // Convert file to base64
+  const fileBuffer = fs.readFileSync(file.path);
+  const base64String = fileBuffer.toString('base64');
+  const ext = path.extname(file.originalname).slice(1);
+
+  const payload = {
+    document: base64String,
+    document_type: ext,
+    reference: '',
+  };
+
+  // Aymakan API
+  const result = await createAymakanDocumentId(payload);
+  const documentId = result.data.document_id;
+
+  skuList.forEach((skuItem) => {
+    if (normalizedSkuCodes.includes(skuItem.merchantProductNo)) {
+      skuItem.documentId = documentId;
+    }
+  });
+
+  await order.save();
+  return documentId;
+};
+
 export default {
   getAllOrders,
   getAdminOrders,
@@ -1364,4 +1426,5 @@ export default {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrdersToCSV,
+  generateDocumentId,
 };
