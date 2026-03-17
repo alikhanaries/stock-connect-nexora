@@ -1,8 +1,17 @@
 import Order from '#models/Orders.js';
 import mongoose from 'mongoose';
 import { getPagination } from '#helpers/PaginationHandler.js';
-import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
-import orderhelper from '#helpers/Order.js';
+import {
+  ORDER_STATUS_MAP,
+  SELECTED_FIELDS,
+  BLOCKED_STATUSES,
+  ORDER_EXPORT_EXCLUDED_COLUMNS,
+} from '#constants/common.js';
+import orderhelper, {
+  flattenAggregatedOrder,
+  getAggregatedOrderHeaders,
+  getOrganizedOrderRowData,
+} from '#helpers/Order.js';
 import { config } from '#config/config.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
@@ -11,49 +20,22 @@ import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { formatDateTime, truncate } from '#helpers/Common.js';
-import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
+import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
 
-const formatOrder = async (order, channelImage, sellerId) => {
-  let sellerName = '';
-  let sellerObjectId = null;
+const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
-  if (sellerId) {
-    sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
-
-    const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
-
-    if (seller) {
-      sellerName = seller.companyName || seller.name || '';
-    }
-  }
-
-  // Filter SKUs seller-wise (if sellerId provided)
-  const sellerSkus = sellerObjectId
-    ? order.orderSkuList?.skuList?.filter((sku) => sku.sellerId?.toString() === sellerObjectId.toString()) || []
-    : order.orderSkuList?.skuList || [];
-
-  const totalQuantity = sellerSkus.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
-
-  const totalPrice = sellerSkus.reduce((sum, sku) => sum + (sku.originalLineTotalInclVat || 0), 0);
-
+const formatOrder = (order, channelImage) => {
+  const totalQuantity = order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.quantity || 0), 0) || 0;
+  const totalPrice = order.totalInclVat
+    ? order.totalInclVat
+    : order.orderSkuList.skuList?.reduce((sum, sku) => sum + (sku.lineVat || 0), 0) || 0;
   const customer = `${order.orderCustomer?.firstName || ''} ${order.orderCustomer?.lastName || ''}`.trim();
-  let skuOrderId = null;
-
-  if (sellerObjectId && sellerSkus.length > 0) {
-    skuOrderId = sellerSkus[0].orderId;
-  }
-
   return {
     _id: order._id,
-    skuOrderId,
-    //  Added seller details
-    sellerId: sellerObjectId || null,
-    sellerName,
-
     channelNo: order.channelId || 1,
     orderID: order.orderId,
     quantity: totalQuantity,
@@ -92,7 +74,7 @@ const getAllOrders = async (query, sellerId) => {
 
     // Base match stage
     const filter = {
-      sellerIds: { $in: [sellerObjectId] },
+      sellerId: sellerObjectId,
     };
     // Escape special regex characters
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -141,7 +123,44 @@ const getAllOrders = async (query, sellerId) => {
     // Build aggregation pipeline
     const pipeline = [{ $match: filter }];
 
-    if (status) {
+    if (status && status.toUpperCase().includes('DELIVERED')) {
+      appliedFilters.status = 'DELIVERED';
+
+      // Filter delivered SKUs using $filter to keep skuList as an array
+      pipeline.push({
+        $addFields: {
+          'orderSkuList.skuList': {
+            $filter: {
+              input: '$orderSkuList.skuList',
+              as: 'sku',
+              cond: {
+                $and: [
+                  { $eq: ['$$sku.statusBreakdown.confirmed', 0] },
+                  { $eq: ['$$sku.statusBreakdown.shipped', 0] },
+                  { $eq: ['$$sku.statusBreakdown.returned', 0] },
+                  {
+                    $eq: [
+                      {
+                        $add: ['$$sku.statusBreakdown.delivered', '$$sku.statusBreakdown.canceled'],
+                      },
+                      '$$sku.quantity',
+                    ],
+                  },
+                  { $gt: ['$$sku.statusBreakdown.delivered', 0] }, //  delivered must be > 0
+                ],
+              },
+            },
+          },
+        },
+      });
+
+      // Remove orders that have no delivered SKUs
+      pipeline.push({
+        $match: {
+          'orderSkuList.skuList.0': { $exists: true },
+        },
+      });
+    } else if (status) {
       // Normal status filter
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
       const validStatuses = Object.values(ORDER_STATUS_MAP);
@@ -179,12 +198,10 @@ const getAllOrders = async (query, sellerId) => {
     });
 
     return {
-      data: await Promise.all(
-        orders.map((order) => {
-          const matchingChannel = channelMap[order.channelId] || null;
-          return formatOrder(order, matchingChannel, sellerObjectId);
-        })
-      ),
+      data: orders.map((order) => {
+        const matchingChannel = channelMap[order.channelId] || null;
+        return formatOrder(order, matchingChannel);
+      }),
       appliedFilters: appliedFilters,
       latestOrderSyncDate: sellerSync.lastOrderSync || null,
       pagination: getPagination(totalOrders, page, size),
@@ -207,11 +224,8 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     const appliedFilters = {};
     const filter = {};
 
-    let sellerObjectId = null;
-
     if (sellerId) {
-      sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
-      filter.sellerIds = { $in: [sellerObjectId] };
+      filter.sellerId = sellerId;
       appliedFilters.sellerId = sellerId;
     }
 
@@ -274,12 +288,10 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     });
 
     return {
-      data: await Promise.all(
-        orders.map((order) => {
-          const matchingChannel = channelMap[order.channelId] || null;
-          return formatOrder(order, matchingChannel, sellerId);
-        })
-      ),
+      data: orders.map((order) => {
+        const matchingChannel = channelMap[order.channelId] || null;
+        return formatOrder(order, matchingChannel);
+      }),
       appliedFilters,
       pagination: getPagination(totalOrders, page, size),
     };
@@ -287,74 +299,17 @@ const getAdminOrders = async (query, sellerId, channelId) => {
     return { success: false, message: err.message };
   }
 };
-export const getOrderById = async (id, sellerId) => {
+export const getOrderById = async (id) => {
   try {
-    let sellerObjectId = null;
-    let sellerName = '';
-
-    // ---------------- OPTIONAL SELLER LOGIC ----------------
-    if (sellerId) {
-      sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
-
-      const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
-
-      if (!seller) {
-        throw new Error('Seller not found');
-      }
-
-      sellerName = seller.companyName || seller.name || '';
-    }
-
-    // ---------------- FETCH ORDER ----------------
     const order = await Order.findById(id).lean();
     if (!order) return false;
-
-    // SECURITY CHECK – only if sellerId provided
-    if (sellerObjectId) {
-      if (!order.sellerIds?.some((s) => s.toString() === sellerObjectId.toString())) {
-        throw new Error('Unauthorized access to this order');
-      }
-    }
-
-    // ---------------- FILTER SKUS ----------------
-    const allOrderSkus =
-      order.orderSkuList?.skuList?.filter((sku) =>
-        sellerObjectId ? sku.sellerId?.toString() === sellerObjectId.toString() : true
-      ) || [];
-
-    let sellerMap = {};
-
-    if (!sellerObjectId) {
-      // collect unique sellerIds
-      const sellerIds = [
-        ...new Set(
-          allOrderSkus
-            .map((s) => s.sellerId)
-            .filter(Boolean)
-            .map((id) => id.toString())
-        ),
-      ];
-
-      const sellers = await Seller.find({ _id: { $in: sellerIds } }, { name: 1, companyName: 1 }).lean();
-
-      sellerMap = sellers.reduce((acc, s) => {
-        acc[s._id.toString()] = s.companyName || s.name || '';
-        return acc;
-      }, {});
-    }
-
-    // ---------------- FETCH SHIPMENTS ----------------
-    const shipmentQuery = {
+    const shipments = await Shipment.find({
       orderId: id,
       type: 'FORWARD',
       status: { $ne: 'CANCELED' },
-    };
+    }).lean();
 
-    if (sellerObjectId) {
-      shipmentQuery.sellerId = sellerObjectId;
-    }
-
-    const shipments = await Shipment.find(shipmentQuery).lean();
+    const allOrderSkus = order.orderSkuList?.skuList || [];
 
     // ---------------- PRODUCT IMAGE MAP ----------------
     const merchantNos = allOrderSkus.map((s) => s.merchantProductNo);
@@ -383,13 +338,10 @@ export const getOrderById = async (id, sellerId) => {
       const image = productsMap[sku.merchantProductNo]?.image || null;
       const hsCode = productsMap[sku.merchantProductNo]?.hsCode || sku.merchantProductNo;
 
-      // const dynamicSellerName = sellerName || sku.sellerName || '';
-      const dynamicSellerName = sellerObjectId ? sellerName : sellerMap[sku.sellerId?.toString()] || '';
-      // CANCELLED
+      // ---------- CANCELLED ----------
       if (b.canceled > 0) {
         cancelledItems.push({
           id: sku.id,
-          skuOrderId: sku.orderId,
           merchantProductNo: sku.merchantProductNo,
           channelProductNo: sku.channelProductNo,
           name: sku.description,
@@ -397,8 +349,6 @@ export const getOrderById = async (id, sellerId) => {
           quantity: b.canceled,
           status: 'CANCELED',
           hsCode,
-          sellerId: sku.sellerId,
-          sellerName: dynamicSellerName,
         });
       }
 
@@ -408,16 +358,13 @@ export const getOrderById = async (id, sellerId) => {
       if (pendingQty > 0) {
         unshippedItems.push({
           id: sku.id,
-          skuOrderId: sku.orderId,
           merchantProductNo: sku.merchantProductNo,
           channelProductNo: sku.channelProductNo,
           name: sku.description,
           imageUrl: image,
           quantity: pendingQty,
-          status: sku.status,
+          status: sku.status, // stays IN_PROGRESS
           hsCode,
-          sellerId: sku.sellerId,
-          sellerName: dynamicSellerName,
         });
       }
     });
@@ -438,12 +385,8 @@ export const getOrderById = async (id, sellerId) => {
           shipment.products?.map((p) => {
             const sku = allOrderSkus.find((s) => s.merchantProductNo === p.merchantProductNo);
 
-            const dynamicSellerName = sellerName || sku?.sellerName || '';
-
             return {
               id: sku?.id,
-              skuOrderId: sku?.orderId || null,
-              sellerName: dynamicSellerName,
               merchantProductNo: p.merchantProductNo,
               channelProductNo: sku?.channelProductNo,
               name: sku?.description,
@@ -459,26 +402,15 @@ export const getOrderById = async (id, sellerId) => {
     });
 
     // ---------------- FINAL RESPONSE ----------------
+    const filteredData = transformOrderResponse(allOrderSkus, order);
 
-    const filteredData = transformOrderResponse(order, allOrderSkus);
-    let orderLogsDetails;
-
-    const filter = { orderId: id };
-
-    if (sellerObjectId) {
-      filter.sellerId = sellerObjectId;
-    }
-
-    orderLogsDetails = await OrderLogs.findOne(filter).lean();
-
+    const orderLogsDetails = await OrderLogs.findOne({ orderId: id }).lean();
     const orderLogsData = orderLogsDetails?.details?.length ? formatOrderTrackingInf(orderLogsDetails.details) : [];
     const productsStatusDetails = allOrderSkus.map((sku) => {
       const b = sku.statusBreakdown || {};
-      const dynamicSellerName = sellerName || sku.sellerName || '';
 
       return {
         id: sku.id,
-        skuOrderId: sku.orderId,
         productCode: sku.merchantProductNo,
         totalQty: sku.quantity,
         confirmed: b.confirmed || 0,
@@ -487,22 +419,11 @@ export const getOrderById = async (id, sellerId) => {
         delivered: b.delivered || 0,
         returned: b.returned || 0,
         canceled: b.canceled || 0,
-        sellerId: sku.sellerId,
-        sellerName: dynamicSellerName,
       };
     });
 
-    let skuOrderId = null;
-
-    if (sellerObjectId) {
-      // Seller specific → all SKUs same seller
-      skuOrderId = allOrderSkus?.[0]?.orderId || null;
-    }
     return {
       ...filteredData,
-      sellerName: sellerObjectId ? sellerName : null,
-      sellerId,
-      skuOrderId,
       shippedItems,
       deliveredItems,
       unshippedItems,
@@ -519,15 +440,7 @@ export const getOrderById = async (id, sellerId) => {
 const getOrderStats = async (sellerId) => {
   try {
     const statuses = Object.keys(ORDER_STATUS_MAP);
-    const sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
-    const counts = await Promise.all(
-      statuses.map((status) =>
-        Order.countDocuments({
-          status,
-          sellerIds: [sellerObjectId], // matches inside array automatically
-        })
-      )
-    );
+    const counts = await Promise.all(statuses.map((status) => Order.countDocuments({ status, sellerId: sellerId })));
     const stats = statuses.reduce((acc, status, i) => {
       acc[status] = counts[i];
       return acc;
@@ -540,19 +453,20 @@ const getOrderStats = async (sellerId) => {
 
 export const processOrders = async (orders, sellerId) => {
   try {
+    // Prepare bulk operations
     const operations = await orderhelper.sanitizeOrdersData(orders, sellerId);
+
+    // Execute the bulk write
     const result = await Order.bulkWrite(operations);
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
     const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
 
-    const orderLogs = [];
-
-    for (let i = 0; i < upsertedIndexes.length; i++) {
-      const index = upsertedIndexes[i];
+    // Build log entries for each newly created order
+    const orderLogs = upsertedIndexes.map((index, i) => {
       const order = orders[index];
       const orderId = upsertedOrderIds[i];
-      const latestOrderData = await Order.findOne({ _id: orderId }, { _id: 1, orderId: 1, sellerIds: 1 }).lean();
+
       const logDetails = [
         {
           status: 'CREATED',
@@ -561,20 +475,15 @@ export const processOrders = async (orders, sellerId) => {
         },
       ];
 
-      //  IMPORTANT: create log per seller
-      const sellerIds = latestOrderData?.sellerIds?.length ? latestOrderData.sellerIds : [sellerId]; // fallback if single seller
+      return {
+        orderId,
+        details: logDetails,
+      };
+    });
 
-      for (const sId of sellerIds) {
-        orderLogs.push({
-          orderId,
-          sellerId: sId,
-          details: logDetails,
-        });
-      }
-    }
-
+    // Insert logs only for newly created orders
     if (orderLogs.length > 0) {
-      await OrderLogs.insertMany(orderLogs, { ordered: false });
+      await OrderLogs.insertMany(orderLogs);
       console.log('Inserted order logs:', orderLogs.length);
     } else {
       console.log('No new orders created — skipping log insertion');
@@ -771,9 +680,8 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
   }
 };
 
-const transformOrderResponse = (response, allOrderSkus = []) => {
+const transformOrderResponse = (allOrderSkus, response) => {
   if (!response) return null;
-
   const data = response;
 
   // ---- Calculate totals from SKUs ----
@@ -837,33 +745,15 @@ const transformOrderResponse = (response, allOrderSkus = []) => {
   };
 };
 
-const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
+const cancelFullOrder = async (orderId, order, reason = 'NA') => {
   try {
-    // Filter SKUs for this seller
-    const sellerSkus = order.orderSkuList.skuList.filter((sku) => sku.sellerId.toString() === sellerId.toString());
-
-    if (!sellerSkus.length) {
-      return {
-        success: false,
-        error: { message: 'No SKUs found for this seller', status: 400 },
-      };
-    }
-
-    // Prepare ChannelEngine cancellation lines
-    const lines = sellerSkus
+    const lines = order.orderSkuList.skuList
       .map((item) => ({
         MerchantProductNo: item.merchantProductNo,
         OrderLineId: item.id,
         Quantity: Math.max(0, parseInt(item.quantity) - parseInt(item.cancellationRequestedQuantity || 0)),
       }))
       .filter((line) => line.Quantity > 0);
-
-    if (!lines.length) {
-      return {
-        success: false,
-        error: { message: 'Nothing to cancel', status: 400 },
-      };
-    }
 
     const cancelPayload = {
       MerchantCancellationNo: randomBytes(6).toString('hex'),
@@ -877,7 +767,6 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
     // Check if order has any shipped shipments
     const shippedShipments = await Shipment.find({
       orderId,
-      sellerId,
       status: { $in: ['SHIPPED', 'DELIVERED'] },
     }).lean();
 
@@ -885,16 +774,14 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
       return {
         success: false,
         error: {
-          message: 'Seller shipment already shipped, cannot cancel',
+          message: 'Order has been shipped, cannot cancel now',
           status: 400,
         },
       };
     }
 
-    // Cancel seller shipments
     const shipments = await Shipment.find({
       orderId,
-      sellerId,
       status: { $nin: ['CANCELED', 'DELIVERED', 'SHIPPED'] },
     }).lean();
 
@@ -931,87 +818,59 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
         data: null,
       };
     }
-
-    // Update only seller SKUs
-    await Order.updateOne({ _id: orderId }, [
-      {
-        $set: {
-          'orderSkuList.skuList': {
-            $map: {
-              input: '$orderSkuList.skuList',
-              as: 'sku',
-              in: {
-                $cond: [
-                  { $eq: ['$$sku.sellerId', new mongoose.Types.ObjectId(sellerId)] },
-                  {
-                    $mergeObjects: [
-                      '$$sku',
-                      {
-                        status: ORDER_STATUS_MAP.CANCELED,
-                        cancellationRequestedQuantity: '$$sku.quantity', // ✅ mark all remaining qty as cancelled
-                        statusBreakdown: {
-                          confirmed: 0,
-                          shipped: 0,
-                          delivered: 0,
-                          returned: 0,
-                          canceled: '$$sku.quantity',
-                        },
+    const updatedOrder = await Order.findByIdAndUpdate(
+      orderId,
+      [
+        {
+          $set: {
+            status: ORDER_STATUS_MAP.CANCELED,
+            'orderSkuList.skuList': {
+              $map: {
+                input: '$orderSkuList.skuList',
+                as: 'sku',
+                in: {
+                  $mergeObjects: [
+                    '$$sku',
+                    {
+                      status: ORDER_STATUS_MAP.CANCELED,
+                      statusBreakdown: {
+                        confirmed: 0,
+                        shipped: 0,
+                        delivered: 0,
+                        returned: 0,
+                        canceled: '$$sku.quantity',
                       },
-                    ],
-                  },
-                  '$$sku',
-                ],
+                    },
+                  ],
+                },
               },
             },
           },
         },
-      },
-    ]);
-    const updatedOrder = await Order.findById(orderId);
+      ],
+      { new: true }
+    );
 
-    // Check if all SKUs are canceled
-    const allCancelled = updatedOrder.orderSkuList.skuList.every((sku) => sku.status === ORDER_STATUS_MAP.CANCELED);
-
-    if (allCancelled) {
-      updatedOrder.status = ORDER_STATUS_MAP.CANCELED;
-      await updatedOrder.save();
-    }
-
-    // ORDER LOG
+    // ORDER LOG ENTRY
     const logEntry = {
       status: 'CANCELED',
       description: `Canceled all items`,
       createdAt: new Date(),
     };
-
-    await OrderLogs.updateOne(
-      { orderId, sellerId: sellerId },
-      {
-        $push: {
-          details: logEntry,
-        },
-      },
-      { upsert: true }
-    );
+    await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
 
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
-
-    return {
-      success: false,
-      error: { message: error.message },
-    };
+    return { success: false, error: { message: error.message } };
   }
 };
 
-export const cancelPartialOrder = async (orderId, products, reason = 'NA', sellerId) => {
+export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
   try {
     // ----------------------------------------------------
     // FETCH ORDER
     // ----------------------------------------------------
-
-    const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
     const order = await Order.findById(orderId).lean();
     if (!order) {
       return { success: false, error: { message: 'Order not found', status: 404 } };
@@ -1053,9 +912,6 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
         }
       });
     });
-    const sellerSkus = order.orderSkuList.skuList.filter(
-      (sku) => sku.sellerId.toString() === sellerObjectId.toString()
-    );
 
     // ----------------------------------------------------
     // VALIDATION
@@ -1063,7 +919,8 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
     for (const item of products) {
       const lineId = item.orderLineId.toString();
 
-      const sku = sellerSkus.find((s) => s.id.toString() === lineId);
+      const sku = order.orderSkuList.skuList.find((s) => s.id.toString() === lineId);
+
       if (!sku) {
         return {
           success: false,
@@ -1115,11 +972,6 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
 
     const updatedSkuList = order.orderSkuList.skuList.map((sku) => {
       const lineId = sku.id.toString();
-
-      // check if this SKU belongs to payload seller
-      if (sku.sellerId.toString() !== sellerObjectId.toString()) {
-        return sku;
-      }
 
       // check if this SKU exists in cancel payload
       const cancelItem = products.find((p) => p.orderLineId.toString() === lineId);
@@ -1185,7 +1037,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
     // LOG
     // ----------------------------------------------------
     await OrderLogs.updateOne(
-      { orderId, sellerId: sellerObjectId },
+      { orderId },
       {
         $push: {
           details: {
@@ -1221,18 +1073,21 @@ export const formatOrderTrackingInf = (data) => {
 
 export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '') => {
   try {
+    // Validate sellerId is provided
     if (!sellerId) {
-      return { success: false, message: 'Seller ID is required for export' };
+      return {
+        success: false,
+        message: 'Seller ID is required for export',
+      };
     }
 
     const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
-    const filter = {
-      sellerIds: { $in: [sellerId] },
-    };
+    const filter = { sellerId: sellerId };
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
+
       filter.$or = [
         { orderId: regex },
         { 'orderCustomer.email': regex },
@@ -1247,107 +1102,116 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     if (status) {
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
-      filter.status = { $in: statusArray };
+
+      // Validate against enum
+      const validStatuses = Object.values(ORDER_STATUS_MAP);
+      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+
+      if (invalid.length > 0) {
+        console.warn(`Invalid status values ignored: ${invalid.join(', ')}`);
+      }
+
+      // Build Mongo filter (case-insensitive) - only use valid statuses
+      const validStatusArray = statusArray.filter((s) => validStatuses.includes(s));
+
+      if (validStatusArray.length > 0) {
+        filter.status = {
+          $in: validStatusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+        };
+      }
     }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const orders = await Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean();
+    const [orders, totalCount] = await Promise.all([
+      Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean(),
+      Order.countDocuments(filter),
+    ]);
 
-    if (!orders.length) {
-      return { success: false, message: 'No orders found' };
+    // Validate export data
+    const validation = validateExportData(orders, 'orders');
+    if (!validation.success) {
+      return validation;
     }
 
-    const headers = ORDER_EXPORT_HEADERS;
-    const csvRows = [headers.join(',')];
+    const dynamicHeaders = generateDynamicHeaders(Order, [
+      'orderSkuList',
+      'orderCustomer',
+      'orderPaymentDetails',
+      'orderShippingAddress',
+      'orderBillingAddress',
+    ]);
 
-    for (const order of orders) {
-      /*
-      FILTER SELLER SKUS AND REMOVE FULLY CANCELLED
-      */
-      const sellerSkus = (order.orderSkuList?.skuList || []).filter((sku) => {
-        const cancelledQty = sku.cancellationRequestedQuantity || 0;
-        const effectiveQty = (sku.quantity || 0) - cancelledQty;
+    // Get a sample order to determine aggregated headers structure
+    const sampleOrder = orders[0];
+    const { customerHeaders, paymentHeaders, shippingHeaders, billingHeaders, skuHeaders } =
+      getAggregatedOrderHeaders(sampleOrder);
 
-        return String(sku.sellerId) === String(sellerId) && effectiveQty > 0;
+    const filteredDynamicHeaders = dynamicHeaders.filter(
+      (header) =>
+        !header.startsWith('orderSkuList') &&
+        !(header.includes('orderId') && header.includes('_')) && // <-- allow top-level 'orderId'
+        !header.includes('createdAt') &&
+        !header.includes('updatedAt')
+    );
+
+    // Combine all headers in the desired order
+    const combinedHeaders = [
+      ...filteredDynamicHeaders,
+      ...skuHeaders,
+      ...shippingHeaders,
+      ...billingHeaders,
+      ...customerHeaders,
+      ...paymentHeaders,
+      'createdAt',
+      'updatedAt',
+    ];
+
+    // Remove any duplicate headers
+    const deduplicatedHeaders = [...new Set(combinedHeaders)];
+
+    // Filter out excluded columns
+    const organizedHeaders = deduplicatedHeaders.filter((header) => !ORDER_EXPORT_EXCLUDED_COLUMNS.includes(header));
+
+    // Create CSV with organized headers
+    const csvRows = [organizedHeaders.join(',')];
+
+    // Process orders in chunks for better performance
+    const chunks = [];
+    for (let i = 0; i < orders.length; i += EXPORT_CHUNK_SIZE) {
+      chunks.push(orders.slice(i, i + EXPORT_CHUNK_SIZE));
+    }
+
+    // Process each chunk
+    const processChunk = async (chunk) => {
+      return chunk.map((order) => {
+        // Flatten the aggregated order data
+        const flattenedOrder = flattenAggregatedOrder(order);
+
+        // Get organized row data
+        const rowData = getOrganizedOrderRowData(flattenedOrder, organizedHeaders);
+
+        return escapeCsv(rowData);
       });
+    };
 
-      if (!sellerSkus.length) continue;
+    // Process all chunks in parallel
+    const processedChunks = await Promise.all(chunks.map(processChunk));
+    csvRows.push(...processedChunks.flat());
 
-      /*
-      CALCULATE SELLER TOTALS USING EFFECTIVE QUANTITY
-      */
-      const sellerTotals = sellerSkus.reduce(
-        (totals, sku) => {
-          const cancelledQty = sku.cancellationRequestedQuantity || 0;
-          const effectiveQty = Math.max((sku.quantity || 0) - cancelledQty, 0);
-
-          const unitPriceInclVat = sku.unitPriceInclVat || 0;
-          const unitVat = sku.unitVat || 0;
-
-          totals.subTotalInclVat += unitPriceInclVat * effectiveQty;
-          totals.subTotalVat += unitVat * effectiveQty;
-
-          return totals;
-        },
-        { subTotalInclVat: 0, subTotalVat: 0 }
-      );
-
-      sellerTotals.totalInclVat = sellerTotals.subTotalInclVat;
-      sellerTotals.totalVat = sellerTotals.subTotalVat;
-      sellerTotals.subTotalExclVat = sellerTotals.subTotalInclVat - sellerTotals.subTotalVat;
-      sellerTotals.totalExclVat = sellerTotals.subTotalExclVat;
-
-      /*
-      CREATE ROW PER SKU
-      */
-      for (let i = 0; i < sellerSkus.length; i++) {
-        const sku = sellerSkus[i];
-
-        const rowObject = buildExportOrderRow(order, sku, sellerTotals, sellerId);
-
-        /*
-        SHOW ORDERID ONLY FIRST ROW
-        */
-        if (i > 0) {
-          rowObject.orderId = '';
-        }
-
-        const row = headers.map((header) => {
-          const value = rowObject?.[header];
-          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
-
-          return `"${safeValue}"`;
-        });
-
-        csvRows.push(row.join(','));
-      }
-    }
-
+    // Generate filename with seller name
     const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
     const exportDate = new Date().toISOString().split('T')[0];
     const filename = `${sanitizedSellerName}_OrderExport_${exportDate}.csv`;
 
     return {
-      success: true,
-      filename,
-      data: csvRows.join('\n'),
-      count: csvRows.length - 1,
+      ...createCSVExportResponse(csvRows, filename, orders.length),
+      totalCount,
     };
   } catch (error) {
     console.error('Error exporting orders:', error.message);
     throw error;
   }
-};
-export const addOrderLog = async (orderId, sellerId, log) => {
-  await OrderLogs.updateOne(
-    { orderId, sellerId },
-    {
-      $push: { details: log },
-      $setOnInsert: { orderId, sellerId },
-    },
-    { upsert: true }
-  );
 };
 
 export default {

@@ -53,7 +53,6 @@
   "ORDERS_FETCHED_SUCCESSFULLY": "Orders fetched successfully",
   "ORDER_FETCHED_SUCCESSFULLY": "Order fetched successfully",
   "INVALID_ORDER_ID_FORMAT": "Invalid order id format",
-  "INVALID_SELLER_ID_FORMAT": "Invalid seller id format",
   "FAILED_TO_GET_ORDER_STATUS": "Failed to get order status",
   "ORDER_STATUS_STATS_FETCHED_SUCCESSFULLY": "Order status statistics fetched successfully",
   "ALREADY_UP_TO_DATE": "Already up to date",
