@@ -292,7 +292,7 @@ router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, veri
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       404: { $ref: "#/components/schemas/FailResponse" }
  */
-router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, verifySellerAccess, getOrderById);
+router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, getOrderById);
 // /* CANCEL ORDER (FULL CANCELLATION) */
 /**
  * @swagger
@@ -320,14 +320,7 @@ router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, verifyS
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-router.put(
-  '/cancelFullOrder',
-  cancelFullOrderValidator,
-  checkLanguage,
-  authMiddleware,
-  verifySellerAccess,
-  cancelFullOrder
-);
+router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMiddleware, cancelFullOrder);
 // /* CANCEL PARTIAL ORDER (PARTIAL CANCELLATION) */
 /**
  * @swagger
@@ -364,12 +357,5 @@ router.put(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-router.put(
-  '/cancelPartialOrder',
-  cancelPartialOrderValidator,
-  checkLanguage,
-  authMiddleware,
-  verifySellerAccess,
-  cancelPartialOrder
-);
+router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
 export default router;

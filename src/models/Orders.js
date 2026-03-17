@@ -24,13 +24,6 @@ const OrderSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    sellerIds: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Seller',
-        index: true,
-      },
-    ],
     channelId: {
       type: Number,
       required: true,
