@@ -1,44 +1,35 @@
-export const formatInventory = (raw = [], sellerId) => {
+import { MIN_STOCK } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
+
+const toArray = (value) => (Array.isArray(value) ? value : value ? [value] : []);
+
+const normalize = (val) => (val || '').trim().toUpperCase();
+const safe = (val, fallback) => normalize(val || fallback).replace(/\s+/g, '_');
+
+export const formatKipInventory = (raw = [], sellerId) => {
   if (!raw.length) return { products: [] };
 
   const products = [];
 
-  for (const p of raw) {
-    const baseSku = (p.ws_code || p.code || '').trim().toUpperCase();
+  for (const item of raw) {
+    const baseSku = normalize(item.ws_code);
     if (!baseSku) continue;
 
-    const subproducts = Array.isArray(p?.subproducts?.subproduct) ? p.subproducts.subproduct : [];
-
+    const subProducts = toArray(item?.subproducts?.subproduct);
     let totalStock = 0;
-    const baseProduct = {
-      sellerId,
-      productSkuCode: baseSku,
-      productType: 'configurable',
-      currentStockCount: 0,
-      status: 'inactive',
-      updatedAt: new Date(),
-    };
 
-    products.push(baseProduct);
-
-    const groupedByColor = {};
-
-    for (const v of subproducts) {
-      const color = (v.color || v.color_drop || '').trim() || 'DEFAULT';
-      (groupedByColor[color] ||= []).push(v);
-    }
+    const groupedByColor = subProducts.reduce((acc, variant) => {
+      const color = normalize(variant.color || variant.color_drop) || 'DEFAULT';
+      (acc[color] ||= []).push(variant);
+      return acc;
+    }, {});
 
     for (const [color, variants] of Object.entries(groupedByColor)) {
-      const safeColor = color.replace(/\s+/g, '_').toUpperCase();
-      const parentSku = `${baseSku}-${safeColor}`;
-
+      const parentSku = `${baseSku}-${safe(color, 'DEFAULT')}`;
       let parentStock = 0;
 
       for (const v of variants) {
-        const size = (v.size || '').trim() || 'NOSIZE';
-        const safeSize = size.replace(/\s+/g, '_').toUpperCase();
-
-        const childSku = `${parentSku}-${safeSize}`;
+        const size = safe(v.size, 'NOSIZE');
+        const childSku = `${parentSku}-${size}`;
 
         const stock = Number(v.stock || 0);
         parentStock += stock;
@@ -47,9 +38,11 @@ export const formatInventory = (raw = [], sellerId) => {
         products.push({
           sellerId,
           productSkuCode: childSku,
+          parentProductSkuCode: parentSku,
+          grandParentProductSkuCode: null,
           productType: 'simple',
           currentStockCount: stock,
-          status: stock > 0 ? 'active' : 'inactive',
+          status: stock < MIN_STOCK ? 'inactive' : 'active',
           updatedAt: new Date(),
         });
       }
@@ -57,15 +50,25 @@ export const formatInventory = (raw = [], sellerId) => {
       products.push({
         sellerId,
         productSkuCode: parentSku,
+        parentProductSkuCode: null,
+        grandParentProductSkuCode: baseSku,
         productType: 'configurable',
         currentStockCount: parentStock,
-        status: parentStock > 0 ? 'active' : 'inactive',
+        status: parentStock < MIN_STOCK ? 'inactive' : 'active',
         updatedAt: new Date(),
       });
     }
 
-    baseProduct.currentStockCount = totalStock;
-    baseProduct.status = totalStock > 0 ? 'active' : 'inactive';
+    products.push({
+      sellerId,
+      productSkuCode: baseSku,
+      parentProductSkuCode: null,
+      grandParentProductSkuCode: null,
+      productType: 'configurable',
+      currentStockCount: totalStock,
+      status: totalStock < MIN_STOCK ? 'inactive' : 'active',
+      updatedAt: new Date(),
+    });
   }
 
   return { products };
