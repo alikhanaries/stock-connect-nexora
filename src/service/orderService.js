@@ -412,6 +412,7 @@ export const getOrderById = async (id, sellerId) => {
           id: sku.id,
           skuOrderId: sku.orderId,
           merchantProductNo: sku.merchantProductNo,
+          documentId: sku.documentId,
           channelProductNo: sku.channelProductNo,
           name: sku.description,
           imageUrl: image,
