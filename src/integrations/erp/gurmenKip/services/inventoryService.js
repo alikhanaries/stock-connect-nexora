@@ -5,6 +5,7 @@ import Product from '#root/src/models/Product.js';
 import Inventory from '#root/src/models/Inventory.js';
 import { createGurmanKipAdapter } from '../gurmanAdapter.js';
 import { formatKipInventory } from '../helpers/formatInventory.js';
+import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
@@ -128,6 +129,12 @@ export const kipInventorySync = async (sellerId) => {
 
           console.log(
             `[Batch ${batchId}] Matched: ${productResult.matchedCount}, Modified: ${productResult.modifiedCount}`
+          );
+
+          // Recalculate hierarchy status for updated SKUs
+          await resolveHierarchyStatus(
+            sellerId,
+            validProducts.map((p) => p.productSkuCode)
           );
         } catch (err) {
           console.error(`[Batch ${batchId}] Error`, err);
