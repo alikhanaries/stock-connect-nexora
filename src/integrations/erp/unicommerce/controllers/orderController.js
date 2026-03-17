@@ -40,3 +40,19 @@ export const orderDispatch = async (req, res) => {
     return errorResponse(res, 500, { message: error.message });
   }
 };
+
+export const cancelOrder = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    if (!sellerId) {
+      return failResponse(res, 400, { message: 'sellerId is missing' });
+    }
+    const result = await orderService.cancelOrders(sellerId, req.body);
+    return successResponse(res, 200, result);
+  } catch (error) {
+    console.error('cancelOrders error:', error.message, error.stack);
+    return errorResponse(res, 500, {
+      message: error.message,
+    });
+  }
+};
