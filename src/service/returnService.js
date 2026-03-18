@@ -9,7 +9,6 @@ import { formatDateTime } from '#root/src/helpers/Common.js';
 import {
   sanitizeReturnData,
   getOrderDataByOrderLineIds,
-  isNameOrEmailSearch,
   buildReturnAggregationPipeline,
   buildReturnMatchAndPipeline,
   formatReturnDetails,
@@ -140,9 +139,9 @@ export const saveReturnToDatabase = async (returnData) => {
 
 //Gets returns from the database with pagination and filtering using aggregation.
 
-export const getReturnsFromDatabase = async (query = {}) => {
+export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
   try {
-    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform } = query;
+    const { status, sortOrder = 'desc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -154,7 +153,6 @@ export const getReturnsFromDatabase = async (query = {}) => {
         .split(',')
         .map((s) => s.trim().toUpperCase());
 
-      // Check each provided status
       const invalid = statusArray.filter((s) => !Object.values(RETURN_STATUS).includes(s));
 
       if (invalid.length > 0) {
@@ -169,74 +167,35 @@ export const getReturnsFromDatabase = async (query = {}) => {
     // Add other filters to appliedFilters
     if (channelId) appliedFilters.channelId = channelId;
     if (platform) appliedFilters.platform = platform;
+    if (sellerId) appliedFilters.sellerId = sellerId;
 
     const { pipeline } = buildReturnMatchAndPipeline(query, {
       includeSearchNameSplit: true,
     });
 
-    pipeline.push(
-      {
-        $addFields: {
-          orderID: { $ifNull: ['$orderId', '$orderInfo.orderId'] },
-          customer: {
-            $concat: [
-              { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
-              ' ',
-              { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
-            ],
-          },
-          email: '$orderInfo.orderCustomer.email',
-          phoneNumber: '$orderInfo.orderCustomer.phone',
-          orderTotalPrice: '$orderInfo.totalInclVat',
-          placedOn: { $ifNull: ['$placedOn', '$createdAt'] },
-        },
-      },
-      {
-        $addFields: {
-          customer: {
-            $cond: [{ $eq: [{ $trim: { input: '$customer' } }, ''] }, null, { $trim: { input: '$customer' } }],
-          },
-          quantity: '$totalQuantity',
-          totalPrice: { $ifNull: ['$orderTotalPrice', '$totalPrice'] },
-          orderSkus: {
-            $map: {
-              input: { $ifNull: ['$orderInfo.orderSkuList.skuList', []] },
-              as: 'sku',
-              in: {
-                productSku: '$$sku.merchantProductNo',
-                productPrice: '$$sku.originalUnitPriceInclVat',
-              },
-            },
-          },
-        },
-      }
-    );
-    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (query.search && isNameOrEmailSearch(query.search)) {
-      const words = query.search.trim().split(/\s+/);
-
-      const andConditions = words.map((word) => {
-        const safeWord = escapeRegex(word);
-        const regex = new RegExp(safeWord, 'i');
-
-        return {
-          $or: [{ customer: { $regex: regex } }, { email: { $regex: regex } }, { orderID: { $regex: regex } }],
-        };
-      });
+    //  Filter by sellerId
+    if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
+      const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
 
       pipeline.push({
-        $match: { $and: andConditions },
+        $match: {
+          $or: [
+            { sellerIds: { $in: [sellerObjectId] } }, // new records
+            { sellerIds: { $exists: false } }, // old records
+          ],
+        },
       });
     }
 
-    // ====== Count and Paginate ======
-    const countPipeline = [...pipeline, { $count: 'total' }];
+    pipeline.push({
+      $addFields: {
+        orderID: { $ifNull: ['$orderId', '$orderInfo.orderId'] },
+        placedOn: { $ifNull: ['$placedOn', '$createdAt'] },
+      },
+    });
 
-    // Handle sorting - map orderID to the actual field name
+    // ===== Sorting =====
     let actualSortBy = sortBy;
-    if (sortBy === 'placedOn') {
-      actualSortBy = 'placedOn';
-    }
 
     if (sortBy === 'returnId') {
       pipeline.push({
@@ -246,6 +205,8 @@ export const getReturnsFromDatabase = async (query = {}) => {
       });
       actualSortBy = 'returnIdNumeric';
     }
+
+    const countPipeline = [...pipeline, { $count: 'total' }];
 
     pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
@@ -263,48 +224,60 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const totalReturns = countResult?.[0]?.total || 0;
 
     const formattedReturns = results.map((r) => {
-      const orderSkuMap = new Map((r.orderSkus || []).map((sku) => [sku.productSku, sku]));
+      const sellerObjectId = sellerId ? new mongoose.Types.ObjectId(String(sellerId)).toString() : null;
 
-      const matchedSkus = (r.products || []).map((p) => {
+      const orderSkuMap = new Map(
+        (r.orderInfo?.orderSkuList?.skuList || []).map((sku) => [sku.merchantProductNo, sku])
+      );
+
+      //  Keep only seller's products
+      const sellerProducts = (r.products || []).filter((p) => {
+        if (!sellerObjectId) return true;
+
+        const orderSku = orderSkuMap.get(p.productSkuCode);
+        return orderSku && String(orderSku.sellerId) === sellerObjectId;
+      });
+
+      const mappedProducts = sellerProducts.map((p) => {
         const quantity = p.quantity || 0;
         const orderSku = orderSkuMap.get(p.productSkuCode);
 
         let productPrice = 0;
-        if (orderSku && typeof orderSku.productPrice === 'number') {
-          productPrice = orderSku.productPrice;
-        } else if (typeof p.price === 'number') {
+        if (orderSku?.originalUnitPriceInclVat) {
+          productPrice = orderSku.originalUnitPriceInclVat;
+        } else if (p.price) {
           productPrice = p.price;
-        } else {
-          console.warn(`Missing price for returned product SKU ${p.productSkuCode} in return ${r._id}`);
         }
 
         return {
           productSku: p.productSkuCode,
-          productPrice,
           quantity,
-          totalPrice: (productPrice || 0) * quantity,
+          productPrice,
+          totalPrice: productPrice * quantity,
         };
       });
 
-      const totalPrice = matchedSkus.reduce((sum, sku) => sum + sku.totalPrice, 0) || 0;
+      const totalQuantity = mappedProducts.reduce((sum, p) => sum + p.quantity, 0);
+
+      const totalPrice = mappedProducts.reduce((sum, p) => sum + p.totalPrice, 0);
 
       return {
         _id: r._id,
+        returnId: r.returnId,
         orderID: r.orderID || null,
-        channelId: r.channelId || null,
-        quantity: r.quantity || 0,
-        totalPrice,
-        customer: r.customer || null,
-        placedOn: r.placedOn,
-        email: r.email || null,
-        phoneNumber: r.phoneNumber || null,
+        channelId: r.channelId,
+        channelImage: channelMap[r.channelId],
         status: r.status,
         platform: r.platform,
-        returnId: r.returnId,
+        placedOn: r.placedOn,
+
+        //  Seller-wise values
+        quantity: totalQuantity,
+        totalPrice,
+        sellerId,
         reason: r.reason || null,
         customerComment: r.customerComment || null,
         merchantComment: r.merchantComment || null,
-        channelImage: channelMap[r.channelId],
       };
     });
 
@@ -476,19 +449,53 @@ export const acceptOrRejectReturn = async (returnData) => {
   }
 };
 
-export const getReturnById = async (id) => {
+export const getReturnById = async (id, sellerId) => {
   try {
-    const returnDataCheck = await Return.findById(id).lean();
-    if (!returnDataCheck) {
-      return null;
-    }
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
 
-    // --- Step 1: Sync shipment status before fetching ---
+    const returnDataCheck = await Return.findById(id).lean();
+    if (!returnDataCheck) return null;
+
     await syncReturnShipmentStatus(id);
 
-    // --- Step 2: Aggregate Return + Latest Shipment ---
+    //  Proper sellerId validation
+    let sellerObjectId = null;
+
+    if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
+      sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+    }
+
+    const matchStage = {
+      _id: new mongoose.Types.ObjectId(id),
+    };
+
+    //  Only filter if sellerObjectId exists
+    if (sellerObjectId) {
+      matchStage['products.sellerId'] = sellerObjectId;
+    }
+
     const [returnData] = await Return.aggregate([
-      { $match: { _id: new mongoose.Types.ObjectId(id) } },
+      { $match: matchStage },
+
+      ...(sellerObjectId
+        ? [
+            {
+              $addFields: {
+                products: {
+                  $filter: {
+                    input: '$products',
+                    as: 'product',
+                    cond: {
+                      $eq: ['$$product.sellerId', sellerObjectId],
+                    },
+                  },
+                },
+              },
+            },
+            { $match: { products: { $ne: [] } } },
+          ]
+        : []),
+
       {
         $lookup: {
           from: 'shipments',
@@ -497,11 +504,11 @@ export const getReturnById = async (id) => {
             {
               $match: {
                 $expr: {
-                  $and: [{ $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] }],
+                  $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }],
                 },
               },
             },
-            { $sort: { createdAt: -1 } }, // get the latest
+            { $sort: { createdAt: -1 } },
             { $limit: 1 },
             {
               $project: {
@@ -526,34 +533,28 @@ export const getReturnById = async (id) => {
 
     if (!returnData) return null;
 
-    // Extract orderLineIds from products
     const orderLineIds = returnData.products?.map((p) => p.orderLineId).filter(Boolean) || [];
 
     let orderInfo = null;
 
-    // --- Step 4: Fetch order data if applicable ---
     if (orderLineIds.length > 0) {
       orderInfo = await getOrderDataByOrderLineIds(orderLineIds, Order, {
         orderId: 1,
-        totalInclVat: 1,
         subTotalExclVat: 1,
         subTotalVat: 1,
         shippingCostsExclVat: 1,
         shippingCostsVat: 1,
-        channelName: 1,
-        orderCustomer: 1,
-        orderShippingAddress: 1,
-        orderPaymentDetails: 1,
-        'orderSkuList.skuList': 1,
+        orderSkuList: 1,
         _id: 1,
+        orderShippingAddress: 1,
+        orderCustomer: 1,
+        orderPaymentDetails: 1,
       });
     }
 
-    // Format the log details safely
     const returnLogsData = returnData?.logs?.length ? formatReturnTrackingInf(returnData.logs) : [];
     const aggregatedResult = {
       ...returnData,
-      totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
       orderInfo,
       returnLogsData,
       omniful: returnData.omniful || null,

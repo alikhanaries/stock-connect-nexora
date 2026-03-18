@@ -8,13 +8,12 @@ import {
   cancelPartialOrderOcp,
   getSyncedOrdersOcp,
 } from '../integrations/erp/ocp/services/orderServices.js';
-
+import shipmentService from '../service/shipmentService.js';
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
 import { syncAmazonOrders } from '../service/amazonOrderService.js';
 import { config } from '../config/config.js';
-import shipmentService from '../service/shipmentService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -78,10 +77,14 @@ export const getAdminOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
+    const sellerId = req.sellerId;
+    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+      return Responses.failResponse(res, 'Invalid sellerid', 400);
+    }
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
-    const order = await orderService.getOrderById(id);
+    const order = await orderService.getOrderById(id, sellerId);
     if (!order) {
       return Responses.failResponse(res, req.locale.NO_ORDERS_FOUND, 404);
     }
@@ -120,7 +123,6 @@ export const getSyncedOrders = async (req, res) => {
     if (!success) {
       return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
     }
-
     if (data.length === 0) {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
@@ -237,6 +239,11 @@ export const merchantCancelById = async (req, res) => {
 export const cancelFullOrder = async (req, res) => {
   try {
     const { orderId, reason } = req.body;
+    const sellerId = req.sellerId;
+
+    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+      return Responses.failResponse(res, req.locale.INVALID_SELLER_ID_FORMAT, 400);
+    }
 
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
@@ -247,17 +254,19 @@ export const cancelFullOrder = async (req, res) => {
     }
 
     const order = await Order.findById(orderId)
-      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .select('orderSkuList orderId merchantOrderNo status sellerId channelName sellerIds')
       .lean();
 
     if (!order) return Responses.failResponse(res, 'Order not found', 404);
-
+    if (order.status?.toUpperCase() === 'CANCELED') {
+      return Responses.failResponse(res, 'Order is already canceled', 400);
+    }
     let orderResponse;
 
     if (order.channelName === 'OCP') {
       orderResponse = await cancelFullOrderOcp(orderId, order, reason);
     } else {
-      orderResponse = await orderService.cancelFullOrder(orderId, order, reason);
+      orderResponse = await orderService.cancelFullOrder(orderId, order, sellerId, reason);
     }
 
     if (!orderResponse.success) {
@@ -277,10 +286,12 @@ export const cancelFullOrder = async (req, res) => {
 };
 export const cancelPartialOrder = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
+    if (!sellerId) return Responses.failResponse(res, 'Seller id is missing', 404);
     const { orderId, reason, products } = req.body;
 
     const order = await Order.findById(orderId)
-      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .select('orderSkuList orderId merchantOrderNo status sellerIds channelName')
       .lean();
 
     if (!order) return Responses.failResponse(res, 'Order not found', 404);
@@ -290,7 +301,7 @@ export const cancelPartialOrder = async (req, res) => {
     if (order.channelName === 'OCP') {
       orderResponse = await cancelPartialOrderOcp(orderId, order, reason, products);
     } else {
-      orderResponse = await orderService.cancelPartialOrder(orderId, products, reason, order);
+      orderResponse = await orderService.cancelPartialOrder(orderId, products, reason, sellerId);
     }
 
     if (!orderResponse.success) {
@@ -308,7 +319,12 @@ export const cancelPartialOrder = async (req, res) => {
 export const exportOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { status, platform, search } = req.query;
+
+    if (!sellerId) {
+      return Responses.failResponse(res, req.locale?.SELLER_ID_REQUIRED || 'Seller ID is required', 400);
+    }
+
+    const { status, platform, search, size, sortBy, sortOrder } = req.query;
 
     // Fetch seller name for filename
     const seller = await Seller.findById(sellerId).select('name').lean();
@@ -316,23 +332,25 @@ export const exportOrders = async (req, res) => {
       return Responses.failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
     }
 
-    // Build filters only with non-empty values
-    const filters = {};
-    if (status) filters.status = status;
-    if (platform) filters.platform = platform;
-    if (search) filters.search = search;
+    /*
+      BUILD FILTERS
+    */
+    const filters = {
+      ...(status && { status }),
+      ...(platform && { platform }),
+      ...(search && { search }),
+      ...(size && { size }),
+      ...(sortBy && { sortBy }),
+      ...(sortOrder && { sortOrder }),
+    };
 
-    // Remove any remaining undefined/empty values
-    Object.keys(filters).forEach((key) => {
-      if (!filters[key]) {
-        delete filters[key];
-      }
-    });
-
+    /*
+      EXPORT CSV
+    */
     const result = await orderService.exportOrdersToCSV(sellerId, filters, seller.name);
 
     if (!result.success) {
-      return Responses.failResponse(res, result.message || req.locale.NO_ORDERS_FOUND, 404);
+      return Responses.failResponse(res, result.message || req.locale?.NO_ORDERS_FOUND || 'No orders found', 404);
     }
     // Set headers for CSV download with UTF-8 encoding
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

@@ -8,7 +8,13 @@ import omnifullService from '#service/omnifullService.js';
 
 export const getAllReturns = async (req, res) => {
   try {
-    const result = await returnService.getReturnsFromDatabase(req.query);
+    const sellerId = req.sellerId;
+
+    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+      return Responses.failResponse(res, 'Invalid seller ID format', 400);
+    }
+
+    const result = await returnService.getReturnsFromDatabase(req.query, sellerId);
 
     if (result.success && !result.success) {
       return Responses.failResponse(res, result.message || req.locale.NO_RETURNS_FOUND, 400);
@@ -153,12 +159,15 @@ export const updateReturn = async (req, res) => {
 export const getReturnById = async (req, res) => {
   try {
     const { id } = req.params;
+    const sellerId = req.sellerId;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_RETURN_ID_FORMAT || 'Invalid return ID format', 400);
     }
-
-    const returnData = await returnService.getReturnById(id);
+    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+      return Responses.failResponse(res, 'Invalid seller ID format', 400);
+    }
+    const returnData = await returnService.getReturnById(id, sellerId);
     if (!returnData) {
       return Responses.failResponse(res, req?.locale?.NO_RETURNS_FOUND || 'Return not found', 404);
     }
