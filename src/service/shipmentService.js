@@ -48,6 +48,9 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       [`${prefix}_country`]: data?.country || '',
       [`${prefix}_phone`]: data?.phone || '',
     });
+    const { documentId, taxData = {} } = shipmentData;
+    const hasInternationalMetadata =
+      documentId && taxData.tax_identification_number && taxData.invoice_number && taxData.invoice_date;
 
     // ---  Build final payload for Aymakan ---
     const payload = {
@@ -58,12 +61,14 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       ...buildPartyPayload(deliveryData, 'delivery'),
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
-      international_metadata: {
-        document_id: shipmentData.documentId || '',
-        tax_identification_number: shipmentData?.taxData?.tax_identification_number || '',
-        invoice_number: shipmentData?.taxData?.invoice_number || '',
-        invoice_date: shipmentData?.taxData?.invoice_date || '',
-      },
+      ...(hasInternationalMetadata && {
+        international_metadata: {
+          document_id: documentId,
+          tax_identification_number: taxData.tax_identification_number,
+          invoice_number: taxData.invoice_number,
+          invoice_date: taxData.invoice_date,
+        },
+      }),
     };
 
     // ---  Call Aymakan API ---
@@ -434,7 +439,7 @@ export const createFullShipmentService = async (shipmentData) => {
       },
       pieces,
       type: 'FORWARD',
-      documentId: shipmentData.documentId || null,
+      invoiceDocumentId: shipmentData.documentId || null,
     });
 
     await shipmentDocument.save();

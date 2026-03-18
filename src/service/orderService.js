@@ -1245,13 +1245,6 @@ export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
     throw new Error(`The following SKU(s) are not in the order: ${missingSkus.join(', ')}`);
   }
 
-  // Check if documentId already exists for any requested SKU
-  const skusWithDoc = skuList.filter((item) => normalizedSkuCodes.includes(item.merchantProductNo) && item.documentId);
-  if (skusWithDoc.length > 0) {
-    const existingSkus = skusWithDoc.map((i) => i.merchantProductNo).join(', ');
-    throw new Error(`Document already exists for SKU(s): ${existingSkus}`);
-  }
-
   // Convert file to base64
   const fileBuffer = fs.readFileSync(file.path);
   const base64String = fileBuffer.toString('base64');
