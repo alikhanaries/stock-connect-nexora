@@ -71,7 +71,6 @@ const deleteUserId = async (id, sellerId) => {
     if (!userToDelete) {
       return null;
     }
-
     const deletedUser = await User.findOneAndUpdate(
       { _id: id, isDeleted: false },
       { $set: { isDeleted: true, active: false } },
