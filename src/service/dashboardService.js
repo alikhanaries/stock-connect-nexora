@@ -21,6 +21,7 @@ import {
   pickSelectedGlobalNames,
   buildChannelStatusPipeline,
   buildReturnsStatusPipeline,
+  formatLabel,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
@@ -373,18 +374,23 @@ export const getTopPerformersProducts = async (
       if (!key) continue;
 
       keys.push(key);
-      items.push({
+      const item = {
         rank: items.length + 1,
         description: type === 'category' ? extractCategoryLabel(x?.product) : x?.product || '',
-        size: x?.size || '',
         brand: x?.brand || '',
-        productSkuCode: x?.productSkuCode || '',
         ordered: Number(x?.ordered) || 0,
         revenue: Number(x?.revenue) || 0,
         growth: 0,
         trend: 'neutral',
         _key: key,
-      });
+      };
+
+      if (type !== 'category') {
+        item.size = x?.size || '';
+        item.productSkuCode = x?.productSkuCode || '';
+      }
+
+      items.push(item);
     }
 
     if (!keys.length) return { type, items: [], meta: { shown: 0, total: 0 } };
@@ -618,12 +624,8 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   const sellerObjectIds = ids
     .map(String)
-    .map((s) => s.trim())
     .filter(Boolean)
-    .map((id) => {
-      if (!mongoose.Types.ObjectId.isValid(id)) throw new Error('Invalid sellerId');
-      return new mongoose.Types.ObjectId(id);
-    });
+    .map((id) => new mongoose.Types.ObjectId(id));
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}"`);
@@ -634,8 +636,16 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   const [result] = await Return.aggregate(pipeline);
 
-  const reasons = result?.reasons ?? [];
-  const statusSummary = result?.statusSummary ?? [];
+  const reasons = (result?.reasons ?? []).map((r) => ({
+    value: r.value,
+    key: r.key ? formatLabel(r.key) : null,
+  }));
+
+  const statusSummary = (result?.statusSummary ?? []).map((s) => ({
+    value: s.value,
+    key: s.key ? formatLabel(s.key) : null,
+  }));
+
   const total = statusSummary.reduce((sum, s) => sum + (s.value || 0), 0);
 
   return { total, reasons, statusSummary };

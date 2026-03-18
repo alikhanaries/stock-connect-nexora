@@ -18,7 +18,7 @@ const UniCommerceRouter = express.Router();
 
 /**
  * @openapi
- * /authToken:
+ * /erp/unicommerce/authToken:
  *   post:
  *     tags: [UniCommerce]
  *     summary: Generate UniCommerce access token
@@ -98,7 +98,7 @@ UniCommerceRouter.post('/authToken', loginValidator, checkLanguage, login);
 
 /**
  * @openapi
- * /productsCount:
+ * /erp/unicommerce/productsCount:
  *   get:
  *     tags: [UniCommerce]
  *     summary: Get total published product count
@@ -151,7 +151,7 @@ UniCommerceRouter.get(
 
 /**
  * @openapi
- * /products:
+ * /erp/unicommerce/products:
  *   get:
  *     tags: [UniCommerce]
  *     summary: Get products list
@@ -222,7 +222,7 @@ UniCommerceRouter.get(
 
 /**
  * @openapi
- * /updateInventory:
+ * /erp/unicommerce/updateInventory:
  *   post:
  *     tags:
  *       - UniCommerce
@@ -355,7 +355,7 @@ UniCommerceRouter.post(
 
 /**
  * @openapi
- * /orders:
+ * /erp/unicommerce/orders:
  *   get:
  *     tags: [UniCommerce]
  *     summary: Get Orders or Order Status
@@ -475,7 +475,7 @@ UniCommerceRouter.get(
 );
 /**
  * @openapi
- * /orders/dispatch:
+ * /erp/unicommerce/orders/dispatch:
  *   post:
  *     tags: [UniCommerce]
  *     summary: Dispatch Order Items
