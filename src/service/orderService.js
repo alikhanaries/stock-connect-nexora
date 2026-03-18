@@ -103,7 +103,10 @@ const getAllOrders = async (query, sellerId) => {
     }
 
     if (channel) {
-      filter.channelName = { $regex: channel, $options: 'i' };
+      const channelArray = channel.split(',').map((s) => s.trim());
+      filter.channelName = {
+        $in: channelArray.map((s) => new RegExp(`${escapeRegex(s)}`, 'i')),
+      };
       appliedFilters.channel = channel;
     }
 
@@ -1097,7 +1100,10 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     }
 
     if (channel) {
-      filter.channelName = { $regex: channel, $options: 'i' };
+      const channelArray = channel.split(',').map((s) => s.trim());
+      filter.channelName = {
+        $in: channelArray.map((s) => new RegExp(`${s}`, 'i')),
+      };
     }
 
     if (status) {
