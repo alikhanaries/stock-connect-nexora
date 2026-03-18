@@ -41,6 +41,7 @@ const shipmentSchema = new mongoose.Schema(
     shippedFromStockLocationId: { type: Number, default: 0 },
     method: { type: String, index: true },
     isMerchantCreator: { type: Boolean, default: true },
+    documentId: { type: String, index: true },
     shipmentMethod: {
       type: String,
       enum: ['AYMAKAN', 'CHANNEL_ENGINE', 'AMAZON', 'MANUAL', 'UNICOMMERCE'],
