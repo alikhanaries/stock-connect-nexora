@@ -282,7 +282,7 @@ export const createFullShipmentService = async (shipmentData) => {
     const order = await Order.findById(id);
     if (!order) return { success: false, message: 'Order not found.' };
 
-    if (!order.sellerIds.map(String).includes(String(sellerId))) {
+    if (sellerId !== order.sellerId.toString()) {
       return { success: false, message: 'Wrong seller Id.' };
     }
     const { orderSkuList, merchantOrderNo, orderId } = order;
@@ -472,21 +472,7 @@ export const createFullShipmentService = async (shipmentData) => {
       createdAt: new Date(),
     };
 
-    await OrderLogs.updateOne(
-      {
-        orderId: new mongoose.Types.ObjectId(id),
-        sellerId: new mongoose.Types.ObjectId(sellerId),
-      },
-      {
-        $push: { details: logEntry },
-        $setOnInsert: {
-          orderId: new mongoose.Types.ObjectId(id),
-          sellerId: new mongoose.Types.ObjectId(sellerId),
-        },
-      },
-      { upsert: true }
-    );
-
+    await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true });
     return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
     console.error('Error in createPartialShipmentService:', error);
@@ -725,7 +711,6 @@ export const ayMakanWebHookService = async (data) => {
         status: 1,
         orderId: 1,
         submissionDate: 1,
-        sellerId: 1,
       }
     ).lean();
 
@@ -952,20 +937,7 @@ export const ayMakanWebHookService = async (data) => {
     if (shippedDelta > 0 || deliveredDelta > 0 || canceledDelta > 0 || canUpdate) {
       const descriptionParts = [];
 
-      // AWB based message
-      if (shipmentStatus === 'SHIPPED') {
-        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been shipped`);
-      }
-
-      if (shipmentStatus === 'DELIVERED') {
-        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been delivered`);
-      }
-
-      if (shipmentStatus === 'CANCELED') {
-        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been canceled`);
-      }
-
-      // Quantity-based messages
+      //  Quantity-based messages (what changed)
       if (deliveredDelta > 0) {
         descriptionParts.push(`${deliveredDelta} item(s) delivered`);
       }
@@ -978,7 +950,7 @@ export const ayMakanWebHookService = async (data) => {
         descriptionParts.push(`${canceledDelta} item(s) canceled`);
       }
 
-      // Status-based meaning
+      //  Status-based meaning (what it means)
       if (finalOrderStatus === 'CLOSED') {
         descriptionParts.push('All actions completed; the order has been closed.');
       } else if (finalOrderStatus === 'DELIVERED' && deliveredDelta === 0) {
@@ -996,10 +968,7 @@ export const ayMakanWebHookService = async (data) => {
       const description = `${descriptionParts.join('. ')}.`;
 
       await OrderLogs.updateOne(
-        {
-          orderId: order._id,
-          sellerId: shipmentData.sellerId,
-        },
+        { orderId: order._id },
         {
           $push: {
             details: {
@@ -1010,10 +979,6 @@ export const ayMakanWebHookService = async (data) => {
               description,
               createdAt: convetDateToUTC(new Date()),
             },
-          },
-          $setOnInsert: {
-            orderId: order._id,
-            sellerId: shipmentData.sellerId,
           },
         },
         { upsert: true }
@@ -1376,21 +1341,14 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     // 7️ Order logs
     const qtyMessage = (products || []).map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
     await OrderLogs.updateOne(
-      {
-        orderId: orderId,
-        sellerId: shipment.sellerId,
-      },
+      { orderId },
       {
         $push: {
           details: {
             status: 'SHIPMENT CANCELED',
-            description: `Shipment with AWB ${airWaybillNo} has been canceled. Items reverted: ${qtyMessage}.`,
+            description: `Shipment canceled (AWB - ${airWaybillNo}). Items reverted: ${qtyMessage}.`,
             createdAt: new Date(),
           },
-        },
-        $setOnInsert: {
-          orderId: orderId,
-          sellerId: shipment.sellerId,
         },
       },
       { upsert: true }
@@ -2009,9 +1967,7 @@ export const createManualShipmentService = async (shipmentData) => {
     if (existingAwb) throw new Error(`AWB number '${airWaybillNo}' already exists`);
     if (!order) throw new Error(`Order with ID ${orderId} not found`);
     if (!user) throw new Error(`User with ID ${userId} not found`);
-    if (!order.sellerIds.map(String).includes(String(sellerId))) {
-      return { success: false, message: 'Wrong seller Id.' };
-    }
+
     /* -------------------- ORDER SKU MAP -------------------- */
     const orderSkuMap = new Map();
     order.orderSkuList?.skuList?.forEach((sku) => {
@@ -2206,25 +2162,15 @@ export const createManualShipmentService = async (shipmentData) => {
     });
 
     /* -------------------- LOGS -------------------- */
-
     await OrderLogs.updateOne(
-      {
-        orderId: orderId,
-        sellerId: sellerId,
-      },
+      { orderId },
       {
         $push: {
           details: {
             status: allShipped ? 'SHIPPED' : 'IN_PROGRESS',
-            description: allShipped
-              ? `Shipment with AWB ${airWaybillNo} has been shipped. All available items shipped`
-              : `Shipment with AWB ${airWaybillNo} has been shipped. Order partially shipped`,
+            description: allShipped ? 'All available items shipped' : 'Order partially shipped',
             createdAt: convetDateToUTC(new Date()),
           },
-        },
-        $setOnInsert: {
-          orderId: orderId,
-          sellerId: sellerId,
         },
       },
       { upsert: true }
@@ -2346,7 +2292,7 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
   const safeFetch = async (url) => {
     try {
       const response = await fetch(url, { method: 'GET', headers });
-
+      console.log('response', response);
       if (response.status === 429) {
         return handleRateLimit(response);
       }

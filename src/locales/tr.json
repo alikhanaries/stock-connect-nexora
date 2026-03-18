@@ -52,7 +52,6 @@
   "ORDERS_FETCHED_SUCCESSFULLY": "Siparişler başarıyla alındı",
   "ORDER_FETCHED_SUCCESSFULLY": "Sipariş başarıyla alındı",
   "INVALID_ORDER_ID_FORMAT": "Geçersiz sipariş ID formatı",
-  "INVALID_SELLER_ID_FORMAT": "Geçersiz satıcı kimliği biçimi",
   "FAILED_TO_GET_ORDER_STATUS": "Sipariş durumu alınamadı",
   "ORDER_STATUS_STATS_FETCHED_SUCCESSFULLY": "Sipariş durumu istatistikleri başarıyla alındı",
   "ALREADY_UP_TO_DATE": "Zaten güncel",
