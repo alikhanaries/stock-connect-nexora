@@ -19,7 +19,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
-import { formatDateTime } from '#helpers/Common.js';
+import { formatDateTime, truncate } from '#helpers/Common.js';
 import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
@@ -402,7 +402,7 @@ export const getOrderById = async (id) => {
     });
 
     // ---------------- FINAL RESPONSE ----------------
-    const filteredData = transformOrderResponse(order);
+    const filteredData = transformOrderResponse(allOrderSkus, order);
 
     const orderLogsDetails = await OrderLogs.findOne({ orderId: id }).lean();
     const orderLogsData = orderLogsDetails?.details?.length ? formatOrderTrackingInf(orderLogsDetails.details) : [];
@@ -509,7 +509,7 @@ export async function getNewOrders() {
     let allOrders = [];
     let hasMore = true;
 
-    while (hasMore && page <= 3) {
+    while (hasMore && page <= 5) {
       const response = await fetch(
         `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
       );
@@ -680,9 +680,28 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
   }
 };
 
-const transformOrderResponse = (response) => {
+const transformOrderResponse = (allOrderSkus, response) => {
   if (!response) return null;
   const data = response;
+
+  // ---- Calculate totals from SKUs ----
+  const totals = allOrderSkus.reduce(
+    (acc, sku) => {
+      //    const shippableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
+      const shippableQty = sku.quantity || 0;
+      const unitExclVat = sku.unitPriceExclVat || 0;
+      const unitVat = sku.unitVat || 0;
+      const unitInclVat = sku.unitPriceInclVat || 0;
+
+      acc.subtotal += unitExclVat * shippableQty;
+      acc.tax += unitVat * shippableQty;
+      acc.total += unitInclVat * shippableQty;
+
+      return acc;
+    },
+    { subtotal: 0, tax: 0, total: 0 }
+  );
+
   // Payment Info
   const paymentInfo = {
     channelName: data.channelName,
@@ -716,10 +735,13 @@ const transformOrderResponse = (response) => {
     customerInfo,
     shippingAddress,
     status: data.status,
-    subtotal: data.totalExclVat,
-    tax: data.totalVat,
-    total: data.totalInclVat,
-    shippingFee: data.shippingCostsInclVat,
+
+    // Calculated values
+    subtotal: truncate(totals.subtotal),
+    tax: truncate(totals.tax),
+    total: truncate(totals.total),
+
+    shippingFee: Number(data.shippingCostsInclVat) || 0,
   };
 };
 
@@ -832,7 +854,7 @@ const cancelFullOrder = async (orderId, order, reason = 'NA') => {
     // ORDER LOG ENTRY
     const logEntry = {
       status: 'CANCELED',
-      description: 'Order Canceled',
+      description: `Canceled all items`,
       createdAt: new Date(),
     };
     await OrderLogs.updateOne({ orderId }, { $push: { details: logEntry } }, { upsert: true });
@@ -950,21 +972,28 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
 
     const updatedSkuList = order.orderSkuList.skuList.map((sku) => {
       const lineId = sku.id.toString();
+
+      // check if this SKU exists in cancel payload
       const cancelItem = products.find((p) => p.orderLineId.toString() === lineId);
 
+      if (!cancelItem) {
+        return sku;
+      }
+
+      const orderedQty = sku.quantity || 0;
+      const prevCanceled = sku.cancellationRequestedQuantity || 0;
       const shippedQty = shippedQtyMap[lineId] || 0;
       const deliveredQty = deliveredQtyMap[lineId] || 0;
       const shipmentCreatedQty = sku?.statusBreakdown?.shipmentCreated || 0;
-      const prevCanceled = sku.cancellationRequestedQuantity || 0;
-      const newlyCanceled = cancelItem ? cancelItem.quantity : 0;
 
+      const newlyCanceled = cancelItem.quantity;
       const canceledQty = prevCanceled + newlyCanceled;
 
-      const confirmedQty = sku.quantity - canceledQty - shippedQty - deliveredQty - shipmentCreatedQty;
+      const confirmedQty = orderedQty - canceledQty - shippedQty - deliveredQty - shipmentCreatedQty;
 
       return {
         ...sku,
-        status: canceledQty === sku.quantity ? ORDER_STATUS_MAP.CANCELED : ORDER_STATUS_MAP.IN_PROGRESS,
+        status: canceledQty === orderedQty ? ORDER_STATUS_MAP.CANCELED : ORDER_STATUS_MAP.IN_PROGRESS,
 
         cancellationRequestedQuantity: canceledQty,
 

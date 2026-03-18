@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS, CHANNEL_STATUS_CONFIG } from '#constants/dashboard.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
-import Inventory from '#models/Inventory.js';
+import InventoryStatus from '#models/InventoryStatus.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Return from '../models/Return.js';
 import {
@@ -15,12 +15,12 @@ import {
   topFacetPipeline,
   prevRevenuePipeline,
   pickChannelIdsFromChannel,
-  buildInventoryStatusPipeline,
   isComparablePeriod,
   buildGlobalChannelFilter,
   pickSelectedGlobalNames,
   buildChannelStatusPipeline,
   buildReturnsStatusPipeline,
+  formatLabel,
 } from '../helpers/dashboard.js';
 
 const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate, month, channel } = {}) => {
@@ -426,11 +426,39 @@ const getInventoryStatus = async (sellerId, period, { startDate, endDate, month,
   if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
 
   const channelIds = pickChannelIdsFromChannel(channel);
-  const pipeline = buildInventoryStatusPipeline(sellerObjectIds, range, channelIds);
-  if (!Array.isArray(pipeline) || pipeline.length === 0) throw new Error('Invalid aggregation pipeline');
+  const match = {
+    sellerId: { $in: sellerObjectIds },
+    ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
+    ...(channelIds.length ? { channelId: { $in: channelIds } } : {}),
+  };
 
-  const result = await Inventory.aggregate(pipeline).allowDiskUse(true);
-  const agg = result?.[0] ?? {};
+  const [result] = await InventoryStatus.aggregate([
+    { $match: match },
+    {
+      $facet: {
+        totalCount: [{ $count: 'count' }],
+        statusCounts: [
+          { $match: { status: { $in: ['active', 'inactive'] } } },
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+          { $project: { _id: 0, status: '$_id', count: 1 } },
+        ],
+        freezeCounts: [
+          { $match: { isFrozen: { $in: [true, false] } } },
+          {
+            $project: {
+              freezeStatus: {
+                $cond: [{ $eq: ['$isFrozen', true] }, 'freeze', 'unfreeze'],
+              },
+            },
+          },
+          { $group: { _id: '$freezeStatus', count: { $sum: 1 } } },
+          { $project: { _id: 0, status: '$_id', count: 1 } },
+        ],
+      },
+    },
+  ]).allowDiskUse(true);
+
+  const agg = result ?? {};
 
   const statusCounts = Array.isArray(agg?.statusCounts) ? agg.statusCounts : [];
   const freezeCounts = Array.isArray(agg?.freezeCounts) ? agg.freezeCounts : [];
@@ -635,8 +663,16 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   const [result] = await Return.aggregate(pipeline);
 
-  const reasons = result?.reasons ?? [];
-  const statusSummary = result?.statusSummary ?? [];
+  const reasons = (result?.reasons ?? []).map((r) => ({
+    value: r.value,
+    key: r.key ? formatLabel(r.key) : null,
+  }));
+
+  const statusSummary = (result?.statusSummary ?? []).map((s) => ({
+    value: s.value,
+    key: s.key ? formatLabel(s.key) : null,
+  }));
+
   const total = statusSummary.reduce((sum, s) => sum + (s.value || 0), 0);
 
   return { total, reasons, statusSummary };
