@@ -1,6 +1,5 @@
 import User from '#models/User.js';
 import UserSeller from '#models/UserSeller.js';
-import { USER_ROLES } from '#constants/common.js';
 
 const deleteAllUsers = async () => {
   try {
@@ -13,45 +12,15 @@ const deleteAllUsers = async () => {
     throw err;
   }
 };
-const deleteSelectedUsers = async (ids, locale, sellerId, currentUserRole, currentUserId) => {
+const deleteSelectedUsers = async (ids, locale, sellerId) => {
   try {
-    const usersToConsider = await User.find({ _id: { $in: ids }, isDeleted: false }, '_id role');
-
-    let idsToDelete = [];
-    let selfDeletionAttempted = false;
-
-    for (const user of usersToConsider) {
-      if (currentUserId.toString() === user._id.toString()) {
-        selfDeletionAttempted = true;
-        continue;
-      }
-
-      if (user.role === USER_ROLES.MASTER_ADMIN) {
-        if (currentUserRole === USER_ROLES.MASTER_ADMIN) {
-          idsToDelete.push(user._id);
-        }
-      } else {
-        if (sellerId) {
-          const connection = await UserSeller.findOne({
-            sellerId: sellerId,
-            userId: user._id,
-          });
-          if (connection) {
-            idsToDelete.push(user._id);
-          }
-        }
-      }
-    }
+    const connections = await UserSeller.find({
+      sellerId: sellerId,
+      userId: { $in: ids },
+    }).select('userId');
+    const idsToDelete = connections.map((con) => con.userId);
 
     if (idsToDelete.length === 0) {
-      if (selfDeletionAttempted && usersToConsider.length === 1) {
-        return { success: false, message: 'You cannot delete yourself.' };
-      } else if (selfDeletionAttempted) {
-        return {
-          success: false,
-          message: 'You cannot delete yourself. No other valid users were selected.',
-        };
-      }
       return { success: false, message: locale.INVALID_USER_IDS_TO_DELETE };
     }
 
@@ -62,7 +31,7 @@ const deleteSelectedUsers = async (ids, locale, sellerId, currentUserRole, curre
       },
       { $set: { isDeleted: true, active: false } }
     );
-    return { success: true, modifiedCount: result.modifiedCount };
+    return result;
   } catch (err) {
     console.error('Error :', err.message);
     throw err;
@@ -92,37 +61,14 @@ const updateSelectedUserStatus = async (ids, active, sellerId, locale) => {
   return result;
 };
 
-const deleteUserId = async (id, sellerId, currentUserRole, currentUserId) => {
+const deleteUserId = async (id, sellerId) => {
   try {
-    const userToConsider = await User.findOne({ _id: id, isDeleted: false }, '_id role');
+    const userToDelete = await UserSeller.findOne({
+      sellerId: sellerId,
+      userId: id,
+    });
 
-    if (!userToConsider) {
-      return null;
-    }
-
-    let canDelete = false;
-
-    if (currentUserId.toString() === userToConsider._id.toString()) {
-      return null;
-    }
-
-    if (userToConsider.role === USER_ROLES.MASTER_ADMIN) {
-      if (currentUserRole === USER_ROLES.MASTER_ADMIN) {
-        canDelete = true;
-      }
-    } else {
-      if (sellerId) {
-        const connection = await UserSeller.findOne({
-          sellerId: sellerId,
-          userId: id,
-        });
-        if (connection) {
-          canDelete = true;
-        }
-      }
-    }
-
-    if (!canDelete) {
+    if (!userToDelete) {
       return null;
     }
 
