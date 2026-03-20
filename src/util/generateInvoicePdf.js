@@ -109,13 +109,13 @@ export const generateSellerInvoicePDF = (res, data) => {
 
   doc.moveDown();
 
-  // ✅ Align with table columns
+  // Align with table columns
   const labelX = 420;
   const valueX = cols.total; // align with "Line Total" column
 
   const rowHeight = 18;
 
-  // ✅ FIXED drawRow (same line rendering)
+  // FIXED drawRow (same line rendering)
   const drawRow = (label, value, bold = false) => {
     const currentY = doc.y; // lock Y
 
