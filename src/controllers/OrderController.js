@@ -13,7 +13,9 @@ import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
 import { syncAmazonOrders } from '../service/amazonOrderService.js';
+import { parseInvoiceDataForGenerateSellerInvoice } from '../helpers/ParseInvoice.js';
 import { config } from '../config/config.js';
+import { generateSellerInvoicePDF } from '#utils/generateInvoicePdf.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -364,6 +366,35 @@ export const exportOrders = async (req, res) => {
     return res.status(200).send(csvWithBOM);
   } catch (error) {
     console.error('Controller Error: exportOrders:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export const generateSellerInvoice = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const orderId = req.body.orderId;
+
+    if (!sellerId) {
+      return Responses.failResponse(res, req.locale?.SELLER_ID_REQUIRED || 'Seller ID is required', 400);
+    }
+
+    // Fetch seller name for filename
+    const seller = await Seller.findById(sellerId).select('name').lean();
+    if (!seller) {
+      return Responses.failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    const result = await parseInvoiceDataForGenerateSellerInvoice(orderId, sellerId, seller);
+
+    if (!result.success) {
+      return Responses.failResponse(res, result.message || req.locale?.NO_ORDERS_FOUND || 'No orders found', 404);
+    }
+    //  Generate PDF (UTIL CALL)
+    return generateSellerInvoicePDF(res, result);
+  } catch (error) {
+    console.error('Controller Error: generateSellerInvoice:', error.message);
     errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }

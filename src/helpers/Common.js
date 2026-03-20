@@ -54,3 +54,19 @@ export default {
 };
 
 export const truncate = (num) => Math.trunc(num * 100) / 100;
+
+export const formatToInvoiceDate = (isoDate) => {
+  const date = new Date(isoDate); // 🔥 important
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  const MM = pad(date.getUTCMonth() + 1);
+  const DD = pad(date.getUTCDate());
+  const YYYY = date.getUTCFullYear();
+
+  const HH = pad(date.getUTCHours());
+  const mm = pad(date.getUTCMinutes());
+  const ss = pad(date.getUTCSeconds());
+
+  return `${MM}/${DD}/${YYYY} ${HH}:${mm}:${ss} 00:00`;
+};
