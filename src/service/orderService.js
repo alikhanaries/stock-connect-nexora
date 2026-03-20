@@ -384,6 +384,7 @@ export const getOrderById = async (id) => {
         shipmentId: shipment._id,
         trackingNumber: shipment.airWaybillNo || null,
         shipmentMode: shipment.shipmentMethod || 'AYMAKAN',
+        documentId: shipment.documentId,
         lineItems:
           shipment.products?.map((p) => {
             const sku = allOrderSkus.find((s) => s.merchantProductNo === p.merchantProductNo);
