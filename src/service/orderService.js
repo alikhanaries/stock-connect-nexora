@@ -400,6 +400,7 @@ export const getOrderById = async (id) => {
               airWaybillNo: shipment.airWaybillNo,
               hsCode: productsMap[p.merchantProductNo]?.hsCode || p.merchantProductNo,
               trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
+              documentId: sku?.documentId,
             };
           }) || [],
       });
