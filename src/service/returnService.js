@@ -176,7 +176,6 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
 
-    if (status) appliedFilters.status = status;
     if (channelId) appliedFilters.channelId = channelId;
     if (platform) appliedFilters.platform = platform;
 
@@ -184,6 +183,30 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
       includeSearchNameSplit: true,
     });
 
+    // Validate status if provided
+    if (status) {
+      const statusArray = status
+        .toString()
+        .split(',')
+        .map((s) => s.trim().toUpperCase());
+
+      const invalid = statusArray.filter((s) => !Object.values(RETURN_STATUS).includes(s));
+
+      if (invalid.length > 0) {
+        throw new Error(
+          `Invalid status: ${invalid.join(', ')}. Valid statuses are: ${Object.values(RETURN_STATUS).join(', ')}`
+        );
+      }
+
+      appliedFilters.status = statusArray;
+
+      // APPLY FILTER IN PIPELINE
+      pipeline.push({
+        $match: {
+          status: { $in: statusArray },
+        },
+      });
+    }
     //  Filter by sellerId
     if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
       const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
