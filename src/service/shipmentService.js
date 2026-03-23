@@ -1324,7 +1324,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     // STEP 5: REVERT SKU STATUS BREAKDOWN
 
     for (const product of products || []) {
-      const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
+      const sku = order?.orderSkuList?.skuList.find((s) => String(s.id) === String(product.orderLineId));
 
       if (!sku) continue;
 
