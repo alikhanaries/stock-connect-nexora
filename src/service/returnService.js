@@ -142,7 +142,7 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform } = query;
+    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform, channel } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -168,6 +168,7 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
     // Add other filters to appliedFilters
     if (channelId) appliedFilters.channelId = channelId;
+    if (channel) appliedFilters.channel = channel;
     if (platform) appliedFilters.platform = platform;
 
     const { pipeline } = buildReturnMatchAndPipeline(query, {
