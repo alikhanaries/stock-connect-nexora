@@ -96,7 +96,7 @@ export const getOrderById = async (req, res) => {
     );
   } catch (error) {
     errorLog(error);
-    return Responses.errorResponse(res, error, 500);
+    return Responses.errorResponse(res, error?.message, 500);
   }
 };
 
