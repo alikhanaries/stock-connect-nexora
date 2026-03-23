@@ -1324,7 +1324,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     // STEP 5: REVERT SKU STATUS BREAKDOWN
 
     for (const product of products || []) {
-      const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
+      const sku = order?.orderSkuList?.skuList.find((s) => String(s.id) === String(product.orderLineId));
 
       if (!sku) continue;
 
@@ -1461,7 +1461,6 @@ export const syncShipmentStatus = async (orderId) => {
         }));
 
         if (!trackingInfo.length) {
-          console.log('No tracking info for shipment:', shipment._id);
           continue;
         }
 
@@ -1479,7 +1478,6 @@ export const syncShipmentStatus = async (orderId) => {
 
         // Avoid duplicate / downgrade updates
         if (shipment.status && ORDER_PRIORITY.indexOf(shipmentStatus) <= ORDER_PRIORITY.indexOf(shipment.status)) {
-          console.log('Skipping downgrade or duplicate update:', shipment.status, '→', shipmentStatus);
           continue;
         }
 
@@ -2418,192 +2416,207 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
   try {
     // ---- 1️ Collect lookup keys upfront
     const merchantOrderNos = new Set();
-    const channelOrderLineNos = new Set();
 
     for (const s of channelEngineShipments) {
-      if (s.MerchantOrderNo) merchantOrderNos.add(s.MerchantOrderNo);
-
-      (s.Lines || []).forEach((l) => {
-        const no = l?.OrderLine?.ChannelOrderLineNo;
-        if (no) channelOrderLineNos.add(no);
-      });
+      if (s?.MerchantOrderNo) merchantOrderNos.add(s.MerchantOrderNo);
     }
 
-    // ---- 2️ Fetch orders in TWO queries only
-    const [ordersByMerchantNo, ordersBySku] = await Promise.all([
-      merchantOrderNos.size ? Order.find({ merchantOrderNo: { $in: [...merchantOrderNos] } }).lean() : [],
-      channelOrderLineNos.size
-        ? Order.find({
-            'orderSkuList.skuList.channelOrderLineNo': {
-              $in: [...channelOrderLineNos],
-            },
-          }).lean()
-        : [],
-    ]);
+    // ---- fetch orders
+    const orders = merchantOrderNos.size
+      ? await Order.find({ merchantOrderNo: { $in: [...merchantOrderNos] } }).lean()
+      : [];
 
-    // ---- 3️ Build fast lookup maps
     const orderByMerchantNo = new Map();
-    const orderByChannelLineNo = new Map();
-
-    ordersByMerchantNo.forEach((o) => {
-      if (o.merchantOrderNo) orderByMerchantNo.set(o.merchantOrderNo, o);
+    orders.forEach((o) => {
+      if (o?.merchantOrderNo) {
+        orderByMerchantNo.set(o.merchantOrderNo, o);
+      }
     });
 
-    ordersBySku.forEach((o) => {
-      o.orderSkuList?.skuList?.forEach((sku) => {
-        if (sku.channelOrderLineNo) {
-          orderByChannelLineNo.set(sku.channelOrderLineNo, o);
-        }
-      });
-    });
-
-    // ---- 4️ Process shipments
+    // ---- process shipments
     for (const ceShipment of channelEngineShipments) {
       if (!ceShipment?.MerchantShipmentNo?.trim()) {
-        console.warn('Skipping shipment without MerchantShipmentNo');
+        // console.warn('Skipping: Missing MerchantShipmentNo');
         continue;
       }
-      const lines = ceShipment.Lines || [];
+
+      const lines = Array.isArray(ceShipment?.Lines) ? ceShipment.Lines : [];
       if (!lines.length) continue;
 
-      let order = ceShipment.MerchantOrderNo && orderByMerchantNo.get(ceShipment.MerchantOrderNo);
+      const order = orderByMerchantNo.get(ceShipment?.MerchantOrderNo);
 
       if (!order) {
-        for (const l of lines) {
-          const no = l?.OrderLine?.ChannelOrderLineNo;
-          if (no && orderByChannelLineNo.has(no)) {
-            order = orderByChannelLineNo.get(no);
-            break;
-          }
-        }
-      }
-
-      if (!order) {
-        console.warn('Order not found for shipment:', ceShipment.MerchantShipmentNo || ceShipment.ChannelShipmentNo);
+        // console.warn('Order NOT FOUND:', ceShipment.MerchantOrderNo);
         continue;
       }
 
-      let deliveryDetails = null;
-      try {
-        const deliveryData = await formatChannelEngineShipmentDeliveryAddress(
-          order.orderShippingAddress,
-          order.orderCustomer
-        );
-        deliveryDetails = await saveDeliveryAddress(deliveryData);
-      } catch (err) {
-        console.error('Delivery address save failed (ignored):', err.message);
-      }
-
-      const products = buildShipmentProducts(lines);
-      const pieces = lines.reduce((s, l) => s + (l.Quantity || 0), 0);
-      //  Extract sellerId from matching SKU
-      let shipmentSellerId = null;
+      // ---- group by seller (FINAL FIX)
+      const sellerLineMap = new Map();
 
       for (const l of lines) {
         const merchantProductNo = l?.MerchantProductNo;
-
         if (!merchantProductNo) continue;
 
-        const matchedSku = order?.orderSkuList?.skuList?.find((sku) => sku.merchantProductNo === merchantProductNo);
+        let sellerIds = [];
 
-        if (matchedSku?.sellerId) {
-          shipmentSellerId = matchedSku.sellerId;
-          break; // stop once found
+        //  1. PRIMARY: from OrderLine.ExtraData
+        const extraData = Array.isArray(l?.OrderLine?.ExtraData) ? l.OrderLine.ExtraData : [];
+
+        const sellerFromExtra = extraData.find((e) => e?.Key === 'sellerId')?.Value;
+
+        if (sellerFromExtra) {
+          sellerIds = [sellerFromExtra];
+          // console.log(`Seller from ExtraData for ${merchantProductNo}:`, sellerFromExtra);
+        } else {
+          //  2. fallback to SKU
+
+          const matchedSku = order.orderSkuList.skuList.find((item) => item.merchantProductNo == merchantProductNo);
+
+          sellerIds = Array.isArray(matchedSku?.sellerId)
+            ? matchedSku.sellerId
+            : [matchedSku?.sellerId || order.sellerId];
+        }
+
+        // ---- map assignment (FIXED KEY)
+        // remove duplicates + normalize
+        const uniqueSellerIds = [...new Set(sellerIds.map((id) => id?.toString()).filter(Boolean))];
+
+        for (const sellerId of uniqueSellerIds) {
+          if (!sellerId) continue;
+
+          const key = sellerId.toString();
+
+          if (!sellerLineMap.has(key)) {
+            sellerLineMap.set(key, []);
+          }
+
+          sellerLineMap.get(key).push(l);
         }
       }
 
-      // fallback to order level sellerId if not found
-      if (!shipmentSellerId) {
-        shipmentSellerId = order.sellerId;
+      // fallback
+      if (sellerLineMap.size === 0 && order?.sellerId) {
+        sellerLineMap.set(order.sellerId.toString(), lines);
       }
-      bulkOps.push({
-        updateOne: {
-          filter: {
-            merchantShipmentNo: ceShipment.MerchantShipmentNo,
-          },
-          update: {
-            $set: {
-              status: mapCEShipmentStatus(ceShipment),
 
-              pickupDate: ceShipment.ShipmentDate ? new Date(ceShipment.ShipmentDate) : null,
-              deliveryDate: ceShipment.DeliveredAt ? new Date(ceShipment.DeliveredAt) : null,
+      // ---- create shipment per seller
+      for (const [sellerIdStr, sellerLines] of sellerLineMap.entries()) {
+        const sellerId = new mongoose.Types.ObjectId(sellerIdStr);
 
-              shipmentMerchantDetails: {
-                name: ceShipment.Method ?? 'NA',
-                email: 'NA',
+        let deliveryDetails = null;
+        try {
+          const deliveryData = await formatChannelEngineShipmentDeliveryAddress(
+            order.orderShippingAddress,
+            order.orderCustomer
+          );
+          deliveryDetails = await saveDeliveryAddress(deliveryData);
+        } catch (err) {
+          console.error('Delivery address save failed (ignored):', err.message);
+        }
+
+        const products = buildShipmentProducts(sellerLines, order);
+
+        bulkOps.push({
+          updateOne: {
+            filter: {
+              merchantShipmentNo: ceShipment.MerchantShipmentNo,
+              sellerId,
+            },
+            update: {
+              $set: {
+                status: mapCEShipmentStatus(ceShipment),
+
+                pickupDate: ceShipment.ShipmentDate ? new Date(ceShipment.ShipmentDate) : null,
+                deliveryDate: ceShipment.DeliveredAt ? new Date(ceShipment.DeliveredAt) : null,
+
+                shipmentMerchantDetails: {
+                  name: ceShipment.Method ?? 'NA',
+                  email: 'NA',
+                },
+              },
+              $setOnInsert: {
+                orderId: order._id,
+                sellerId,
+                userId,
+                shipmentMethod: 'CHANNEL_ENGINE',
+                products,
+                pieces: 1,
+                merchantOrderNo: ceShipment?.MerchantOrderNo,
+                trackingInfo: ceShipment.TrackTraceNo
+                  ? [
+                      {
+                        trackingNo: ceShipment.TrackTraceNo,
+                        trackingUrl: ceShipment.TrackTraceUrl,
+                        carrier: ceShipment.Method,
+                        createdAt: new Date(),
+                        statusCode: 'NA',
+                      },
+                    ]
+                  : [],
+                airWaybillNo: ceShipment?.AirWaybillNo || ceShipment?.TrackTraceNo || ceShipment?.MerchantShipmentNo,
+                method: ceShipment?.Method,
+                shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
+                shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
+
+                isMerchantCreator: ceShipment.IsMerchantCreator ?? true,
+
+                submissionDate: new Date(ceShipment.CreatedAt),
+                type: 'FORWARD',
+                extraData: { channelEngine: ceShipment },
+                deliveryId: deliveryDetails?._id || null,
               },
             },
-            $setOnInsert: {
-              orderId: order._id,
-              sellerId: shipmentSellerId,
-              userId,
-              shipmentMethod: 'CHANNEL_ENGINE',
-              products,
-              pieces,
-              trackingInfo: ceShipment.TrackTraceNo
-                ? [
-                    {
-                      trackingNo: ceShipment.TrackTraceNo,
-                      trackingUrl: ceShipment.TrackTraceUrl,
-                      carrier: ceShipment.Method,
-                      createdAt: new Date(),
-                      statusCode: 'NA',
-                    },
-                  ]
-                : [],
-              merchantOrderNo: ceShipment.MerchantOrderNo,
-
-              airWaybillNo: ceShipment.AirWaybillNo || ceShipment.TrackTraceNo || ceShipment.MerchantShipmentNo,
-
-              method: ceShipment.Method,
-              shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
-              shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
-
-              isMerchantCreator: ceShipment.IsMerchantCreator ?? true,
-
-              submissionDate: new Date(ceShipment.CreatedAt),
-              type: 'FORWARD',
-              extraData: { channelEngine: ceShipment },
-              deliveryId: deliveryDetails?._id || null,
-            },
+            upsert: true,
           },
-          upsert: true,
-        },
-      });
+        });
+      }
     }
 
-    if (!bulkOps.length) {
-      console.log('No shipment operations to write');
-      return true;
-    }
+    if (!bulkOps.length) return true;
 
     const result = await Shipment.bulkWrite(bulkOps, { ordered: false });
 
-    console.log('Bulk shipment sync result:', {
+    console.log('Bulk result:', {
       inserted: result.upsertedCount,
       modified: result.modifiedCount,
-      matched: result.matchedCount,
     });
 
     return true;
   } catch (err) {
-    console.error('Shipment sync failed (ignored):', err.message);
+    console.error('Shipment sync failed:', err);
     return false;
   }
 };
 
-const buildShipmentProducts = (lines = []) => {
-  return lines.map((line) => ({
-    merchantProductNo: line.MerchantProductNo,
-    channelProductNo: line.ChannelProductNo,
-    quantity: line.Quantity,
-    status: line.ShipmentStatus,
-    orderLineId: line.OrderLine?.Id,
-    extraData: {
-      channelEngine: line,
-    },
-  }));
+// ---- build products
+const buildShipmentProducts = (lines = [], order) => {
+  const map = new Map();
+
+  for (const line of lines) {
+    const merchantProductNo = line?.MerchantProductNo;
+    if (!merchantProductNo) continue;
+
+    const matchedSku = order.orderSkuList.skuList.find((item) => item.merchantProductNo == merchantProductNo);
+
+    const product = {
+      merchantProductNo,
+      orderLineId: line?.OrderLine?.Id,
+      quantity: line?.Quantity || 0,
+      lineTotalInclVat: matchedSku?.lineTotalInclVat || 0,
+      hsCode: matchedSku?.hsCode || '1111111',
+    };
+
+    const key = `${product.merchantProductNo}_${product.orderLineId}`;
+    if (!map.has(key)) {
+      map.set(key, product);
+    }
+  }
+
+  return [...map.values()];
 };
+
+// ---- helpers
+
 const mapCEShipmentStatus = (ceShipment) => {
   if (ceShipment.DeliveredAt) return 'DELIVERED';
 
