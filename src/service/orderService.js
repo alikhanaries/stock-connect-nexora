@@ -1225,7 +1225,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       return { success: false, message: 'Seller ID is required for export' };
     }
 
-    const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
+    const { status, platform, search, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
     const filter = {
       sellerIds: { $in: [sellerId] },
@@ -1252,7 +1252,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const orders = await Order.find(filter).sort(sort).limit(parseInt(size, 10)).lean();
+    const orders = await Order.find(filter).sort(sort).lean();
 
     if (!orders.length) {
       return { success: false, message: 'No orders found' };
@@ -1266,10 +1266,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       FILTER SELLER SKUS AND REMOVE FULLY CANCELLED
       */
       const sellerSkus = (order.orderSkuList?.skuList || []).filter((sku) => {
-        const cancelledQty = sku.cancellationRequestedQuantity || 0;
-        const effectiveQty = (sku.quantity || 0) - cancelledQty;
-
-        return String(sku.sellerId) === String(sellerId) && effectiveQty > 0;
+        return String(sku.sellerId) === String(sellerId);
       });
 
       if (!sellerSkus.length) continue;
