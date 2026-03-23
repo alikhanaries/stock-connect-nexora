@@ -46,6 +46,7 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.6",
     "pdfjs-dist": "^5.4.394",
+    "pdfkit": "^0.18.0",
     "sharp": "^0.34.5",
     "slugify": "^1.6.6",
     "swagger-jsdoc": "^6.2.8",

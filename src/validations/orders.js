@@ -256,3 +256,16 @@ export const exportOrdersValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+
+export const generateSellerInvoiceValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const bodySchema = z.object({
+    orderId: z
+      .string()
+      .length(24, 'order id must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'order id must be a hex string'),
+  });
+
+  bodySchema.parse(req.body);
+});
