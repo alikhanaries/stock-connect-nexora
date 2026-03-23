@@ -1,6 +1,27 @@
 import PDFDocument from 'pdfkit';
 import { formatToInvoiceDate } from '#root/src/helpers/Common.js';
 import Product from '#models/Product.js';
+const simpleNumericHash = (str) => {
+  let hash = 0;
+
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0; // unsigned int
+  }
+
+  return hash;
+};
+export const generateSellerInvoiceNumber = (sellerData, orderInfo, invoiceData) => {
+  const baseString =
+    (sellerData?.sellerCode || sellerData?.sellerName || 'SELLER') +
+    '|' +
+    (orderInfo?.channelOrderNumber || orderInfo?.orderId || '') +
+    '|' +
+    (invoiceData?.invoiceNumber || '');
+
+  const hash = simpleNumericHash(baseString);
+
+  return `INV${hash.toString().slice(0, 10)}`;
+};
 export const generateSellerInvoicePDF = async (res, data) => {
   const { invoiceData, sellerData, orderInfo, billingAddress } = data;
 
@@ -9,8 +30,11 @@ export const generateSellerInvoicePDF = async (res, data) => {
     bufferPages: true, // required for footer
   });
 
-  const fileName = `${sellerData?.sellerName}_OrderInvoice--${orderInfo.channelOrderNumber}-${invoiceData.invoiceNumber}.pdf`;
+  const channelEngineInvoiceId = invoiceData.invoiceNumber;
+  // OR whatever you already receive from ChannelEngine
 
+  const sellerInvoiceId = generateSellerInvoiceNumber(sellerData, orderInfo, invoiceData);
+  const fileName = `${sellerData?.sellerName}_OrderInvoice--${sellerInvoiceId}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
@@ -81,7 +105,8 @@ export const generateSellerInvoicePDF = async (res, data) => {
     doc.y = baseY + rowHeight;
   };
 
-  drawDetailRow('Invoice number', invoiceData.invoiceNumber);
+  drawDetailRow('Main Invoice number', channelEngineInvoiceId);
+  drawDetailRow('Seller Invoice number', sellerInvoiceId);
   drawDetailRow('Order number', orderInfo.channelOrderNumber);
   drawDetailRow('Order date', formattedOrderDate);
   drawDetailRow('Invoice date', invoiceData.invoiceDate, true); // last row
@@ -135,29 +160,36 @@ export const generateSellerInvoicePDF = async (res, data) => {
   });
 
   sellerData.skus.forEach((sku, index) => {
+    doc.font('Helvetica'); // FORCE NORMAL FONT
+
     const product = productMap[sku.merchantProductNo] || {};
 
     const color = product.color || '-';
     const size = product.size || '-';
+
     const desc = `${sku.description || ''}
-    Color: ${color || '-'} | Size: ${size || '-'}
-    GTIN: ${sku.gtin || '-'}
-    Merchant product number: ${sku.merchantProductNo || '-'}`;
+Color: ${color || '-'} | Size: ${size || '-'}
+GTIN: ${sku.gtin || '-'}
+MPN: ${sku.merchantProductNo || '-'}`;
 
     const descHeight = doc.heightOfString(desc, { width: 220 });
 
-    doc.text(desc, cols.desc, yPos, { width: 220 });
+    doc.text(desc, cols.desc, yPos, { width: 240 });
 
     doc.text(sku.quantity?.toString() || '0', cols.qty, yPos, { width: 50, align: 'right' });
+
     doc.text((sku.unitPriceInclVat || 0).toFixed(2), cols.price, yPos, { width: 50, align: 'right' });
+
     doc.text((sku.vatRate || 0).toFixed(2), cols.vatP, yPos, { width: 40, align: 'right' });
+
     doc.text((sku.lineVat || 0).toFixed(2), cols.vat, yPos, { width: 50, align: 'right' });
+
     doc.text((sku.lineTotalExclVat || 0).toFixed(2), cols.exVat, yPos, { width: 50, align: 'right' });
+
     doc.text((sku.lineTotalInclVat || 0).toFixed(2), cols.total, yPos, { width: 50, align: 'right' });
 
     const nextY = yPos + descHeight + 10;
 
-    // Skip border for last item
     if (index !== sellerData.skus.length - 1) {
       doc
         .moveTo(40, nextY - 5)
@@ -183,18 +215,18 @@ export const generateSellerInvoicePDF = async (res, data) => {
   yPos += 12;
 
   const drawTotal = (label, value) => {
-    const paddingTop = 4; //  space from top
-    const rowHeight = 22; //  total row height
-    const lineOffset = 18; //  divider position
+    const paddingTop = 4;
+    const rowHeight = 22;
+    const lineOffset = 18;
 
     const currentY = yPos + paddingTop;
 
+    //  Label in Bold
     doc.font('Helvetica-Bold');
-
-    // Label
     doc.text(label, 420, currentY);
 
-    // Value
+    //  Value in Regular (NOT bold)
+    doc.font('Helvetica');
     doc.text(value, 510, currentY, {
       width: 50,
       align: 'right',
@@ -210,10 +242,8 @@ export const generateSellerInvoicePDF = async (res, data) => {
         .stroke();
     }
 
-    // Move to next row
     yPos += rowHeight;
   };
-
   drawTotal('Subtotal', (t.subTotalExclVat || 0).toFixed(2));
   drawTotal('VAT', (t.vat || 0).toFixed(2));
   drawTotal('Total', (t.subTotalInclVat || 0).toFixed(2));
