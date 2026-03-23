@@ -50,33 +50,9 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
         },
       },
       {
-        $facet: {
-          statusCounts: [
-            { $match: { status: { $ne: 'DELIVERED' } } },
-            { $group: { _id: '$status', count: { $sum: 1 } } },
-          ],
-          deliveredQty: [
-            { $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false } },
-            { $match: { 'orderSkuList.skuList.statusBreakdown.delivered': { $gt: 0 } } },
-            {
-              $group: {
-                _id: 'DELIVERED',
-                count: { $sum: { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] } },
-              },
-            },
-          ],
-        },
-      },
-      {
-        $project: {
-          merged: { $concatArrays: ['$statusCounts', '$deliveredQty'] },
-        },
-      },
-      { $unwind: '$merged' },
-      {
         $group: {
-          _id: '$merged._id',
-          count: { $sum: '$merged.count' },
+          _id: '$status',
+          count: { $sum: 1 },
         },
       },
     ];
@@ -304,8 +280,7 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
   }));
 };
 
-const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month, channel } = {}) => {
-  if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
+const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
   const globalChannelFilter = buildGlobalChannelFilter(channel);
   const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
@@ -319,14 +294,17 @@ const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, end
   const pipeline = buildAggregationPipeline({
     sellerObjectIds,
     period,
-    metric,
     range,
+    metrics: ['sales', 'orders'],
     ...globalChannelFilter,
   });
 
   const rawData = await Order.aggregate(pipeline);
 
-  return { metric, data: normalizeSeries(period, rawData, range) };
+  return {
+    sales: normalizeSeries(period, rawData, range, 'sales'),
+    orders: normalizeSeries(period, rawData, range, 'orders'),
+  };
 };
 
 export const getTopPerformersProducts = async (
