@@ -326,7 +326,7 @@ export const exportOrders = async (req, res) => {
       return Responses.failResponse(res, req.locale?.SELLER_ID_REQUIRED || 'Seller ID is required', 400);
     }
 
-    const { status, platform, search, size, sortBy, sortOrder } = req.query;
+    const { status, platform, search, sortBy, sortOrder } = req.query;
 
     // Fetch seller name for filename
     const seller = await Seller.findById(sellerId).select('name').lean();
@@ -341,7 +341,6 @@ export const exportOrders = async (req, res) => {
       ...(status && { status }),
       ...(platform && { platform }),
       ...(search && { search }),
-      ...(size && { size }),
       ...(sortBy && { sortBy }),
       ...(sortOrder && { sortOrder }),
     };

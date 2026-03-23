@@ -31,63 +31,92 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 export const getReturns = async (queryParams = {}) => {
   try {
-    const params = new URLSearchParams({
-      ...queryParams,
-      apikey: `${CHANNEL_ENGINE_API_KEY}`,
-    });
+    let page = 1;
+    const pageSize = 100;
+    let hasMore = true;
 
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
-    const responseData = await response.json();
+    let totalProcessed = 0;
+    let totalUpserted = 0;
+    let totalModified = 0;
 
-    if (!response.ok) {
-      return { success: false, message: `ChannelEngine API error: ${response.status}`, error: responseData };
-    }
+    while (hasMore) {
+      const params = new URLSearchParams({
+        ...queryParams,
+        apikey: CHANNEL_ENGINE_API_KEY,
+        page,
+        pageSize,
+      });
 
-    const { Content = [] } = responseData;
-    if (!Content.length) return { success: true, data: { Content: [], upsertedCount: 0, totalProcessed: 0 } };
+      const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
 
-    // Save returns using bulk operations to track new vs existing
-    const bulkOps = [];
-
-    for (const returnData of Content) {
-      // Sanitize return data using helper
-      const sanitizationResult = await sanitizeReturnData(returnData, Order);
-      if (!sanitizationResult.success) {
-        console.warn('Sanitization failed for return:', returnData.Id);
-        continue;
+      if (!response.ok) {
+        return {
+          success: false,
+          message: `ChannelEngine API error: ${response.status}`,
+        };
       }
 
-      const simplifiedReturnDocument = sanitizationResult.data;
+      const responseData = await response.json();
+      const { Content = [] } = responseData;
 
-      // Add bulk upsert operation
-      bulkOps.push({
-        updateOne: {
-          filter: { returnId: simplifiedReturnDocument.returnId },
-          update: { $set: simplifiedReturnDocument },
-          upsert: true,
-        },
-      });
-    }
+      if (!Content.length) {
+        hasMore = false;
+        break;
+      }
 
-    let upsertedCount = 0;
-    let modifiedCount = 0;
-    if (bulkOps.length > 0) {
-      const result = await Return.bulkWrite(bulkOps);
-      upsertedCount = result.upsertedCount || 0;
-      modifiedCount = result.modifiedCount || 0;
+      const bulkOps = [];
+
+      for (const returnData of Content) {
+        // Sanitize return data using helper
+        const sanitizationResult = await sanitizeReturnData(returnData, Order);
+        if (!sanitizationResult.success) {
+          console.warn('Sanitization failed for return:', returnData.Id);
+          continue;
+        }
+
+        const simplifiedReturnDocument = sanitizationResult.data;
+
+        // Add bulk upsert operation
+        bulkOps.push({
+          updateOne: {
+            filter: { returnId: simplifiedReturnDocument.returnId },
+            update: { $set: simplifiedReturnDocument },
+            upsert: true,
+          },
+        });
+      }
+
+      if (bulkOps.length > 0) {
+        const result = await Return.bulkWrite(bulkOps);
+
+        totalUpserted += result.upsertedCount || 0;
+        totalModified += result.modifiedCount || 0;
+      }
+
+      totalProcessed += Content.length;
+
+      // stop when last page reached
+      if (Content.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
     }
 
     return {
       success: true,
       data: {
-        ...responseData,
-        upsertedCount,
-        modifiedCount,
-        totalProcessed: Content.length,
+        totalProcessed,
+        totalUpserted,
+        totalModified,
       },
     };
   } catch (error) {
-    return { success: false, message: 'Error communicating with ChannelEngine.', error: error.message };
+    return {
+      success: false,
+      message: 'Error communicating with ChannelEngine.',
+      error: error.message,
+    };
   }
 };
 
@@ -141,11 +170,19 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
   try {
-    const { status, sortOrder = 'desc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform } = query;
+    const { status, sortOrder = 'desc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform, search } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const appliedFilters = {};
+
+    if (channelId) appliedFilters.channelId = channelId;
+    if (platform) appliedFilters.platform = platform;
+
+    const { pipeline } = buildReturnMatchAndPipeline(query, {
+      includeSearchNameSplit: true,
+    });
+
     // Validate status if provided
     if (status) {
       const statusArray = status
@@ -161,32 +198,73 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
         );
       }
 
-      appliedFilters.status = status;
+      appliedFilters.status = statusArray;
+
+      // APPLY FILTER IN PIPELINE
+      pipeline.push({
+        $match: {
+          status: { $in: statusArray },
+        },
+      });
     }
-
-    // Add other filters to appliedFilters
-    if (channelId) appliedFilters.channelId = channelId;
-    if (platform) appliedFilters.platform = platform;
-    if (sellerId) appliedFilters.sellerId = sellerId;
-
-    const { pipeline } = buildReturnMatchAndPipeline(query, {
-      includeSearchNameSplit: true,
-    });
-
     //  Filter by sellerId
     if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
       const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
 
       pipeline.push({
         $match: {
-          $or: [
-            { sellerIds: { $in: [sellerObjectId] } }, // new records
-            { sellerIds: { $exists: false } }, // old records
-          ],
+          $or: [{ sellerIds: { $in: [sellerObjectId] } }, { sellerIds: { $exists: false } }],
         },
       });
     }
 
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+
+      const searchConditions = [
+        { returnId: { $regex: searchRegex } },
+        { orderId: { $regex: searchRegex } },
+
+        // Customer search
+        { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
+        { 'orderInfo.orderCustomer.phone': { $regex: searchRegex } },
+      ];
+
+      const searchTerms = search.trim().split(/\s+/);
+
+      if (searchTerms.length > 1) {
+        const [firstTerm, ...rest] = searchTerms;
+        const lastTerm = rest.join(' ');
+
+        const firstRegex = new RegExp(firstTerm, 'i');
+        const lastRegex = new RegExp(lastTerm, 'i');
+
+        searchConditions.push(
+          {
+            $and: [
+              { 'orderInfo.orderCustomer.firstName': firstRegex },
+              { 'orderInfo.orderCustomer.lastName': lastRegex },
+            ],
+          },
+          {
+            $and: [
+              { 'orderInfo.orderCustomer.lastName': firstRegex },
+              { 'orderInfo.orderCustomer.firstName': lastRegex },
+            ],
+          }
+        );
+      }
+
+      pipeline.push({
+        $match: {
+          $or: searchConditions,
+        },
+      });
+    }
+
+    // Normalize fields
     pipeline.push({
       $addFields: {
         orderID: { $ifNull: ['$orderId', '$orderInfo.orderId'] },
@@ -194,7 +272,27 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
       },
     });
 
-    // ===== Sorting =====
+    // Customer extraction from orderInfo
+    pipeline.push({
+      $addFields: {
+        customer: {
+          firstName: {
+            $ifNull: ['$orderInfo.orderCustomer.firstName', 'NA'],
+          },
+          lastName: {
+            $ifNull: ['$orderInfo.orderCustomer.lastName', 'NA'],
+          },
+          email: {
+            $ifNull: ['$orderInfo.orderCustomer.email', 'NA'],
+          },
+          phone: {
+            $ifNull: ['$orderInfo.orderCustomer.phone', 'NA'],
+          },
+        },
+      },
+    });
+
+    // Sorting
     let actualSortBy = sortBy;
 
     if (sortBy === 'returnId') {
@@ -250,9 +348,7 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
         }
 
         return {
-          productSku: p.productSkuCode,
           quantity,
-          productPrice,
           totalPrice: productPrice * quantity,
         };
       });
@@ -263,21 +359,27 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
 
       return {
         _id: r._id,
-        returnId: r.returnId,
-        orderID: r.orderID || null,
+        returnId: r.returnId || 'NA',
+        orderID: r.orderID || 'NA',
         channelId: r.channelId,
-        channelImage: channelMap[r.channelId],
-        status: r.status,
-        platform: r.platform,
-        placedOn: r.placedOn,
+        channelImage: channelMap[r.channelId] || 'NA',
+        status: r.status || 'NA',
+        platform: r.platform || 'NA',
+        placedOn: r.placedOn || 'NA',
 
-        //  Seller-wise values
         quantity: totalQuantity,
         totalPrice,
         sellerId,
-        reason: r.reason || null,
-        customerComment: r.customerComment || null,
-        merchantComment: r.merchantComment || null,
+
+        reason: r.reason || 'NA',
+        customerComment: r.customerComment || 'NA',
+        merchantComment: r.merchantComment || 'NA',
+
+        customerInfo: {
+          name: `${r.orderInfo?.orderCustomer?.firstName || 'NA'} ${r.orderInfo?.orderCustomer?.lastName || ''}`.trim(),
+          email: r.orderInfo?.orderCustomer?.email || 'NA',
+          phoneNo: r.orderInfo?.orderCustomer?.phone || 'NA',
+        },
       };
     });
 
