@@ -5,7 +5,7 @@ export const generateSellerInvoicePDF = (res, data) => {
 
   const doc = new PDFDocument({ margin: 40 });
 
-  const fileName = `${sellerData?.sellerName}_OrderInvoice--${orderInfo.channelOrderNumber}-${invoiceData.invoiceNumber}-${orderInfo?.orderId}.pdf`;
+  const fileName = `${sellerData?.sellerName}_OrderInvoice--${orderInfo.channelOrderNumber}-${invoiceData.invoiceNumber}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
   doc.pipe(res);
@@ -18,6 +18,13 @@ export const generateSellerInvoicePDF = (res, data) => {
 
   doc.fontSize(10);
 
+  if (billingAddress.line1) {
+    doc.font('Helvetica-Bold'); // bold
+    doc.text(billingAddress.companyName);
+
+    doc.font('Helvetica'); // reset to normal
+  }
+
   doc.text(name || 'Customer');
 
   if (billingAddress.line1) doc.text(billingAddress.line1);
@@ -25,7 +32,7 @@ export const generateSellerInvoicePDF = (res, data) => {
   const cityLine = [billingAddress.city, billingAddress.state || billingAddress.region].filter(Boolean).join(', ');
 
   if (cityLine) doc.text(cityLine);
-
+  if (billingAddress.city) doc.text(billingAddress.city);
   if (billingAddress.postalCode) doc.text(billingAddress.postalCode);
 
   if (billingAddress.countryIso) doc.text(billingAddress.countryIso);
