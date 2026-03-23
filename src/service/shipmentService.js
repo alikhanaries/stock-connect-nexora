@@ -2479,7 +2479,10 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
         }
 
         // ---- map assignment (FIXED KEY)
-        for (const sellerId of sellerIds) {
+        // remove duplicates + normalize
+        const uniqueSellerIds = [...new Set(sellerIds.map((id) => id?.toString()).filter(Boolean))];
+
+        for (const sellerId of uniqueSellerIds) {
           if (!sellerId) continue;
 
           const key = sellerId.toString();
