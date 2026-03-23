@@ -1478,7 +1478,6 @@ export const syncShipmentStatus = async (orderId) => {
 
         // Avoid duplicate / downgrade updates
         if (shipment.status && ORDER_PRIORITY.indexOf(shipmentStatus) <= ORDER_PRIORITY.indexOf(shipment.status)) {
-          // console.log('Skipping downgrade or duplicate update:', shipment.status, '→', shipmentStatus);
           continue;
         }
 
