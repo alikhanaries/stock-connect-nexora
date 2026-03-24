@@ -45,7 +45,7 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     const buildAgg = (range) => [
       {
         $match: {
-          sellerId: { $in: sellerObjectIds },
+          sellerIds: { $in: sellerObjectIds },
           ...globalChannelFilter,
           orderDate: { $gte: range.start, $lte: range.end },
         },
@@ -125,7 +125,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
   const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
   const globalChannelFilter = buildGlobalChannelFilter(channel);
   const baseMatch = {
-    sellerId: { $in: sellerObjectIds },
+    sellerIds: { $in: sellerObjectIds },
     ...globalChannelFilter,
   };
 
@@ -495,7 +495,7 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
   const pipeline = [
     {
       $match: {
-        sellerId: { $in: sellerObjectIds },
+        sellerIds: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
         globalChannelName: { $type: 'string', $ne: '' },
       },
@@ -561,7 +561,7 @@ const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate,
   const pipeline = [
     {
       $match: {
-        sellerId: { $in: sellerObjectIds },
+        sellerIds: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
         globalChannelName: { $type: 'string', $ne: '' },
       },
