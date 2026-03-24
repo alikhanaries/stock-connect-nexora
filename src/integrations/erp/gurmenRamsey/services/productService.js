@@ -1,3 +1,5 @@
+import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
+import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
@@ -21,7 +23,7 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
       return { message: 'No Ramsey (Gürmen Group) products to sync.' };
     }
     console.log(`[Ramsey Sync] Started — Batch Size: ${MAX_BATCH_SIZE}, Concurrency: ${BATCH_CONCURRENCY}`);
-
+    let upsertCount = 0;
     /**
      * processInBatches:
      * -----------------
@@ -100,13 +102,22 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
                   productSkuCode: product.productSkuCode,
                   sellerId: product.sellerId,
                 },
-                update: { $set: product },
+                update: {
+                  $set: {
+                    ...product,
+                    updatedAt: new Date(),
+                  },
+                  $setOnInsert: {
+                    createdAt: new Date(),
+                  },
+                },
                 upsert: true,
               },
             }));
 
-            await Product.bulkWrite(bulkOps, { ordered: false });
+            const data = await Product.bulkWrite(bulkOps, { ordered: false });
             console.log(`[Batch ${batchId}] Upserted Products: ${canonical.length}`);
+            upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
           }
 
           /**
@@ -131,6 +142,7 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
       // Number of batches to process in parallel
       BATCH_CONCURRENCY
     );
+    await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
     console.log(`\n[Ramsey Sync] ALL BATCHES COMPLETED SUCCESSFULLY`);
   } catch (error) {
     console.error('Failed to sync Ramsey products (Gürmen Group):', error);

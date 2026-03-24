@@ -2,6 +2,7 @@ import {
   deleteMultipleProducts,
   deleteProduct,
   getProducts,
+  syncProducts,
   getProductById,
   getTopSellingProduct,
   getUserUnassignedProducts,
@@ -13,6 +14,7 @@ import {
   addProductsToUserChannel,
   unlinkProductFromChannel,
   exportProducts,
+  exportUserChannelProducts,
   searchProducts,
   freezeOrUnfreezeProducts,
 } from '#controllers/ProductController.js';
@@ -36,6 +38,7 @@ import {
   getProductByIdValidator,
   getTopSellingProductValidator,
   updateProductStatusValidator,
+  syncProductsValidator,
 } from '#validations/products.js';
 import upload from '#helpers/FileHandler.js'; // the above multer setup
 
@@ -115,16 +118,16 @@ productsRouter.delete(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
+productsRouter.get('/getProduct/:id', getProductByIdValidator, checkLanguage, authMiddleware, getProductById);
+
 productsRouter.get(
-  '/getProduct/:id',
-  getProductByIdValidator,
+  '/product-sync/:channel',
+  syncProductsValidator,
   checkLanguage,
   authMiddleware,
   verifySellerAccess,
-  getProductById
+  syncProducts
 );
-
-productsRouter.get('/', getProductsValidator, checkLanguage, authMiddleware, verifySellerAccess, getProducts);
 
 /* UPLOAD PRODUCTS FROM GOOGLE SHEET */
 /**
@@ -478,6 +481,15 @@ productsRouter.get(
   authMiddleware,
   verifySellerAccess,
   exportProducts
+);
+
+productsRouter.get(
+  '/export-products/:channelId',
+  getUserChannelProductsValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  exportUserChannelProducts
 );
 
 /**

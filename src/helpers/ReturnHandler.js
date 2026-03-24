@@ -45,6 +45,7 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
           quantity: line.Quantity || 0,
           acceptedQuantity: line.AcceptedQuantity || 0,
           rejectedQuantity: line.RejectedQuantity || 0,
+          price: line.OrderLine?.UnitPriceInclVat || 0,
         }))
       : [];
 
@@ -54,6 +55,9 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
 
     const sanitizedData = {
       returnId: returnData.Id?.toString(),
+      reason: returnData.Reason || '',
+      customerComment: returnData.CustomerComment || '',
+      merchantComment: returnData.MerchantComment || '',
       merchantReturnNo: returnData.MerchantReturnNo,
       merchantOrderNo: returnData.MerchantOrderNo,
       channelOrderNo: returnData.ChannelOrderNo,
@@ -66,6 +70,7 @@ export const sanitizeReturnData = async (returnData, Order = null) => {
       status: returnData.Status,
       platform: returnData.ChannelName,
       products: products,
+      returnDate: returnData?.ReturnDate || null,
     };
 
     return { success: true, data: sanitizedData };
@@ -96,7 +101,7 @@ export const buildReturnAggregationPipeline = () => {
                         {
                           $filter: {
                             input: '$orderSkuList.skuList',
-                            cond: { $in: ['$$this.id', '$$orderLineIds'] },
+                            cond: { $in: ['$$this.id', { $ifNull: ['$$orderLineIds', []] }] },
                           },
                         },
                         [],
@@ -125,6 +130,39 @@ export const buildReturnAggregationPipeline = () => {
       },
     },
     {
+      $lookup: {
+        from: 'shipments',
+        let: { shipment_ids: '$shipmentId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [{ $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] }],
+              },
+            },
+          },
+          { $sort: { createdAt: -1 } },
+          { $limit: 1 }, // only get last shipment
+          {
+            $project: {
+              airWaybillNo: 1,
+              merchantShipmentNo: 1,
+              status: 1,
+              createdAt: 1,
+              _id: 0,
+            },
+          },
+        ],
+        as: 'shipmentData',
+      },
+    },
+    {
+      $unwind: {
+        path: '$shipmentData',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
       $project: {
         _id: 1,
         returnId: 1,
@@ -134,6 +172,9 @@ export const buildReturnAggregationPipeline = () => {
         channelReturnNo: 1,
         channelId: 1,
         orderId: 1,
+        reason: 1,
+        customerComment: 1,
+        merchantComment: 1,
         placedOn: 1,
         acknowledgeDate: 1,
         platform: 1,
@@ -144,6 +185,7 @@ export const buildReturnAggregationPipeline = () => {
         createdAt: 1,
         updatedAt: 1,
         orderInfo: 1,
+        shipmentData: 1,
       },
     },
   ];
@@ -156,7 +198,8 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
 };
 
 export const buildReturnMatchAndPipeline = (query = {}) => {
-  const { status, platform, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
+  const { status, platform, channel, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const matchConditions = {};
 
@@ -182,9 +225,16 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
     $in: v.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
   }));
 
-  addFilter(matchConditions, 'platform', platform, (v) => ({
-    $regex: new RegExp(v, 'i'),
-  }));
+  if (channel) {
+    const channelArray = channel.split(',').map((s) => s.trim());
+    matchConditions.platform = {
+      $in: channelArray.map((s) => new RegExp(`${escapeRegex(s)}`, 'i')),
+    };
+  } else if (platform) {
+    addFilter(matchConditions, 'platform', platform, (v) => ({
+      $regex: new RegExp(v, 'i'),
+    }));
+  }
 
   addFilter(matchConditions, 'channelId', channelId, (v) => parseInt(v, 10));
 
@@ -355,6 +405,7 @@ export const formatReturnDetails = (aggregatedResult) => {
           acceptedQuantity: product.acceptedQuantity || 0,
           rejectedQuantity: product.rejectedQuantity || 0,
         })) || [],
+      omniful: returnData.omniful || null,
       status: returnData.status || null,
       subtotal: 0,
       tax: 0,
@@ -439,7 +490,11 @@ export const formatReturnDetails = (aggregatedResult) => {
   return {
     _id: returnData._id,
     returnId: returnData.returnId || null,
+    reason: returnData.reason || null,
+    customerComment: returnData.customerComment || null,
+    merchantComment: returnData.merchantComment || null,
     orderId: orderInfo.orderId || null,
+    orderDbId: orderInfo._id || null,
     paymentInfo: {
       channelName: returnData.platform || orderInfo.channelName || null,
       paymentMethod: orderInfo.orderPaymentDetails?.paymentMethod || null,
@@ -454,11 +509,16 @@ export const formatReturnDetails = (aggregatedResult) => {
     },
     shippingAddress: shippingAddress,
     products: products,
+    omniful: returnData.omniful || null,
     status: returnData.status || 'UNKNOWN',
     subtotal: parseFloat(subtotal.toFixed(2)),
     tax: parseFloat(tax.toFixed(2)),
     total: parseFloat(total.toFixed(2)),
     shippingFee: parseFloat(shippingFee.toFixed(2)),
+    trackingNumber: returnData?.shipmentData?.airWaybillNo || null,
+    shipmentStatus: returnData?.shipmentData?.status,
+    logsDetails: returnData?.returnLogsData,
+    orderLogsData: returnData?.returnLogsData,
   };
 };
 

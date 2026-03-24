@@ -30,7 +30,7 @@ const shipmentSchema = new mongoose.Schema(
     deliveryDate: { type: Date, index: true },
 
     // Delivery & collection references
-    deliveryId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryAdress', required: true },
+    deliveryId: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryAdress' },
     pickUpId: { type: mongoose.Schema.Types.ObjectId, ref: 'PickupAddress' },
 
     // ChannelEngine / Shipment info
@@ -41,7 +41,11 @@ const shipmentSchema = new mongoose.Schema(
     shippedFromStockLocationId: { type: Number, default: 0 },
     method: { type: String, index: true },
     isMerchantCreator: { type: Boolean, default: true },
-    shipmentMethod: { type: String, enum: ['AYMAKAN', 'MANUAL'], index: true },
+    shipmentMethod: {
+      type: String,
+      enum: ['AYMAKAN', 'CHANNEL_ENGINE', 'AMAZON', 'MANUAL', 'UNICOMMERCE'],
+      index: true,
+    },
     description: { type: String },
 
     // products array
@@ -58,15 +62,15 @@ const shipmentSchema = new mongoose.Schema(
         type: String,
         lowercase: true,
         trim: true,
-        validate: {
-          validator: function (v) {
-            return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-          },
-          message: (props) => `${props.value} is not a valid email address!`,
-        },
       },
     },
     cancelReason: { type: String },
+    type: {
+      type: String,
+      enum: ['FORWARD', 'REVERSE'],
+      default: 'FORWARD',
+      index: true,
+    },
   },
   {
     timestamps: true,

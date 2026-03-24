@@ -52,3 +52,5 @@ export default {
   formatDateTime,
   formatCustomerName,
 };
+
+export const truncate = (num) => Math.trunc(num * 100) / 100;

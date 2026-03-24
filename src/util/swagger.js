@@ -78,3 +78,18 @@ export function loadSwagger() {
     ],
   });
 }
+
+export function loadUniCommerceSwagger() {
+  return swaggerJsdoc({
+    definition: {
+      openapi: '3.0.0',
+      info: {
+        title: 'Stock Connect UniCommerce API',
+        description: 'UniCommerce ERP Integration APIs',
+        version: '1.0.0',
+      },
+      servers: [{ url: `${config.BASE_URL}api` }, { url: 'http://localhost:8000/api' }],
+    },
+    apis: [path.join(process.cwd(), 'src/integrations/erp/unicommerce/**/*.js')],
+  });
+}

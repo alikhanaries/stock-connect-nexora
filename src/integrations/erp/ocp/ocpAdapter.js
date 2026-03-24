@@ -2,7 +2,7 @@ import { errorLog } from '#root/src/middleware/errorLogMiddleware.js';
 import { createBaseERPAdapter } from '../base/BaseERPAdapter.js';
 import { ocpEndPoints } from './config/config.js';
 
-import { cancelFullOrderOcp, fetchFromOcp } from './utils/fetch.js';
+import { cancelFullOrderOcp, cancelPartialOrderOcp, fetchFromOcp } from './utils/fetch.js';
 
 export const createOcpAdapter = () => {
   const base = createBaseERPAdapter();
@@ -44,6 +44,28 @@ export const createOcpAdapter = () => {
           },
         });
 
+        return data;
+      } catch (err) {
+        console.error(err);
+        errorLog(err);
+        throw err;
+      }
+    },
+
+    partialCancelOrderOcp: async (options = {}) => {
+      try {
+        const { ocpBrandSlug, reason, ocpOrderId, cancelItems } = options;
+        const payload = {
+          message: reason,
+          cancelItems: cancelItems,
+        };
+        const data = await cancelPartialOrderOcp(ocpEndPoints.OCP_ORDERS, ocpOrderId, {
+          method: 'PUT',
+          body: payload,
+          headers: {
+            'x-ocp-tenant-slug': ocpBrandSlug,
+          },
+        });
         return data;
       } catch (err) {
         console.error(err);

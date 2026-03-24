@@ -3,12 +3,15 @@ import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { formatProducts } from '#root/src/integrations/erp/shopify/helpers/formatter.js';
 import { fetchProducts } from '#root/src/integrations/erp/shopify/service/shopifyService.js';
+import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
+import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
   try {
     const rawResponse = await fetchProducts(sellerData);
 
+    let upsertCount = 0;
     const rawProducts = rawResponse;
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
@@ -37,7 +40,15 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
           productSkuCode: product.productSkuCode,
           sellerId, //  safer
         },
-        update: { $set: product },
+        update: {
+          $set: {
+            ...product,
+            updatedAt: new Date(),
+          },
+          $setOnInsert: {
+            createdAt: new Date(),
+          },
+        },
         upsert: true,
       },
     }));
@@ -45,12 +56,14 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
     const BULK_CHUNK_SIZE = 500;
 
     for (let i = 0; i < bulkOps.length; i += BULK_CHUNK_SIZE) {
-      await Product.bulkWrite(bulkOps.slice(i, i + BULK_CHUNK_SIZE), { ordered: false });
+      const data = await Product.bulkWrite(bulkOps.slice(i, i + BULK_CHUNK_SIZE), { ordered: false });
+      upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
     }
 
     if (categoryTrails.size > 0) {
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
+    await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
   } catch (err) {
     console.error('fetchAndStoreShopifyProducts error:', err);
   }

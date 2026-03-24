@@ -1,6 +1,15 @@
 // Define valid statuses for channels
 export const VALID_STATUSES = ['active', 'inactive', 'removed'];
-export const ORDER_PRIORITY = ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED'];
+export const ORDER_PRIORITY = [
+  'NEW', // 0 – created, nothing done
+  'PENDING', // 1 – waiting for payment / confirmation
+  'IN_PROGRESS', // 2 – partially processed
+  'SHIPPED', // 3 – nothing pending, shipped
+  'DELIVERED', // 4 – fully delivered
+  'CLOSED', // 5 – delivered + canceled (final success)
+  'CANCELED', // 6 – fully canceled (final failure)
+  'PAYMENT_FAILED', // 7 – terminal failure
+];
 // Map status to display messages
 export const STATUS_MESSAGES = { active: 'activated', inactive: 'inactivated', removed: 'removed' };
 
@@ -59,6 +68,14 @@ export const ORDER_STATUS_MAP = {
   IN_COMBI: 'IN_COMBI',
   PARTIALLY_CANCELED: 'PARTIALLY_CANCELED',
   SHIPMENT_CREATED: 'SHIPMENT_CREATED',
+  DELIVERED: 'DELIVERED',
+};
+
+export const syncFunctions = {
+  ORDER: 'lastOrderSync',
+  PRODUCT: 'lastProductSync',
+  INVENTORY: 'lastInventorySync',
+  PRICE: 'lastPriceSync',
 };
 
 export const SELECTED_FIELDS = [
@@ -83,6 +100,8 @@ export const BLOCKED_STATUSES = {
   RETURNED: 'Order has been returned, cannot cancel',
   SHIPPED: 'Order has been shipped, cannot cancel now',
   CANCELED: 'Order has already been cancelled',
+  PENDING: 'Order is pending it cannot be cancelled',
+  PAYMENT_FAILED: 'Payment failed orders cannot be cancelled',
 };
 
 export const RETURN_STATUS = {
@@ -90,6 +109,16 @@ export const RETURN_STATUS = {
   RECEIVED: 'RECEIVED',
   CANCELLED: 'CANCELLED',
   SHIPMENT_CREATED: 'SHIPMENT_CREATED',
+};
+
+export const AMAZON_STATUS_MAP = {
+  Returned: 'RETURNED',
+  Delivered: 'DELIVERED',
+  'In Progress': 'IN_PROGRESS',
+  Canceled: 'CANCELED',
+  Shipped: 'SHIPPED',
+  Pending: 'PENDING',
+  Unshipped: 'NEW',
 };
 
 export const PRODUCT_EXPORT_HEADERS = [
@@ -110,9 +139,6 @@ export const PRODUCT_EXPORT_HEADERS = [
   'hsCodeSA',
   'hsCodeAE',
   'imageUrl',
-  'ExtraImageUrl1',
-  'ExtraImageUrl2',
-  'ExtraImageUrl3',
   'maxPrice',
   'minPrice',
   'msrp',
@@ -124,9 +150,10 @@ export const PRODUCT_EXPORT_HEADERS = [
   'shippingCost',
   'shippingTime',
   'size',
-  'sizeType',
   'vatRateType',
   'volumetricWeightCm',
+  'namshiPrice',
+  'noonPrice',
 ];
 
 export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
@@ -145,3 +172,29 @@ export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
   'orderCustomer_languageCode',
   'orderPaymentDetails_currencyCode',
 ];
+
+export const SHIPMENT_EXPORT_HEADERS = [
+  'merchantProductNo',
+  'airWaybillNo',
+  'merchantOrderNo',
+  'merchantShipmentNo',
+  'orderLineId',
+  'quantity',
+  'hsCode',
+  'status',
+  'method',
+  'type',
+  'userName',
+  'userEmail',
+  'pieces',
+  'isMerchantCreator',
+  'tracking_description',
+  'tracking_status',
+  'tracking_date',
+];
+
+export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
+
+export const LOW_STOCK_THRESHOLD_SELLERS = ['kip', 'ramsey'];
+
+export const LOW_STOCK_THRESHOLD = 3;

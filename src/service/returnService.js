@@ -5,6 +5,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 import mongoose from 'mongoose';
+import { formatDateTime } from '#root/src/helpers/Common.js';
 import {
   sanitizeReturnData,
   getOrderDataByOrderLineIds,
@@ -23,6 +24,8 @@ import {
 } from '#helpers/export.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
+import { syncReturnShipmentStatus } from '#service/shipmentService.js';
+import Channel from '../models/Channel.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 //Fetches returns from ChannelEngine and saves them to the database.
@@ -92,7 +95,7 @@ export const getReturns = async (queryParams = {}) => {
 //Saves return data to the database with simplified structure.
 export const saveReturnToDatabase = async (returnData) => {
   try {
-    // Sanitize return data using helper
+    // --- Step 1: Sanitize data ---
     const sanitizationResult = await sanitizeReturnData(returnData, Order);
     if (!sanitizationResult.success) {
       return sanitizationResult;
@@ -100,13 +103,34 @@ export const saveReturnToDatabase = async (returnData) => {
 
     const simplifiedReturnDocument = sanitizationResult.data;
 
-    // Use upsert to create or update the document based on returnId
-    await Return.findOneAndUpdate({ returnId: simplifiedReturnDocument.returnId }, simplifiedReturnDocument, {
-      upsert: true,
-      new: true,
-      setDefaultsOnInsert: true,
-    });
+    // --- Step 2: Check if return already exists ---
+    const existingReturn = await Return.findOne({ returnId: simplifiedReturnDocument.returnId }).lean();
+    // --- Step 3: Add logs only if new or logs don't exist ---
+    if (!existingReturn || !existingReturn.logs || existingReturn.logs.length === 0) {
+      simplifiedReturnDocument.logs = [
+        {
+          status: 'CREATED',
+          description: 'Return Placed',
+          createdAt: new Date(
+            simplifiedReturnDocument?.ReturnDate || simplifiedReturnDocument?.returnDate || Date.now()
+          ),
+        },
+      ];
+    } else {
+      // Keep existing logs as-is (don’t overwrite)
+      delete simplifiedReturnDocument.logs;
+    }
 
+    // --- Step 4: Upsert (create/update) the document ---
+    await Return.findOneAndUpdate(
+      { returnId: simplifiedReturnDocument.returnId },
+      { $set: simplifiedReturnDocument },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    );
     return { success: true };
   } catch (error) {
     console.error('Error in saveReturnToDatabase:', error.message);
@@ -118,7 +142,7 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}) => {
   try {
-    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10 } = query;
+    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform, channel } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -141,6 +165,11 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
       appliedFilters.status = status;
     }
+
+    // Add other filters to appliedFilters
+    if (channelId) appliedFilters.channelId = channelId;
+    if (channel) appliedFilters.channel = channel;
+    if (platform) appliedFilters.platform = platform;
 
     const { pipeline } = buildReturnMatchAndPipeline(query, {
       includeSearchNameSplit: true,
@@ -170,15 +199,34 @@ export const getReturnsFromDatabase = async (query = {}) => {
           },
           quantity: '$totalQuantity',
           totalPrice: { $ifNull: ['$orderTotalPrice', '$totalPrice'] },
+          orderSkus: {
+            $map: {
+              input: { $ifNull: ['$orderInfo.orderSkuList.skuList', []] },
+              as: 'sku',
+              in: {
+                productSku: '$$sku.merchantProductNo',
+                productPrice: '$$sku.originalUnitPriceInclVat',
+              },
+            },
+          },
         },
       }
     );
-
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (query.search && isNameOrEmailSearch(query.search)) {
+      const words = query.search.trim().split(/\s+/);
+
+      const andConditions = words.map((word) => {
+        const safeWord = escapeRegex(word);
+        const regex = new RegExp(safeWord, 'i');
+
+        return {
+          $or: [{ customer: { $regex: regex } }, { email: { $regex: regex } }, { orderID: { $regex: regex } }],
+        };
+      });
+
       pipeline.push({
-        $match: {
-          $or: [{ customer: { $ne: null } }, { email: { $ne: null } }, { orderID: { $ne: null } }],
-        },
+        $match: { $and: andConditions },
       });
     }
 
@@ -202,23 +250,64 @@ export const getReturnsFromDatabase = async (query = {}) => {
 
     pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
-    const [results, countResult] = await Promise.all([Return.aggregate(pipeline), Return.aggregate(countPipeline)]);
+    const [results, countResult, allChannelImage] = await Promise.all([
+      Return.aggregate(pipeline),
+      Return.aggregate(countPipeline),
+      Channel.find().select('-_id channelId channelImageUrl').lean(),
+    ]);
+
+    const channelMap = {};
+    allChannelImage.forEach((channel) => {
+      channelMap[channel.channelId] = channel.channelImageUrl;
+    });
 
     const totalReturns = countResult?.[0]?.total || 0;
 
-    const formattedReturns = results.map((r) => ({
-      _id: r._id,
-      orderID: r.orderID || null,
-      quantity: r.quantity || 0,
-      totalPrice: r.totalPrice || null,
-      customer: r.customer || null,
-      placedOn: r.placedOn,
-      email: r.email || null,
-      phoneNumber: r.phoneNumber || null,
-      status: r.status,
-      platform: r.platform,
-      returnId: r.returnId,
-    }));
+    const formattedReturns = results.map((r) => {
+      const orderSkuMap = new Map((r.orderSkus || []).map((sku) => [sku.productSku, sku]));
+
+      const matchedSkus = (r.products || []).map((p) => {
+        const quantity = p.quantity || 0;
+        const orderSku = orderSkuMap.get(p.productSkuCode);
+
+        let productPrice = 0;
+        if (orderSku && typeof orderSku.productPrice === 'number') {
+          productPrice = orderSku.productPrice;
+        } else if (typeof p.price === 'number') {
+          productPrice = p.price;
+        } else {
+          console.warn(`Missing price for returned product SKU ${p.productSkuCode} in return ${r._id}`);
+        }
+
+        return {
+          productSku: p.productSkuCode,
+          productPrice,
+          quantity,
+          totalPrice: (productPrice || 0) * quantity,
+        };
+      });
+
+      const totalPrice = matchedSkus.reduce((sum, sku) => sum + sku.totalPrice, 0) || 0;
+
+      return {
+        _id: r._id,
+        orderID: r.orderID || null,
+        channelId: r.channelId || null,
+        quantity: r.quantity || 0,
+        totalPrice,
+        customer: r.customer || null,
+        placedOn: r.placedOn,
+        email: r.email || null,
+        phoneNumber: r.phoneNumber || null,
+        status: r.status,
+        platform: r.platform,
+        returnId: r.returnId,
+        reason: r.reason || null,
+        customerComment: r.customerComment || null,
+        merchantComment: r.merchantComment || null,
+        channelImage: channelMap[r.channelId],
+      };
+    });
 
     return {
       success: formattedReturns.length > 0,
@@ -390,17 +479,60 @@ export const acceptOrRejectReturn = async (returnData) => {
 
 export const getReturnById = async (id) => {
   try {
-    const returnData = await Return.findById(id).lean();
-    if (!returnData) {
+    const returnDataCheck = await Return.findById(id).lean();
+    if (!returnDataCheck) {
       return null;
     }
+
+    // --- Step 1: Sync shipment status before fetching ---
+    await syncReturnShipmentStatus(id);
+
+    // --- Step 2: Aggregate Return + Latest Shipment ---
+    const [returnData] = await Return.aggregate([
+      { $match: { _id: new mongoose.Types.ObjectId(id) } },
+      {
+        $lookup: {
+          from: 'shipments',
+          let: { shipment_ids: '$shipmentId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] }],
+                },
+              },
+            },
+            { $sort: { createdAt: -1 } }, // get the latest
+            { $limit: 1 },
+            {
+              $project: {
+                airWaybillNo: 1,
+                merchantShipmentNo: 1,
+                status: 1,
+                createdAt: 1,
+                _id: 0,
+              },
+            },
+          ],
+          as: 'shipmentData',
+        },
+      },
+      {
+        $unwind: {
+          path: '$shipmentData',
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+    ]);
+
+    if (!returnData) return null;
 
     // Extract orderLineIds from products
     const orderLineIds = returnData.products?.map((p) => p.orderLineId).filter(Boolean) || [];
 
     let orderInfo = null;
 
-    // Get order data
+    // --- Step 4: Fetch order data if applicable ---
     if (orderLineIds.length > 0) {
       orderInfo = await getOrderDataByOrderLineIds(orderLineIds, Order, {
         orderId: 1,
@@ -414,14 +546,18 @@ export const getReturnById = async (id) => {
         orderShippingAddress: 1,
         orderPaymentDetails: 1,
         'orderSkuList.skuList': 1,
+        _id: 1,
       });
     }
 
-    // Create aggregated result format for formatReturnDetails
+    // Format the log details safely
+    const returnLogsData = returnData?.logs?.length ? formatReturnTrackingInf(returnData.logs) : [];
     const aggregatedResult = {
       ...returnData,
       totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
-      orderInfo: orderInfo,
+      orderInfo,
+      returnLogsData,
+      omniful: returnData.omniful || null,
     };
 
     return formatReturnDetails(aggregatedResult);
@@ -430,7 +566,19 @@ export const getReturnById = async (id) => {
     throw error;
   }
 };
+export const formatReturnTrackingInf = (data) => {
+  if (!Array.isArray(data) || data.length === 0) return [];
 
+  return data.map((item) => {
+    const formatted = formatDateTime(item?.createdAt);
+
+    return {
+      status: item?.description || '',
+      date: formatted?.date || '',
+      time: formatted?.time || '',
+    };
+  });
+};
 export const exportReturnsToCSV = async (sellerId, filters = {}) => {
   try {
     if (!sellerId) {
@@ -717,6 +865,7 @@ export const getReturnsForWebhook = async (queryParams = {}) => {
     };
   }
 };
+
 export default {
   getReturns,
   getReturnsFromDatabase,

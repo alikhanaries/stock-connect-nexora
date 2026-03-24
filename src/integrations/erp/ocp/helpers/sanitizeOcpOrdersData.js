@@ -1,5 +1,6 @@
 import Channel from '#root/src/models/Channel.js';
 import Order from '#root/src/models/Orders.js';
+import { OCP_STATUS_MAP } from '../constants/common.js';
 
 export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const orderIds = orders.map((data) => String(data.id));
@@ -17,6 +18,8 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
     const orderIdRaw = `${sellerId}${data.id}`;
 
     const existingOrder = existingOrdersMap.get(String(orderIdRaw));
+    const rawStatus = (data.status ?? data.Status ?? 'PENDING').toUpperCase();
+    const mappedStatus = OCP_STATUS_MAP[rawStatus] || 'NEW';
 
     const allRawItems = [...(data.unShippedItems || []), ...(data.shippedItems || []), ...(data.cancelledItems || [])];
 
@@ -37,7 +40,8 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       const existingSkuMap = new Map(existingOrder?.orderSkuList?.skuList?.map((s) => [s.id, s]) || []);
       const existingSku = existingSkuMap.get(lineId);
 
-      const lineStatus = line.status ?? line.Status ?? 'PENDING';
+      const rawLineStatus = (line.status ?? line.Status ?? 'PENDING').toUpperCase();
+      const lineStatus = OCP_STATUS_MAP[rawLineStatus] || 'NEW';
 
       const imageUri = line.image?.imageURI ?? null;
       const slug = line.slug ?? null;
@@ -104,7 +108,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       orderId: orderId,
       channelId: Number(channelNo.channelId ?? 6),
       channelName: 'OCP',
-      status: data.status ?? data.Status ?? 'PENDING',
+      status: mappedStatus,
       globalChannelName: 'OCP',
       globalChannelId: Number(channelNo.globalChannelId ?? 0),
       orderDate: createdAt,
@@ -162,8 +166,8 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
         houseNr: null,
         houseNrAddition: null,
         zipCode: shipAddr.zipCode ?? shipAddr.ZipCode,
-        city: shipAddr.city ?? shipAddr.City,
-        region: shipAddr.state ?? shipAddr.State,
+        city: shipAddr.city,
+        region: shipAddr.state === 'NA' ? shipAddr.city : shipAddr.state,
         countryIso: 'SA',
       },
       orderBillingAddress: {

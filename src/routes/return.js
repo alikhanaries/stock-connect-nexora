@@ -9,6 +9,7 @@ import {
   getReturnById,
   fetchReturnsWebhook,
   exportReturns,
+  handleOmnifulQCWebhook,
 } from '#controllers/ReturnController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess, webHookAuthMiddleware } from '#middleware/index.js';
 import {
@@ -233,4 +234,7 @@ router.put('/update', updateReturnValidator, checkLanguage, authMiddleware, upda
  *         description: Webhook received
  */
 router.post('/fetchReturnsWebhook', returnWebHookValidator, webHookAuthMiddleware, fetchReturnsWebhook);
+
+router.post('/omniful-qc-webhook', handleOmnifulQCWebhook);
+
 export default router;

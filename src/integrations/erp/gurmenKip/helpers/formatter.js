@@ -1,5 +1,4 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
-import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
 import { MIN_STOCK } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
@@ -77,7 +76,9 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
       parentProductSkuCode: null,
       grandParentProductSkuCode: null,
       productType: 'configurable',
-      price: await priceConverter('USD', parseFloat(product.price_special) || 0),
+      price: parseFloat(product.price_special_vat_included || product.price_special || 0),
+      purchasePrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
+      msrp: parseFloat(product.price_special_vat_included || product.price_special || 0),
       currentStockCount: totalStock,
       status: totalStock < MIN_STOCK ? 'inactive' : 'active',
       color: '',
@@ -106,7 +107,9 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
         color,
         size: '',
         ean: '',
-        price: await priceConverter('USD', parseFloat(product.price_special)),
+        price: parseFloat(product.price_special_vat_included || product.price_special || 0),
+        purchasePrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
+        msrp: parseFloat(product.price_special_vat_included || product.price_special || 0),
         currentStockCount: parentStock,
         status: parentStock < MIN_STOCK ? 'inactive' : 'active',
       });
@@ -145,16 +148,16 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
           grandParentProductSkuCode: null,
           productType: 'simple',
           ...processedChild, // only applied when true
-          price: await priceConverter('USD', parseFloat(variant.price_special || product.price_special_vat_included)),
-          msrp: await priceConverter(
-            'USD',
-            parseFloat(variant.price_tl_vat_included_discount || product.price_special_vat_included)
+          price: parseFloat(
+            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
+          ),
+          msrp: parseFloat(
+            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
           ),
           minPrice: null,
           maxPrice: null,
-          purchasePrice: await priceConverter(
-            'USD',
-            parseFloat(variant.price_special || product.price_special_vat_included)
+          purchasePrice: parseFloat(
+            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
           ),
           color,
           size,

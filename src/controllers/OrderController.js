@@ -3,19 +3,32 @@ import orderService from '#service/orderService.js';
 import mongoose from 'mongoose';
 import { errorLog } from '#middleware/index.js';
 import { VALID_PERIODS, USER_ROLES } from '#constants/common.js';
-import { cancelFullOrderOcp, getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
+import {
+  cancelFullOrderOcp,
+  cancelPartialOrderOcp,
+  getSyncedOrdersOcp,
+} from '../integrations/erp/ocp/services/orderServices.js';
+
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
+import { updateSyncDate } from '../helpers/updateSyncDate.js';
+import { syncAmazonOrders } from '../service/amazonOrderService.js';
+import { config } from '../config/config.js';
+import shipmentService from '../service/shipmentService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { data, appliedFilters, pagination } = await orderService.getAllOrders(req.query, sellerId);
+    const { data, appliedFilters, pagination, latestOrderSyncDate } = await orderService.getAllOrders(
+      req.query,
+      sellerId
+    );
 
     if (!data.length) {
       return Responses.successResponse(res, req.locale.NO_ORDERS_FOUND, 200, {
         content: [],
         appliedFilters: appliedFilters || {},
+        latestOrderSyncDate,
         ...pagination,
       });
     }
@@ -23,6 +36,7 @@ export const getAllOrders = async (req, res) => {
     return Responses.successResponse(res, req?.locale?.ORDERS_FETCHED_SUCCESSFULLY, 200, {
       content: data,
       appliedFilters: appliedFilters || {},
+      latestOrderSyncDate,
       ...pagination,
     });
   } catch (error) {
@@ -64,7 +78,6 @@ export const getAdminOrders = async (req, res) => {
 export const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_ORDER_ID_FORMAT, 400);
     }
@@ -101,39 +114,66 @@ export const getOrderStats = async (req, res) => {
 export const getSyncedOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const userId = req.user._id;
     // TODO : Move this to service layer
     const { success, data } = await orderService.getNewOrders();
     if (!success) {
-      return Responses.errorResponse(res, req.locale.NO_ORDERS_FOUND, 200);
+      return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
     }
 
     if (data.length === 0) {
-      return Responses.successResponse(res, req.locale.ALREADY_UP_TO_DATE, 200, []);
+      return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    const [dataSavedInDb, response] = await Promise.allSettled([
-      orderService.processOrders(data),
-      getSyncedOrdersOcp(sellerId),
+    const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
+      orderService.processOrders(data, sellerId),
+      config.IS_OCP_ORDER_SYNC_ENABLED
+        ? getSyncedOrdersOcp(sellerId)
+        : Promise.resolve({ success: true, message: 'OCP order sync is disabled' }),
+      syncAmazonOrders(sellerId, req.locale, req.user._id),
     ]);
 
-    if (!dataSavedInDb.value.success && !response.value.success) {
-      return Responses.errorResponse(res, dataSavedInDb.value.message && response.value.message, 500);
+    // Check for rejected promises or failed results
+    const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
+    const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
+    const isAmazonSuccess = amazonResponse.status === 'fulfilled' && amazonResponse.value?.success;
+
+    if (!isChannelEngineSuccess && !isOcpSuccess && !isAmazonSuccess) {
+      const errorMessages = [
+        dataSavedInDb.status === 'rejected' ? dataSavedInDb.reason?.message : dataSavedInDb.value?.message,
+        response.status === 'rejected' ? response.reason?.message : response.value?.message,
+        amazonResponse.status === 'rejected' ? amazonResponse.reason?.message : amazonResponse.value?.message,
+      ]
+        .filter(Boolean)
+        .join('; ');
+
+      return Responses.errorResponse(res, errorMessages || 'All sync operations failed', 500);
     }
 
     const newUpdateCount =
-      (dataSavedInDb?.value?.data?.upsertedCount ? dataSavedInDb?.value?.data?.upsertedCount : 0) +
-      (response?.value?.data?.upsertedCount ? response?.value?.data?.upsertedCount : 0);
+      ((dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.data?.upsertedCount) || 0) +
+      ((response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0) +
+      ((amazonResponse.status === 'fulfilled' && amazonResponse.value?.data?.newUpdateCount) || 0);
+
+    await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
 
     const message =
       newUpdateCount > 0
-        ? `${newUpdateCount} ${req.locale.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
-        : req.locale.NO_NEW_ORDERS_FOUND;
+        ? `${newUpdateCount} ${req?.locale?.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
+        : req?.locale?.NO_NEW_ORDERS_FOUND;
 
-    const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW');
+    const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW' || !order.MerchantOrderNo);
     if (newOrdersToAcknowledge.length > 0) {
       orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge);
     }
-
+    shipmentService
+      ?.getChannelEngineShipmentDetailsService(userId)
+      .then(() => {
+        console.log(' ChannelEngine shipment sync completed successfully');
+      })
+      .catch((error) => {
+        console.error(' ChannelEngine shipment sync failed:', error);
+      });
     return Responses.successResponse(res, message, 200);
   } catch (error) {
     errorLog(error);
@@ -239,7 +279,20 @@ export const cancelPartialOrder = async (req, res) => {
   try {
     const { orderId, reason, products } = req.body;
 
-    const orderResponse = await orderService.cancelPartialOrder(orderId, products, reason);
+    const order = await Order.findById(orderId)
+      .select('orderSkuList orderId merchantOrderNo status sellerId channelName')
+      .lean();
+
+    if (!order) return Responses.failResponse(res, 'Order not found', 404);
+
+    let orderResponse;
+
+    if (order.channelName === 'OCP') {
+      orderResponse = await cancelPartialOrderOcp(orderId, order, reason, products);
+    } else {
+      orderResponse = await orderService.cancelPartialOrder(orderId, products, reason, order);
+    }
+
     if (!orderResponse.success) {
       return Responses.failResponse(res, orderResponse.error.message, orderResponse.error.status, null);
     }
@@ -255,7 +308,12 @@ export const cancelPartialOrder = async (req, res) => {
 export const exportOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { status, platform, search } = req.query;
+
+    if (!sellerId) {
+      return Responses.failResponse(res, req.locale?.SELLER_ID_REQUIRED || 'Seller ID is required', 400);
+    }
+
+    const { status, channel, search } = req.query;
 
     // Fetch seller name for filename
     const seller = await Seller.findById(sellerId).select('name').lean();
@@ -266,7 +324,7 @@ export const exportOrders = async (req, res) => {
     // Build filters only with non-empty values
     const filters = {};
     if (status) filters.status = status;
-    if (platform) filters.platform = platform;
+    if (channel) filters.channel = channel;
     if (search) filters.search = search;
 
     // Remove any remaining undefined/empty values

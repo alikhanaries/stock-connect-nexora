@@ -36,5 +36,7 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     productType: item.productType || 'simple',
     source: item.source || 'MANUAL',
     status: item.status,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
   };
 };

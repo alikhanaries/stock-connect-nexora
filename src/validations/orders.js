@@ -71,11 +71,11 @@ export const getAllOrdersValidator = validate(async (req) => {
       })
       .transform((val) => (val ? val : 'orderId')),
 
-    platform: z
+    channel: z
       .string()
       .optional()
       .refine((val) => !val || val.trim().length > 0, {
-        message: 'platform cannot be empty',
+        message: 'channel cannot be empty',
       })
       .transform((val) => (val ? val : '')),
     sellerId: z
@@ -220,7 +220,7 @@ export const cancelPartialOrderValidator = validate(async (req) => {
         z.object({
           orderLineId: z.number().min(1, 'Order line ID is required'),
           quantity: z.number().int('Quantity must be an integer').positive('Quantity must be greater than zero'),
-          merchantProductNo: z.string().min(1, 'merchantProductNo is required'),
+          merchantProductNo: z.string().optional(),
         })
       )
       .min(1, 'Products array cannot be empty'),
@@ -249,7 +249,7 @@ export const exportOrdersValidator = validate(async (req) => {
         }
       ),
 
-    platform: z.string().optional(),
+    channel: z.string().optional(),
 
     search: z.string().optional(),
   });

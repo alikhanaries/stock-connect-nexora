@@ -35,3 +35,16 @@ export const importInventoryConstant = {
   INV_UPDATE_PARTIAL_SUCCESS:
     'Important: Some entries in your file were not updated successfully. Refer to the table below for the row numbers and corresponding error details.',
 };
+
+export const importPriceConstant = {
+  PRICE_UPDATE_STATUS: 'Price Update Status',
+  PRICE_UPDATE_FAILED: 'Price Update Failed!',
+  PRICE_UPDATE_SUCCESS: 'Price Update Successful!',
+  PRC_UPDATE_FAILED: 'Your price update has failed due to some errors.',
+  PRC_UPDATE_SUCCESS: 'Your price update has been completed successfully.',
+  PRC_UPDATE_SKIPPED_SKUS: 'Skipped SKUs:',
+  PRC_UPDATE_FOOTER: 'All rights reserved.',
+  SUBJECT: 'Price Update Notification',
+  PRC_UPDATE_PARTIAL_SUCCESS:
+    'Important: Some entries in your file were not updated successfully. Refer to the table below for the row numbers and corresponding error details.',
+};

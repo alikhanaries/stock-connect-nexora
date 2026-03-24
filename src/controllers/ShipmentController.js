@@ -1,15 +1,18 @@
 import {
-  createPartialShipmentService,
+  createFullShipmentService,
   getAllShipmentsService,
   getAllShipmentsAdminService,
   ayMakanWebHookService,
   getSingleShipmentService,
   cancelShipmentService,
+  createReverseShipmentService,
   createManualShipmentService,
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
-import { USER_ROLES } from '#constants/common.js';
+import { SHIPMENT_EXPORT_HEADERS, USER_ROLES } from '#constants/common.js';
+import Seller from '../models/Seller.js';
+import { exportShipmentToCSV } from '../service/shipmentExportService.js';
 
 export const createShipment = async (req, res) => {
   try {
@@ -21,7 +24,7 @@ export const createShipment = async (req, res) => {
       return errorResponse(res, 'Shipment data is required', 400);
     }
 
-    const result = await createPartialShipmentService(shipmentData);
+    const result = await createFullShipmentService(shipmentData);
 
     if (!result.success) {
       // This can happen if service returns false for invalid inputs
@@ -162,6 +165,33 @@ export const cancelShipment = async (req, res) => {
   }
 };
 
+//CREATE REVERSE SHIPMENT
+export const createReverseShipment = async (req, res) => {
+  try {
+    const shipmentData = req.body;
+    const userId = req.user._id;
+    shipmentData['userId'] = userId;
+    // Validate request body early
+    if (!shipmentData || Object.keys(shipmentData).length === 0) {
+      return errorResponse(res, 'Return shipment data is required', 400);
+    }
+
+    const result = await createReverseShipmentService(shipmentData);
+
+    if (!result.success) {
+      return failResponse(res, result.message || 'Failed to approve return', result?.statusCode || 500);
+    }
+
+    return successResponse(res, result.message || 'Return request is approved', 201, {
+      shipmentId: result?.shipmentId,
+    });
+  } catch (error) {
+    console.error('Controller Error: createMerchantReturn:', error.message);
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
 export const createManualShipment = async (req, res) => {
   try {
     const shipmentData = req.body;
@@ -189,5 +219,57 @@ export const createManualShipment = async (req, res) => {
     errorLog(error);
 
     return errorResponse(res, error?.message || 'Manual shipment could not be created', 400);
+  }
+};
+
+export const exportShipmentController = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { status, sortOrder, search } = req.query;
+
+    const seller = await Seller.findById(sellerId).select('name').lean();
+
+    if (!seller) {
+      return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    const filters = {};
+    if (status) filters.status = status;
+    if (sortOrder) filters.sortOrder = sortOrder;
+    if (search) filters.search = search;
+
+    const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const label = 'shipmentData';
+    const filename = `${sellerName}_${label}_${exportDate}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    res.write('\uFEFF');
+
+    res.write(SHIPMENT_EXPORT_HEADERS.join(',') + '\n');
+
+    await exportShipmentToCSV(sellerId, filters, res);
+
+    return res.end();
+  } catch (error) {
+    console.error('Controller Error: exportShipmentController:', error.message);
+    errorLog(error);
+
+    if (res.headersSent) {
+      try {
+        if (typeof res.end === 'function' && !res.writableEnded) {
+          res.end();
+        }
+      } catch (endError) {
+        console.error('Error while ending response after export failure:', endError.message);
+      }
+      return;
+    }
+
+    return errorResponse(res, error.message, 500);
   }
 };

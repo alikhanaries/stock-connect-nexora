@@ -12,6 +12,12 @@ const OrderSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    channelOrderNumber: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
     sellerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Seller',
@@ -30,6 +36,8 @@ const OrderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      enum: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'CANCELED', 'CLOSED', 'RETURNED'],
+      required: true,
       index: true,
     },
     globalChannelName: {
