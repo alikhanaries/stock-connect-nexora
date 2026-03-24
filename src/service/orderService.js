@@ -1309,7 +1309,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
         if (i > 0) {
           rowObject.orderId = '';
         }
-
+        console.log('rowObject', rowObject);
         const row = headers.map((header) => {
           const value = rowObject?.[header];
           const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');

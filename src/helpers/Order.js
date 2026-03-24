@@ -109,7 +109,7 @@ export const flattenAggregatedOrder = (order = {}) => {
     safeGet(order, 'orderSkuList') && Array.isArray(order.orderSkuList.skuList) ? order.orderSkuList.skuList : [];
 
   if (!Array.isArray(skuList) || skuList.length === 0) {
-    flattened['orderSkuList_skuList_count'] = 0;
+    flattened['orderSkuListCount'] = 0;
     // ensure commonly expected sku columns exist so headers align
     [
       'id',
@@ -129,10 +129,11 @@ export const flattenAggregatedOrder = (order = {}) => {
       'expectedDeliveryDate',
       'expectedShipmentDate',
     ].forEach((k) => {
-      flattened[`skuList_${k}_list`] = 'N/A';
+      const key = `sku${k.charAt(0).toUpperCase()}${k.slice(1)}`;
+      flattened[key] = 'N/A';
     });
   } else {
-    flattened['orderSkuList_skuList_count'] = skuList.length;
+    flattened['orderSkuListCount'] = skuList.length;
 
     // union of sku keys
     const allSkuKeys = new Set();
@@ -188,7 +189,7 @@ export const flattenAggregatedOrder = (order = {}) => {
       if (!(col in flattened)) flattened[col] = 'N/A';
     });
   }
-
+  console.log('flattened', flattened);
   // keep createdAt/updatedAt if present
   if (order.createdAt) flattened.createdAt = order.createdAt;
   if (order.updatedAt) flattened.updatedAt = order.updatedAt;
@@ -258,23 +259,23 @@ export const getAggregatedOrderHeaders = (sampleOrder) => {
 
   // SKU list headers
   const skuHeaders = [
-    'orderSkuList_skuList_count',
-    'skuList_id_list',
-    'skuList_merchantProductNo_list',
-    'skuList_description_list',
-    'skuList_quantity_list',
-    'skuList_status_list',
-    'skuList_unitPriceInclVat_list',
-    'skuList_lineTotalInclVat_list',
-    'skuList_gtin_list',
-    'skuList_channelProductNo_list',
-    'skuList_airWaybillNo_list',
-    'skuList_condition_list',
-    'skuList_vatRate_list',
-    'skuList_unitVat_list',
-    'skuList_lineVat_list',
-    'skuList_expectedDeliveryDate_list',
-    'skuList_expectedShipmentDate_list',
+    'orderSkuListCount',
+    'skuId',
+    'skuMerchantProductNo',
+    'skuDescription',
+    'skuQuantity',
+    'skuStatus',
+    'skuUnitPriceInclVat',
+    'skuLineTotalInclVat',
+    'skuGtin',
+    'skuChannelProductNo',
+    'skuAirWaybillNo',
+    'skuCondition',
+    'skuVatRate',
+    'skuUnitVat',
+    'skuLineVat',
+    'skuExpectedDeliveryDate',
+    'skuExpectedShipmentDate',
   ];
 
   return {

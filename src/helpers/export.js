@@ -83,27 +83,29 @@ export const generateDynamicHeaders = (model, excludeFields = []) => {
 
   return finalHeaders;
 };
-
-export const generateDynamicRowData = (doc, model, excludeFields = []) => {
+export const generateDynamicRowData = (doc, model, excludeFields = [], nestedObj = null) => {
   const schema = model.schema;
   const paths = schema.paths;
   const row = [];
 
-  // Standard exclusions for internal fields
   const defaultExclusions = ['__v', '_id'];
   const allExclusions = [...defaultExclusions, ...excludeFields];
 
   Object.keys(paths).forEach((path) => {
-    // Skip excluded fields and nested array paths
     if (allExclusions.includes(path) || path.includes('.$') || path === 'createdAt' || path === 'updatedAt') {
       return;
     }
 
-    const value = doc[path];
+    let value = doc[path];
+
+    // ✅ NEW: If value is undefined and nestedObj exists, try from nested object
+    if ((value === undefined || value === null) && nestedObj) {
+      value = nestedObj[path];
+    }
+
     row.push(formatValueForCSV(value, path));
   });
 
-  // Add timestamps at the end if they exist
   if (paths.createdAt) {
     row.push(formatDateTime(doc.createdAt)?.date || 'N/A');
   }
@@ -193,7 +195,7 @@ export const formatAddressForCSV = (address) => {
 };
 
 export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
-  return {
+  const data = {
     orderId: order.orderId,
     sellerId,
     channelOrderNumber: order.channelOrderNumber,
@@ -212,68 +214,70 @@ export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
     subTotalFee: order.subTotalFee,
     orderFee: order.orderFee,
 
-    orderSkuList_skuList_count: 1,
+    orderSkuCount: sellerTotal || 1,
 
-    skuList_id_list: sku.id,
-    skuList_merchantProductNo_list: sku.merchantProductNo,
-    skuList_description_list: sku.description,
-    skuList_quantity_list: sku.quantity,
-    skuList_status_list: sku.status,
-    skuList_unitPriceInclVat_list: sku.unitPriceInclVat,
-    skuList_lineTotalInclVat_list: sku.lineTotalInclVat,
-    skuList_gtin_list: sku.gtin,
-    skuList_channelProductNo_list: sku.channelProductNo,
-    skuList_airWaybillNo_list: sku.airWaybillNo,
-    skuList_condition_list: sku.condition,
-    skuList_vatRate_list: sku.vatRate,
-    skuList_unitVat_list: sku.unitVat,
-    skuList_lineVat_list: sku.lineVat,
-    skuList_expectedDeliveryDate_list: sku.expectedDeliveryDate,
-    skuList_expectedShipmentDate_list: sku.expectedShipmentDate,
+    skuId: sku.id,
+    skuMerchantProductNo: sku.merchantProductNo,
+    skuDescription: sku.description,
+    skuQuantity: sku.quantity,
+    skuStatus: sku.status,
+    skuUnitPriceInclVat: sku.unitPriceInclVat,
+    skuLineTotalInclVat: sku.lineTotalInclVat,
+    skuGtin: sku.gtin,
+    skuChannelProductNo: sku.channelProductNo,
+    skuAirWaybillNo: sku.airWaybillNo,
+    skuCondition: sku.condition,
+    skuVatRate: sku.vatRate,
+    skuUnitVat: sku.unitVat,
+    skuLineVat: sku.lineVat,
+    skuExpectedDeliveryDate: sku.expectedDeliveryDate,
+    skuExpectedShipmentDate: sku.expectedShipmentDate,
 
-    orderShippingAddress_line1: order.orderShippingAddress?.line1,
-    orderShippingAddress_line2: order.orderShippingAddress?.line2,
-    orderShippingAddress_line3: order.orderShippingAddress?.line3,
-    orderShippingAddress_companyName: order.orderShippingAddress?.companyName,
-    orderShippingAddress_firstName: order.orderShippingAddress?.firstName,
-    orderShippingAddress_lastName: order.orderShippingAddress?.lastName,
-    orderShippingAddress_streetName: order.orderShippingAddress?.streetName,
-    orderShippingAddress_houseNr: order.orderShippingAddress?.houseNr,
-    orderShippingAddress_houseNrAddition: order.orderShippingAddress?.houseNrAddition,
-    orderShippingAddress_zipCode: order.orderShippingAddress?.zipCode,
-    orderShippingAddress_city: order.orderShippingAddress?.city,
-    orderShippingAddress_region: order.orderShippingAddress?.region,
-    orderShippingAddress_countryIso: order.orderShippingAddress?.countryIso,
+    orderShippingAddressLine1: order.orderShippingAddress?.line1,
+    orderShippingAddressLine2: order.orderShippingAddress?.line2,
+    orderShippingAddressLine3: order.orderShippingAddress?.line3,
+    orderShippingAddressCompanyName: order.orderShippingAddress?.companyName,
+    orderShippingAddressFirstName: order.orderShippingAddress?.firstName,
+    orderShippingAddressLastName: order.orderShippingAddress?.lastName,
+    orderShippingAddressStreetName: order.orderShippingAddress?.streetName,
+    orderShippingAddressHouseNr: order.orderShippingAddress?.houseNr,
+    orderShippingAddressHouseNrAddition: order.orderShippingAddress?.houseNrAddition,
+    orderShippingAddressZipCode: order.orderShippingAddress?.zipCode,
+    orderShippingAddressCity: order.orderShippingAddress?.city,
+    orderShippingAddressRegion: order.orderShippingAddress?.region,
+    orderShippingAddressCountryIso: order.orderShippingAddress?.countryIso,
 
-    orderBillingAddress_line1: order.orderBillingAddress?.line1,
-    orderBillingAddress_line2: order.orderBillingAddress?.line2,
-    orderBillingAddress_line3: order.orderBillingAddress?.line3,
-    orderBillingAddress_companyName: order.orderBillingAddress?.companyName,
-    orderBillingAddress_firstName: order.orderBillingAddress?.firstName,
-    orderBillingAddress_lastName: order.orderBillingAddress?.lastName,
-    orderBillingAddress_streetName: order.orderBillingAddress?.streetName,
-    orderBillingAddress_houseNr: order.orderBillingAddress?.houseNr,
-    orderBillingAddress_houseNrAddition: order.orderBillingAddress?.houseNrAddition,
-    orderBillingAddress_zipCode: order.orderBillingAddress?.zipCode,
-    orderBillingAddress_city: order.orderBillingAddress?.city,
-    orderBillingAddress_region: order.orderBillingAddress?.region,
-    orderBillingAddress_countryIso: order.orderBillingAddress?.countryIso,
+    orderBillingAddressLine1: order.orderBillingAddress?.line1,
+    orderBillingAddressLine2: order.orderBillingAddress?.line2,
+    orderBillingAddressLine3: order.orderBillingAddress?.line3,
+    orderBillingAddressCompanyName: order.orderBillingAddress?.companyName,
+    orderBillingAddressFirstName: order.orderBillingAddress?.firstName,
+    orderBillingAddressLastName: order.orderBillingAddress?.lastName,
+    orderBillingAddressStreetName: order.orderBillingAddress?.streetName,
+    orderBillingAddressHouseNr: order.orderBillingAddress?.houseNr,
+    orderBillingAddressHouseNrAddition: order.orderBillingAddress?.houseNrAddition,
+    orderBillingAddressZipCode: order.orderBillingAddress?.zipCode,
+    orderBillingAddressCity: order.orderBillingAddress?.city,
+    orderBillingAddressRegion: order.orderBillingAddress?.region,
+    orderBillingAddressCountryIso: order.orderBillingAddress?.countryIso,
 
-    orderCustomer_gender: order.orderCustomer?.gender,
-    orderCustomer_firstName: order.orderCustomer?.firstName,
-    orderCustomer_lastName: order.orderCustomer?.lastName,
-    orderCustomer_phone: order.orderCustomer?.phone,
-    orderCustomer_email: order.orderCustomer?.email,
-    orderCustomer_companyRegistrationNo: order.orderCustomer?.companyRegistrationNo,
-    orderCustomer_channelCustomerNo: order.orderCustomer?.channelCustomerNo,
+    orderCustomerGender: order.orderCustomer?.gender,
+    orderCustomerFirstName: order.orderCustomer?.firstName,
+    orderCustomerLastName: order.orderCustomer?.lastName,
+    orderCustomerPhone: order.orderCustomer?.phone,
+    orderCustomerEmail: order.orderCustomer?.email,
+    orderCustomerCompanyRegistrationNo: order.orderCustomer?.companyRegistrationNo,
+    orderCustomerChannelCustomerNo: order.orderCustomer?.channelCustomerNo,
 
-    orderPaymentDetails_vatNo: order.orderPaymentDetails?.vatNo,
-    orderPaymentDetails_paymentMethod: order.orderPaymentDetails?.paymentMethod,
-    orderPaymentDetails_paymentReferenceNo: order.orderPaymentDetails?.paymentReferenceNo,
+    orderPaymentDetailsVatNo: order.orderPaymentDetails?.vatNo,
+    orderPaymentDetailsPaymentMethod: order.orderPaymentDetails?.paymentMethod,
+    orderPaymentDetailsPaymentReferenceNo: order.orderPaymentDetails?.paymentReferenceNo,
 
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
+  console.log('data------------------', data);
+  return data;
 };
 
 export const ORDER_EXPORT_HEADERS = [
@@ -292,59 +296,62 @@ export const ORDER_EXPORT_HEADERS = [
   'originalShippingCostsExclVat',
   'subTotalFee',
   'orderFee',
-  'orderSkuList_skuList_count',
-  'skuList_id_list',
-  'skuList_merchantProductNo_list',
-  'skuList_description_list',
-  'skuList_quantity_list',
-  'skuList_status_list',
-  'skuList_unitPriceInclVat_list',
-  'skuList_lineTotalInclVat_list',
-  'skuList_gtin_list',
-  'skuList_channelProductNo_list',
-  'skuList_airWaybillNo_list',
-  'skuList_condition_list',
-  'skuList_vatRate_list',
-  'skuList_unitVat_list',
-  'skuList_lineVat_list',
-  'skuList_expectedDeliveryDate_list',
-  'skuList_expectedShipmentDate_list',
-  'orderShippingAddress_line1',
-  'orderShippingAddress_line2',
-  'orderShippingAddress_line3',
-  'orderShippingAddress_companyName',
-  'orderShippingAddress_firstName',
-  'orderShippingAddress_lastName',
-  'orderShippingAddress_streetName',
-  'orderShippingAddress_houseNr',
-  'orderShippingAddress_houseNrAddition',
-  'orderShippingAddress_zipCode',
-  'orderShippingAddress_city',
-  'orderShippingAddress_region',
-  'orderShippingAddress_countryIso',
-  'orderBillingAddress_line1',
-  'orderBillingAddress_line2',
-  'orderBillingAddress_line3',
-  'orderBillingAddress_companyName',
-  'orderBillingAddress_firstName',
-  'orderBillingAddress_lastName',
-  'orderBillingAddress_streetName',
-  'orderBillingAddress_houseNr',
-  'orderBillingAddress_houseNrAddition',
-  'orderBillingAddress_zipCode',
-  'orderBillingAddress_city',
-  'orderBillingAddress_region',
-  'orderBillingAddress_countryIso',
-  'orderCustomer_gender',
-  'orderCustomer_firstName',
-  'orderCustomer_lastName',
-  'orderCustomer_phone',
-  'orderCustomer_email',
-  'orderCustomer_companyRegistrationNo',
-  'orderCustomer_channelCustomerNo',
-  'orderPaymentDetails_vatNo',
-  'orderPaymentDetails_paymentMethod',
-  'orderPaymentDetails_paymentReferenceNo',
+  'orderSkuListCount',
+  'skuId',
+  'skuMerchantProductNo',
+  'skuDescription',
+  'skuQuantity',
+  'skuStatus',
+  'skuUnitPriceInclVat',
+  'skuLineTotalInclVat',
+  'skuGtin',
+  'skuChannelProductNo',
+  'skuAirWaybillNo',
+  'skuCondition',
+  'skuVatRate',
+  'skuUnitVat',
+  'skuLineVat',
+  'skuExpectedDeliveryDate',
+  'skuExpectedShipmentDate',
+  'orderShippingAddressLine1',
+  'orderShippingAddressLine2',
+  'orderShippingAddressLine3',
+  'orderShippingAddressCompanyName',
+  'orderShippingAddressFirstName',
+  'orderShippingAddressLastName',
+  'orderShippingAddressStreetName',
+  'orderShippingAddressHouseNr',
+  'orderShippingAddressHouseNrAddition',
+  'orderShippingAddressZipCode',
+  'orderShippingAddressCity',
+  'orderShippingAddressRegion',
+  'orderShippingAddressCountryIso',
+
+  'orderBillingAddressLine1',
+  'orderBillingAddressLine2',
+  'orderBillingAddressLine3',
+  'orderBillingAddressCompanyName',
+  'orderBillingAddressFirstName',
+  'orderBillingAddressLastName',
+  'orderBillingAddressStreetName',
+  'orderBillingAddressHouseNr',
+  'orderBillingAddressHouseNrAddition',
+  'orderBillingAddressZipCode',
+  'orderBillingAddressCity',
+  'orderBillingAddressRegion',
+  'orderBillingAddressCountryIso',
+
+  'orderCustomerGender',
+  'orderCustomerFirstName',
+  'orderCustomerLastName',
+  'orderCustomerPhone',
+  'orderCustomerEmail',
+  'orderCustomerCompanyRegistrationNo',
+  'orderCustomerChannelCustomerNo',
+
+  'orderPaymentDetailsVatNo',
+  'orderPaymentDetailsPaymentMethod',
+  'orderPaymentDetailsPaymentReferenceNo',
   'createdAt',
   'updatedAt',
 ];
