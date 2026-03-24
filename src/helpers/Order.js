@@ -189,7 +189,7 @@ export const flattenAggregatedOrder = (order = {}) => {
       if (!(col in flattened)) flattened[col] = 'N/A';
     });
   }
-  console.log('flattened', flattened);
+
   // keep createdAt/updatedAt if present
   if (order.createdAt) flattened.createdAt = order.createdAt;
   if (order.updatedAt) flattened.updatedAt = order.updatedAt;

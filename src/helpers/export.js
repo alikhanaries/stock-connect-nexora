@@ -98,7 +98,7 @@ export const generateDynamicRowData = (doc, model, excludeFields = [], nestedObj
 
     let value = doc[path];
 
-    // ✅ NEW: If value is undefined and nestedObj exists, try from nested object
+    // NEW: If value is undefined and nestedObj exists, try from nested object
     if ((value === undefined || value === null) && nestedObj) {
       value = nestedObj[path];
     }
@@ -195,7 +195,7 @@ export const formatAddressForCSV = (address) => {
 };
 
 export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
-  const data = {
+  return {
     orderId: order.orderId,
     sellerId,
     channelOrderNumber: order.channelOrderNumber,
@@ -276,8 +276,6 @@ export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
   };
-  console.log('data------------------', data);
-  return data;
 };
 
 export const ORDER_EXPORT_HEADERS = [

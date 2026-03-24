@@ -2316,7 +2316,7 @@ async function handleShipmentReturnStatusUpdate({ shipment, shipmentStatus, trac
 }
 export const getChannelEngineShipmentDetailsService = async (userId) => {
   const pageSize = 100; // ChannelEngine hard limit
-  const MAX_PAGES_PER_RUN = 1; // rate-limit safe
+  const MAX_PAGES_PER_RUN = 3; // rate-limit safe
   const DELAY_MS = 300;
 
   const baseUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`;
@@ -2337,7 +2337,7 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
   const safeFetch = async (url) => {
     try {
       const response = await fetch(url, { method: 'GET', headers });
-      console.log('response', response);
+
       if (response.status === 429) {
         return handleRateLimit(response);
       }

@@ -724,7 +724,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const deliveryModelFields = Array.isArray(generateDynamicHeaders(DeliveryAddress))
       ? generateDynamicHeaders(DeliveryAddress).filter((h) => h !== '_id')
       : [];
-
+    // When no return IDs found → show message
     if (!returnIds.length) {
       return {
         success: false,
@@ -782,7 +782,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const pickupCollectionName = PickupAddress?.collection?.collectionName || 'pickupaddresses';
     const deliveryCollectionName = DeliveryAddress?.collection?.collectionName || 'deliveryaddresses';
 
-    // ---- pickup lookup
+    // lookup pickup
     pipeline.push({
       $lookup: {
         from: pickupCollectionName,
@@ -806,7 +806,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       },
     });
 
-    // ---- delivery lookup
+    // lookup delivery
     pipeline.push({
       $lookup: {
         from: deliveryCollectionName,
@@ -870,7 +870,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       ...pickupModelFields.map((h) => `pickup_${h}`),
       ...deliveryModelFields.map((h) => `delivery_${h}`),
     ];
-    console.log('csvRocsvHeadersws1111111', csvHeaders);
+
     const simpleFormat = (v) => {
       if (v === undefined || v === null) return '';
       if (v instanceof Date) return v.toISOString();
@@ -898,7 +898,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     };
 
     const csvRows = [csvHeaders.join(',')];
-    console.log('csvRows', csvRows);
+
     for (const doc of aggregated) {
       const filteredProducts = (doc.products || []).filter((p) => String(p.sellerId) === String(sellerId));
 
