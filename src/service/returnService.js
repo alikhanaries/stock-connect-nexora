@@ -844,15 +844,13 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const detailedValidation = validateExportData(aggregated, 'detailed return data');
     if (!detailedValidation.success) return detailedValidation;
 
-    // ✅ remove sellerIds + add sellerId
+    //  remove sellerIds + add sellerId
     const returnHeadersRaw = generateDynamicHeaders(Return);
 
-    // ❌ remove sellerIds
-    // const returnHeaders = returnHeadersRaw.filter((h) => h !== 'sellerIds');
     const returnHeaders = returnHeadersRaw.filter(
       (h) => h !== 'sellerIds' && h !== 'products' && h !== 'logs' && h !== 'omniful' && h !== 'shipmentId'
     );
-    // ✅ insert sellerId at 2nd position
+    // insert sellerId at 2nd position
     const finalReturnHeaders = [...returnHeaders];
     finalReturnHeaders.splice(1, 0, 'sellerId');
     const productHeaders = [
@@ -922,8 +920,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
           baseRow[returnIdIndex] = '';
         }
 
-        const shipmentRow = [simpleFormat(doc?.shipment?.pickUpId), simpleFormat(doc?.shipment?.deliveryId)];
-
+        const shipmentRow = [doc?.shipment?.pickUpId?.toString(), doc?.shipment?.deliveryId?.toString()];
         const pickupRow = mapModelFields(doc?.shipment?.pickupAddress, pickupModelFields);
         const deliveryRow = mapModelFields(doc?.shipment?.deliveryAddress, deliveryModelFields);
 
@@ -961,9 +958,11 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         isFirstRow = false;
       }
     }
-    console.log('csvRows', csvRows);
+
     const filename =
-      typeof generateCSVFilename === 'function' ? generateCSVFilename('returns') : `returns-${Date.now()}.csv`;
+      typeof generateCSVFilename === 'function'
+        ? generateCSVFilename('returns')
+        : `returns-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.csv`;
 
     return createCSVExportResponse(csvRows, filename, csvRows.length - 1);
   } catch (err) {
