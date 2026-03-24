@@ -225,7 +225,7 @@ export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
     skuLineTotalInclVat: sku.lineTotalInclVat,
     skuGtin: sku.gtin,
     skuChannelProductNo: sku.channelProductNo,
-    skuAirWaybillNo: sku.airWaybillNo,
+    skuAirWaybillNo: sku.airwaybillNumber || '',
     skuCondition: sku.condition,
     skuVatRate: sku.vatRate,
     skuUnitVat: sku.unitVat,

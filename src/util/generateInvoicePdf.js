@@ -61,8 +61,16 @@ export const generateSellerInvoicePDF = async (res, data) => {
 
   const name = `${billingAddress.firstName || ''} ${billingAddress.lastName || ''}`.trim();
 
-  doc.font('Helvetica-Bold').text(billingAddress.companyName || 'ABCD');
-  doc.font('Helvetica').text(name || 'Customer');
+  if (billingAddress.companyName) {
+    // Show company name in bold
+    doc.font('Helvetica-Bold').text(billingAddress.companyName);
+
+    // Show customer name in normal
+    doc.font('Helvetica').text(name || 'Customer');
+  } else {
+    // No company → show name in bold only
+    doc.font('Helvetica-Bold').text(name || 'Customer');
+  }
 
   if (billingAddress.line1) doc.text(billingAddress.line1);
 
@@ -105,8 +113,8 @@ export const generateSellerInvoicePDF = async (res, data) => {
     doc.y = baseY + rowHeight;
   };
 
-  drawDetailRow('Main Invoice number', channelEngineInvoiceId);
-  drawDetailRow('Seller Invoice number', sellerInvoiceId);
+  drawDetailRow('Invoice number', channelEngineInvoiceId);
+  drawDetailRow('Brand Invoice number', sellerInvoiceId);
   drawDetailRow('Order number', orderInfo.channelOrderNumber);
   drawDetailRow('Order date', formattedOrderDate);
   drawDetailRow('Invoice date', invoiceData.invoiceDate, true); // last row
@@ -117,12 +125,12 @@ export const generateSellerInvoicePDF = async (res, data) => {
 
   const cols = {
     desc: 45,
-    qty: 270,
-    price: 310,
-    vatP: 360,
-    vat: 390,
-    exVat: 440,
-    total: 500,
+    qty: 245,
+    price: 305,
+    vatP: 355,
+    vat: 395,
+    exVat: 450,
+    total: 510,
   };
 
   const headerHeight = 22;
@@ -174,7 +182,7 @@ MPN: ${sku.merchantProductNo || '-'}`;
 
     const descHeight = doc.heightOfString(desc, { width: 220 });
 
-    doc.text(desc, cols.desc, yPos, { width: 240 });
+    doc.text(desc, cols.desc, yPos, { width: 220 });
 
     doc.text(sku.quantity?.toString() || '0', cols.qty, yPos, { width: 50, align: 'right' });
 
