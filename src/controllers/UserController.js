@@ -281,7 +281,9 @@ export const softDeleteUser = async (req, res) => {
   try {
     const { id } = req.params;
     const sellerId = req.sellerId;
-    const deletedUser = await userService.deleteUserId(id, sellerId);
+    const currentUserRole = req.user?.role;
+    const currentUserId = req.user._id;
+    const deletedUser = await userService.deleteUserId(id, sellerId, currentUserRole, currentUserId);
 
     if (!deletedUser) {
       return Responses.failResponse(res, req.locale.USER_NOT_FOUND, 404);
@@ -310,10 +312,15 @@ export const deleteSelectedUsers = async (req, res) => {
   try {
     const { ids } = req.body;
     const sellerId = req.sellerId;
+    const currentUserRole = req.user?.role;
+    const currentUserId = req.user._id;
+
+    console.log(currentUserId, '______________________');
+
     if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, req.locale.PROVIDE_ARRAY_OF_USER_IDS, 400);
     }
-    const result = await userService.deleteSelectedUsers(ids, req.locale, sellerId);
+    const result = await userService.deleteSelectedUsers(ids, req.locale, sellerId, currentUserRole, currentUserId);
 
     if (result.success === false) {
       return Responses.failResponse(res, result.message, 400);
