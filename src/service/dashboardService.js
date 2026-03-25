@@ -315,19 +315,27 @@ const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, mo
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range) throw new Error(`Invalid period "${period}"`);
 
-  const pipeline = buildAggregationPipeline({
+  const salesPipeline = buildAggregationPipeline({
     sellerObjectIds,
     period,
+    metric: 'sales',
     range,
-    metrics: ['sales', 'orders'],
     ...globalChannelFilter,
   });
 
-  const rawData = await Order.aggregate(pipeline);
+  const ordersPipeline = buildAggregationPipeline({
+    sellerObjectIds,
+    period,
+    metric: 'orders',
+    range,
+    ...globalChannelFilter,
+  });
+
+  const [salesRaw, ordersRaw] = await Promise.all([Order.aggregate(salesPipeline), Order.aggregate(ordersPipeline)]);
 
   return {
-    sales: normalizeSeries(period, rawData, range, 'sales'),
-    orders: normalizeSeries(period, rawData, range, 'orders'),
+    sales: normalizeSeries(period, salesRaw, range),
+    orders: normalizeSeries(period, ordersRaw, range),
   };
 };
 
