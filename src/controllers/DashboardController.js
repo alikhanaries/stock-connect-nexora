@@ -73,9 +73,9 @@ export const getShipmentAnalytics = async (req, res) => {
 export const getAnalytics = async (req, res) => {
   try {
     const sellerIds = req.sellerIds;
-    const { period, metric, startDate, endDate, month, channel } = req.query;
+    const { period, startDate, endDate, month, channel } = req.query;
 
-    const data = await dashboardService.getAnalyticsTimeSeries(sellerIds, period, metric, {
+    const data = await dashboardService.getAnalyticsTimeSeries(sellerIds, period, {
       startDate,
       endDate,
       month,
