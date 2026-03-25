@@ -50,9 +50,33 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
         },
       },
       {
+        $facet: {
+          statusCounts: [
+            { $match: { status: { $ne: 'DELIVERED' } } },
+            { $group: { _id: '$status', count: { $sum: 1 } } },
+          ],
+          deliveredQty: [
+            { $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false } },
+            { $match: { 'orderSkuList.skuList.statusBreakdown.delivered': { $gt: 0 } } },
+            {
+              $group: {
+                _id: 'DELIVERED',
+                count: { $sum: { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] } },
+              },
+            },
+          ],
+        },
+      },
+      {
+        $project: {
+          merged: { $concatArrays: ['$statusCounts', '$deliveredQty'] },
+        },
+      },
+      { $unwind: '$merged' },
+      {
         $group: {
-          _id: '$status',
-          count: { $sum: 1 },
+          _id: '$merged._id',
+          count: { $sum: '$merged.count' },
         },
       },
     ];
