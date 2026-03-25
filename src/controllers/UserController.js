@@ -315,8 +315,6 @@ export const deleteSelectedUsers = async (req, res) => {
     const currentUserRole = req.user?.role;
     const currentUserId = req.user._id;
 
-    console.log(currentUserId, '______________________');
-
     if (!Array.isArray(ids) || ids.length === 0) {
       return Responses.failResponse(res, req.locale.PROVIDE_ARRAY_OF_USER_IDS, 400);
     }
