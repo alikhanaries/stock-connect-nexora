@@ -605,7 +605,13 @@ export const getReturnById = async (id, sellerId) => {
             {
               $match: {
                 $expr: {
-                  $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }],
+                  $and: [
+                    { $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] },
+
+                    ...(sellerObjectId ? [{ $eq: ['$sellerId', sellerObjectId] }] : []),
+
+                    { $eq: ['$type', 'REVERSE'] },
+                  ],
                 },
               },
             },
@@ -634,6 +640,33 @@ export const getReturnById = async (id, sellerId) => {
 
     if (!returnData) return null;
 
+    const sellerShipments = await Shipment.find({
+      _id: { $in: returnData?.shipmentId || [] },
+      ...(sellerObjectId && { sellerId: sellerObjectId }),
+      type: 'REVERSE',
+      status: { $ne: 'CANCELED' },
+    }).lean();
+
+    const shippedSkuSet = new Set();
+
+    sellerShipments.forEach((shipment) => {
+      (shipment.products || []).forEach((p) => {
+        if (p.merchantProductNo) {
+          shippedSkuSet.add(p.merchantProductNo);
+        }
+      });
+    });
+
+    const returnSkus = (returnData.products || []).map((p) => p.productSkuCode) || [];
+
+    const isAnySkuPending = returnSkus.some((sku) => !shippedSkuSet.has(sku));
+
+    let finalStatus = returnData.status;
+
+    if (isAnySkuPending) {
+      finalStatus = 'IN_PROGRESS';
+    }
+
     const orderLineIds = returnData.products?.map((p) => p.orderLineId).filter(Boolean) || [];
 
     let orderInfo = null;
@@ -656,6 +689,7 @@ export const getReturnById = async (id, sellerId) => {
     const returnLogsData = returnData?.logs?.length ? formatReturnTrackingInf(returnData.logs) : [];
     const aggregatedResult = {
       ...returnData,
+      status: finalStatus,
       orderInfo,
       returnLogsData,
       omniful: returnData.omniful || null,

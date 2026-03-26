@@ -1775,7 +1775,7 @@ export const createReverseShipmentWithAymakan = async (shipmentData) => {
   }
 };
 
-export const createReverseShipmentService = async (shipmentData) => {
+export const createReverseShipmentService = async (shipmentData, sellerId) => {
   try {
     const { orderId, userId, deliverId, pieces = 0, returnId } = shipmentData;
 
@@ -1785,6 +1785,7 @@ export const createReverseShipmentService = async (shipmentData) => {
     if (!userId) missingFields.push('userId');
     if (!deliverId) missingFields.push('deliverId');
     if (!returnId) missingFields.push('returnId');
+    if (!sellerId) missingFields.push('sellerId');
 
     if (missingFields.length > 0) {
       throw new Error(`Missing required shipment fields: ${missingFields.join(', ')}`);
@@ -1799,42 +1800,49 @@ export const createReverseShipmentService = async (shipmentData) => {
 
     if (!returnData) return { success: false, message: 'Return data not found.' };
 
-    const returnProducts = returnData?.products;
-    const { merchantOrderNo, orderSkuList, sellerId } = order;
+    const { merchantOrderNo, orderSkuList } = order;
 
-    // Validate SKU list
-    if (!returnProducts || returnProducts.length === 0) {
-      return { success: false, message: 'Retrun has empty line items.' };
+    const sellerProducts = (returnData.products || []).filter((p) => p.sellerId.toString() === sellerId.toString());
+
+    if (!sellerProducts.length) {
+      return { success: false, message: 'No products found for this seller in return.' };
     }
 
     // Filter products to valid SKUs
-    const validProducts = returnProducts.filter((product) =>
+    const validProducts = sellerProducts.filter((product) =>
       orderSkuList.skuList.some((s) => s.merchantProductNo === product.productSkuCode)
     );
     if (validProducts.length === 0) {
-      return { success: false, message: 'No valid SKUs found in order for shipment.' };
+      return { success: false, message: 'No valid SKUs found in order for this seller.' };
     }
 
-    //  Step 3: Find existing shipments for given SKUs
-    const productLineIds = returnProducts.map((p) => p.productSkuCode);
+    // Prevent duplicate reverse shipment (seller-level)
+    const productSkuCodes = validProducts.map((p) => p.productSkuCode);
 
-    const existingShipments = await Shipment.find({
+    const existingShipment = await Shipment.findOne({
       orderId,
+      returnId,
+      sellerId,
       type: 'REVERSE',
       status: { $ne: 'CANCELED' },
-      'products.merchantProductNo': { $in: productLineIds },
-    }).lean();
-    if (existingShipments && existingShipments?.length !== 0) {
-      return { success: false, message: `Shipment already created` };
+      'products.merchantProductNo': { $in: productSkuCodes },
+    });
+
+    if (existingShipment) {
+      return { success: false, message: 'Reverse shipment already exists for this seller.' };
     }
-    //  Step 6: Prepare delivery & pickup details
+
+    // Step 6: Prepare addresses
     const pickUpData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!pickUpData) throw new Error('Invalid pickup information');
+
     const collectionData = await saveDeliveryAddress(pickUpData);
 
     const deliveryData = await getPickUpAddress(deliverId);
     if (!deliveryData) throw new Error('Invalid delivery information');
-    const formatedProducts = returnProducts?.map((pro) => {
+
+    //Format ONLY seller products
+    const formatedProducts = validProducts.map((pro) => {
       const plain = JSON.parse(JSON.stringify(pro));
 
       return {
@@ -1845,7 +1853,7 @@ export const createReverseShipmentService = async (shipmentData) => {
       };
     });
 
-    // //  Step 7: Create shipment in Aymakan
+    // Step 8: Create shipment in Aymakan
     const aymakanResult = await createReverseShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
@@ -1859,10 +1867,9 @@ export const createReverseShipmentService = async (shipmentData) => {
     }
 
     const trackingNumber = aymakanResult.shipping.tracking_number;
-
     const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
 
-    //  Step 8: Track shipment for initial status info
+    // Step 9: Track shipment
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo = Array.isArray(aymakanTrackingResult?.trackingInfo)
       ? aymakanTrackingResult.trackingInfo.map((info) => ({
@@ -1886,6 +1893,7 @@ export const createReverseShipmentService = async (shipmentData) => {
       airWaybillNo: trackingNumber,
       merchantShipmentNo,
       merchantOrderNo,
+      returnId,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
       products: formatedProducts,
@@ -1900,7 +1908,7 @@ export const createReverseShipmentService = async (shipmentData) => {
 
     const newShipmentData = await shipmentDocument.save();
 
-    // ACKNOWLDGE CHANNEL ENGINE ABOUT APPROVAL
+    // Step 11: Acknowledge Channel Engine
     const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
     await fetch(ceUrl, {
       method: 'POST',
@@ -1915,22 +1923,21 @@ export const createReverseShipmentService = async (shipmentData) => {
     await Return.findByIdAndUpdate(
       returnId,
       {
-        $set: { status: 'SHIPMENT_CREATED' },
+        $addToSet: { shipmentId: newShipmentData._id }, // ✅ avoids duplicates
         $push: {
-          shipmentId: newShipmentData?._id,
           logs: {
             status: 'SHIPMENT_CREATED',
-            description: 'Shipment Created',
+            description: `Reverse shipment created for seller ${sellerId}`,
             createdAt: new Date(),
           },
         },
       },
-      { new: true } // optional: returns the updated document
+      { new: true }
     );
 
     return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
-    console.error('Error in createPartialShipmentService:', error);
+    console.error('Error in createReverseShipmentService:', error);
     throw error;
   }
 };
@@ -2107,7 +2114,7 @@ export const createManualShipmentService = async (shipmentData) => {
       sellerId,
       userId,
       deliveryId,
-      ...(pickupData && { pickUpId: pickupData._id }), // ✅ optional
+      ...(pickupData && { pickUpId: pickupData._id }),
       airWaybillNo,
       merchantShipmentNo,
       merchantOrderNo: order.merchantOrderNo || order.orderId,
@@ -2436,7 +2443,6 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
     // ---- process shipments
     for (const ceShipment of channelEngineShipments) {
       if (!ceShipment?.MerchantShipmentNo?.trim()) {
-        // console.warn('Skipping: Missing MerchantShipmentNo');
         continue;
       }
 
@@ -2446,7 +2452,6 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
       const order = orderByMerchantNo.get(ceShipment?.MerchantOrderNo);
 
       if (!order) {
-        // console.warn('Order NOT FOUND:', ceShipment.MerchantOrderNo);
         continue;
       }
 
@@ -2466,7 +2471,6 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
 
         if (sellerFromExtra) {
           sellerIds = [sellerFromExtra];
-          // console.log(`Seller from ExtraData for ${merchantProductNo}:`, sellerFromExtra);
         } else {
           //  2. fallback to SKU
 
