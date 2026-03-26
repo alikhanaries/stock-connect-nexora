@@ -345,6 +345,7 @@ router.post(
   createReverseShipmentValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   createReverseShipment
 );
 

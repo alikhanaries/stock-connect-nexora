@@ -11,6 +11,7 @@ import {
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
+import mongoose from 'mongoose';
 
 export const createShipment = async (req, res) => {
   try {
@@ -166,6 +167,12 @@ export const cancelShipment = async (req, res) => {
 //CREATE REVERSE SHIPMENT
 export const createReverseShipment = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
+
+    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
+      return failResponse(res, 'Invalid sellerid', 400);
+    }
+
     const shipmentData = req.body;
     const userId = req.user._id;
     shipmentData['userId'] = userId;
@@ -174,7 +181,7 @@ export const createReverseShipment = async (req, res) => {
       return errorResponse(res, 'Return shipment data is required', 400);
     }
 
-    const result = await createReverseShipmentService(shipmentData);
+    const result = await createReverseShipmentService(shipmentData, sellerId);
 
     if (!result.success) {
       return failResponse(res, result.message || 'Failed to approve return', result?.statusCode || 500);
