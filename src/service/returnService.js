@@ -14,7 +14,6 @@ import {
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
 import {
-  escapeCsv,
   generateCSVFilename,
   createCSVExportResponse,
   validateExportData,
@@ -704,6 +703,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const basicResult = await (typeof getReturnsFromDatabase === 'function'
       ? getReturnsFromDatabase(queryObj)
       : Promise.resolve({ data: [] }));
+
     const validation = validateExportData(basicResult.data, 'returns');
     if (!validation.success) return validation;
 
@@ -720,10 +720,10 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const pickupModelFields = Array.isArray(generateDynamicHeaders(PickupAddress))
       ? generateDynamicHeaders(PickupAddress).filter((h) => h !== '_id')
       : [];
+
     const deliveryModelFields = Array.isArray(generateDynamicHeaders(DeliveryAddress))
       ? generateDynamicHeaders(DeliveryAddress).filter((h) => h !== '_id')
       : [];
-
     // When no return IDs found → show message
     if (!returnIds.length) {
       return {
@@ -736,6 +736,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const pipeline = typeof buildReturnAggregationPipeline === 'function' ? buildReturnAggregationPipeline() : [];
     pipeline.push({ $match: { _id: { $in: returnIds } } });
 
+    // ---- shipment lookup (unchanged)
     pipeline.push({
       $lookup: {
         from: Shipment.collection?.collectionName || 'shipments',
@@ -843,15 +844,31 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const detailedValidation = validateExportData(aggregated, 'detailed return data');
     if (!detailedValidation.success) return detailedValidation;
 
-    const returnHeaders = generateDynamicHeaders(Return);
-    const shipmentSingleHeader = ['pickUpId', 'deliveryId'];
-    const pickupPrefixedHeaders = pickupModelFields.map((h) => `pickup_${h}`);
-    const deliveryPrefixedHeaders = deliveryModelFields.map((h) => `delivery_${h}`);
+    //  remove sellerIds + add sellerId
+    const returnHeadersRaw = generateDynamicHeaders(Return);
+
+    const returnHeaders = returnHeadersRaw.filter(
+      (h) => h !== 'sellerIds' && h !== 'products' && h !== 'logs' && h !== 'omniful' && h !== 'shipmentId'
+    );
+    // insert sellerId at 2nd position
+    const finalReturnHeaders = [...returnHeaders];
+    finalReturnHeaders.splice(1, 0, 'sellerId');
+    const productHeaders = [
+      'productSkuCode',
+      'orderLineId',
+      'quantity',
+      'acceptedQuantity',
+      'rejectedQuantity',
+      'unitPrice',
+      'totalPrice',
+    ];
     const csvHeaders = [
-      ...returnHeaders,
-      ...shipmentSingleHeader,
-      ...pickupPrefixedHeaders,
-      ...deliveryPrefixedHeaders,
+      ...finalReturnHeaders,
+      ...productHeaders,
+      'pickUpId',
+      'deliveryId',
+      ...pickupModelFields.map((h) => `pickup_${h}`),
+      ...deliveryModelFields.map((h) => `delivery_${h}`),
     ];
 
     const simpleFormat = (v) => {
@@ -873,10 +890,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         const parts = String(f).split('.');
         let cur = doc;
         for (const p of parts) {
-          if (cur == null) {
-            cur = null;
-            break;
-          }
+          if (cur == null) break;
           cur = cur[p];
         }
         return simpleFormat(cur);
@@ -886,37 +900,71 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const csvRows = [csvHeaders.join(',')];
 
     for (const doc of aggregated) {
-      const baseRow = generateDynamicRowData(doc, Return);
+      const filteredProducts = (doc.products || []).filter((p) => String(p.sellerId) === String(sellerId));
 
-      const pickUpIdValue = doc?.shipment?.pickUpId ? String(doc.shipment.pickUpId) : '';
-      const deliveryIdValue = doc?.shipment?.deliveryId ? String(doc.shipment.deliveryId) : '';
-      const shipmentRow = [simpleFormat(pickUpIdValue), simpleFormat(deliveryIdValue)];
+      if (!filteredProducts.length) continue;
 
-      const pickupDoc = doc?.shipment?.pickupAddress ?? null;
-      const deliveryDoc = doc?.shipment?.deliveryAddress ?? null;
+      let isFirstRow = true;
 
-      const pickupRow = mapModelFields(pickupDoc, pickupModelFields);
-      const deliveryRow = mapModelFields(deliveryDoc, deliveryModelFields);
+      for (const product of filteredProducts) {
+        const tempDoc = { ...doc, products: [product] };
 
-      const fullRowArray = [...baseRow, ...shipmentRow, ...pickupRow, ...deliveryRow];
+        let baseRow = generateDynamicRowData(tempDoc, Return, ['products', 'logs', 'omniful', 'shipmentId']);
+        //  remove sellerIds column value
+        const sellerIdsIndex = returnHeadersRaw.indexOf('sellerIds');
+        if (sellerIdsIndex !== -1) baseRow.splice(sellerIdsIndex, 1);
 
-      const csvLine =
-        typeof escapeCsv === 'function'
-          ? escapeCsv(fullRowArray)
-          : fullRowArray
-              .map((v) => {
-                const s = simpleFormat(v);
-                if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-                return s;
-              })
-              .join(',');
+        //  handle returnId display
+        const returnIdIndex = returnHeaders.indexOf('returnId');
+        if (!isFirstRow && returnIdIndex !== -1) {
+          baseRow[returnIdIndex] = '';
+        }
 
-      csvRows.push(csvLine);
+        const shipmentRow = [doc?.shipment?.pickUpId?.toString(), doc?.shipment?.deliveryId?.toString()];
+        const pickupRow = mapModelFields(doc?.shipment?.pickupAddress, pickupModelFields);
+        const deliveryRow = mapModelFields(doc?.shipment?.deliveryAddress, deliveryModelFields);
+
+        const totalPrice = (product.quantity || 0) * (product.price || 0);
+
+        const productRow = [
+          simpleFormat(product.productSkuCode),
+          simpleFormat(product.orderLineId),
+          simpleFormat(product.quantity),
+          simpleFormat(product.acceptedQuantity),
+          simpleFormat(product.rejectedQuantity),
+          simpleFormat(product.price), // unit price
+          simpleFormat(totalPrice), // total price
+        ];
+        const fullRowArray = [
+          baseRow[0], // returnId
+          String(sellerId), //  sellerId in 2nd position
+          ...baseRow.slice(1), // rest of fields
+          ...productRow,
+          ...shipmentRow,
+          ...pickupRow,
+          ...deliveryRow,
+        ];
+
+        const csvLine = fullRowArray
+          .map((v) => {
+            const s = simpleFormat(v);
+            if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+            return s;
+          })
+          .join(',');
+
+        csvRows.push(csvLine);
+
+        isFirstRow = false;
+      }
     }
 
     const filename =
-      typeof generateCSVFilename === 'function' ? generateCSVFilename('returns') : `returns-${Date.now()}.csv`;
-    return createCSVExportResponse(csvRows, filename, aggregated.length);
+      typeof generateCSVFilename === 'function'
+        ? generateCSVFilename('returns')
+        : `returns-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.csv`;
+
+    return createCSVExportResponse(csvRows, filename, csvRows.length - 1);
   } catch (err) {
     console.error('Error exporting returns :', err?.message, err?.stack);
     throw err;

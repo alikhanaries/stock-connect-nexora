@@ -1258,12 +1258,46 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       return { success: false, message: 'No orders found' };
     }
 
+    /*
+     FETCH ALL SHIPMENTS IN ONE GO (OPTIMIZED)
+    */
+    const orderIds = orders.map((o) => o._id);
+
+    const shipments = await Shipment.find({
+      orderId: { $in: orderIds },
+    }).lean();
+
+    /*
+     BUILD LOOKUP MAP
+    key = orderId_merchantProductNo
+    value = [airWaybillNos]
+    */
+    const airwaybillMap = {};
+
+    shipments.forEach((shipment) => {
+      const orderIdStr = String(shipment.orderId);
+
+      (shipment.products || []).forEach((product) => {
+        if (!product?.merchantProductNo) return;
+
+        const key = `${orderIdStr}_${product.merchantProductNo}`;
+
+        if (!airwaybillMap[key]) {
+          airwaybillMap[key] = [];
+        }
+
+        if (shipment.airWaybillNo) {
+          airwaybillMap[key].push(shipment.airWaybillNo);
+        }
+      });
+    });
+
     const headers = ORDER_EXPORT_HEADERS;
     const csvRows = [headers.join(',')];
 
     for (const order of orders) {
       /*
-      FILTER SELLER SKUS AND REMOVE FULLY CANCELLED
+      FILTER SELLER SKUS
       */
       const sellerSkus = (order.orderSkuList?.skuList || []).filter((sku) => {
         return String(sku.sellerId) === String(sellerId);
@@ -1272,7 +1306,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       if (!sellerSkus.length) continue;
 
       /*
-      CALCULATE SELLER TOTALS USING EFFECTIVE QUANTITY
+      CALCULATE TOTALS
       */
       const sellerTotals = sellerSkus.reduce(
         (totals, sku) => {
@@ -1301,7 +1335,25 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       for (let i = 0; i < sellerSkus.length; i++) {
         const sku = sellerSkus[i];
 
-        const rowObject = buildExportOrderRow(order, sku, sellerTotals, sellerId);
+        /*
+         GET AIRWAYBILL NUMBER
+        */
+        const key = `${order._id}_${sku.merchantProductNo}`;
+
+        const airwaybillNumber = (airwaybillMap[key] || []).join('|'); // multiple AWBs handled
+
+        /*
+        PASS TO ROW BUILDER
+        */
+        const rowObject = buildExportOrderRow(
+          order,
+          {
+            ...sku,
+            airwaybillNumber, //  injected here
+          },
+          sellerTotals,
+          sellerId
+        );
 
         /*
         SHOW ORDERID ONLY FIRST ROW
