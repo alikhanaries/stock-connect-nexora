@@ -102,7 +102,15 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
                   productSkuCode: product.productSkuCode,
                   sellerId: product.sellerId,
                 },
-                update: { $set: product },
+                update: {
+                  $set: {
+                    ...product,
+                    updatedAt: new Date(),
+                  },
+                  $setOnInsert: {
+                    createdAt: new Date(),
+                  },
+                },
                 upsert: true,
               },
             }));

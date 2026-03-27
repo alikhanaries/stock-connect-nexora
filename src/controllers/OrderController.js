@@ -308,7 +308,12 @@ export const cancelPartialOrder = async (req, res) => {
 export const exportOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { status, platform, search } = req.query;
+
+    if (!sellerId) {
+      return Responses.failResponse(res, req.locale?.SELLER_ID_REQUIRED || 'Seller ID is required', 400);
+    }
+
+    const { status, channel, search } = req.query;
 
     // Fetch seller name for filename
     const seller = await Seller.findById(sellerId).select('name').lean();
@@ -319,7 +324,7 @@ export const exportOrders = async (req, res) => {
     // Build filters only with non-empty values
     const filters = {};
     if (status) filters.status = status;
-    if (platform) filters.platform = platform;
+    if (channel) filters.channel = channel;
     if (search) filters.search = search;
 
     // Remove any remaining undefined/empty values

@@ -63,7 +63,7 @@ const getAllOrders = async (query, sellerId) => {
       status,
       sortOrder = 'desc',
       sortBy = 'orderDate',
-      platform = '',
+      channel = '',
     } = query;
     const skip = (page - 1) * size;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -102,9 +102,12 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.search = search;
     }
 
-    if (platform) {
-      filter.channelName = { $regex: platform, $options: 'i' };
-      appliedFilters.platform = platform;
+    if (channel) {
+      const channelArray = channel.split(',').map((s) => s.trim());
+      filter.channelName = {
+        $in: channelArray.map((s) => new RegExp(`${escapeRegex(s)}`, 'i')),
+      };
+      appliedFilters.channel = channel;
     }
 
     if (fromDate || toDate) {
@@ -1081,7 +1084,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       };
     }
 
-    const { status, platform, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
+    const { status, channel, search, size = 100000, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
 
     const filter = { sellerId: sellerId };
 
@@ -1096,8 +1099,11 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       ];
     }
 
-    if (platform) {
-      filter.channelName = { $regex: platform, $options: 'i' };
+    if (channel) {
+      const channelArray = channel.split(',').map((s) => s.trim());
+      filter.channelName = {
+        $in: channelArray.map((s) => new RegExp(`${s}`, 'i')),
+      };
     }
 
     if (status) {

@@ -81,8 +81,14 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
           sellerId: product.sellerId,
         },
         {
-          $set: updateFields,
-          $setOnInsert: insertOnlyProduct,
+          $set: {
+            ...updateFields,
+            updatedAt: new Date(),
+          },
+          $setOnInsert: {
+            ...insertOnlyProduct,
+            createdAt: new Date(),
+          },
         },
         { upsert: true }
       );

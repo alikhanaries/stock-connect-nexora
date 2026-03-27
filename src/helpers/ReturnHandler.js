@@ -198,7 +198,8 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
 };
 
 export const buildReturnMatchAndPipeline = (query = {}) => {
-  const { status, platform, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
+  const { status, platform, channel, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const matchConditions = {};
 
@@ -224,9 +225,16 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
     $in: v.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
   }));
 
-  addFilter(matchConditions, 'platform', platform, (v) => ({
-    $regex: new RegExp(v, 'i'),
-  }));
+  if (channel) {
+    const channelArray = channel.split(',').map((s) => s.trim());
+    matchConditions.platform = {
+      $in: channelArray.map((s) => new RegExp(`${escapeRegex(s)}`, 'i')),
+    };
+  } else if (platform) {
+    addFilter(matchConditions, 'platform', platform, (v) => ({
+      $regex: new RegExp(v, 'i'),
+    }));
+  }
 
   addFilter(matchConditions, 'channelId', channelId, (v) => parseInt(v, 10));
 

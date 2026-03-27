@@ -77,6 +77,8 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
       grandParentProductSkuCode: null,
       productType: 'configurable',
       price: parseFloat(product.price_special_vat_included || product.price_special || 0),
+      noonPrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
+      namshiPrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
       purchasePrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
       msrp: parseFloat(product.price_special_vat_included || product.price_special || 0),
       currentStockCount: totalStock,
@@ -108,6 +110,8 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
         size: '',
         ean: '',
         price: parseFloat(product.price_special_vat_included || product.price_special || 0),
+        noonPrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
+        namshiPrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
         purchasePrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
         msrp: parseFloat(product.price_special_vat_included || product.price_special || 0),
         currentStockCount: parentStock,
@@ -149,6 +153,12 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
           productType: 'simple',
           ...processedChild, // only applied when true
           price: parseFloat(
+            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
+          ),
+          noonPrice: parseFloat(
+            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
+          ),
+          namshiPrice: parseFloat(
             variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
           ),
           msrp: parseFloat(

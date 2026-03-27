@@ -304,8 +304,7 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
   }));
 };
 
-const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, endDate, month, channel } = {}) => {
-  if (!['sales', 'orders'].includes(metric)) throw new Error(`Invalid metric "${metric}"`);
+const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
   const globalChannelFilter = buildGlobalChannelFilter(channel);
   const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
@@ -316,17 +315,28 @@ const getAnalyticsTimeSeries = async (sellerId, period, metric, { startDate, end
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range) throw new Error(`Invalid period "${period}"`);
 
-  const pipeline = buildAggregationPipeline({
+  const salesPipeline = buildAggregationPipeline({
     sellerObjectIds,
     period,
-    metric,
+    metric: 'sales',
     range,
     ...globalChannelFilter,
   });
 
-  const rawData = await Order.aggregate(pipeline);
+  const ordersPipeline = buildAggregationPipeline({
+    sellerObjectIds,
+    period,
+    metric: 'orders',
+    range,
+    ...globalChannelFilter,
+  });
 
-  return { metric, data: normalizeSeries(period, rawData, range) };
+  const [salesRaw, ordersRaw] = await Promise.all([Order.aggregate(salesPipeline), Order.aggregate(ordersPipeline)]);
+
+  return {
+    sales: normalizeSeries(period, salesRaw, range),
+    orders: normalizeSeries(period, ordersRaw, range),
+  };
 };
 
 export const getTopPerformersProducts = async (
