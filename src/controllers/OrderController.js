@@ -355,3 +355,26 @@ export const exportOrders = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+
+export const generateDocumentId = async (req, res) => {
+  try {
+    const orderId = req.body.orderId;
+    const skuCodes = Array.isArray(req.body.skuCodes)
+      ? req.body.skuCodes
+      : req.body.skuCodes
+        ? [req.body.skuCodes]
+        : [];
+    const file = req.file;
+    const documentId = await orderService.generateDocumentId({
+      orderId,
+      skuCodes,
+      file,
+    });
+
+    return Responses.successResponse(res, 'Document ID generated successfully', 200, { documentId });
+  } catch (error) {
+    console.error('Controller Error: generateDocumentId:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
