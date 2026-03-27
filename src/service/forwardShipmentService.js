@@ -43,11 +43,10 @@ const fetchNewTokens = async (refreshToken) => {
     }),
   });
 
-  const data = await response.json();
-
   if (!response.ok) {
     throw new Error('Token API failed');
   }
+  const data = await response.json();
 
   return {
     accessToken: data?.data?.access_token,
@@ -59,7 +58,13 @@ export const getReportToken = async () => {
   const tokenDoc = await getToken();
 
   if (!tokenDoc) {
-    throw new Error('Token not initialized in DB');
+    const refreshTokenToUse = process.env.OMNIFUL_REFRESH_TOKEN;
+    if (!refreshTokenToUse) {
+      throw new Error('Token not initialized in DB');
+    }
+    const newTokens = await fetchNewTokens(refreshTokenToUse);
+    await upsertToken(newTokens);
+    return newTokens.accessToken;
   }
 
   if (!isOlderThan25Days(tokenDoc.updatedAt)) {
@@ -74,13 +79,13 @@ export const getReportToken = async () => {
 };
 
 export const forwardAymakanShipment = async (shipmentData) => {
-  const omnifulAccessToken = await getReportToken();
+  let omnifulAccessToken = await getReportToken();
 
   if (!omnifulAccessToken) {
     throw new Error('Omniful access token not available');
   }
 
-  if (omnifulAccessToken) {
+  {
     const skuCodes = shipmentData.products.map((p) => p.merchantProductNo);
 
     const productDetails = await Product.find({
@@ -141,7 +146,7 @@ export const forwardAymakanShipment = async (shipmentData) => {
         hub_code: OMNIFUL_HUB_CODE,
 
         order_items: (shipmentData.products || []).map((item) => ({
-          sku_code: shipmentData.airWaybillNo,
+          sku_code: item.merchantProductNo,
           name:
             orderFromMerchantNo.orderSkuList?.skuList?.find((s) => s.merchantProductNo === item.merchantProductNo)
               ?.description || 'Unknown Product',
