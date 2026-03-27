@@ -76,16 +76,18 @@ export const decreaseStock = async (sku, quantity, sellerId, sellerName, type, s
 
     const opts = session ? { new: true, session } : { new: true };
 
-    const inventory = await Inventory.findOneAndUpdate(
-      { productSkuCode: sku, sellerId, currentStockCount: { $gte: qty } },
-      { $inc: { currentStockCount: -qty } },
-      opts
-    );
-    const product = await Product.findOneAndUpdate(
-      { productSkuCode: sku, sellerId, currentStockCount: { $gte: qty } },
-      { $inc: { currentStockCount: -qty }, $set: { updatedAt: new Date() } },
-      opts
-    );
+    const [inventory, product] = await Promise.all([
+      Inventory.findOneAndUpdate(
+        { productSkuCode: sku, currentStockCount: { $gte: qty } },
+        { $inc: { currentStockCount: -qty } },
+        opts
+      ),
+      Product.findOneAndUpdate(
+        { productSkuCode: sku, currentStockCount: { $gte: qty } },
+        { $inc: { currentStockCount: -qty }, $set: { updatedAt: new Date() } },
+        opts
+      ),
+    ]);
 
     if (!inventory || !product) {
       return { success: false, message: 'Inventory or product not found or insufficient stock' };
