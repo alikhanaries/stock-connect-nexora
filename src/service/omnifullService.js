@@ -141,12 +141,11 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
         statusCode: 400,
       };
     }
-    const orderId = data.order_id;
+    const shipmentId = data.order_id;
     const omnifulStatusCode = data.status_code;
     const result = await Shipment.updateOne(
       {
-        orderId: orderId,
-        shipmentMethod: 'AYMAKAN',
+        _id: shipmentId,
       },
       {
         $set: {
@@ -160,8 +159,7 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
       throw new Error('OrderId does not exist');
     }
     const shipmentData = await Shipment.findOne({
-      orderId: orderId,
-      shipmentMethod: 'AYMAKAN',
+      _id: shipmentId,
     }).lean();
 
     if (omnifulStatusCode === 'ready_to_ship') {
@@ -172,7 +170,7 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
       success: true,
       message: 'Shipment updated',
       data: {
-        orderId,
+        shipmentId,
         omnifulStatusCode,
       },
     };
