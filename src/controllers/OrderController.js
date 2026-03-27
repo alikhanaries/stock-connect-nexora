@@ -15,6 +15,7 @@ import { updateSyncDate } from '../helpers/updateSyncDate.js';
 import { syncAmazonOrders } from '../service/amazonOrderService.js';
 import { config } from '../config/config.js';
 import shipmentService from '../service/shipmentService.js';
+import omnifullService from '../service/omnifullService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -351,6 +352,44 @@ export const exportOrders = async (req, res) => {
     return res.status(200).send(csvWithBOM);
   } catch (error) {
     console.error('Controller Error: exportOrders:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export const generateDocumentId = async (req, res) => {
+  try {
+    const orderId = req.body.orderId;
+    const skuCodes = Array.isArray(req.body.skuCodes)
+      ? req.body.skuCodes
+      : req.body.skuCodes
+        ? [req.body.skuCodes]
+        : [];
+    const file = req.file;
+    const documentId = await orderService.generateDocumentId({
+      orderId,
+      skuCodes,
+      file,
+    });
+
+    return Responses.successResponse(res, 'Document ID generated successfully', 200, { documentId });
+  } catch (error) {
+    console.error('Controller Error: generateDocumentId:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export const handleOmnifulOrderWebhook = async (req, res) => {
+  try {
+    const { event_name, data } = req.body;
+    if (!event_name || !data) {
+      return Responses.failResponse(res, 'Invalid webhook structure', 400);
+    }
+    const result = await omnifullService.handleOmnifulOrdersWebhook(req.body);
+    return Responses.successResponse(res, result.message || 'Order details updated successfully', 200, result.data);
+  } catch (error) {
+    console.error('Controller Error: handleOmnifulOrderWebhook:', error.message);
     errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
