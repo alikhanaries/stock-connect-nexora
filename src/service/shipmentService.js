@@ -508,7 +508,6 @@ export const createFullShipmentService = async (shipmentData) => {
     }
 
     return { success: true, shipmentId: shipmentDocument._id };
-
   } catch (error) {
     if (session.inTransaction()) {
       await session.abortTransaction();
@@ -1928,7 +1927,7 @@ export const createReverseShipmentService = async (shipmentData) => {
     for (const product of validProducts) {
       const qty = Number(product.quantity || 0);
 
-      const stockResult = await increaseStock(product.productSkuCode, qty, sellerName, 'CE', session);
+      const stockResult = await increaseStock(product.productSkuCode, qty, sellerId, sellerName, 'CE', session);
 
       if (!stockResult?.success) {
         if (session.inTransaction()) {
