@@ -29,6 +29,7 @@ import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDa
 import { decreaseStock, increaseStock, validateStockAvailability } from '../helpers/inventoryHandler.js';
 import { sendStockBatch } from '../service/InventoryService.js';
 import Seller from '#models/Seller.js';
+import forwardShipmentService from './forwardShipmentService.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
@@ -508,7 +509,6 @@ export const createFullShipmentService = async (shipmentData) => {
     }
 
     return { success: true, shipmentId: shipmentDocument._id };
-
   } catch (error) {
     if (session.inTransaction()) {
       await session.abortTransaction();
@@ -790,6 +790,7 @@ export const ayMakanWebHookService = async (data) => {
     }
 
     if (shipmentStatus === 'DELIVERED') {
+      await forwardShipmentService.forwardAymakanShipment(shipmentData);
       await safeExecute(async () => {
         await updateShipmentDeliveryStateChannelEngine(
           'DELIVERED',
