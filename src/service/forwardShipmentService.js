@@ -2,8 +2,8 @@ const { OMNIFUL_API_URL, CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = con
 import { config } from '../config/config.js';
 
 export const createShipmentwithCE = async (shipmentData) => {
-  const accessToken = await getReportToken();
-  if (!accessToken) {
+  const omnifulAccessToken = await getReportToken();
+  if (!omnifulAccessToken) {
     throw new Error('Access token not available');
   }
   const orderId = shipmentData.orderId.toString();
@@ -11,7 +11,7 @@ export const createShipmentwithCE = async (shipmentData) => {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: `Bearer ${omnifulAccessToken}`,
     },
   });
 
