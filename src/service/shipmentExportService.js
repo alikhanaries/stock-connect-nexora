@@ -47,7 +47,6 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
                 orderDate: 1,
                 status: 1,
                 'orderSkuList.skuList.merchantProductNo': 1,
-                'orderSkuList.skuList.quantity': 1,
                 'orderSkuList.skuList.lineTotalExclVat': 1,
                 'orderSkuList.skuList.lineVat': 1,
                 'orderSkuList.skuList.lineTotalInclVat': 1,
@@ -90,7 +89,6 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
               },
             },
           },
-          // Build list of shipment product nos to filter order skuList for financials
           shipmentProductNos: {
             $map: {
               input: { $ifNull: ['$products', []] },
@@ -98,24 +96,6 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
               in: '$$p.merchantProductNo',
             },
           },
-        },
-      },
-      {
-        $addFields: {
-          filteredOrderSkuList: {
-            $filter: {
-              input: { $ifNull: [{ $arrayElemAt: ['$orderData.orderSkuList.skuList', 0] }, []] },
-              as: 'item',
-              cond: { $in: ['$$item.merchantProductNo', '$shipmentProductNos'] },
-            },
-          },
-        },
-      },
-      {
-        $addFields: {
-          shipmentSubtotal: { $sum: '$filteredOrderSkuList.lineTotalExclVat' },
-          shipmentTax: { $sum: '$filteredOrderSkuList.lineVat' },
-          shipmentTotal: { $sum: '$filteredOrderSkuList.lineTotalInclVat' },
         },
       },
       {
@@ -131,6 +111,7 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
           totalProducts: 1,
           productSKUs: 1,
           totalQuantity: 1,
+          shipmentProductNos: 1,
           trackingCount: 1,
           latestTracking: 1,
           trackingHistory: 1,
@@ -139,9 +120,10 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
           'order.channelOrderNumber': 1,
           'order.orderDate': 1,
           'order.status': 1,
-          shipmentSubtotal: 1,
-          shipmentTax: 1,
-          shipmentTotal: 1,
+          'order.orderSkuList.skuList.merchantProductNo': 1,
+          'order.orderSkuList.skuList.lineTotalExclVat': 1,
+          'order.orderSkuList.skuList.lineVat': 1,
+          'order.orderSkuList.skuList.lineTotalInclVat': 1,
         },
       },
     ];
@@ -151,6 +133,14 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
     for await (const shipment of cursor) {
       const latestStatusCode = shipment.latestTracking?.statusCode || '';
       const aymakanEntry = AYMAKAN_STATUS[latestStatusCode];
+
+      const shipmentProductNos = new Set(shipment.shipmentProductNos || []);
+      const skuList = shipment.order?.orderSkuList?.skuList || [];
+      const filtered = skuList.filter((item) => shipmentProductNos.has(item.merchantProductNo));
+      const shipmentSubtotal = filtered.reduce((sum, item) => sum + (item.lineTotalExclVat || 0), 0);
+      const shipmentTax = filtered.reduce((sum, item) => sum + (item.lineVat || 0), 0);
+      const shipmentTotal = filtered.reduce((sum, item) => sum + (item.lineTotalInclVat || 0), 0);
+
       const row = [
         shipment.productSKUs || '',
         shipment.merchantShipmentNo || '',
@@ -168,9 +158,9 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
         shipment.order?.orderDate ? new Date(shipment.order.orderDate).toISOString() : '',
         shipment.totalProducts || 0,
         shipment.totalQuantity || 0,
-        shipment.shipmentSubtotal || 0,
-        shipment.shipmentTax || 0,
-        shipment.shipmentTotal || 0,
+        shipmentSubtotal,
+        shipmentTax,
+        shipmentTotal,
         shipment.trackingCount || 0,
         aymakanEntry ? aymakanEntry.status : latestStatusCode,
         shipment.latestTracking?.description || '',
