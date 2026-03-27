@@ -9,7 +9,7 @@ const {
 import { config } from '../config/config.js';
 import Product from '#models/Product.js';
 import Order from '#models/Orders.js';
-import Token from '../models/token.js';
+import Token from '../models/Token.js';
 export const getToken = async () => {
   return await Token.findOne({ name: 'omniful' });
 };
