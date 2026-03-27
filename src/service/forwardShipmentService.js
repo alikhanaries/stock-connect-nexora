@@ -8,13 +8,13 @@ export const getToken = async () => {
 };
 
 export const forwardAymakanShipment = async (shipmentData) => {
-  const accessToken = await getReportToken();
+  const omnifulAccessToken = await getReportToken();
 
-  if (!accessToken) {
+  if (!omnifulAccessToken) {
     throw new Error('Access token not available');
   }
 
-  if (accessToken) {
+  if (omnifulAccessToken) {
     const skuCodes = shipmentData.products.map((p) => p.merchantProductNo);
 
     const productDetails = await Product.find({
@@ -58,7 +58,7 @@ export const forwardAymakanShipment = async (shipmentData) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${omnifulAccessToken}`,
       },
       body: JSON.stringify(createSkuPayload),
     });
@@ -114,7 +114,7 @@ export const forwardAymakanShipment = async (shipmentData) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${omnifulAccessToken}`,
         },
         body: JSON.stringify(createOrderPayload),
       });
