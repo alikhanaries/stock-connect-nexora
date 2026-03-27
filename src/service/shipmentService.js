@@ -425,7 +425,14 @@ export const createFullShipmentService = async (shipmentData) => {
     const stockPayloads = [];
     for (const product of validProducts) {
       const shippedQty = Number(product.quantity || 0);
-      const stockResult = await decreaseStock(product.merchantProductNo, shippedQty, sellerName, 'CE', session);
+      const stockResult = await decreaseStock(
+        product.merchantProductNo,
+        shippedQty,
+        sellerId,
+        sellerName,
+        'CE',
+        session
+      );
 
       if (!stockResult?.success) {
         await session.abortTransaction();
