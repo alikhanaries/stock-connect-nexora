@@ -13,8 +13,6 @@ export const upsertToken = async ({ accessToken, refreshToken }) => {
   );
 };
 
-let refreshPromise = null;
-
 const isOlderThan25Days = (updatedAt) => {
   const age = Date.now() - new Date(updatedAt).getTime();
   return age > 25 * 24 * 60 * 60 * 1000;
@@ -59,17 +57,9 @@ export const getReportToken = async () => {
     return tokenDoc.accessToken;
   }
 
-  if (!refreshPromise) {
-    refreshPromise = (async () => {
-      const newTokens = await fetchNewTokens(tokenDoc.refreshToken);
+  const refreshTokenToUse = tokenDoc.refreshToken || process.env.OMNIFUL_REFRESH_TOKEN;
+  const newTokens = await fetchNewTokens(refreshTokenToUse);
+  await upsertToken(newTokens);
 
-      await upsertToken(newTokens);
-
-      return newTokens.accessToken;
-    })().finally(() => {
-      refreshPromise = null;
-    });
-  }
-
-  return refreshPromise;
+  return newTokens.accessToken;
 };
