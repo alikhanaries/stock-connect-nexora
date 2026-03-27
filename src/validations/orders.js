@@ -291,7 +291,8 @@ export const generateDocumentIdValidator = validate(async (req) => {
           return allowedExtensions.includes(ext);
         },
         { message: 'Please upload a valid file' }
-      ),
+      )
+      .refine((f) => !f || f.size <= 200 * 1024, { message: 'File size should not exceed 200 KB' }),
   });
 
   // Parse combined body with normalized skuCodes

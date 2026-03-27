@@ -1241,14 +1241,14 @@ export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
   if (!order) throw new Error(`Order not found: ${normalizedOrderId}`);
 
   // Check all requested SKUs exist
-  const skuList = order.orderSkuList?.skuList;
+  const skuList = order.orderSkuList?.skuList || [];
   const missingSkus = normalizedSkuCodes.filter((sku) => !skuList.some((item) => item.merchantProductNo === sku));
   if (missingSkus.length > 0) {
     throw new Error(`The following SKU(s) are not in the order: ${missingSkus.join(', ')}`);
   }
 
   // Convert file to base64
-  const fileBuffer = fs.readFileSync(file.path);
+  const fileBuffer = await fs.promises.readFile(file.path);
   const base64String = fileBuffer.toString('base64');
   const ext = path.extname(file.originalname).slice(1);
 
