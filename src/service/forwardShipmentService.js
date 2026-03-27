@@ -11,7 +11,7 @@ export const forwardAymakanShipment = async (shipmentData) => {
   const omnifulAccessToken = await getReportToken();
 
   if (!omnifulAccessToken) {
-    throw new Error('Access token not available');
+    throw new Error('Omniful access token not available');
   }
 
   if (omnifulAccessToken) {
@@ -71,7 +71,7 @@ export const forwardAymakanShipment = async (shipmentData) => {
       }).lean();
 
       const createOrderPayload = {
-        order_id: shipmentData.orderId.toString(),
+        order_id: shipmentData._id.toString(),
         hub_code: OMNIFUL_HUB_CODE,
 
         order_items: (shipmentData.products || []).map((item) => ({
