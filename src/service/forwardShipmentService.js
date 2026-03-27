@@ -6,7 +6,7 @@ export const createShipmentwithCE = async (shipmentData) => {
   if (!omnifulAccessToken) {
     throw new Error('Access token not available');
   }
-  const orderId = shipmentData.orderId.toString();
+  const orderId = shipmentData._id.toString();
   const getOrderResponse = await fetch(`${OMNIFUL_API_URL}/sales-channel/public/v1/orders/${orderId}`, {
     method: 'GET',
     headers: {
