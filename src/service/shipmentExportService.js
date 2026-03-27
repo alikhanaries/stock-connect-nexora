@@ -46,7 +46,8 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
                 channelOrderNumber: 1,
                 orderDate: 1,
                 status: 1,
-                'orderSkuList.skuList.id': 1,
+                'orderSkuList.skuList.merchantProductNo': 1,
+                'orderSkuList.skuList.quantity': 1,
                 'orderSkuList.skuList.lineTotalExclVat': 1,
                 'orderSkuList.skuList.lineVat': 1,
                 'orderSkuList.skuList.lineTotalInclVat': 1,
@@ -58,36 +59,6 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
       {
         $addFields: {
           order: { $arrayElemAt: ['$orderData', 0] },
-          totalProducts: { $size: '$products' },
-          totalQuantity: { $sum: '$products.quantity' },
-          productSKUs: {
-            $reduce: {
-              input: '$products',
-              initialValue: '',
-              in: {
-                $cond: [
-                  { $eq: ['$$value', ''] },
-                  '$$this.merchantProductNo',
-                  { $concat: ['$$value', ' | ', '$$this.merchantProductNo'] },
-                ],
-              },
-            },
-          },
-          allHsCodes: {
-            $reduce: {
-              input: {
-                $filter: {
-                  input: '$products',
-                  as: 'p',
-                  cond: { $and: [{ $ne: ['$$p.hsCode', null] }, { $ne: ['$$p.hsCode', ''] }] },
-                },
-              },
-              initialValue: '',
-              in: {
-                $cond: [{ $eq: ['$$value', ''] }, '$$this.hsCode', { $concat: ['$$value', ' | ', '$$this.hsCode'] }],
-              },
-            },
-          },
           trackingCount: { $size: '$trackingInfo' },
           latestTracking: { $arrayElemAt: ['$trackingInfo', -1] },
           trackingHistory: {
@@ -103,40 +74,48 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
               },
             },
           },
-        },
-      },
-      {
-        // Single pass over products×skuList instead of three separate passes
-        $addFields: {
-          _totals: {
+
+          totalProducts: { $size: { $ifNull: ['$products', []] } },
+          totalQuantity: { $sum: { $ifNull: ['$products.quantity', []] } },
+          productSKUs: {
             $reduce: {
-              input: '$products',
-              initialValue: { subtotal: 0, tax: 0, total: 0 },
+              input: { $ifNull: ['$products', []] },
+              initialValue: '',
               in: {
-                $let: {
-                  vars: {
-                    matched: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: { $ifNull: ['$order.orderSkuList.skuList', []] },
-                            as: 'sku',
-                            cond: { $eq: ['$$sku.id', '$$this.orderLineId'] },
-                          },
-                        },
-                        0,
-                      ],
-                    },
-                  },
-                  in: {
-                    subtotal: { $add: ['$$value.subtotal', { $ifNull: ['$$matched.lineTotalExclVat', 0] }] },
-                    tax: { $add: ['$$value.tax', { $ifNull: ['$$matched.lineVat', 0] }] },
-                    total: { $add: ['$$value.total', { $ifNull: ['$$matched.lineTotalInclVat', 0] }] },
-                  },
-                },
+                $cond: [
+                  { $eq: ['$$value', ''] },
+                  '$$this.merchantProductNo',
+                  { $concat: ['$$value', ' | ', '$$this.merchantProductNo'] },
+                ],
               },
             },
           },
+          // Build list of shipment product nos to filter order skuList for financials
+          shipmentProductNos: {
+            $map: {
+              input: { $ifNull: ['$products', []] },
+              as: 'p',
+              in: '$$p.merchantProductNo',
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          filteredOrderSkuList: {
+            $filter: {
+              input: { $ifNull: [{ $arrayElemAt: ['$orderData.orderSkuList.skuList', 0] }, []] },
+              as: 'item',
+              cond: { $in: ['$$item.merchantProductNo', '$shipmentProductNos'] },
+            },
+          },
+        },
+      },
+      {
+        $addFields: {
+          shipmentSubtotal: { $sum: '$filteredOrderSkuList.lineTotalExclVat' },
+          shipmentTax: { $sum: '$filteredOrderSkuList.lineVat' },
+          shipmentTotal: { $sum: '$filteredOrderSkuList.lineTotalInclVat' },
         },
       },
       {
@@ -152,7 +131,6 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
           totalProducts: 1,
           productSKUs: 1,
           totalQuantity: 1,
-          allHsCodes: 1,
           trackingCount: 1,
           latestTracking: 1,
           trackingHistory: 1,
@@ -161,9 +139,9 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
           'order.channelOrderNumber': 1,
           'order.orderDate': 1,
           'order.status': 1,
-          shipmentSubtotal: '$_totals.subtotal',
-          shipmentTax: '$_totals.tax',
-          shipmentTotal: '$_totals.total',
+          shipmentSubtotal: 1,
+          shipmentTax: 1,
+          shipmentTotal: 1,
         },
       },
     ];
@@ -190,7 +168,6 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
         shipment.order?.orderDate ? new Date(shipment.order.orderDate).toISOString() : '',
         shipment.totalProducts || 0,
         shipment.totalQuantity || 0,
-        shipment.allHsCodes || '',
         shipment.shipmentSubtotal || 0,
         shipment.shipmentTax || 0,
         shipment.shipmentTotal || 0,

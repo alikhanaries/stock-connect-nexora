@@ -190,7 +190,6 @@ export const SHIPMENT_EXPORT_HEADERS = [
   'Order Date',
   'Total Products',
   'Total Quantity',
-  'HS Codes',
   'Subtotal Amount',
   'Tax Amount (VAT)',
   'Total Amount',
