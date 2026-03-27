@@ -11,6 +11,7 @@ import {
   cancelPartialOrder,
   generateDocumentId,
   exportOrders,
+  handleOmnifulOrderWebhook,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -385,4 +386,6 @@ router.post(
   generateDocumentIdValidator,
   generateDocumentId
 );
+
+router.post('/omniful-order-webhook', handleOmnifulOrderWebhook);
 export default router;

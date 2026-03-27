@@ -72,6 +72,10 @@ const shipmentSchema = new mongoose.Schema(
       default: 'FORWARD',
       index: true,
     },
+    omnifulStatusCode: {
+      type: String,
+      index: true,
+    },
   },
   {
     timestamps: true,
