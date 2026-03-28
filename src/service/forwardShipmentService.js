@@ -223,7 +223,7 @@ export const createShipmentwithCE = async (shipmentData) => {
     ShipmentDate: getOrderResponseData?.data?.order_created_at,
     ReturnMethod: '',
     IsMerchantCreator: true,
-    AirWaybillNo: shipmentData.airWaybillNo,
+    AirWaybillNo: getOrderResponseData?.data?.shipment?.awb_number,
   };
 
   const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
