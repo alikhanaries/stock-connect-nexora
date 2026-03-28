@@ -437,7 +437,14 @@ export const createFullShipmentService = async (shipmentData) => {
     const stockPayloads = [];
     for (const product of validProducts) {
       const shippedQty = Number(product.quantity || 0);
-      const stockResult = await decreaseStock(product.merchantProductNo, shippedQty, sellerName, 'CE', session);
+      const stockResult = await decreaseStock(
+        product.merchantProductNo,
+        shippedQty,
+        sellerId,
+        sellerName,
+        'CE',
+        session
+      );
 
       if (!stockResult?.success) {
         await session.abortTransaction();
@@ -510,7 +517,7 @@ export const createFullShipmentService = async (shipmentData) => {
       createdAt: new Date(),
     };
 
-    await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true });
+    await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true, session });
 
     if (session.inTransaction()) {
       await session.commitTransaction();
@@ -1827,6 +1834,7 @@ export const createReverseShipmentWithAymakan = async (shipmentData) => {
 };
 
 export const createReverseShipmentService = async (shipmentData) => {
+  const session = await mongoose.startSession();
   try {
     const { orderId, userId, deliverId, pieces = 0, returnId } = shipmentData;
 
@@ -1869,12 +1877,20 @@ export const createReverseShipmentService = async (shipmentData) => {
     //  Step 3: Find existing shipments for given SKUs
     const productLineIds = returnProducts.map((p) => p.productSkuCode);
 
-    const existingShipments = await Shipment.find({
-      orderId,
-      type: 'REVERSE',
-      status: { $ne: 'CANCELED' },
-      'products.merchantProductNo': { $in: productLineIds },
-    }).lean();
+    const [existingShipments, sellerDoc] = await Promise.all([
+      Shipment.find({
+        orderId,
+        type: 'REVERSE',
+        status: { $ne: 'CANCELED' },
+        'products.merchantProductNo': { $in: productLineIds },
+      }).lean(),
+      Seller.findById(sellerId).select('name').lean(),
+    ]);
+    if (!sellerDoc) {
+      return { success: false, message: `Seller not found` };
+    }
+    const sellerName = sellerDoc?.name;
+
     if (existingShipments && existingShipments?.length !== 0) {
       return { success: false, message: `Shipment already created` };
     }
@@ -1927,6 +1943,23 @@ export const createReverseShipmentService = async (shipmentData) => {
         }))
       : [];
 
+    session.startTransaction();
+    const stockPayloads = [];
+    for (const product of validProducts) {
+      const qty = Number(product.quantity || 0);
+
+      const stockResult = await increaseStock(product.productSkuCode, qty, sellerId, sellerName, 'CE', session);
+
+      if (!stockResult?.success) {
+        if (session.inTransaction()) {
+          await session.abortTransaction();
+        }
+        throw new Error(`Unable to start shipment: ${stockResult?.message || 'unknown error'}`);
+      }
+
+      if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
+    }
+
     //  Step 9: Prepare & save shipment document
     const shipmentDocument = new Shipment({
       orderId: new mongoose.Types.ObjectId(orderId),
@@ -1949,18 +1982,7 @@ export const createReverseShipmentService = async (shipmentData) => {
       type: 'REVERSE',
     });
 
-    const newShipmentData = await shipmentDocument.save();
-
-    // ACKNOWLDGE CHANNEL ENGINE ABOUT APPROVAL
-    const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
-    await fetch(ceUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ReturnId: returnData?.returnId,
-        MerchantReturnNo: returnData?.merchantReturnNo,
-      }),
-    });
+    const newShipmentData = await shipmentDocument.save({ session });
 
     // UPDATE RETURN STATUS AS APPROVED
     await Return.findByIdAndUpdate(
@@ -1976,15 +1998,48 @@ export const createReverseShipmentService = async (shipmentData) => {
           },
         },
       },
-      { new: true } // optional: returns the updated document
+      { session: session, new: true }
     );
+
+    if (session.inTransaction()) {
+      await session.commitTransaction();
+    }
+
+    if (stockPayloads.length > 0) {
+      sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
+    }
+
+    // ACKNOWLDGE CHANNEL ENGINE ABOUT APPROVAL
+    try {
+      const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
+      const ceResponse = await fetch(ceUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ReturnId: returnData?.returnId,
+          MerchantReturnNo: returnData?.merchantReturnNo,
+        }),
+      });
+
+      if (!ceResponse.ok) {
+        console.error(`ChannelEngine return-acknowledge failed with status ${ceResponse.status}`);
+      }
+    } catch (error) {
+      console.error('Network error during ChannelEngine return-acknowledge:', error.message);
+    }
 
     return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
-    console.error('Error in createPartialShipmentService:', error);
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    console.error('Error in createReverseShipmentService:', error);
     throw error;
+  } finally {
+    session.endSession();
   }
 };
+
 export const createManualShipmentService = async (shipmentData) => {
   const session = await mongoose.startSession();
   try {
@@ -2046,7 +2101,7 @@ export const createManualShipmentService = async (shipmentData) => {
       Shipment.findOne({ merchantShipmentNo }),
       Shipment.findOne({ airWaybillNo }),
       User.findById(userId).lean(),
-      Seller.findById(sellerId).lean().select('name'),
+      Seller.findById(sellerId).select('name').lean(),
     ]);
     const sellerName = sellerDoc?.name || '';
 
@@ -2299,18 +2354,26 @@ export const createManualShipmentService = async (shipmentData) => {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
     }
 
-    await createShipmentWithChannelEngine({
-      merchantShipmentNo,
-      merchantOrderNo: order.merchantOrderNo || order.orderId,
-      lines: validatedProducts,
-      trackTraceNo: airWaybillNo,
-      trackTraceUrl,
-      method,
-      shippedFromCountryCode,
-      shipmentDate: new Date(),
-      isMerchantCreator: true,
-      airWaybillNo,
-    });
+    try {
+      const ceResult = await createShipmentWithChannelEngine({
+        merchantShipmentNo,
+        merchantOrderNo: order.merchantOrderNo || order.orderId,
+        lines: validatedProducts,
+        trackTraceNo: airWaybillNo,
+        trackTraceUrl,
+        method,
+        shippedFromCountryCode,
+        shipmentDate: new Date(),
+        isMerchantCreator: true,
+        airWaybillNo,
+      });
+
+      if (!ceResult?.success) {
+        console.error(`ChannelEngine create shipment failed: ${ceResult?.message}`);
+      }
+    } catch (error) {
+      console.error(`CE create shipment failed due to ${error.message}`);
+    }
 
     return {
       success: true,
