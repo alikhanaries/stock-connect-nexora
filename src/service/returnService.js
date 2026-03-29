@@ -1,6 +1,7 @@
 import { config } from '#config/config.js';
 import Order from '../models/Orders.js';
 import Return from '../models/Return.js';
+import Seller from '#root/src/models/Seller.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
@@ -169,7 +170,7 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
   try {
-    const { status, sortOrder = 'desc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform, search } = query;
+    const { status, sortOrder = 'desc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform } = query;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -178,7 +179,7 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
     if (channelId) appliedFilters.channelId = channelId;
     if (platform) appliedFilters.platform = platform;
 
-    const { pipeline } = buildReturnMatchAndPipeline(query, {
+    const { pipeline } = await buildReturnMatchAndPipeline(query, {
       includeSearchNameSplit: true,
     });
 
@@ -209,58 +210,13 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
     //  Filter by sellerId
     if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
       const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
-
-      pipeline.push({
+      const sellerIdData = {
         $match: {
           $or: [{ sellerIds: { $in: [sellerObjectId] } }, { sellerIds: { $exists: false } }],
         },
-      });
-    }
+      };
 
-    if (search) {
-      const searchRegex = new RegExp(search, 'i');
-
-      const searchConditions = [
-        { returnId: { $regex: searchRegex } },
-        { orderId: { $regex: searchRegex } },
-
-        // Customer search
-        { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
-        { 'orderInfo.orderCustomer.phone': { $regex: searchRegex } },
-      ];
-
-      const searchTerms = search.trim().split(/\s+/);
-
-      if (searchTerms.length > 1) {
-        const [firstTerm, ...rest] = searchTerms;
-        const lastTerm = rest.join(' ');
-
-        const firstRegex = new RegExp(firstTerm, 'i');
-        const lastRegex = new RegExp(lastTerm, 'i');
-
-        searchConditions.push(
-          {
-            $and: [
-              { 'orderInfo.orderCustomer.firstName': firstRegex },
-              { 'orderInfo.orderCustomer.lastName': lastRegex },
-            ],
-          },
-          {
-            $and: [
-              { 'orderInfo.orderCustomer.lastName': firstRegex },
-              { 'orderInfo.orderCustomer.firstName': lastRegex },
-            ],
-          }
-        );
-      }
-
-      pipeline.push({
-        $match: {
-          $or: searchConditions,
-        },
-      });
+      pipeline.push(sellerIdData);
     }
 
     // Normalize fields
@@ -623,7 +579,8 @@ export const getReturnById = async (id, sellerId) => {
                 merchantShipmentNo: 1,
                 status: 1,
                 createdAt: 1,
-                _id: 0,
+                _id: 1,
+                deliveryId: 1,
               },
             },
           ],
@@ -720,6 +677,18 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       return { success: false, message: 'Seller ID is required for export' };
     }
 
+    let sellerName = '';
+
+    const seller = await Seller.findById(sellerId).select('name'); // adjust field if needed
+    sellerName = seller?.name || '';
+
+    // sanitize seller name for filename
+    const safeSellerName = sellerName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/gi, '_') // replace special chars
+      .replace(/_+/g, '_') // remove duplicate underscores
+      .replace(/^_|_$/g, ''); // trim underscores
+
     const {
       status,
       platform,
@@ -730,9 +699,10 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       dateFrom,
       dateTo,
       page = 1,
+      channelId,
     } = filters;
 
-    const queryObj = { sellerId, status, platform, search, dateFrom, dateTo, sortBy, sortOrder, size, page };
+    const queryObj = { channelId, sellerId, status, platform, search, dateFrom, dateTo, sortBy, sortOrder, size, page };
 
     const basicResult = await (typeof getReturnsFromDatabase === 'function'
       ? getReturnsFromDatabase(queryObj)
@@ -770,44 +740,17 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const pipeline = typeof buildReturnAggregationPipeline === 'function' ? buildReturnAggregationPipeline() : [];
     pipeline.push({ $match: { _id: { $in: returnIds } } });
 
-    // ---- shipment lookup (unchanged)
-    pipeline.push({
-      $lookup: {
-        from: Shipment.collection?.collectionName || 'shipments',
-        let: { orderIdFromOrderInfo: '$orderInfo._id', orderIdFromReturn: '$orderId' },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $ne: ['$status', 'CANCELED'] },
-                  {
-                    $or: [
-                      { $eq: ['$orderId', '$$orderIdFromOrderInfo'] },
-                      { $eq: ['$orderId', { $toString: '$$orderIdFromOrderInfo' }] },
-                      { $eq: ['$orderId', '$$orderIdFromReturn'] },
-                      { $eq: ['$_id', '$$orderIdFromReturn'] },
-                    ],
-                  },
-                ],
-              },
-            },
-          },
-          { $limit: 1 },
-        ],
-        as: 'shipments',
-      },
-    });
-
     pipeline.push({ $addFields: { shipment: { $arrayElemAt: ['$shipments', 0] } } });
 
     pipeline.push({
       $addFields: {
         shipment: {
-          $cond: [
-            { $ifNull: ['$shipment', false] },
-            { pickUpId: '$shipment.pickUpId', deliveryId: '$shipment.deliveryId' },
-            null,
+          $mergeObjects: [
+            { $arrayElemAt: ['$shipments', 0] },
+            {
+              pickUpId: '$shipmentData.pickUpId',
+              deliveryId: '$shipmentData.deliveryId',
+            },
           ],
         },
       },
@@ -819,18 +762,13 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     // lookup pickup
     pipeline.push({
       $lookup: {
-        from: pickupCollectionName,
+        from: deliveryCollectionName,
         let: { pickupId: '$shipment.pickUpId' },
         pipeline: [
           {
             $match: {
               $expr: {
-                $and: [
-                  { $ne: ['$$pickupId', null] },
-                  {
-                    $or: [{ $eq: ['$_id', '$$pickupId'] }, { $eq: [{ $toString: '$_id' }, '$$pickupId'] }],
-                  },
-                ],
+                $and: [{ $ne: ['$$pickupId', null] }, { $eq: ['$_id', '$$pickupId'] }],
               },
             },
           },
@@ -843,18 +781,13 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     // lookup delivery
     pipeline.push({
       $lookup: {
-        from: deliveryCollectionName,
+        from: pickupCollectionName,
         let: { deliveryId: '$shipment.deliveryId' },
         pipeline: [
           {
             $match: {
               $expr: {
-                $and: [
-                  { $ne: ['$$deliveryId', null] },
-                  {
-                    $or: [{ $eq: ['$_id', '$$deliveryId'] }, { $eq: [{ $toString: '$_id' }, '$$deliveryId'] }],
-                  },
-                ],
+                $and: [{ $ne: ['$$deliveryId', null] }, { $eq: ['$_id', '$$deliveryId'] }],
               },
             },
           },
@@ -863,7 +796,6 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         as: 'deliveryAddress',
       },
     });
-
     pipeline.push({
       $addFields: {
         'shipment.pickupAddress': { $arrayElemAt: ['$pickupAddress', 0] },
@@ -993,10 +925,12 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       }
     }
 
+    const datePart = new Date().toISOString().split('T')[0];
+
     const filename =
       typeof generateCSVFilename === 'function'
-        ? generateCSVFilename('returns')
-        : `returns-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.csv`;
+        ? generateCSVFilename(`returns-${safeSellerName}`)
+        : `returns-${safeSellerName}-${datePart}.csv`;
 
     return createCSVExportResponse(csvRows, filename, csvRows.length - 1);
   } catch (err) {

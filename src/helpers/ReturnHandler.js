@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import Channel from '#root/src/models/Channel.js';
 import { RETURN_STATUS } from '#root/src/constants/common.js';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
@@ -179,7 +180,9 @@ export const buildReturnAggregationPipeline = () => {
               merchantShipmentNo: 1,
               status: 1,
               createdAt: 1,
-              _id: 0,
+              _id: 1,
+              deliveryId: 1,
+              pickUpId: 1,
             },
           },
         ],
@@ -228,7 +231,7 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
   }
 };
 
-export const buildReturnMatchAndPipeline = (query = {}) => {
+export const buildReturnMatchAndPipeline = async (query = {}) => {
   const { status, platform, channelId, returnId, orderID, search, dateFrom, dateTo, sellerId } = query;
 
   const matchConditions = {};
@@ -294,9 +297,23 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
   // Search filter (after lookup because it uses orderInfo)
   if (search) {
     const searchRegex = new RegExp(search, 'i');
+
+    //  Fetch matching channelIds
+    const matchingChannels = await Channel.find({
+      channelName: { $regex: searchRegex },
+    })
+      .select('channelId')
+      .lean();
+
+    const channelIdsFromSearch = matchingChannels.map((c) => c.channelId);
+
     const searchConditions = [
       { returnId: { $regex: searchRegex } },
       { orderId: { $regex: searchRegex } },
+
+      //  Channel name → channelId mapping
+      ...(channelIdsFromSearch.length ? [{ channelId: { $in: channelIdsFromSearch } }] : []),
+
       { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
       { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
       { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
@@ -325,7 +342,11 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
       );
     }
 
-    pipeline.push({ $match: { $or: searchConditions } });
+    pipeline.push({
+      $match: {
+        $or: searchConditions,
+      },
+    });
   }
 
   return { pipeline, matchConditions };
@@ -481,25 +502,18 @@ export const formatReturnDetails = (aggregatedResult) => {
 
   const shippingAddress = orderInfo.orderShippingAddress
     ? {
-        address: [
-          orderInfo.orderShippingAddress.line1,
-          orderInfo.orderShippingAddress.line2,
-          orderInfo.orderShippingAddress.line3,
-          orderInfo.orderShippingAddress.streetName,
-          orderInfo.orderShippingAddress.houseNr,
-          orderInfo.orderShippingAddress.houseNrAddition,
-        ]
-          .filter(Boolean)
-          .join(' '),
+        address: orderInfo.orderShippingAddress.line1,
         city: orderInfo.orderShippingAddress.city || '',
         region: orderInfo.orderShippingAddress.region || '',
         zipCode: orderInfo.orderShippingAddress.zipCode || '',
+        countryIso: orderInfo.orderShippingAddress.countryIso || '',
       }
     : {
         address: '',
         city: '',
         region: '',
         zipCode: '',
+        countryIso: '',
       };
 
   return {

@@ -194,16 +194,18 @@ export const formatAddressForCSV = (address) => {
   ];
 };
 
-export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
+export const buildExportOrderRow = (order, sku, sellerTotal, sellerId, totalSkuCount) => {
   return {
     orderId: order.orderId,
     sellerId,
+    channelId: order?.channelId,
     channelOrderNumber: order.channelOrderNumber,
     status: order.status,
     channelName: order.channelName,
     orderDate: order.orderDate,
     merchantOrderNo: order.merchantOrderNo,
     isBusinessOrder: order.isBusinessOrder,
+    orderSkuListCount: totalSkuCount,
 
     shippingCostsInclVat: order.shippingCostsInclVat,
     shippingCostsVat: order.shippingCostsVat,
@@ -281,12 +283,14 @@ export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
 export const ORDER_EXPORT_HEADERS = [
   'orderId',
   'sellerId',
+  'channelId',
   'channelOrderNumber',
   'status',
   'channelName',
   'orderDate',
   'merchantOrderNo',
   'isBusinessOrder',
+  'orderSkuListCount',
   'shippingCostsInclVat',
   'shippingCostsVat',
   'originalShippingCostsVat',
@@ -294,7 +298,7 @@ export const ORDER_EXPORT_HEADERS = [
   'originalShippingCostsExclVat',
   'subTotalFee',
   'orderFee',
-  'orderSkuListCount',
+
   'skuId',
   'skuMerchantProductNo',
   'skuDescription',
