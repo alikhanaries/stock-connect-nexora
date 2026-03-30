@@ -43,7 +43,7 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
 
     //  Run DB calls in parallel
     const [existingReturn, orderData] = await Promise.all([
-      Return.findOne({ returnId }, { sellerStatuses: 1 }).lean(), // ✅ only needed field
+      Return.findOne({ returnId }, { sellerStatuses: 1 }).lean(), //  only needed field
       OrderModel && returnData.MerchantOrderNo
         ? OrderModel.findOne({
             merchantOrderNo: returnData.MerchantOrderNo,

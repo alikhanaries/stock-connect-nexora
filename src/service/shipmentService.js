@@ -1930,7 +1930,7 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
           shipmentId: newShipmentData._id,
         },
         $set: {
-          'sellerStatuses.$.status': 'SHIPMENT_CREATED', // 🔥 update only this seller
+          'sellerStatuses.$.status': 'SHIPMENT_CREATED', //  update only this seller
         },
         $push: {
           logs: {
