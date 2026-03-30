@@ -1920,10 +1920,18 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
     });
 
     // UPDATE RETURN STATUS AS APPROVED
-    await Return.findByIdAndUpdate(
-      returnId,
+    await Return.findOneAndUpdate(
       {
-        $addToSet: { shipmentId: newShipmentData._id }, // ✅ avoids duplicates
+        _id: returnId,
+        'sellerStatuses.sellerId': new mongoose.Types.ObjectId(sellerId),
+      },
+      {
+        $addToSet: {
+          shipmentId: newShipmentData._id,
+        },
+        $set: {
+          'sellerStatuses.$.status': 'SHIPMENT_CREATED', // 🔥 update only this seller
+        },
         $push: {
           logs: {
             status: 'SHIPMENT_CREATED',

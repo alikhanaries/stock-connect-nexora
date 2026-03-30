@@ -58,6 +58,19 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
+    sellerStatuses: [
+      {
+        sellerId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Seller',
+          index: true,
+        },
+        status: {
+          type: String,
+          index: true,
+        },
+      },
+    ],
     platform: {
       type: String,
     },
