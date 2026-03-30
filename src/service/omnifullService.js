@@ -135,15 +135,15 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
   try {
     const { data } = payload;
 
-    if (!data?.order_id || !data?.status_code) {
+    if (!data?.order_id || !data?.order_status) {
       return {
         success: false,
-        message: 'Missing order_id or status_code',
+        message: 'Missing order_id or order_status',
         statusCode: 400,
       };
     }
     const shipmentId = data.order_id;
-    const omnifulStatusCode = data.status_code;
+    const omnifulStatusCode = data.order_status;
     const result = await Shipment.updateOne(
       {
         _id: shipmentId,
