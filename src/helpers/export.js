@@ -354,6 +354,140 @@ export const ORDER_EXPORT_HEADERS = [
   'updatedAt',
 ];
 
+export const buildExportShipmentRow = (shipment, product = {}, pickup = {}, delivery = {}) => {
+  const safe = (v) => (v === null || v === undefined ? '' : v);
+
+  return {
+    shipmentId: safe(shipment?._id),
+    orderId: safe(shipment?.orderId),
+    channelEngineOrderNumber: safe(shipment?.ceOrderId),
+    sellerId: safe(shipment?.sellerId),
+
+    status: safe(shipment?.status),
+    type: safe(shipment?.type),
+    shipmentMethod: safe(shipment?.shipmentMethod),
+
+    airWaybillNo: safe(shipment?.airWaybillNo),
+    merchantOrderNo: safe(shipment?.merchantOrderNo),
+    merchantShipmentNo: safe(shipment?.merchantShipmentNo),
+
+    isMerchantCreator: safe(shipment?.isMerchantCreator),
+    pieces: safe(shipment?.pieces),
+    description: safe(shipment?.description),
+    cancelReason: safe(shipment?.cancelReason),
+
+    submissionDate: shipment?.submissionDate ? new Date(shipment.submissionDate).toISOString() : '',
+    pickupDate: shipment?.pickupDate ? new Date(shipment.pickupDate).toISOString() : '',
+    deliveryDate: shipment?.deliveryDate ? new Date(shipment.deliveryDate).toISOString() : '',
+
+    createdAt: shipment?.createdAt ? new Date(shipment.createdAt).toISOString() : '',
+    updatedAt: shipment?.updatedAt ? new Date(shipment.updatedAt).toISOString() : '',
+
+    // SKU
+    skuMerchantProductNo: safe(product?.merchantProductNo),
+    skuOrderLineId: safe(product?.orderLineId),
+    skuQuantity: safe(product?.quantity),
+    skuLineTotalInclVat: safe(product?.lineTotalInclVat),
+    skuHsCode: safe(product?.hsCode),
+
+    // Pickup
+    pickupName: safe(pickup?.name),
+    pickupEmail: safe(pickup?.email),
+    pickupPhone: safe(pickup?.phone),
+    pickupAddressLine1: safe(pickup?.addressLine1),
+    pickupAddressLine2: safe(pickup?.addressLine2),
+    pickupCity: safe(pickup?.city),
+    pickupState: safe(pickup?.state),
+    pickupCountry: safe(pickup?.country),
+    pickupPincode: safe(pickup?.pincode),
+
+    // Delivery
+    deliveryName: safe(delivery?.name),
+    deliveryEmail: safe(delivery?.email),
+    deliveryPhone: safe(delivery?.phone),
+    deliveryAddressLine1: safe(delivery?.addressLine1),
+    deliveryAddressLine2: safe(delivery?.addressLine2),
+    deliveryCity: safe(delivery?.city),
+    deliveryState: safe(delivery?.state),
+    deliveryCountry: safe(delivery?.country),
+    deliveryPincode: safe(delivery?.pincode),
+
+    // Merchant
+    merchantName: safe(shipment?.shipmentMerchantDetails?.name),
+    merchantEmail: safe(shipment?.shipmentMerchantDetails?.email),
+  };
+};
+
+export const SHIPMENT_EXPORT_HEADERS = [
+  // -------------------------
+  // SHIPMENT LEVEL
+  // -------------------------
+  'shipmentId',
+  'orderId',
+  'channelEngineOrderNumber',
+  'sellerId',
+
+  'status',
+  'type',
+  'shipmentMethod',
+
+  'airWaybillNo',
+  'merchantOrderNo',
+  'merchantShipmentNo',
+
+  'isMerchantCreator',
+  'pieces',
+  'description',
+  'cancelReason',
+
+  'submissionDate',
+  'pickupDate',
+  'deliveryDate',
+
+  'createdAt',
+  'updatedAt',
+
+  // -------------------------
+  // PRODUCT (LINE LEVEL)
+  // -------------------------
+  'skuMerchantProductNo',
+  'skuOrderLineId',
+  'skuQuantity',
+  'skuLineTotalInclVat',
+  'skuHsCode',
+
+  // -------------------------
+  // PICKUP ADDRESS
+  // -------------------------
+  'pickupName',
+  'pickupEmail',
+  'pickupPhone',
+  'pickupAddressLine1',
+  'pickupAddressLine2',
+  'pickupCity',
+  'pickupState',
+  'pickupCountry',
+  'pickupPincode',
+
+  // -------------------------
+  // DELIVERY ADDRESS
+  // -------------------------
+  'deliveryName',
+  'deliveryEmail',
+  'deliveryPhone',
+  'deliveryAddressLine1',
+  'deliveryAddressLine2',
+  'deliveryCity',
+  'deliveryState',
+  'deliveryCountry',
+  'deliveryPincode',
+
+  // -------------------------
+  // MERCHANT DETAILS
+  // -------------------------
+  'merchantName',
+  'merchantEmail',
+];
 export default {
   escapeCsv,
   generateCSVFilename,
@@ -366,4 +500,6 @@ export default {
   formatAddressForCSV,
   buildExportOrderRow,
   ORDER_EXPORT_HEADERS,
+  buildExportShipmentRow,
+  SHIPMENT_EXPORT_HEADERS,
 };

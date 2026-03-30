@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
 import Return from '#models/Return.js';
+import { SHIPMENT_EXPORT_HEADERS, buildExportShipmentRow } from '#helpers/export.js';
 import {
   createAymakanShipment,
   trackAymakanShipment,
@@ -1904,6 +1905,7 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
       },
       pieces,
       type: 'REVERSE',
+      shipmentMethod: 'AYMAKAN',
     });
 
     const newShipmentData = await shipmentDocument.save();
@@ -1920,10 +1922,18 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
     });
 
     // UPDATE RETURN STATUS AS APPROVED
-    await Return.findByIdAndUpdate(
-      returnId,
+    await Return.findOneAndUpdate(
       {
-        $addToSet: { shipmentId: newShipmentData._id }, // ✅ avoids duplicates
+        _id: returnId,
+        'sellerStatuses.sellerId': new mongoose.Types.ObjectId(sellerId),
+      },
+      {
+        $addToSet: {
+          shipmentId: newShipmentData._id,
+        },
+        $set: {
+          'sellerStatuses.$.status': 'SHIPMENT_CREATED', // 🔥 update only this seller
+        },
         $push: {
           logs: {
             status: 'SHIPMENT_CREATED',
@@ -2738,6 +2748,222 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
   // 4️ Anything partially done
   return 'IN_PROGRESS';
 };
+
+export const exportShipmentsToCSVService = async (sellerId, filters = {}, sellerName = '') => {
+  try {
+    if (!sellerId) {
+      return { success: false, message: 'Seller ID is required for export' };
+    }
+
+    const { status, search, shipmentMethod, type, sortBy = 'createdAt', sortOrder = 'desc' } = filters;
+
+    // -------------------------
+    // MATCH
+    // -------------------------
+    const match = {
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+    };
+
+    if (search) {
+      const regex = { $regex: search, $options: 'i' };
+      match.$or = [{ airWaybillNo: regex }, { merchantOrderNo: regex }, { merchantShipmentNo: regex }];
+    }
+
+    if (status) {
+      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+      match.status = { $in: statusArray };
+    }
+
+    if (shipmentMethod) match.shipmentMethod = shipmentMethod;
+    if (type) match.type = type;
+
+    const sort = {
+      [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1,
+    };
+
+    // -------------------------
+    // AGGREGATION
+    // -------------------------
+    const shipments = await Shipment.aggregate([
+      { $match: match },
+
+      // 🔹 ChannelEngine orderId only
+      {
+        $lookup: {
+          from: 'channelengineorders',
+          let: { orderIdRef: '$orderId' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ['$_id', '$$orderIdRef'], // adjust if needed
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                orderId: 1,
+              },
+            },
+          ],
+          as: 'channelOrder',
+        },
+      },
+      {
+        $addFields: {
+          ceOrderId: { $arrayElemAt: ['$channelOrder.orderId', 0] },
+        },
+      },
+
+      // 🔹 Normal lookups
+      {
+        $lookup: {
+          from: 'pickupaddresses', // ⚠️ confirm collection name
+          localField: 'pickUpId',
+          foreignField: '_id',
+          as: 'pickupDetails',
+        },
+      },
+      {
+        $lookup: {
+          from: 'deliveryaddresses', // ⚠️ confirm collection name
+          localField: 'deliveryId',
+          foreignField: '_id',
+          as: 'deliveryDetails',
+        },
+      },
+
+      // 🔹 Reverse lookups
+      {
+        $lookup: {
+          from: 'deliveryaddresses',
+          localField: 'pickUpId',
+          foreignField: '_id',
+          as: 'reversePickupDetails',
+        },
+      },
+      {
+        $lookup: {
+          from: 'pickupaddresses',
+          localField: 'deliveryId',
+          foreignField: '_id',
+          as: 'reverseDeliveryDetails',
+        },
+      },
+
+      // 🔥 Conditional mapping
+      {
+        $addFields: {
+          finalPickup: {
+            $cond: [
+              { $eq: ['$type', 'REVERSE'] },
+              { $arrayElemAt: ['$reversePickupDetails', 0] },
+              { $arrayElemAt: ['$pickupDetails', 0] },
+            ],
+          },
+          finalDelivery: {
+            $cond: [
+              { $eq: ['$type', 'REVERSE'] },
+              { $arrayElemAt: ['$reverseDeliveryDetails', 0] },
+              { $arrayElemAt: ['$deliveryDetails', 0] },
+            ],
+          },
+        },
+      },
+
+      {
+        $project: {
+          pickupDetails: 0,
+          deliveryDetails: 0,
+          reversePickupDetails: 0,
+          reverseDeliveryDetails: 0,
+          channelOrder: 0,
+        },
+      },
+
+      { $sort: sort },
+    ]);
+
+    if (!shipments.length) {
+      return { success: false, message: 'No shipments found' };
+    }
+
+    // -------------------------
+    // CSV BUILD
+    // -------------------------
+    const headers = SHIPMENT_EXPORT_HEADERS;
+    const csvRows = [headers.join(',')];
+
+    for (const shipment of shipments) {
+      const products = shipment.products || [];
+
+      // ✅ Use aggregated addresses
+      const pickup = shipment.finalPickup || {};
+      const delivery = shipment.finalDelivery || {};
+
+      // -------------------------
+      // NO PRODUCTS CASE
+      // -------------------------
+      if (!products.length) {
+        const rowObject = buildExportShipmentRow(shipment, {}, pickup, delivery, sellerId);
+
+        const row = headers.map((header) => {
+          const value = rowObject?.[header];
+          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+
+          return `"${safeValue}"`;
+        });
+
+        csvRows.push(row.join(','));
+        continue;
+      }
+
+      // -------------------------
+      // MULTIPLE PRODUCTS
+      // -------------------------
+      for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+
+        const rowObject = buildExportShipmentRow(shipment, product, pickup, delivery, sellerId);
+
+        const row = headers.map((header) => {
+          let value = rowObject?.[header];
+
+          // ✅ Show shipmentId only for first product row
+          if ((header === '_id' || header === 'shipmentId') && i > 0) {
+            value = '';
+          }
+
+          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+
+          return `"${safeValue}"`;
+        });
+
+        csvRows.push(row.join(','));
+      }
+    }
+
+    // -------------------------
+    // FILENAME
+    // -------------------------
+    const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+
+    const filename = `${sanitizedSellerName}_ShipmentExport_${exportDate}.csv`;
+
+    return {
+      success: true,
+      filename,
+      data: csvRows.join('\n'),
+      count: csvRows.length - 1,
+    };
+  } catch (error) {
+    console.error('Error exporting shipments:', error.message);
+    throw error;
+  }
+};
+
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -2757,4 +2983,5 @@ export default {
   syncReturnShipmentStatus,
   createManualShipmentService,
   getChannelEngineShipmentDetailsService,
+  exportShipmentsToCSVService,
 };

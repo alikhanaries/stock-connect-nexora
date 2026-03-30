@@ -9,6 +9,7 @@ import {
   cancelShipment,
   createManualShipment,
   createReverseShipment,
+  exportShipmentsToCSV,
 } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -18,6 +19,7 @@ import {
   cancelShipmentValidator,
   createManualShipmentValidator,
   createReverseShipmentValidator,
+  exportShipmentsToCSVValidator,
 } from '#validations/shipment.js';
 
 const router = express.Router();
@@ -70,6 +72,15 @@ const router = express.Router();
  *       400: { description: "Validation failed" }
  */
 router.post('/createShipment', createShipmentValidator, checkLanguage, authMiddleware, createShipment);
+
+router.get(
+  '/exportShipmentsToCSV',
+  exportShipmentsToCSVValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  exportShipmentsToCSV
+);
 
 // GET ALL SHIPMENT
 /**

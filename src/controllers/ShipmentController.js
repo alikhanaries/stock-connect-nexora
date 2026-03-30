@@ -7,11 +7,13 @@ import {
   cancelShipmentService,
   createReverseShipmentService,
   createManualShipmentService,
+  exportShipmentsToCSVService,
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 import mongoose from 'mongoose';
+import Seller from '#models/Seller.js';
 
 export const createShipment = async (req, res) => {
   try {
@@ -224,5 +226,66 @@ export const createManualShipment = async (req, res) => {
     errorLog(error);
 
     return errorResponse(res, error?.message || 'Manual shipment could not be created', 400);
+  }
+};
+
+// Exports shipments data as CSV file for a specific seller.
+export const exportShipmentsToCSV = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+
+    if (!sellerId) {
+      return failResponse(res, req.locale?.SELLER_ID_REQUIRED || 'Seller ID is required', 400);
+    }
+
+    const { status, search, shipmentMethod, type, sortBy, sortOrder } = req.query;
+
+    // -------------------------
+    // FETCH SELLER NAME
+    // -------------------------
+    const seller = await Seller.findById(sellerId).select('name').lean();
+
+    if (!seller) {
+      return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    // -------------------------
+    // BUILD FILTERS
+    // -------------------------
+    const filters = {
+      ...(status && { status }),
+      ...(search && { search }),
+      ...(shipmentMethod && { shipmentMethod }),
+      ...(type && { type }),
+      ...(sortBy && { sortBy }),
+      ...(sortOrder && { sortOrder }),
+    };
+
+    // -------------------------
+    // EXPORT CSV
+    // -------------------------
+    const result = await exportShipmentsToCSVService(sellerId, filters, seller.name);
+    console.log('result', result);
+    if (!result.success) {
+      return failResponse(res, result.message || req.locale?.NO_SHIPMENTS_FOUND || 'No shipments found', 404);
+    }
+
+    // -------------------------
+    // SET CSV HEADERS
+    // -------------------------
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    // UTF-8 BOM for Excel support
+    const csvWithBOM = '\uFEFF' + result.data;
+
+    return res.status(200).send(csvWithBOM);
+  } catch (error) {
+    console.error('Controller Error: exportShipments:', error.message);
+    errorLog(error);
+
+    return errorResponse(res, error.message, 500);
   }
 };
