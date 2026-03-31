@@ -256,3 +256,163 @@ export const exportOrdersValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+
+export const getAnalyticsOrdersValidator = validate(async (req) => {
+  // -------------------------
+  //  HEADERS
+  // -------------------------
+  headerSchema.parse(req.headers);
+
+  // -------------------------
+  //  QUERY SCHEMA
+  // -------------------------
+  const querySchema = z.object({
+    page: z
+      .string()
+      .optional()
+      .transform((val) => (val ? Number(val) : 1)),
+
+    size: z
+      .string()
+      .optional()
+      .transform((val) => (val ? Number(val) : 10)),
+
+    search: z.string().optional(),
+
+    period: z.string().optional(), // "all" or custom
+
+    // ✅ DATE INPUT (DD/MM/YYYY)
+    startDate: z
+      .string()
+      .optional()
+      .refine((val) => !val || /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
+        message: 'startDate must be in DD/MM/YYYY format',
+      }),
+
+    endDate: z
+      .string()
+      .optional()
+      .refine((val) => !val || /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
+        message: 'endDate must be in DD/MM/YYYY format',
+      }),
+
+    // ✅ sellerId supports "all" OR comma-separated string
+    sellerId: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (!val) return val;
+
+        // 🔥 remove wrapping quotes + inner quotes
+        return val
+          .trim()
+          .replace(/^"+|"+$/g, '') // remove starting/ending double quotes
+          .replace(/'/g, ''); // remove single quotes
+      })
+      .refine(
+        (val) => {
+          if (!val) return true;
+          if (val.toLowerCase() === 'all') return true;
+
+          return val.split(',').every((id) => id.trim().length > 0);
+        },
+        {
+          message: 'sellerId must be "all" or comma-separated values',
+        }
+      ),
+
+    // ✅ channel → cleaned but stays string
+    channel: z
+      .string()
+      .optional()
+      .transform((val) =>
+        val
+          ? val
+              .split(',')
+              .map((c) =>
+                c
+                  .trim()
+                  .replace(/^"+|"+$/g, '')
+                  .replace(/'/g, '')
+              )
+              .filter(Boolean)
+              .join(',')
+          : val
+      ),
+
+    // ✅ NEW: status → cleaned comma-separated string
+    status: z
+      .string()
+      .optional()
+      .transform((val) =>
+        val
+          ? val
+              .split(',')
+              .map((s) =>
+                s
+                  .trim()
+                  .replace(/^"+|"+$/g, '')
+                  .replace(/'/g, '')
+              )
+              .filter(Boolean)
+              .join(',')
+          : val
+      ),
+
+    sortOrder: z
+      .string()
+      .optional()
+      .transform((val) => (val ? val.toLowerCase() : 'desc')),
+
+    sortBy: z
+      .string()
+      .optional()
+      .transform((val) => (val ? val : 'orderDate')),
+  });
+
+  // -------------------------
+  //  PARSE
+  // -------------------------
+  const validatedQuery = querySchema.parse(req.query);
+
+  const { period, startDate, endDate } = validatedQuery;
+
+  // -------------------------
+  //  DATE HANDLING LOGIC
+  // -------------------------
+  let fromDate;
+  let toDate;
+
+  if (period === 'all') {
+    // ✅ ignore date filters
+    fromDate = undefined;
+    toDate = undefined;
+  } else if (startDate && endDate) {
+    const [sd, sm, sy] = startDate.split('/');
+    const [ed, em, ey] = endDate.split('/');
+
+    fromDate = new Date(`${sy}-${sm}-${sd}`);
+    toDate = new Date(`${ey}-${em}-${ed}`);
+
+    if (isNaN(fromDate) || isNaN(toDate)) {
+      throw new Error('Invalid date values');
+    }
+
+    if (fromDate > toDate) {
+      throw new Error('startDate must be before endDate');
+    }
+
+    fromDate.setHours(0, 0, 0, 0);
+    toDate.setHours(23, 59, 59, 999);
+  } else if (startDate || endDate) {
+    throw new Error('Both startDate and endDate are required together');
+  }
+
+  // -------------------------
+  //  ATTACH PROCESSED DATA
+  // -------------------------
+  validatedQuery.fromDate = fromDate;
+  validatedQuery.toDate = toDate;
+
+  req.validatedQuery = validatedQuery;
+});

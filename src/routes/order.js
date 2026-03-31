@@ -10,6 +10,7 @@ import {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrders,
+  getAnalyticsOrders,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -22,8 +23,10 @@ import {
   cancelFullOrderValidator,
   cancelPartialOrderValidator,
   exportOrdersValidator,
+  getAnalyticsOrdersValidator,
 } from '#validations/orders.js';
 const router = express.Router();
+router.get('/getAnalyticsOrders', getAnalyticsOrdersValidator, checkLanguage, authMiddleware, getAnalyticsOrders);
 
 /**
  * @swagger
@@ -358,4 +361,6 @@ router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMidd
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
 router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
+// GET ALL ANALYTICA ORDERS
+
 export default router;

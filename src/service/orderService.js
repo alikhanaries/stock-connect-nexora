@@ -49,6 +49,7 @@ const formatOrder = (order, channelImage) => {
     platform: order.channelName,
     paymentMethod: order.paymentDetails?.paymentMethod,
     currencyCode: order.paymentDetails?.currencyCode,
+    sellerId: order.sellerId,
   };
 };
 
@@ -1220,6 +1221,212 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
   }
 };
 
+const getAnalyticsOrders = async (query) => {
+  try {
+    const {
+      page = 1,
+      size = 10,
+      search,
+      fromDate,
+      toDate,
+      statuses = [], // array
+      sortOrder = 'desc',
+      sortBy = 'orderDate',
+      sellerIds = [], // array (empty = ALL)
+      channels = [], // array
+    } = query;
+
+    const skip = (page - 1) * size;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+
+    const appliedFilters = {};
+    const filter = {};
+
+    // -------------------------
+    //  SELLER FILTER
+    // -------------------------
+    let sellerObjectIds = [];
+    console.log('sellerIds', sellerIds);
+    if (sellerIds.length) {
+      sellerObjectIds = sellerIds.map((id) => new mongoose.Types.ObjectId(id));
+
+      filter.sellerId = { $in: sellerObjectIds };
+    }
+    // ✅ if empty → ALL sellers (no filter)
+
+    // -------------------------
+    //  CHANNEL FILTER
+    // -------------------------
+    if (channels.length) {
+      filter.channelName = { $in: channels };
+      appliedFilters.channel = channels;
+    }
+
+    // -------------------------
+    //  SEARCH
+    // -------------------------
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    if (search && search.trim()) {
+      const words = search.trim().split(/\s+/);
+
+      filter.$and = words.map((word) => {
+        const regex = {
+          $regex: escapeRegex(word),
+          $options: 'i',
+        };
+
+        return {
+          $or: [
+            { orderId: regex },
+            { 'orderCustomer.email': regex },
+            { 'orderCustomer.firstName': regex },
+            { 'orderCustomer.lastName': regex },
+            { channelOrderNumber: regex },
+          ],
+        };
+      });
+
+      appliedFilters.search = search;
+    }
+
+    // -------------------------
+    //  DATE FILTER
+    // -------------------------
+    if (fromDate && toDate) {
+      filter.createdAt = {
+        $gte: fromDate,
+        $lte: toDate,
+      };
+
+      appliedFilters.fromDate = fromDate;
+      appliedFilters.toDate = toDate;
+    }
+
+    // -------------------------
+    //  BASE PIPELINE
+    // -------------------------
+    let pipeline = [{ $match: filter }];
+
+    // -------------------------
+    //  STATUS HANDLING
+    // -------------------------
+    if (statuses.length) {
+      const statusArray = statuses.map((s) => s.toUpperCase());
+
+      const validStatuses = Object.values(ORDER_STATUS_MAP);
+      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+
+      if (invalid.length) {
+        throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
+      }
+
+      // 🔥 SPECIAL CASE: DELIVERED
+      if (statusArray.includes('DELIVERED')) {
+        pipeline.push({
+          $addFields: {
+            'orderSkuList.skuList': {
+              $filter: {
+                input: '$orderSkuList.skuList',
+                as: 'sku',
+                cond: {
+                  $and: [
+                    { $eq: ['$$sku.statusBreakdown.confirmed', 0] },
+                    { $eq: ['$$sku.statusBreakdown.shipped', 0] },
+                    { $eq: ['$$sku.statusBreakdown.returned', 0] },
+                    {
+                      $eq: [
+                        {
+                          $add: ['$$sku.statusBreakdown.delivered', '$$sku.statusBreakdown.canceled'],
+                        },
+                        '$$sku.quantity',
+                      ],
+                    },
+                    { $gt: ['$$sku.statusBreakdown.delivered', 0] },
+                  ],
+                },
+              },
+            },
+          },
+        });
+
+        pipeline.push({
+          $match: {
+            'orderSkuList.skuList.0': { $exists: true },
+          },
+        });
+
+        appliedFilters.status = 'DELIVERED';
+      } else {
+        filter.status = {
+          $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+        };
+        console.log('filter', filter);
+        pipeline[0] = { $match: filter };
+        appliedFilters.status = statuses;
+      }
+    }
+
+    // -------------------------
+    //  PAGINATION
+    // -------------------------
+    pipeline.push({ $sort: { [sortBy]: sortDirection } });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: parseInt(size) });
+
+    // -------------------------
+    //  EXECUTION
+    // -------------------------
+    const [totalOrders, orders, allChannels, sellerSyncs] = await Promise.all([
+      Order.countDocuments(filter),
+
+      Order.aggregate(pipeline),
+
+      Channel.find().select('_id channelId channelImageUrl'),
+
+      Seller.find(sellerObjectIds.length ? { _id: { $in: sellerObjectIds } } : {})
+        .select('lastOrderSync')
+        .lean(),
+    ]);
+
+    // -------------------------
+    //  CHANNEL MAP
+    // -------------------------
+    const channelMap = {};
+    allChannels.forEach((c) => {
+      channelMap[c.channelId] = c.channelImageUrl;
+    });
+
+    // -------------------------
+    //  LATEST SYNC
+    // -------------------------
+    const latestOrderSyncDate = sellerSyncs.length
+      ? sellerSyncs.reduce((max, s) => {
+          if (!s.lastOrderSync) return max;
+          return !max || s.lastOrderSync > max ? s.lastOrderSync : max;
+        }, null)
+      : null;
+
+    // -------------------------
+    //  RESPONSE
+    // -------------------------
+    return {
+      data: orders.map((order) => {
+        const matchingChannel = channelMap[order.channelId] || null;
+
+        return formatOrder(order, matchingChannel);
+      }),
+
+      appliedFilters,
+      latestOrderSyncDate,
+      pagination: getPagination(totalOrders, page, size),
+    };
+  } catch (err) {
+    console.error('Error fetching orders:', err);
+    return { success: false, message: err.message };
+  }
+};
+
 export default {
   getAllOrders,
   getAdminOrders,
@@ -1234,4 +1441,5 @@ export default {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrdersToCSV,
+  getAnalyticsOrders,
 };
