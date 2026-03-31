@@ -773,21 +773,6 @@ export const ayMakanWebHookService = async (data) => {
       };
     }
 
-    // ---------------- CHANNEL ENGINE ----------------
-    if (shipmentStatus === 'SHIPPED') {
-      await createShipmentWithChannelEngine({
-        merchantShipmentNo: shipmentData.merchantShipmentNo,
-        merchantOrderNo: shipmentData.merchantOrderNo,
-        lines: shipmentData.products || [],
-        trackTraceNo: shipmentData.airWaybillNo,
-        method: 'Aymakan',
-        shippedFromCountryCode: data.delivery_country,
-        shipmentDate: data.date_time,
-        isMerchantCreator: true,
-        airWaybillNo: shipmentData.airWaybillNo,
-      });
-    }
-
     if (shipmentStatus === 'DELIVERED') {
       await forwardShipmentService.forwardAymakanShipment(shipmentData);
       await safeExecute(async () => {
