@@ -1,5 +1,5 @@
 import { errorResponse, successResponse } from '#root/src/helpers/response.js';
-import { importAllProducts } from '../services/productService.js';
+import { importAllProducts } from '../service/productService.js';
 
 export const syncEntegraProducts = (req, res) => {
   try {
@@ -18,7 +18,7 @@ export const syncEntegraProducts = (req, res) => {
       }
     });
 
-    return successResponse(res, `Entegra product sync started (imageUpdate=${isImageUpdate})`, 202);
+    return successResponse(res, `Entegra product sync started in background`, 202);
   } catch (error) {
     console.error('Failed to start Entrega sync:', error);
     return errorResponse(res, error.message);
