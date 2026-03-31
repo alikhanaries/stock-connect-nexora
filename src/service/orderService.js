@@ -82,6 +82,7 @@ const getAllOrders = async (query, sellerId) => {
       sortOrder = 'desc',
       sortBy = 'orderDate',
       platform = '',
+      channelId,
     } = query;
     const skip = (page - 1) * size;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -125,6 +126,20 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.platform = platform;
     }
 
+    if (channelId !== undefined && channelId !== null) {
+      const ids = []
+        .concat(channelId) // handles number | string | array
+        .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
+        .map((id) => Number(id))
+        .filter((id) => !isNaN(id));
+
+      if (ids.length === 1) {
+        filter.channelId = ids[0];
+      } else if (ids.length > 1) {
+        filter.channelId = { $in: ids };
+      }
+    }
+
     if (fromDate || toDate) {
       filter.createdAt = {};
 
@@ -141,23 +156,23 @@ const getAllOrders = async (query, sellerId) => {
     // Build aggregation pipeline
     const pipeline = [{ $match: filter }];
 
-    if (status) {
-      // Normal status filter
-      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+    if (status !== undefined && status !== null) {
+      const statusArray = []
+        .concat(status)
+        .flatMap((s) => (typeof s === 'string' ? s.split(',') : s))
+        .map((s) => String(s).trim().toUpperCase())
+        .filter(Boolean);
+
       const validStatuses = Object.values(ORDER_STATUS_MAP);
+
       const invalid = statusArray.filter((s) => !validStatuses.includes(s));
 
       if (invalid.length) {
         throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
       }
-
-      // Build Mongo filter (case-insensitive)
-      filter.status = {
-        $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
-      };
+      filter.status = statusArray.length === 1 ? statusArray[0] : { $in: statusArray };
 
       appliedFilters.status = status;
-      pipeline[0] = { $match: filter };
     }
 
     // Sorting, skip, limit
@@ -1225,7 +1240,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       return { success: false, message: 'Seller ID is required for export' };
     }
 
-    const { status, platform, search, sortBy = 'orderDate', sortOrder = 'desc' } = filters;
+    const { status, platform, search, sortBy = 'orderDate', sortOrder = 'desc', channelId } = filters;
 
     const filter = {
       sellerIds: { $in: [sellerId] },
@@ -1240,19 +1255,40 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
         { 'orderCustomer.lastName': regex },
       ];
     }
+    if (status !== undefined && status !== null) {
+      const statusArray = []
+        .concat(status)
+        .flatMap((s) => (typeof s === 'string' ? s.split(',') : s))
+        .map((s) => String(s).trim().toUpperCase())
+        .filter((s) => s); // remove empty
+
+      if (statusArray.length === 1) {
+        filter.status = statusArray[0];
+      } else if (statusArray.length > 1) {
+        filter.status = { $in: statusArray };
+      }
+    }
 
     if (platform) {
       filter.channelName = { $regex: platform, $options: 'i' };
     }
+    if (channelId !== undefined && channelId !== null) {
+      const ids = []
+        .concat(channelId) // handles number | string | array
+        .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
+        .map((id) => Number(id))
+        .filter((id) => !isNaN(id));
 
-    if (status) {
-      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
-      filter.status = { $in: statusArray };
+      if (ids.length === 1) {
+        filters.channelId = ids[0];
+      } else if (ids.length > 1) {
+        filters.channelId = { $in: ids };
+      }
     }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const orders = await Order.find(filter).sort(sort).lean();
+    const orders = await Order.find(filters).sort(sort).lean();
 
     if (!orders.length) {
       return { success: false, message: 'No orders found' };
@@ -1304,7 +1340,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       });
 
       if (!sellerSkus.length) continue;
-
+      const totalSkuCount = sellerSkus?.length;
       /*
       CALCULATE TOTALS
       */
@@ -1352,7 +1388,8 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
             airwaybillNumber, //  injected here
           },
           sellerTotals,
-          sellerId
+          sellerId,
+          totalSkuCount
         );
 
         /*
@@ -1360,6 +1397,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
         */
         if (i > 0) {
           rowObject.orderId = '';
+          rowObject.orderSkuListCount = '';
         }
 
         const row = headers.map((header) => {
