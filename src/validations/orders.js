@@ -279,9 +279,11 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
 
     search: z.string().optional(),
 
-    period: z.string().optional(), // "all" or custom
+    period: z.string().optional(),
 
-    // ✅ DATE INPUT (DD/MM/YYYY)
+    // -------------------------
+    //  DATE INPUT (DD/MM/YYYY)
+    // -------------------------
     startDate: z
       .string()
       .optional()
@@ -296,68 +298,70 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
         message: 'endDate must be in DD/MM/YYYY format',
       }),
 
-    // ✅ sellerId supports "all" OR comma-separated string
+    // -------------------------
+    //  SELLER IDS → ARRAY
+    // -------------------------
     sellerId: z
       .string()
       .optional()
       .transform((val) => {
-        if (!val) return val;
+        if (!val) return [];
 
-        // 🔥 remove wrapping quotes + inner quotes
-        return val
+        const cleaned = val
           .trim()
-          .replace(/^"+|"+$/g, '') // remove starting/ending double quotes
-          .replace(/'/g, ''); // remove single quotes
-      })
-      .refine(
-        (val) => {
-          if (!val) return true;
-          if (val.toLowerCase() === 'all') return true;
+          .replace(/^"+|"+$/g, '')
+          .replace(/'/g, '');
 
-          return val.split(',').every((id) => id.trim().length > 0);
-        },
-        {
-          message: 'sellerId must be "all" or comma-separated values',
-        }
-      ),
+        if (cleaned.toLowerCase() === 'all') return [];
 
-    // ✅ channel → cleaned but stays string
+        return cleaned
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
+      }),
+
+    // -------------------------
+    //  CHANNEL → ARRAY
+    // -------------------------
     channel: z
       .string()
       .optional()
-      .transform((val) =>
-        val
-          ? val
-              .split(',')
-              .map((c) =>
-                c
-                  .trim()
-                  .replace(/^"+|"+$/g, '')
-                  .replace(/'/g, '')
-              )
-              .filter(Boolean)
-              .join(',')
-          : val
-      ),
+      .transform((val) => {
+        if (!val) return [];
 
-    // ✅ NEW: status → cleaned comma-separated string
+        const cleaned = val
+          .trim()
+          .replace(/^"+|"+$/g, '')
+          .replace(/'/g, '');
+
+        if (cleaned.toLowerCase() === 'all') return [];
+
+        return cleaned
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean);
+      }),
+
+    // -------------------------
+    //  STATUS → ARRAY
+    // -------------------------
     status: z
       .string()
       .optional()
-      .transform((val) =>
-        val
-          ? val
-              .split(',')
-              .map((s) =>
-                s
-                  .trim()
-                  .replace(/^"+|"+$/g, '')
-                  .replace(/'/g, '')
-              )
-              .filter(Boolean)
-              .join(',')
-          : val
-      ),
+      .transform((val) => {
+        if (!val) return [];
+
+        return val
+          .split(',')
+          .map((s) =>
+            s
+              .trim()
+              .replace(/^"+|"+$/g, '')
+              .replace(/'/g, '')
+              .toUpperCase()
+          )
+          .filter(Boolean);
+      }),
 
     sortOrder: z
       .string()
@@ -367,29 +371,28 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
     sortBy: z
       .string()
       .optional()
-      .transform((val) => (val ? val : 'orderDate')),
+      .transform((val) => val || 'orderDate'),
   });
 
   // -------------------------
-  //  PARSE
+  //  PARSE QUERY
   // -------------------------
   const validatedQuery = querySchema.parse(req.query);
 
-  const { period, startDate, endDate } = validatedQuery;
+  const { period, startDate: startDateStr, endDate: endDateStr } = validatedQuery;
 
   // -------------------------
-  //  DATE HANDLING LOGIC
+  //  DATE HANDLING
   // -------------------------
   let fromDate;
   let toDate;
 
   if (period === 'all') {
-    // ✅ ignore date filters
     fromDate = undefined;
     toDate = undefined;
-  } else if (startDate && endDate) {
-    const [sd, sm, sy] = startDate.split('/');
-    const [ed, em, ey] = endDate.split('/');
+  } else if (startDateStr && endDateStr) {
+    const [sd, sm, sy] = startDateStr.split('/');
+    const [ed, em, ey] = endDateStr.split('/');
 
     fromDate = new Date(`${sy}-${sm}-${sd}`);
     toDate = new Date(`${ey}-${em}-${ed}`);
@@ -404,15 +407,24 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
 
     fromDate.setHours(0, 0, 0, 0);
     toDate.setHours(23, 59, 59, 999);
-  } else if (startDate || endDate) {
+  } else if (startDateStr || endDateStr) {
     throw new Error('Both startDate and endDate are required together');
   }
 
   // -------------------------
-  //  ATTACH PROCESSED DATA
+  //  FINAL NORMALIZED OUTPUT
   // -------------------------
-  validatedQuery.fromDate = fromDate;
-  validatedQuery.toDate = toDate;
+  req.validatedQuery = {
+    ...validatedQuery,
 
-  req.validatedQuery = validatedQuery;
+    sellerIds: validatedQuery.sellerId, // always array
+    channels: validatedQuery.channel, // always array
+    statuses: validatedQuery.status, // always array
+
+    fromDate,
+    toDate,
+  };
+
+  // Optional debug
+  console.log('✅ validatedQuery:', req.validatedQuery);
 });

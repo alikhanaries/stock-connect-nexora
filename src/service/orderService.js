@@ -1229,11 +1229,11 @@ const getAnalyticsOrders = async (query) => {
       search,
       fromDate,
       toDate,
-      statuses = [], // array
+      statuses = [],
       sortOrder = 'desc',
       sortBy = 'orderDate',
-      sellerIds = [], // array (empty = ALL)
-      channels = [], // array
+      sellerIds = [],
+      channels = [],
     } = query;
 
     const skip = (page - 1) * size;
@@ -1246,13 +1246,11 @@ const getAnalyticsOrders = async (query) => {
     //  SELLER FILTER
     // -------------------------
     let sellerObjectIds = [];
-    console.log('sellerIds', sellerIds);
+
     if (sellerIds.length) {
       sellerObjectIds = sellerIds.map((id) => new mongoose.Types.ObjectId(id));
-
       filter.sellerId = { $in: sellerObjectIds };
     }
-    // ✅ if empty → ALL sellers (no filter)
 
     // -------------------------
     //  CHANNEL FILTER
@@ -1271,10 +1269,7 @@ const getAnalyticsOrders = async (query) => {
       const words = search.trim().split(/\s+/);
 
       filter.$and = words.map((word) => {
-        const regex = {
-          $regex: escapeRegex(word),
-          $options: 'i',
-        };
+        const regex = { $regex: escapeRegex(word), $options: 'i' };
 
         return {
           $or: [
@@ -1294,9 +1289,9 @@ const getAnalyticsOrders = async (query) => {
     //  DATE FILTER
     // -------------------------
     if (fromDate && toDate) {
-      filter.createdAt = {
-        $gte: fromDate,
-        $lte: toDate,
+      filter.orderDate = {
+        $gte: new Date(fromDate),
+        $lte: new Date(toDate),
       };
 
       appliedFilters.fromDate = fromDate;
@@ -1321,73 +1316,93 @@ const getAnalyticsOrders = async (query) => {
         throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
       }
 
-      // 🔥 SPECIAL CASE: DELIVERED
+      // 🔥 DELIVERED (ALL SKUs must be delivered)
       if (statusArray.includes('DELIVERED')) {
-        pipeline.push({
-          $addFields: {
-            'orderSkuList.skuList': {
-              $filter: {
-                input: '$orderSkuList.skuList',
-                as: 'sku',
-                cond: {
-                  $and: [
-                    { $eq: ['$$sku.statusBreakdown.confirmed', 0] },
-                    { $eq: ['$$sku.statusBreakdown.shipped', 0] },
-                    { $eq: ['$$sku.statusBreakdown.returned', 0] },
-                    {
-                      $eq: [
-                        {
-                          $add: ['$$sku.statusBreakdown.delivered', '$$sku.statusBreakdown.canceled'],
-                        },
-                        '$$sku.quantity',
-                      ],
-                    },
-                    { $gt: ['$$sku.statusBreakdown.delivered', 0] },
-                  ],
+        pipeline.push(
+          {
+            // Step 1: use all SKUs (since order already filtered by sellerId)
+            $addFields: {
+              sellerSkus: '$orderSkuList.skuList',
+            },
+          },
+          {
+            // Step 2: remove orders with no SKUs
+            $match: {
+              'sellerSkus.0': { $exists: true },
+            },
+          },
+          {
+            // Step 3: find invalid SKUs
+            $addFields: {
+              invalidSkus: {
+                $filter: {
+                  input: '$sellerSkus',
+                  as: 'sku',
+                  cond: {
+                    $or: [
+                      { $gt: ['$$sku.statusBreakdown.confirmed', 0] },
+                      { $gt: ['$$sku.statusBreakdown.shipped', 0] },
+                      { $gt: ['$$sku.statusBreakdown.returned', 0] },
+
+                      {
+                        $ne: [
+                          {
+                            $add: ['$$sku.statusBreakdown.delivered', '$$sku.statusBreakdown.canceled'],
+                          },
+                          '$$sku.quantity',
+                        ],
+                      },
+
+                      { $eq: ['$$sku.statusBreakdown.delivered', 0] },
+                    ],
+                  },
                 },
               },
             },
           },
-        });
-
-        pipeline.push({
-          $match: {
-            'orderSkuList.skuList.0': { $exists: true },
-          },
-        });
+          {
+            // Step 4: keep only orders where ALL SKUs are delivered
+            $match: {
+              invalidSkus: { $size: 0 },
+            },
+          }
+        );
 
         appliedFilters.status = 'DELIVERED';
       } else {
-        filter.status = {
+        // NORMAL STATUS FILTER
+        pipeline[0].$match.status = {
           $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
         };
-        console.log('filter', filter);
-        pipeline[0] = { $match: filter };
+
         appliedFilters.status = statuses;
       }
     }
 
     // -------------------------
-    //  PAGINATION
+    //  SORT + PAGINATION
     // -------------------------
-    pipeline.push({ $sort: { [sortBy]: sortDirection } });
-    pipeline.push({ $skip: skip });
-    pipeline.push({ $limit: parseInt(size) });
+    pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size) });
+
+    // -------------------------
+    //  COUNT PIPELINE (FIXED)
+    // -------------------------
+    const countPipeline = pipeline.slice(0, -3); // remove sort, skip, limit
+    countPipeline.push({ $count: 'total' });
 
     // -------------------------
     //  EXECUTION
     // -------------------------
-    const [totalOrders, orders, allChannels, sellerSyncs] = await Promise.all([
-      Order.countDocuments(filter),
-
+    const [orders, countResult, allChannels, sellerSyncs] = await Promise.all([
       Order.aggregate(pipeline),
-
+      Order.aggregate(countPipeline),
       Channel.find().select('_id channelId channelImageUrl'),
-
       Seller.find(sellerObjectIds.length ? { _id: { $in: sellerObjectIds } } : {})
         .select('lastOrderSync')
         .lean(),
     ]);
+
+    const totalOrders = countResult[0]?.total || 0;
 
     // -------------------------
     //  CHANNEL MAP
@@ -1413,10 +1428,8 @@ const getAnalyticsOrders = async (query) => {
     return {
       data: orders.map((order) => {
         const matchingChannel = channelMap[order.channelId] || null;
-
         return formatOrder(order, matchingChannel);
       }),
-
       appliedFilters,
       latestOrderSyncDate,
       pagination: getPagination(totalOrders, page, size),

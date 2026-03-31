@@ -360,80 +360,24 @@ export const getAnalyticsOrders = async (req, res) => {
   try {
     console.log('🚀 getAnalyticsOrders called');
 
-    // -------------------------
-    //  USE VALIDATED QUERY
-    // -------------------------
     const query = req.validatedQuery;
 
-    let {
-      sellerId, // string ("all" OR comma-separated)
-      channel, // string (comma-separated)
-      status, // string (comma-separated)
-      fromDate,
-      toDate,
-    } = query;
+    const { sellerIds = [], channels = [], statuses = [], fromDate, toDate } = query;
 
-    console.log('sellerId:', sellerId);
-    console.log('channel:', channel);
-    console.log('status:', status);
-    console.log('fromDate:', fromDate);
-    console.log('toDate:', toDate);
+    console.log('sellerIds:', sellerIds);
+    console.log('channels:', channels);
+    console.log('statuses:', statuses);
 
-    // -------------------------
-    //  SELLER HANDLING
-    // -------------------------
-    let sellerIds = [];
-
-    if (!sellerId || !sellerId.trim()) {
-      return Responses.errorResponse(res, 'sellerId is required', 400);
-    }
-
-    if (sellerId !== 'all') {
-      sellerIds = sellerId.split(',').map((id) => id.trim());
-
-      if (!sellerIds.length) {
-        return Responses.errorResponse(res, 'Invalid sellerId format', 400);
-      }
-    }
-    console.log('sellerIds', sellerIds);
-    // -------------------------
-    //  CHANNEL HANDLING
-    // -------------------------
-    let channels = [];
-    if (channel && channel.trim().toLowerCase() !== 'all') {
-      channels = channel
-        .split(',')
-        .map((c) => c.trim())
-        .filter(Boolean);
-    }
-
-    // -------------------------
-    //  STATUS HANDLING
-    // -------------------------
-    let statuses = [];
-    if (status) {
-      statuses = status
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-    console.log('statuses', statuses);
-    // -------------------------
-    //  PREPARE FINAL QUERY
-    // -------------------------
     const finalQuery = {
       ...query,
-      sellerIds: sellerId === 'all' ? [] : sellerIds, // empty means ALL
-      channels,
+      sellerIds,
+      channels: channels.includes('all') ? [] : channels,
       statuses,
       fromDate,
       toDate,
-      isAll: sellerId === 'all',
+      isAll: sellerIds.length === 0,
     };
 
-    // -------------------------
-    //  CALL SERVICE
-    // -------------------------
     const {
       data = [],
       appliedFilters = {},
@@ -441,24 +385,12 @@ export const getAnalyticsOrders = async (req, res) => {
       latestOrderSyncDate = null,
     } = await orderService.getAnalyticsOrders(finalQuery);
 
-    // -------------------------
-    //  RESPONSE
-    // -------------------------
-    const responsePayload = {
+    return Responses.successResponse(res, data.length ? 'Orders fetched successfully' : 'No orders found', 200, {
       content: data,
       appliedFilters,
       latestOrderSyncDate,
       ...pagination,
-    };
-
-    return Responses.successResponse(
-      res,
-      data.length
-        ? req?.locale?.ORDERS_FETCHED_SUCCESSFULLY || 'Orders fetched successfully'
-        : req?.locale?.NO_ORDERS_FOUND || 'No orders found',
-      200,
-      responsePayload
-    );
+    });
   } catch (error) {
     console.error('❌ Controller Error:', error);
     errorLog(error);
