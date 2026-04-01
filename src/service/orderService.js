@@ -19,7 +19,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
-import { formatDateTime, truncate } from '#helpers/Common.js';
+import { formatDateTime, truncate, resolveDateRange } from '#helpers/Common.js';
 import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
@@ -1227,8 +1227,6 @@ const getAnalyticsOrders = async (query) => {
       page = 1,
       size = 10,
       search,
-      fromDate,
-      toDate,
       statuses = [],
       sortOrder = 'desc',
       sortBy = 'orderDate',
@@ -1293,16 +1291,19 @@ const getAnalyticsOrders = async (query) => {
     // -------------------------
     // DATE FILTER
     // -------------------------
-    if (fromDate && toDate) {
+    const { start, end, appliedPeriod } = resolveDateRange(query);
+
+    if (start && end) {
       filter.orderDate = {
-        $gte: new Date(fromDate),
-        $lte: new Date(toDate),
+        $gte: start,
+        $lte: end,
       };
 
-      appliedFilters.fromDate = fromDate;
-      appliedFilters.toDate = toDate;
+      appliedFilters.period = appliedPeriod;
+      appliedFilters.fromDate = start.toISOString();
+      appliedFilters.toDate = end.toISOString();
     }
-
+    console.log('filter', filter);
     // -------------------------
     // BASE PIPELINE
     // -------------------------
@@ -1327,6 +1328,7 @@ const getAnalyticsOrders = async (query) => {
     pipeline.push({
       $match: {
         'seller.isDeleted': false,
+        'seller.type': 'normal',
       },
     });
 
