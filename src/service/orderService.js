@@ -1243,7 +1243,7 @@ const getAnalyticsOrders = async (query) => {
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     // -------------------------
-    // SELLER FILTER (ONLY ID FILTER HERE)
+    // SELLER FILTER
     // -------------------------
     let sellerObjectIds = [];
 
@@ -1303,14 +1303,14 @@ const getAnalyticsOrders = async (query) => {
       appliedFilters.fromDate = start.toISOString();
       appliedFilters.toDate = end.toISOString();
     }
-    console.log('filter', filter);
+
     // -------------------------
     // BASE PIPELINE
     // -------------------------
     let pipeline = [{ $match: filter }];
 
     // -------------------------
-    // SELLER VALIDATION (EXISTS + NOT DELETED)
+    // SELLER VALIDATION
     // -------------------------
     pipeline.push({
       $lookup: {
@@ -1333,7 +1333,7 @@ const getAnalyticsOrders = async (query) => {
     });
 
     // -------------------------
-    // APPLY SELLER IDS FILTER (AFTER LOOKUP SAFELY)
+    // APPLY SELLER IDS FILTER
     // -------------------------
     if (sellerObjectIds.length) {
       pipeline.push({
@@ -1344,69 +1344,35 @@ const getAnalyticsOrders = async (query) => {
     }
 
     // -------------------------
-    // STATUS HANDLING (UNCHANGED)
+    // STATUS HANDLING (UPDATED)
     // -------------------------
     if (statuses.length) {
       const statusArray = statuses.map((s) => s.toUpperCase());
 
       const validStatuses = Object.values(ORDER_STATUS_MAP);
+
       const invalid = statusArray.filter((s) => !validStatuses.includes(s));
 
       if (invalid.length) {
         throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
       }
 
-      const hasDelivered = statusArray.some((s) => /delivered/i.test(s));
+      // 🔥 MAP: DELIVERED → CLOSED
+      const mappedStatuses = statusArray.map((s) => (s === 'DELIVERED' ? 'CLOSED' : s));
+
+      const hasDelivered = statusArray.includes('DELIVERED');
 
       if (hasDelivered) {
-        pipeline.push(
-          {
-            $addFields: {
-              sellerSkus: '$orderSkuList.skuList',
-            },
+        pipeline.push({
+          $match: {
+            status: 'CLOSED',
           },
-          {
-            $match: {
-              'sellerSkus.0': { $exists: true },
-            },
-          },
-          {
-            $addFields: {
-              invalidSkus: {
-                $filter: {
-                  input: '$sellerSkus',
-                  as: 'sku',
-                  cond: {
-                    $or: [
-                      { $gt: ['$$sku.statusBreakdown.confirmed', 0] },
-                      { $gt: ['$$sku.statusBreakdown.shipped', 0] },
-                      { $gt: ['$$sku.statusBreakdown.returned', 0] },
-                      {
-                        $ne: [
-                          {
-                            $add: ['$$sku.statusBreakdown.delivered', '$$sku.statusBreakdown.canceled'],
-                          },
-                          '$$sku.quantity',
-                        ],
-                      },
-                      { $eq: ['$$sku.statusBreakdown.delivered', 0] },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-          {
-            $match: {
-              invalidSkus: { $size: 0 },
-            },
-          }
-        );
+        });
 
         appliedFilters.status = 'DELIVERED';
       } else {
         pipeline[0].$match.status = {
-          $in: statusArray.map((s) => new RegExp(escapeRegex(s), 'i')),
+          $in: mappedStatuses.map((s) => new RegExp(escapeRegex(s), 'i')),
         };
 
         appliedFilters.status = statuses;
@@ -1464,7 +1430,6 @@ const getAnalyticsOrders = async (query) => {
     return { success: false, message: err.message };
   }
 };
-
 export default {
   getAllOrders,
   getAdminOrders,
