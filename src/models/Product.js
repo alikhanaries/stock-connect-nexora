@@ -10,7 +10,7 @@ const ProductSchema = new mongoose.Schema(
 
     grandParentProductSkuCode: { type: String, trim: true, default: null },
     parentProductSkuCode: { type: String, trim: true, default: null },
-    productSkuCode: { type: String, trim: true, index: true },
+    productSkuCode: { type: String, trim: true },
     name: { type: String, required: true, trim: true },
     nameAr: { type: String, trim: true },
     description: { type: String },

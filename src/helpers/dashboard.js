@@ -241,9 +241,10 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
     },
   ];
   if (metric === 'sales') {
-    pipeline.push({
-      $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false },
-    });
+    pipeline.push(
+      { $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false } },
+      { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } }
+    );
   }
 
   pipeline.push({
@@ -558,6 +559,7 @@ export const topFacetPipeline = (sellerObjectIds, range, type, globalChannelFilt
       },
     },
     { $unwind: '$orderSkuList.skuList' },
+    { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } },
     { $match: { 'orderSkuList.skuList.merchantProductNo': { $type: 'string', $ne: '' } } },
     {
       $lookup: {
@@ -609,6 +611,7 @@ export const prevRevenuePipeline = (sellerObjectIds, prevRange, keys = [], globa
     },
   },
   { $unwind: '$orderSkuList.skuList' },
+  { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } },
 
   { $match: { 'orderSkuList.skuList.merchantProductNo': { $in: keys } } },
 
