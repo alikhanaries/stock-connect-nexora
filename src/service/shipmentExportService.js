@@ -31,40 +31,144 @@ export const exportShipmentToCSV = async (sellerId, filters, res) => {
 
     const pipeline = [
       { $match: query },
-      { $unwind: '$products' },
+      { $sort: sort },
+      {
+        $lookup: {
+          from: 'channelengineorders',
+          localField: 'orderId',
+          foreignField: '_id',
+          as: 'orderData',
+          pipeline: [
+            {
+              $project: {
+                orderId: 1,
+                channelName: 1,
+                channelOrderNumber: 1,
+                orderDate: 1,
+                status: 1,
+                'orderSkuList.skuList.merchantProductNo': 1,
+                'orderSkuList.skuList.lineTotalExclVat': 1,
+                'orderSkuList.skuList.lineVat': 1,
+                'orderSkuList.skuList.lineTotalInclVat': 1,
+              },
+            },
+          ],
+        },
+      },
       {
         $addFields: {
-          trackingInfo: {
-            $arrayElemAt: ['$trackingInfo', -1],
+          order: { $arrayElemAt: ['$orderData', 0] },
+          trackingCount: { $size: '$trackingInfo' },
+          latestTracking: { $arrayElemAt: ['$trackingInfo', -1] },
+          trackingHistory: {
+            $reduce: {
+              input: '$trackingInfo',
+              initialValue: '',
+              in: {
+                $cond: [
+                  { $eq: ['$$value', ''] },
+                  '$$this.statusCode',
+                  { $concat: ['$$value', ' | ', '$$this.statusCode'] },
+                ],
+              },
+            },
+          },
+
+          totalProducts: { $size: { $ifNull: ['$products', []] } },
+          totalQuantity: { $sum: { $ifNull: ['$products.quantity', []] } },
+          productSKUs: {
+            $reduce: {
+              input: { $ifNull: ['$products', []] },
+              initialValue: '',
+              in: {
+                $cond: [
+                  { $eq: ['$$value', ''] },
+                  '$$this.merchantProductNo',
+                  { $concat: ['$$value', ' | ', '$$this.merchantProductNo'] },
+                ],
+              },
+            },
+          },
+          shipmentProductNos: {
+            $map: {
+              input: { $ifNull: ['$products', []] },
+              as: 'p',
+              in: '$$p.merchantProductNo',
+            },
           },
         },
       },
-      { $sort: sort },
+      {
+        $project: {
+          status: 1,
+          shipmentMethod: 1,
+          merchantShipmentNo: 1,
+          airWaybillNo: 1,
+          pieces: 1,
+          createdAt: 1,
+          updatedAt: 1,
+          merchantOrderNo: 1,
+          totalProducts: 1,
+          productSKUs: 1,
+          totalQuantity: 1,
+          shipmentProductNos: 1,
+          trackingCount: 1,
+          latestTracking: 1,
+          trackingHistory: 1,
+          'order.orderId': 1,
+          'order.channelName': 1,
+          'order.channelOrderNumber': 1,
+          'order.orderDate': 1,
+          'order.status': 1,
+          'order.orderSkuList.skuList.merchantProductNo': 1,
+          'order.orderSkuList.skuList.lineTotalExclVat': 1,
+          'order.orderSkuList.skuList.lineVat': 1,
+          'order.orderSkuList.skuList.lineTotalInclVat': 1,
+        },
+      },
     ];
 
     const cursor = Shipment.aggregate(pipeline).cursor();
 
     for await (const shipment of cursor) {
+      const latestStatusCode = shipment.latestTracking?.statusCode || '';
+      const aymakanEntry = AYMAKAN_STATUS[latestStatusCode];
+
+      const shipmentProductNos = new Set(shipment.shipmentProductNos || []);
+      const skuList = shipment.order?.orderSkuList?.skuList || [];
+      const filtered = skuList.filter((item) => shipmentProductNos.has(item.merchantProductNo));
+      const shipmentSubtotal = filtered.reduce((sum, item) => sum + (item.lineTotalExclVat || 0), 0);
+      const shipmentTax = filtered.reduce((sum, item) => sum + (item.lineVat || 0), 0);
+      const shipmentTotal = filtered.reduce((sum, item) => sum + (item.lineTotalInclVat || 0), 0);
+
       const row = [
-        shipment.products?.merchantProductNo || '',
-        shipment.airWaybillNo || '',
-        shipment.merchantOrderNo || '',
+        shipment.productSKUs || '',
         shipment.merchantShipmentNo || '',
-        shipment.products?.orderLineId || '',
-        shipment.products?.quantity || 0,
-        shipment.products?.hsCode || '',
+        shipment.airWaybillNo || '',
+        shipment.order?.orderId || '',
+        shipment.merchantOrderNo || '',
+        shipment.order?.channelOrderNumber || '',
+        shipment.order?.channelName || '',
         shipment.status || '',
-        shipment.method || '',
-        shipment.type || 'FORWARD',
-        shipment.shipmentMerchantDetails?.name || '',
-        shipment.shipmentMerchantDetails?.email || '',
+        shipment.shipmentMethod || '',
         shipment.pieces || 0,
-        shipment.isMerchantCreator ? 'Yes' : 'No',
-        shipment.trackingInfo?.description || '',
-        AYMAKAN_STATUS[shipment.trackingInfo?.statusCode]
-          ? AYMAKAN_STATUS[shipment.trackingInfo?.statusCode]?.status
-          : shipment.trackingInfo?.statusCode || '',
-        shipment.trackingInfo?.date ? new Date(shipment.trackingInfo.date).toISOString() : '',
+        shipment.order?.status || '',
+        shipment.createdAt ? new Date(shipment.createdAt).toISOString() : '',
+        shipment.updatedAt ? new Date(shipment.updatedAt).toISOString() : '',
+        shipment.order?.orderDate ? new Date(shipment.order.orderDate).toISOString() : '',
+        shipment.totalProducts || 0,
+        shipment.totalQuantity || 0,
+        shipmentSubtotal,
+        shipmentTax,
+        shipmentTotal,
+        shipment.trackingCount || 0,
+        aymakanEntry ? aymakanEntry.status : latestStatusCode,
+        shipment.latestTracking?.description || '',
+        shipment.latestTracking?.createdAt ? new Date(shipment.latestTracking.createdAt).toISOString() : '',
+        (shipment.trackingHistory || '')
+          .split(' | ')
+          .map((code) => AYMAKAN_STATUS[code]?.status || code)
+          .join(' | '),
       ];
 
       if (!res.write(escapeCsv(row) + '\n')) {
