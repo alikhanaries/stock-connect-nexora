@@ -136,7 +136,7 @@ export const resolveDateRange = (query) => {
     }
 
     case 'monthly':
-      // ✅ 1st day of month → today
+      // 1st day of month → today
       start = startOfMonth();
       start.setHours(0, 0, 0, 0);
       end = endOfToday();

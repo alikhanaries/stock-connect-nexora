@@ -1303,7 +1303,7 @@ const getAnalyticsOrders = async (query) => {
       appliedFilters.fromDate = start.toISOString();
       appliedFilters.toDate = end.toISOString();
     }
-    console.log('filter', filter);
+
     // -------------------------
     // BASE PIPELINE
     // -------------------------
@@ -1357,7 +1357,7 @@ const getAnalyticsOrders = async (query) => {
         throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
       }
 
-      // 🔥 MAP: DELIVERED → CLOSED
+      //  MAP: DELIVERED → CLOSED
       const mappedStatuses = statusArray.map((s) => (s === 'DELIVERED' ? 'CLOSED' : s));
 
       const hasDelivered = statusArray.includes('DELIVERED');
