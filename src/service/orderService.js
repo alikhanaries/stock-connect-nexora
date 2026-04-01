@@ -1243,6 +1243,11 @@ const getAnalyticsOrders = async (query) => {
     const filter = {};
 
     // -------------------------
+    //  ESCAPE REGEX (GLOBAL)
+    // -------------------------
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // -------------------------
     //  SELLER FILTER
     // -------------------------
     let sellerObjectIds = [];
@@ -1253,23 +1258,26 @@ const getAnalyticsOrders = async (query) => {
     }
 
     // -------------------------
-    //  CHANNEL FILTER
+    //  CHANNEL FILTER (REGEX)
     // -------------------------
     if (channels.length) {
-      filter.channelName = { $in: channels };
+      filter.channelName = {
+        $in: channels.map((ch) => new RegExp(escapeRegex(ch), 'i')),
+      };
       appliedFilters.channel = channels;
     }
 
     // -------------------------
     //  SEARCH
     // -------------------------
-    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
     if (search && search.trim()) {
       const words = search.trim().split(/\s+/);
 
       filter.$and = words.map((word) => {
-        const regex = { $regex: escapeRegex(word), $options: 'i' };
+        const regex = {
+          $regex: escapeRegex(word),
+          $options: 'i',
+        };
 
         return {
           $or: [
@@ -1304,7 +1312,7 @@ const getAnalyticsOrders = async (query) => {
     let pipeline = [{ $match: filter }];
 
     // -------------------------
-    //  STATUS HANDLING
+    //  STATUS HANDLING (REGEX)
     // -------------------------
     if (statuses.length) {
       const statusArray = statuses.map((s) => s.toUpperCase());
@@ -1316,23 +1324,25 @@ const getAnalyticsOrders = async (query) => {
         throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
       }
 
-      // 🔥 DELIVERED (ALL SKUs must be delivered)
-      if (statusArray.includes('DELIVERED')) {
+      // 🔥 detect any "delivered" variation
+      const hasDelivered = statusArray.some((s) => /delivered/i.test(s));
+
+      if (hasDelivered) {
+        // -------------------------
+        //  DELIVERED LOGIC (STRICT)
+        // -------------------------
         pipeline.push(
           {
-            // Step 1: use all SKUs (since order already filtered by sellerId)
             $addFields: {
               sellerSkus: '$orderSkuList.skuList',
             },
           },
           {
-            // Step 2: remove orders with no SKUs
             $match: {
               'sellerSkus.0': { $exists: true },
             },
           },
           {
-            // Step 3: find invalid SKUs
             $addFields: {
               invalidSkus: {
                 $filter: {
@@ -1340,10 +1350,15 @@ const getAnalyticsOrders = async (query) => {
                   as: 'sku',
                   cond: {
                     $or: [
-                      { $gt: ['$$sku.statusBreakdown.confirmed', 0] },
-                      { $gt: ['$$sku.statusBreakdown.shipped', 0] },
-                      { $gt: ['$$sku.statusBreakdown.returned', 0] },
-
+                      {
+                        $gt: ['$$sku.statusBreakdown.confirmed', 0],
+                      },
+                      {
+                        $gt: ['$$sku.statusBreakdown.shipped', 0],
+                      },
+                      {
+                        $gt: ['$$sku.statusBreakdown.returned', 0],
+                      },
                       {
                         $ne: [
                           {
@@ -1352,8 +1367,9 @@ const getAnalyticsOrders = async (query) => {
                           '$$sku.quantity',
                         ],
                       },
-
-                      { $eq: ['$$sku.statusBreakdown.delivered', 0] },
+                      {
+                        $eq: ['$$sku.statusBreakdown.delivered', 0],
+                      },
                     ],
                   },
                 },
@@ -1361,7 +1377,6 @@ const getAnalyticsOrders = async (query) => {
             },
           },
           {
-            // Step 4: keep only orders where ALL SKUs are delivered
             $match: {
               invalidSkus: { $size: 0 },
             },
@@ -1370,9 +1385,11 @@ const getAnalyticsOrders = async (query) => {
 
         appliedFilters.status = 'DELIVERED';
       } else {
-        // NORMAL STATUS FILTER
+        // -------------------------
+        //  NORMAL STATUS (REGEX)
+        // -------------------------
         pipeline[0].$match.status = {
-          $in: statusArray.map((s) => new RegExp(`^${s}$`, 'i')),
+          $in: statusArray.map((s) => new RegExp(escapeRegex(s), 'i')),
         };
 
         appliedFilters.status = statuses;
@@ -1385,9 +1402,9 @@ const getAnalyticsOrders = async (query) => {
     pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size) });
 
     // -------------------------
-    //  COUNT PIPELINE (FIXED)
+    //  COUNT PIPELINE
     // -------------------------
-    const countPipeline = pipeline.slice(0, -3); // remove sort, skip, limit
+    const countPipeline = pipeline.slice(0, -3);
     countPipeline.push({ $count: 'total' });
 
     // -------------------------
