@@ -1242,23 +1242,20 @@ const getAnalyticsOrders = async (query) => {
     const appliedFilters = {};
     const filter = {};
 
-    // -------------------------
-    //  ESCAPE REGEX (GLOBAL)
-    // -------------------------
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     // -------------------------
-    //  SELLER FILTER
+    // SELLER FILTER (ONLY ID FILTER HERE)
     // -------------------------
     let sellerObjectIds = [];
 
     if (sellerIds.length) {
       sellerObjectIds = sellerIds.map((id) => new mongoose.Types.ObjectId(id));
-      filter.sellerId = { $in: sellerObjectIds };
+      appliedFilters.sellerIds = sellerIds;
     }
 
     // -------------------------
-    //  CHANNEL FILTER (REGEX)
+    // CHANNEL FILTER
     // -------------------------
     if (channels.length) {
       filter.channelName = {
@@ -1268,7 +1265,7 @@ const getAnalyticsOrders = async (query) => {
     }
 
     // -------------------------
-    //  SEARCH
+    // SEARCH
     // -------------------------
     if (search && search.trim()) {
       const words = search.trim().split(/\s+/);
@@ -1294,7 +1291,7 @@ const getAnalyticsOrders = async (query) => {
     }
 
     // -------------------------
-    //  DATE FILTER
+    // DATE FILTER
     // -------------------------
     if (fromDate && toDate) {
       filter.orderDate = {
@@ -1307,12 +1304,45 @@ const getAnalyticsOrders = async (query) => {
     }
 
     // -------------------------
-    //  BASE PIPELINE
+    // BASE PIPELINE
     // -------------------------
     let pipeline = [{ $match: filter }];
 
     // -------------------------
-    //  STATUS HANDLING (REGEX)
+    // SELLER VALIDATION (EXISTS + NOT DELETED)
+    // -------------------------
+    pipeline.push({
+      $lookup: {
+        from: 'sellers',
+        localField: 'sellerId',
+        foreignField: '_id',
+        as: 'seller',
+      },
+    });
+
+    pipeline.push({
+      $unwind: '$seller',
+    });
+
+    pipeline.push({
+      $match: {
+        'seller.isDeleted': false,
+      },
+    });
+
+    // -------------------------
+    // APPLY SELLER IDS FILTER (AFTER LOOKUP SAFELY)
+    // -------------------------
+    if (sellerObjectIds.length) {
+      pipeline.push({
+        $match: {
+          sellerId: { $in: sellerObjectIds },
+        },
+      });
+    }
+
+    // -------------------------
+    // STATUS HANDLING (UNCHANGED)
     // -------------------------
     if (statuses.length) {
       const statusArray = statuses.map((s) => s.toUpperCase());
@@ -1324,13 +1354,9 @@ const getAnalyticsOrders = async (query) => {
         throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
       }
 
-      // 🔥 detect any "delivered" variation
       const hasDelivered = statusArray.some((s) => /delivered/i.test(s));
 
       if (hasDelivered) {
-        // -------------------------
-        //  DELIVERED LOGIC (STRICT)
-        // -------------------------
         pipeline.push(
           {
             $addFields: {
@@ -1350,15 +1376,9 @@ const getAnalyticsOrders = async (query) => {
                   as: 'sku',
                   cond: {
                     $or: [
-                      {
-                        $gt: ['$$sku.statusBreakdown.confirmed', 0],
-                      },
-                      {
-                        $gt: ['$$sku.statusBreakdown.shipped', 0],
-                      },
-                      {
-                        $gt: ['$$sku.statusBreakdown.returned', 0],
-                      },
+                      { $gt: ['$$sku.statusBreakdown.confirmed', 0] },
+                      { $gt: ['$$sku.statusBreakdown.shipped', 0] },
+                      { $gt: ['$$sku.statusBreakdown.returned', 0] },
                       {
                         $ne: [
                           {
@@ -1367,9 +1387,7 @@ const getAnalyticsOrders = async (query) => {
                           '$$sku.quantity',
                         ],
                       },
-                      {
-                        $eq: ['$$sku.statusBreakdown.delivered', 0],
-                      },
+                      { $eq: ['$$sku.statusBreakdown.delivered', 0] },
                     ],
                   },
                 },
@@ -1385,9 +1403,6 @@ const getAnalyticsOrders = async (query) => {
 
         appliedFilters.status = 'DELIVERED';
       } else {
-        // -------------------------
-        //  NORMAL STATUS (REGEX)
-        // -------------------------
         pipeline[0].$match.status = {
           $in: statusArray.map((s) => new RegExp(escapeRegex(s), 'i')),
         };
@@ -1397,18 +1412,18 @@ const getAnalyticsOrders = async (query) => {
     }
 
     // -------------------------
-    //  SORT + PAGINATION
+    // SORT + PAGINATION
     // -------------------------
     pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size) });
 
     // -------------------------
-    //  COUNT PIPELINE
+    // COUNT PIPELINE
     // -------------------------
     const countPipeline = pipeline.slice(0, -3);
     countPipeline.push({ $count: 'total' });
 
     // -------------------------
-    //  EXECUTION
+    // EXECUTION
     // -------------------------
     const [orders, countResult, allChannels, sellerSyncs] = await Promise.all([
       Order.aggregate(pipeline),
@@ -1421,17 +1436,11 @@ const getAnalyticsOrders = async (query) => {
 
     const totalOrders = countResult[0]?.total || 0;
 
-    // -------------------------
-    //  CHANNEL MAP
-    // -------------------------
     const channelMap = {};
     allChannels.forEach((c) => {
       channelMap[c.channelId] = c.channelImageUrl;
     });
 
-    // -------------------------
-    //  LATEST SYNC
-    // -------------------------
     const latestOrderSyncDate = sellerSyncs.length
       ? sellerSyncs.reduce((max, s) => {
           if (!s.lastOrderSync) return max;
@@ -1439,9 +1448,6 @@ const getAnalyticsOrders = async (query) => {
         }, null)
       : null;
 
-    // -------------------------
-    //  RESPONSE
-    // -------------------------
     return {
       data: orders.map((order) => {
         const matchingChannel = channelMap[order.channelId] || null;
