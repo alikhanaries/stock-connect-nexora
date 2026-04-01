@@ -1369,13 +1369,15 @@ const getAnalyticsOrders = async (query) => {
           },
         });
 
-        appliedFilters.status = 'DELIVERED';
+        appliedFilters.status = 'delivered';
       } else {
         pipeline[0].$match.status = {
           $in: mappedStatuses.map((s) => new RegExp(escapeRegex(s), 'i')),
         };
 
-        appliedFilters.status = statuses;
+        appliedFilters.status = Array.isArray(statuses)
+          ? statuses.map((s) => s.toLowerCase())
+          : statuses?.toLowerCase();
       }
     }
 
