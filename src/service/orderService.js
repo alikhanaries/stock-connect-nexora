@@ -1303,7 +1303,7 @@ const getAnalyticsOrders = async (query) => {
       appliedFilters.fromDate = start.toISOString();
       appliedFilters.toDate = end.toISOString();
     }
-
+    console.log('filter', filter);
     // -------------------------
     // BASE PIPELINE
     // -------------------------

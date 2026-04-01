@@ -112,11 +112,26 @@ export const resolveDateRange = (query) => {
       break;
 
     case 'weekly': {
-      const d = new Date();
-      const day = d.getDay(); // 0 Sunday
-      d.setDate(d.getDate() - day);
-      start = new Date(d.setHours(0, 0, 0, 0));
-      end = endOfToday();
+      const today = new Date();
+      const day = today.getDay(); // 0 (Sun) - 6 (Sat)
+
+      // Convert Sunday (0) → 7 for easier calc
+      const adjustedDay = day === 0 ? 7 : day;
+
+      // Get Monday
+      const diff = adjustedDay - 1;
+
+      const startDate = new Date(today);
+      startDate.setDate(today.getDate() - diff);
+      startDate.setHours(0, 0, 0, 0);
+
+      start = startDate;
+
+      const endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      end = endDate;
+
       break;
     }
 
@@ -127,12 +142,23 @@ export const resolveDateRange = (query) => {
       end = endOfToday();
       break;
 
-    case 'last_30_days':
-      start = new Date();
-      start.setDate(start.getDate() - 30);
-      start.setHours(0, 0, 0, 0);
-      end = endOfToday();
+    case 'last_30_days': {
+      const today = new Date();
+
+      // subtract 29 days (NOT 30)
+      const startDate = new Date(today);
+      startDate.setDate(today.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+
+      start = startDate;
+
+      const endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      end = endDate;
+
       break;
+    }
 
     case 'last_60_days':
       start = new Date();
