@@ -126,3 +126,29 @@ export const ordersValidator = async (req, res, next) => {
     next(error);
   }
 };
+
+export const orderCancelValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const bodySchema = z.object({
+    orderId: z.string().min(1, 'orderId is required'),
+
+    orderItems: z
+      .array(
+        z.object({
+          orderItemId: z.string().min(1, 'orderItemId is required'),
+          productId: z.string().min(1, 'productId is required'),
+          variantId: z.string().min(1, 'variantId is required'),
+          quantity: z
+            .number({
+              required_error: 'quantity is required',
+            })
+            .int()
+            .positive(),
+        })
+      )
+      .min(1, 'orderItems must contain at least one item'),
+  });
+
+  req.body = bodySchema.parse(req.body);
+});

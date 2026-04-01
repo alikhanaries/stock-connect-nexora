@@ -9,8 +9,8 @@ import { login } from '#root/src/integrations/erp/unicommerce/controllers/authCo
 import { loginValidator } from '#root/src/integrations/erp/unicommerce/validations/auth.js';
 import { checkLanguage } from '#middleware/index.js';
 import { getProductCountValidator, getProductsValidator } from '../validations/products.js';
-import { ordersController, orderDispatch } from '../controllers/orderController.js';
-import { orderDispatchValidator, ordersValidator } from '../validations/orders.js';
+import { ordersController, orderDispatch, cancelOrder } from '../controllers/orderController.js';
+import { orderCancelValidator, orderDispatchValidator, ordersValidator } from '../validations/orders.js';
 import { updateInventoryValidator } from '../validations/inventory.js';
 import { updateInventory } from '../controllers/inventoryController.js';
 
@@ -603,6 +603,117 @@ UniCommerceRouter.post(
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
   orderDispatch
+);
+
+/**
+ * @openapi
+ * /erp/unicommerce/orders/cancel:
+ *   post:
+ *     tags: [UniCommerce]
+ *     summary: Cancel Order Items
+ *     description: Notify marketplace when seller cancels order items in Uniware.
+ *
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         description: Language preference
+ *
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer access token (Authorization: Bearer token)
+ *
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orderId
+ *               - orderItems
+ *             properties:
+ *               orderId:
+ *                 type: string
+ *                 description: Order ID to cancel
+ *                 example: ORD12345
+ *
+ *               orderItems:
+ *                 type: array
+ *                 description: List of cancelled order items
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - orderItemId
+ *                     - productId
+ *                     - variantId
+ *                     - quantity
+ *                   properties:
+ *                     orderItemId:
+ *                       type: string
+ *                       example: "47123"
+ *
+ *                     productId:
+ *                       type: string
+ *                       example: "979"
+ *
+ *                     variantId:
+ *                       type: string
+ *                       example: "4726"
+ *
+ *                     quantity:
+ *                       type: number
+ *                       example: 2
+ *
+ *     responses:
+ *       200:
+ *         description: Cancellation processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [SUCCESS, FAILED, PARTIAL_SUCCESS]
+ *                   example: SUCCESS
+ *
+ *                 orderItems:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       orderItemId:
+ *                         type: string
+ *                         example: "47123"
+ *
+ *                       errorMessage:
+ *                         type: string
+ *                         example: order Item Id not available
+ *
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/FailResponse"
+ *
+ *       500:
+ *         description: Internal server error
+ */
+
+UniCommerceRouter.post(
+  '/orders/cancel',
+  orderCancelValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  cancelOrder
 );
 
 export default UniCommerceRouter;

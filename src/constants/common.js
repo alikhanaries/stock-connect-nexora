@@ -173,6 +173,33 @@ export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
   'orderPaymentDetails_currencyCode',
 ];
 
+export const SHIPMENT_EXPORT_HEADERS = [
+  'Product SKUs',
+  'Merchant Shipment Number',
+  'Tracking Number (AWB)',
+  'Order ID',
+  'Merchant Order Number',
+  'Channel Order ID',
+  'Sales Channel',
+  'Shipment Status',
+  'Shipment Method',
+  'Number of Packages',
+  'Order Status',
+  'Shipment Created Date',
+  'Shipment Last Updated Date',
+  'Order Date',
+  'Total Products',
+  'Total Quantity',
+  'Subtotal Amount',
+  'Tax Amount (VAT)',
+  'Total Amount',
+  'Tracking Updates Count',
+  'Latest Tracking Status Code',
+  'Latest Tracking Status Description',
+  'Latest Tracking Date',
+  'Tracking Status History',
+];
+
 export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
 
 export const LOW_STOCK_THRESHOLD_SELLERS = ['kip', 'ramsey'];

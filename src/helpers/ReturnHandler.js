@@ -232,7 +232,7 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
 };
 
 export const buildReturnMatchAndPipeline = async (query = {}) => {
-  const { status, platform, channelId, returnId, orderID, search, dateFrom, dateTo, sellerId } = query;
+  const { status, channelId, returnId, orderID, search, dateFrom, dateTo, sellerId } = query;
 
   const matchConditions = {};
 
@@ -256,10 +256,6 @@ export const buildReturnMatchAndPipeline = async (query = {}) => {
   // Filters
   addFilter(matchConditions, 'status', status, (v) => ({
     $in: v.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
-  }));
-
-  addFilter(matchConditions, 'platform', platform, (v) => ({
-    $regex: new RegExp(v, 'i'),
   }));
 
   addFilter(matchConditions, 'channelId', channelId, (v) => parseInt(v, 10));

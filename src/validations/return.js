@@ -25,6 +25,8 @@ export const getAllReturnsValidator = validate(async (req) => {
 
     status: z.string().optional(),
 
+    channel: z.string().optional(),
+
     channelId: z
       .string()
       .optional()

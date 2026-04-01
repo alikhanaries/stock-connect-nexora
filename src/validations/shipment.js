@@ -143,3 +143,14 @@ export const createReverseShipmentValidator = validate(async (req) => {
   // Validate body
   bodySchema.parse(req.body);
 });
+
+export const exportShipmentValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z.object({
+    status: z.string().optional(),
+    search: z.string().optional(),
+  });
+
+  await querySchema.parseAsync(req.query);
+});

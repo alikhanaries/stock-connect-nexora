@@ -81,7 +81,6 @@ const getAllOrders = async (query, sellerId) => {
       status,
       sortOrder = 'desc',
       sortBy = 'orderDate',
-      platform = '',
       channelId,
     } = query;
     const skip = (page - 1) * size;
@@ -119,11 +118,6 @@ const getAllOrders = async (query, sellerId) => {
         };
       });
       appliedFilters.search = search;
-    }
-
-    if (platform) {
-      filter.channelName = { $regex: platform, $options: 'i' };
-      appliedFilters.platform = platform;
     }
 
     if (channelId !== undefined && channelId !== null) {
@@ -1240,7 +1234,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       return { success: false, message: 'Seller ID is required for export' };
     }
 
-    const { status, platform, search, sortBy = 'orderDate', sortOrder = 'desc', channelId } = filters;
+    const { status, search, sortBy = 'orderDate', sortOrder = 'desc', channelId } = filters;
 
     const filter = {
       sellerIds: { $in: [sellerId] },
@@ -1269,9 +1263,6 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       }
     }
 
-    if (platform) {
-      filter.channelName = { $regex: platform, $options: 'i' };
-    }
     if (channelId !== undefined && channelId !== null) {
       const ids = []
         .concat(channelId) // handles number | string | array
