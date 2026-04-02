@@ -221,3 +221,31 @@ export const createAymakanReverseShipment = async (payload) => {
     throw error;
   }
 };
+
+export const createAymakanDocumentId = async (payload) => {
+  try {
+    // Call Aymakan API
+    const response = await fetch(`${AYMAKAN_API_URL}shipping/documents/upload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: AYMAKAN_API_KEY,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData?.message);
+    }
+    const result = await response.json().catch(async () => {
+      const errorData = await response.json();
+      throw new Error(errorData?.message);
+    });
+    return result;
+  } catch (error) {
+    console.log(error);
+    console.error('Aymakan Service Error:', error.message, error.stack);
+    throw error;
+  }
+};
