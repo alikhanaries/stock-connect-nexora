@@ -5,6 +5,7 @@ import { AMAZON_STATUS_MAP, ORDER_STATUS_MAP } from '../constants/common.js';
 import Order from '../models/Orders.js';
 import Seller from '../models/Seller.js';
 import Channel from '../models/Channel.js';
+import Product from '../models/Product.js';
 
 const ROW_CONCURRENCY = 50;
 const limit = pLimit(ROW_CONCURRENCY);
@@ -247,7 +248,22 @@ export const sanitizeAmazonOrdersData = async (orders) => {
 
   const skuSet = new Set();
   orders.forEach((row) => {
-    if (row.sku) skuSet.add(row.sku);
+    if (row.sku) {
+      skuSet.add(row.sku.trim());
+    }
+  });
+  const productDocs = await Product.find({
+    productSkuCode: {
+      $in: Array.from(skuSet).map((sku) => sku.trim()),
+    },
+  })
+    .select('productSkuCode sellerId')
+    .lean();
+
+  const productSellerMap = new Map();
+
+  productDocs.forEach((product) => {
+    productSellerMap.set(product.productSkuCode, product.sellerId);
   });
 
   const brandNameSet = new Set();
@@ -293,18 +309,6 @@ export const sanitizeAmazonOrdersData = async (orders) => {
     const { orderInfo, items } = orderData;
     const existingOrder = existingOrdersMap.get(orderId);
 
-    let finalSellerId = null;
-
-    if (orderInfo.brandName) {
-      const brandKey = orderInfo.brandName.toLowerCase().trim();
-      finalSellerId = brandSellerMap.get(brandKey) || null;
-    }
-
-    if (!finalSellerId) {
-      console.warn(`Skipping order ${orderId}: no seller found for brand "${orderInfo.brandName}"`);
-      continue;
-    }
-
     const purchaseDate = parseAmazonDate(orderInfo.purchaseDate);
 
     let totalPrice = 0;
@@ -316,18 +320,24 @@ export const sanitizeAmazonOrdersData = async (orders) => {
       totalTax += parseFloat(item.itemTax) || 0;
       totalShipping += parseFloat(item.shippingPrice) || 0;
     });
+    const sellerIDsSet = new Set();
 
     const skuList = items.map((item, index) => {
-      const existingSku = existingOrder?.orderSkuList?.skuList?.find(
-        (s) => s.id === item.orderItemId || s.merchantProductNo === item.sku
-      );
+      const skuSellerId = productSellerMap.get(item.sku?.trim()) || null;
 
+      if (skuSellerId) {
+        sellerIDsSet.add(String(skuSellerId));
+      }
+      const existingSku = existingOrder?.orderSkuList?.skuList?.find(
+        (s) => s.id === item.orderItemId || s.merchantProductNo === item.sku?.trim()
+      );
       const qty = parseInt(item.quantityPurchased) || 1;
       const mappedStatus = existingSku?.status || mapAmazonStatus(item.orderStatus);
 
       const statusBreakdown = existingSku?.statusBreakdown ?? buildAmazonStatusBreakdown(mappedStatus, qty);
 
       return {
+        sellerId: skuSellerId,
         id: item.orderItemId || `${orderId}-${index}`,
         channelOrderLineNo: item.orderItemId,
         status: mappedStatus,
@@ -355,7 +365,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
         originalLineTotalExclVat: parseFloat(item.itemPrice) || 0,
         extraData: null,
         channelProductNo: item.orderItemId,
-        merchantProductNo: item.sku,
+        merchantProductNo: item.sku?.trim(),
         quantity: qty,
         cancellationRequestedQuantity: existingSku?.cancellationRequestedQuantity || 0,
         unitPriceInclVat: parseFloat(item.itemPrice) || 0,
@@ -382,7 +392,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
       orderId: orderId,
       channelOrderNumber: orderId,
       channelId: channelInfo.channelId,
-      sellerId: finalSellerId,
+      sellerIds: Array.from(sellerIDsSet),
       channelName: channelInfo.channelName,
       globalChannelName: channelInfo.globalChannelName,
       globalChannelId: channelInfo.globalChannelId,
