@@ -385,9 +385,9 @@ export const buildExportShipmentRow = (shipment, product = {}) => {
 
     //  Aggregated
     'Total Products': safe(shipment.totalProducts),
-    'Product SKUs': safe(product?.merchantProductNo), // 🔥 PER ROW
-    'Total Quantity': safe(product?.quantity), // 🔥 PER ROW
-    'HS Codes': safe(product?.hsCode), // 🔥 PER ROW
+    'Product SKUs': safe(product?.merchantProductNo), //  PER ROW
+    'Total Quantity': safe(product?.quantity), //  PER ROW
+    'HS Codes': safe(product?.hsCode), //  PER ROW
 
     'Subtotal Amount': safe(order?.subTotalInclVat),
     'Tax Amount (VAT)': safe(order?.totalVat),
