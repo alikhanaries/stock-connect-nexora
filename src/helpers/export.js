@@ -358,6 +358,84 @@ export const ORDER_EXPORT_HEADERS = [
   'updatedAt',
 ];
 
+export const buildExportShipmentRow = (shipment, product = {}) => {
+  const safe = (v) => (v === null || v === undefined ? '' : v);
+
+  const order = shipment.order || {};
+  const latest = shipment.latestTracking || {};
+
+  return {
+    //  Shipment
+    'Shipment ID': safe(shipment?._id?.toString()),
+    'Shipment Status': safe(shipment.status),
+    'Merchant Shipment Number': safe(shipment.merchantShipmentNo),
+    'Tracking Number (AWB)': safe(shipment.airWaybillNo),
+    'Number of Packages': safe(shipment.pieces),
+
+    'Shipment Created Date': shipment.createdAt ? new Date(shipment.createdAt).toISOString() : '',
+    'Shipment Last Updated Date': shipment.updatedAt ? new Date(shipment.updatedAt).toISOString() : '',
+
+    //  Order
+    'Order ID': safe(order?.orderId || shipment?.orderId),
+    'Merchant Order Number': safe(order?.merchantOrderNo),
+    'Sales Channel': safe(order?.channelName),
+    'Channel Order ID': safe(order?.channelOrderNumber),
+    'Order Date': order?.orderDate ? new Date(order.orderDate).toISOString() : '',
+    'Order Status': safe(order?.status),
+
+    //  Aggregated
+    'Total Products': safe(shipment.totalProducts),
+    'Product SKUs': safe(product?.merchantProductNo), //  PER ROW
+    'Total Quantity': safe(product?.quantity), //  PER ROW
+    'HS Codes': safe(product?.hsCode), //  PER ROW
+
+    'Subtotal Amount': safe(order?.subTotalInclVat),
+    'Tax Amount (VAT)': safe(order?.totalVat),
+    'Total Amount': safe(order?.totalInclVat),
+    'Payment Method': safe(order?.orderPaymentDetails?.method),
+
+    //  Tracking
+    'Tracking Updates Count': safe(shipment.trackingCount),
+    'Latest Tracking Status Code': safe(latest?.statusCode),
+    'Latest Tracking Status Description': safe(latest?.description),
+    'Latest Tracking Date': latest?.createdAt ? new Date(latest.createdAt).toISOString() : '',
+
+    'Tracking Status History': safe(shipment.trackingHistory),
+  };
+};
+
+export const SHIPMENT_EXPORT_HEADERS = [
+  'Shipment ID', //  NEW FIELD'
+  'Shipment Status',
+  'Merchant Shipment Number',
+  'Tracking Number (AWB)',
+  'Number of Packages',
+  'Shipment Created Date',
+  'Shipment Last Updated Date',
+
+  'Order ID',
+  'Merchant Order Number',
+  'Sales Channel',
+  'Channel Order ID',
+  'Order Date',
+  'Order Status',
+
+  'Total Products',
+  'Product SKUs',
+  'Total Quantity',
+  'HS Codes',
+
+  'Subtotal Amount',
+  'Tax Amount (VAT)',
+  'Total Amount',
+  'Payment Method',
+
+  'Tracking Updates Count',
+  'Latest Tracking Status Code',
+  'Latest Tracking Status Description',
+  'Latest Tracking Date',
+  'Tracking Status History',
+];
 export default {
   escapeCsv,
   generateCSVFilename,
@@ -370,4 +448,6 @@ export default {
   formatAddressForCSV,
   buildExportOrderRow,
   ORDER_EXPORT_HEADERS,
+  buildExportShipmentRow,
+  SHIPMENT_EXPORT_HEADERS,
 };

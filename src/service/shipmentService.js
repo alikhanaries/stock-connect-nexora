@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
 import Return from '#models/Return.js';
+import { SHIPMENT_EXPORT_HEADERS, buildExportShipmentRow } from '#helpers/export.js';
 import {
   createAymakanShipment,
   trackAymakanShipment,
@@ -1936,6 +1937,7 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
       },
       pieces,
       type: 'REVERSE',
+      shipmentMethod: 'AYMAKAN',
     });
 
     const newShipmentData = await shipmentDocument.save();
@@ -1952,10 +1954,18 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
     });
 
     // UPDATE RETURN STATUS AS APPROVED
-    await Return.findByIdAndUpdate(
-      returnId,
+    await Return.findOneAndUpdate(
       {
-        $addToSet: { shipmentId: newShipmentData._id }, // ✅ avoids duplicates
+        _id: returnId,
+        'sellerStatuses.sellerId': new mongoose.Types.ObjectId(sellerId),
+      },
+      {
+        $addToSet: {
+          shipmentId: newShipmentData._id,
+        },
+        $set: {
+          'sellerStatuses.$.status': 'SHIPMENT_CREATED', //  update only this seller
+        },
         $push: {
           logs: {
             status: 'SHIPMENT_CREATED',
@@ -2794,6 +2804,199 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
   // 4️ Anything partially done
   return 'IN_PROGRESS';
 };
+
+export const exportShipmentsToCSVService = async (sellerId, filters = {}, sellerName = '') => {
+  try {
+    if (!sellerId) {
+      return { success: false, message: 'Seller ID is required for export' };
+    }
+
+    const { status, search, shipmentMethod, type, sortBy = 'createdAt', sortOrder = 'desc' } = filters;
+
+    // -------------------------
+    // MATCH
+    // -------------------------
+    const match = {
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+    };
+
+    if (search) {
+      const regex = { $regex: search, $options: 'i' };
+      match.$or = [{ airWaybillNo: regex }, { merchantOrderNo: regex }, { merchantShipmentNo: regex }];
+    }
+
+    if (status) {
+      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
+      match.status = { $in: statusArray };
+    }
+
+    if (shipmentMethod) match.shipmentMethod = shipmentMethod;
+    if (type) match.type = type;
+
+    const sort = {
+      [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1,
+    };
+
+    // -------------------------
+    // AGGREGATION
+    // -------------------------
+    const shipments = await Shipment.aggregate([
+      { $match: match },
+
+      //  ORDER LOOKUP
+      {
+        $lookup: {
+          from: 'channelengineorders',
+          localField: 'orderId',
+          foreignField: '_id',
+          as: 'order',
+        },
+      },
+      { $unwind: { path: '$order', preserveNullAndEmptyArrays: true } },
+
+      //  PRODUCT AGGREGATION
+      {
+        $addFields: {
+          totalProducts: { $size: { $ifNull: ['$products', []] } },
+          totalQuantity: { $sum: '$products.quantity' },
+
+          productSKUs: {
+            $reduce: {
+              input: '$products',
+              initialValue: '',
+              in: {
+                $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, '$$this.merchantProductNo'],
+              },
+            },
+          },
+
+          hsCodes: {
+            $reduce: {
+              input: '$products',
+              initialValue: '',
+              in: {
+                $concat: [
+                  '$$value',
+                  { $cond: [{ $eq: ['$$value', ''] }, '', ', '] },
+                  { $ifNull: ['$$this.hsCode', ''] },
+                ],
+              },
+            },
+          },
+        },
+      },
+
+      //  TRACKING PROCESSING
+      {
+        $addFields: {
+          trackingCount: { $size: { $ifNull: ['$trackingInfo', []] } },
+
+          latestTracking: {
+            $arrayElemAt: [
+              {
+                $sortArray: {
+                  input: { $ifNull: ['$trackingInfo', []] },
+                  sortBy: { date: -1 },
+                },
+              },
+              0,
+            ],
+          },
+
+          trackingHistory: {
+            $reduce: {
+              input: { $ifNull: ['$trackingInfo', []] },
+              initialValue: '',
+              in: {
+                $concat: [
+                  '$$value',
+                  { $cond: [{ $eq: ['$$value', ''] }, '', ' | '] },
+                  { $ifNull: ['$$this.statusCode', ''] },
+                ],
+              },
+            },
+          },
+        },
+      },
+
+      { $sort: sort },
+    ]);
+
+    if (!shipments.length) {
+      return { success: false, message: 'No shipments found' };
+    }
+
+    // -------------------------
+    // CSV BUILD
+    // -------------------------
+    const headers = SHIPMENT_EXPORT_HEADERS;
+    const csvRows = [headers.join(',')];
+
+    for (const shipment of shipments) {
+      const products = shipment.products || [];
+
+      // -------------------------
+      // NO PRODUCTS CASE
+      // -------------------------
+      if (!products.length) {
+        const rowObject = buildExportShipmentRow(shipment, {});
+
+        const row = headers.map((header) => {
+          const value = rowObject?.[header];
+          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+
+          return `"${safeValue}"`;
+        });
+
+        csvRows.push(row.join(','));
+        continue;
+      }
+
+      // -------------------------
+      // MULTIPLE PRODUCTS
+      // -------------------------
+      for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+
+        const rowObject = buildExportShipmentRow(shipment, product);
+
+        const row = headers.map((header) => {
+          let value = rowObject?.[header];
+
+          //  SHOW Shipment ID ONLY IN FIRST ROW
+          if (header === 'Shipment ID' && i > 0) {
+            value = '';
+          }
+
+          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+
+          return `"${safeValue}"`;
+        });
+
+        csvRows.push(row.join(','));
+      }
+    }
+
+    // -------------------------
+    // FILENAME
+    // -------------------------
+    const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+
+    const filename = `${sanitizedSellerName}_ShipmentExport_${exportDate}.csv`;
+
+    return {
+      success: true,
+      filename,
+      data: csvRows.join('\n'),
+      count: shipments.length,
+    };
+  } catch (error) {
+    console.error('Error exporting shipments:', error.message);
+    throw error;
+  }
+};
+
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -2813,4 +3016,5 @@ export default {
   syncReturnShipmentStatus,
   createManualShipmentService,
   getChannelEngineShipmentDetailsService,
+  exportShipmentsToCSVService,
 };

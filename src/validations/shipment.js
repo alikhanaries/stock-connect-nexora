@@ -144,13 +144,51 @@ export const createReverseShipmentValidator = validate(async (req) => {
   bodySchema.parse(req.body);
 });
 
-export const exportShipmentValidator = validate(async (req) => {
+// EXPORT SHIPMENT VALIDATOR
+export const exportShipmentsToCSVValidator = validate(async (req) => {
+  // -------------------------
+  // HEADERS VALIDATION
+  // -------------------------
   headerSchema.parse(req.headers);
 
+  // -------------------------
+  // QUERY VALIDATION
+  // -------------------------
   const querySchema = z.object({
-    status: z.string().optional(),
-    search: z.string().optional(),
+    status: z
+      .string()
+      .optional()
+      .refine(
+        (val) =>
+          !val ||
+          val
+            .split(',')
+            .every((s) =>
+              [
+                'SHIPMENT_CREATED',
+                'PICKED',
+                'SHIPPED',
+                'OUT_FOR_DELIVERY',
+                'RETURNED',
+                'RETURN REQUESTED',
+                'DAMAGED',
+                'CANCELED',
+                'DELIVERED',
+                'NOT_DELIVERED',
+                'SHIPMENT_REPROCESSING',
+              ].includes(s.trim().toUpperCase())
+            ),
+        {
+          message: 'Invalid shipment status value',
+        }
+      ),
+
+    search: z.string().trim().optional(),
+
+    sortBy: z.enum(['createdAt', 'updatedAt', 'submissionDate', 'pickupDate', 'deliveryDate']).optional(),
+
+    sortOrder: z.enum(['asc', 'desc', 'ASC', 'DESC']).optional(),
   });
 
-  await querySchema.parseAsync(req.query);
+  querySchema.parse(req.query);
 });
