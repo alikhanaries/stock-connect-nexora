@@ -108,6 +108,4 @@ const SkuSchema = new mongoose.Schema(
   },
   { _id: false }
 );
-SkuSchema.index({ merchantProductNo: 1 });
-
 export default SkuSchema;

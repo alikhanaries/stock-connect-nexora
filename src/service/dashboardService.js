@@ -136,44 +136,66 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           orderDate: { $gte: start, $lte: end },
         },
       },
-      { $unwind: '$orderSkuList.skuList' },
       {
-        $group: {
-          _id: '$_id',
-          status: { $first: '$status' },
-          totalOrderValue: { $first: { $ifNull: ['$originalTotalInclVat', 0] } },
-          deliveredTotal: {
-            $sum: {
-              $multiply: [
-                { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
-                { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
-              ],
+        $facet: {
+          orderCount: [{ $count: 'total' }],
+          skuMetrics: [
+            { $unwind: '$orderSkuList.skuList' },
+            { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } },
+            {
+              $group: {
+                _id: '$_id',
+                totalOrderValue: {
+                  $sum: { $ifNull: ['$orderSkuList.skuList.originalLineTotalInclVat', 0] },
+                },
+                deliveredTotal: {
+                  $sum: {
+                    $multiply: [
+                      { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
+                      { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+                    ],
+                  },
+                },
+                canceledTotal: {
+                  $sum: {
+                    $multiply: [
+                      { $ifNull: ['$orderSkuList.skuList.statusBreakdown.canceled', 0] },
+                      { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+                    ],
+                  },
+                },
+                returnedTotal: {
+                  $sum: {
+                    $multiply: [
+                      { $ifNull: ['$orderSkuList.skuList.statusBreakdown.returned', 0] },
+                      { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+                    ],
+                  },
+                },
+                totalProducts: { $sum: '$orderSkuList.skuList.quantity' },
+              },
             },
-          },
-          canceledTotal: {
-            $sum: {
-              $multiply: [
-                { $ifNull: ['$orderSkuList.skuList.statusBreakdown.canceled', 0] },
-                { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
-              ],
+            {
+              $group: {
+                _id: null,
+                totalDeliveredSales: { $sum: '$deliveredTotal' },
+                totalOrderValue: { $sum: '$totalOrderValue' },
+                cancellationValue: { $sum: '$canceledTotal' },
+                returnedValue: { $sum: '$returnedTotal' },
+                avgProductsPerOrder: { $avg: '$totalProducts' },
+              },
             },
-          },
-
-          totalProducts: {
-            $sum: '$orderSkuList.skuList.quantity',
-          },
+          ],
         },
       },
       {
-        $group: {
-          _id: null,
-          totalOrders: { $sum: 1 },
-          totalDeliveredSales: { $sum: '$deliveredTotal' },
-          totalOrderValue: { $sum: '$totalOrderValue' },
-
-          cancellationValue: { $sum: '$canceledTotal' },
-
-          avgProductsPerOrder: { $avg: '$totalProducts' },
+        $project: {
+          totalOrders: { $ifNull: [{ $arrayElemAt: ['$orderCount.total', 0] }, 0] },
+          totalDeliveredSales: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.totalDeliveredSales', 0] }, 0] },
+          totalOrderValue: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.totalOrderValue', 0] }, 0] },
+          cancellationValue: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.cancellationValue', 0] }, 0] },
+          returnedValue: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.returnedValue', 0] }, 0] },
+          avgProductsPerOrder: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.avgProductsPerOrder', 0] }, 0] },
         },
       },
     ]);
@@ -184,6 +206,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
         totalDeliveredSales: 0,
         totalOrderValue: 0,
         cancellationValue: 0,
+        returnedValue: 0,
         avgProductsPerOrder: 0,
       }
     );
@@ -218,8 +241,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const prevAvgOrderValue = previous.totalOrders > 0 ? previous.totalOrderValue / previous.totalOrders : 0;
 
-  const currNetGmv = current.totalOrderValue - current.cancellationValue;
-  const prevNetGmv = previous.totalOrderValue - previous.cancellationValue;
+  const currNetGmv = current.totalOrderValue - current.cancellationValue - current.returnedValue;
+  const prevNetGmv = previous.totalOrderValue - previous.cancellationValue - previous.returnedValue;
 
   return [
     buildMetric(
@@ -543,6 +566,7 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
         preserveNullAndEmptyArrays: false,
       },
     },
+    { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } },
     {
       $group: {
         _id: '$globalChannelName',
