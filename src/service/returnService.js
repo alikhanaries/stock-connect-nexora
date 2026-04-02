@@ -2,7 +2,6 @@ import { config } from '#config/config.js';
 import Order from '../models/Orders.js';
 import Return from '../models/Return.js';
 import Seller from '#root/src/models/Seller.js';
-import Shipment from '../models/Shipment/Shipment.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 import mongoose from 'mongoose';
@@ -174,6 +173,7 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
+
     const appliedFilters = {};
 
     if (channelId) appliedFilters.channelId = channelId;
@@ -183,7 +183,19 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
       includeSearchNameSplit: true,
     });
 
-    // Validate status if provided
+    let sellerObjectId = null;
+
+    if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
+      sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
+
+      pipeline.push({
+        $match: {
+          $or: [{ sellerIds: { $in: [sellerObjectId] } }, { sellerIds: { $exists: false } }],
+        },
+      });
+    }
+
+    //  STATUS FILTER (Seller-specific)
     if (status) {
       const statusArray = status
         .toString()
@@ -200,23 +212,30 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
 
       appliedFilters.status = statusArray;
 
-      // APPLY FILTER IN PIPELINE
-      pipeline.push({
-        $match: {
-          status: { $in: statusArray },
-        },
-      });
-    }
-    //  Filter by sellerId
-    if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
-      const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
-      const sellerIdData = {
-        $match: {
-          $or: [{ sellerIds: { $in: [sellerObjectId] } }, { sellerIds: { $exists: false } }],
-        },
-      };
-
-      pipeline.push(sellerIdData);
+      if (sellerObjectId) {
+        pipeline.push({
+          $match: {
+            $or: [
+              {
+                sellerStatuses: {
+                  $elemMatch: {
+                    sellerId: sellerObjectId,
+                    status: { $in: statusArray },
+                  },
+                },
+              },
+              // fallback for old data
+              { sellerStatuses: { $exists: false }, status: { $in: statusArray } },
+            ],
+          },
+        });
+      } else {
+        pipeline.push({
+          $match: {
+            status: { $in: statusArray },
+          },
+        });
+      }
     }
 
     // Normalize fields
@@ -227,22 +246,14 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
       },
     });
 
-    // Customer extraction from orderInfo
+    // Customer extraction
     pipeline.push({
       $addFields: {
         customer: {
-          firstName: {
-            $ifNull: ['$orderInfo.orderCustomer.firstName', 'NA'],
-          },
-          lastName: {
-            $ifNull: ['$orderInfo.orderCustomer.lastName', 'NA'],
-          },
-          email: {
-            $ifNull: ['$orderInfo.orderCustomer.email', 'NA'],
-          },
-          phone: {
-            $ifNull: ['$orderInfo.orderCustomer.phone', 'NA'],
-          },
+          firstName: { $ifNull: ['$orderInfo.orderCustomer.firstName', 'NA'] },
+          lastName: { $ifNull: ['$orderInfo.orderCustomer.lastName', 'NA'] },
+          email: { $ifNull: ['$orderInfo.orderCustomer.email', 'NA'] },
+          phone: { $ifNull: ['$orderInfo.orderCustomer.phone', 'NA'] },
         },
       },
     });
@@ -277,19 +288,30 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
     const totalReturns = countResult?.[0]?.total || 0;
 
     const formattedReturns = results.map((r) => {
-      const sellerObjectId = sellerId ? new mongoose.Types.ObjectId(String(sellerId)).toString() : null;
+      const sellerObjectIdStr = sellerObjectId ? String(sellerObjectId) : null;
 
       const orderSkuMap = new Map(
         (r.orderInfo?.orderSkuList?.skuList || []).map((sku) => [sku.merchantProductNo, sku])
       );
 
-      //  Keep only seller's products
       const sellerProducts = (r.products || []).filter((p) => {
-        if (!sellerObjectId) return true;
-
+        if (!sellerObjectIdStr) return true;
         const orderSku = orderSkuMap.get(p.productSkuCode);
-        return orderSku && String(orderSku.sellerId) === sellerObjectId;
+        return orderSku && String(orderSku.sellerId) === sellerObjectIdStr;
       });
+
+      //  Seller-specific status logic
+      let sellerStatus = r.status || 'NA';
+
+      if (sellerObjectIdStr && Array.isArray(r.sellerStatuses)) {
+        const sellerStatusObj = r.sellerStatuses.find((s) => String(s.sellerId) === sellerObjectIdStr);
+
+        if (sellerStatusObj?.status) {
+          sellerStatus = sellerStatusObj.status;
+        } else {
+          sellerStatus = 'IN_PROGRESS';
+        }
+      }
 
       const mappedProducts = sellerProducts.map((p) => {
         const quantity = p.quantity || 0;
@@ -309,7 +331,6 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
       });
 
       const totalQuantity = mappedProducts.reduce((sum, p) => sum + p.quantity, 0);
-
       const totalPrice = mappedProducts.reduce((sum, p) => sum + p.totalPrice, 0);
 
       return {
@@ -318,7 +339,10 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
         orderID: r.orderID || 'NA',
         channelId: r.channelId,
         channelImage: channelMap[r.channelId] || 'NA',
-        status: r.status || 'NA',
+
+        //  UPDATED STATUS
+        status: sellerStatus,
+
         platform: r.platform || 'NA',
         placedOn: r.placedOn || 'NA',
 
@@ -505,7 +529,6 @@ export const acceptOrRejectReturn = async (returnData) => {
     };
   }
 };
-
 export const getReturnById = async (id, sellerId) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(id)) return null;
@@ -526,7 +549,7 @@ export const getReturnById = async (id, sellerId) => {
       _id: new mongoose.Types.ObjectId(id),
     };
 
-    //  Only filter if sellerObjectId exists
+    //  Filter by seller products if sellerId present
     if (sellerObjectId) {
       matchStage['products.sellerId'] = sellerObjectId;
     }
@@ -563,9 +586,7 @@ export const getReturnById = async (id, sellerId) => {
                 $expr: {
                   $and: [
                     { $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] },
-
                     ...(sellerObjectId ? [{ $eq: ['$sellerId', sellerObjectId] }] : []),
-
                     { $eq: ['$type', 'REVERSE'] },
                   ],
                 },
@@ -597,33 +618,20 @@ export const getReturnById = async (id, sellerId) => {
 
     if (!returnData) return null;
 
-    const sellerShipments = await Shipment.find({
-      _id: { $in: returnData?.shipmentId || [] },
-      ...(sellerObjectId && { sellerId: sellerObjectId }),
-      type: 'REVERSE',
-      status: { $ne: 'CANCELED' },
-    }).lean();
+    //  NEW: Seller-specific status logic
+    let finalStatus = returnData.status || 'NA';
 
-    const shippedSkuSet = new Set();
+    if (sellerObjectId && Array.isArray(returnData.sellerStatuses)) {
+      const sellerStatusObj = returnData.sellerStatuses.find((s) => String(s.sellerId) === String(sellerObjectId));
 
-    sellerShipments.forEach((shipment) => {
-      (shipment.products || []).forEach((p) => {
-        if (p.merchantProductNo) {
-          shippedSkuSet.add(p.merchantProductNo);
-        }
-      });
-    });
-
-    const returnSkus = (returnData.products || []).map((p) => p.productSkuCode) || [];
-
-    const isAnySkuPending = returnSkus.some((sku) => !shippedSkuSet.has(sku));
-
-    let finalStatus = returnData.status;
-
-    if (isAnySkuPending) {
-      finalStatus = 'IN_PROGRESS';
+      if (sellerStatusObj?.status) {
+        finalStatus = sellerStatusObj.status;
+      } else {
+        finalStatus = 'IN_PROGRESS'; // fallback if seller not found
+      }
     }
 
+    //  Fetch order info
     const orderLineIds = returnData.products?.map((p) => p.orderLineId).filter(Boolean) || [];
 
     let orderInfo = null;
@@ -644,9 +652,10 @@ export const getReturnById = async (id, sellerId) => {
     }
 
     const returnLogsData = returnData?.logs?.length ? formatReturnTrackingInf(returnData.logs) : [];
+
     const aggregatedResult = {
       ...returnData,
-      status: finalStatus,
+      status: finalStatus, //  override with seller-specific status
       orderInfo,
       returnLogsData,
       omniful: returnData.omniful || null,
@@ -679,15 +688,14 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
 
     let sellerName = '';
 
-    const seller = await Seller.findById(sellerId).select('name'); // adjust field if needed
+    const seller = await Seller.findById(sellerId).select('name');
     sellerName = seller?.name || '';
 
-    // sanitize seller name for filename
     const safeSellerName = sellerName
       .toLowerCase()
-      .replace(/[^a-z0-9]/gi, '_') // replace special chars
-      .replace(/_+/g, '_') // remove duplicate underscores
-      .replace(/^_|_$/g, ''); // trim underscores
+      .replace(/[^a-z0-9]/gi, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
 
     const {
       status,
@@ -702,11 +710,21 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       channelId,
     } = filters;
 
-    const queryObj = { channelId, sellerId, status, platform, search, dateFrom, dateTo, sortBy, sortOrder, size, page };
+    //   pass sellerId separately (so sellerStatus filter works)
+    const queryObj = {
+      channelId,
+      status,
+      platform,
+      search,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortOrder,
+      size,
+      page,
+    };
 
-    const basicResult = await (typeof getReturnsFromDatabase === 'function'
-      ? getReturnsFromDatabase(queryObj)
-      : Promise.resolve({ data: [] }));
+    const basicResult = await getReturnsFromDatabase(queryObj, sellerId);
 
     const validation = validateExportData(basicResult.data, 'returns');
     if (!validation.success) return validation;
@@ -721,14 +739,6 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       })
       .filter(Boolean);
 
-    const pickupModelFields = Array.isArray(generateDynamicHeaders(PickupAddress))
-      ? generateDynamicHeaders(PickupAddress).filter((h) => h !== '_id')
-      : [];
-
-    const deliveryModelFields = Array.isArray(generateDynamicHeaders(DeliveryAddress))
-      ? generateDynamicHeaders(DeliveryAddress).filter((h) => h !== '_id')
-      : [];
-    // When no return IDs found → show message
     if (!returnIds.length) {
       return {
         success: false,
@@ -736,6 +746,9 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         data: [],
       };
     }
+
+    const pickupModelFields = generateDynamicHeaders(PickupAddress)?.filter((h) => h !== '_id') || [];
+    const deliveryModelFields = generateDynamicHeaders(DeliveryAddress)?.filter((h) => h !== '_id') || [];
 
     const pipeline = typeof buildReturnAggregationPipeline === 'function' ? buildReturnAggregationPipeline() : [];
     pipeline.push({ $match: { _id: { $in: returnIds } } });
@@ -745,12 +758,10 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     pipeline.push({
       $addFields: {
         shipment: {
-          $mergeObjects: [
-            { $arrayElemAt: ['$shipments', 0] },
-            {
-              pickUpId: '$shipmentData.pickUpId',
-              deliveryId: '$shipmentData.deliveryId',
-            },
+          $cond: [
+            { $ifNull: ['$shipment', false] },
+            { pickUpId: '$shipmentData.pickUpId', deliveryId: '$shipmentData.deliveryId' },
+            null,
           ],
         },
       },
@@ -762,8 +773,8 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     // lookup pickup
     pipeline.push({
       $lookup: {
-        from: deliveryCollectionName,
-        let: { pickupId: '$shipment.pickUpId' },
+        from: pickupCollectionName,
+        let: { pickupId: '$shipmentData.deliveryId' },
         pipeline: [
           {
             $match: {
@@ -781,8 +792,8 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     // lookup delivery
     pipeline.push({
       $lookup: {
-        from: pickupCollectionName,
-        let: { deliveryId: '$shipment.deliveryId' },
+        from: deliveryCollectionName,
+        let: { deliveryId: '$shipmentData.pickUpId' },
         pipeline: [
           {
             $match: {
@@ -802,21 +813,22 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         'shipment.deliveryAddress': { $arrayElemAt: ['$deliveryAddress', 0] },
       },
     });
-
     pipeline.push({ $project: { shipments: 0, pickupAddress: 0, deliveryAddress: 0 } });
 
     const aggregated = await Return.aggregate(pipeline).allowDiskUse(true);
 
-    const detailedValidation = validateExportData(aggregated, 'detailed return data');
-    if (!detailedValidation.success) return detailedValidation;
-
-    //  remove sellerIds + add sellerId
     const returnHeadersRaw = generateDynamicHeaders(Return);
 
     const returnHeaders = returnHeadersRaw.filter(
-      (h) => h !== 'sellerIds' && h !== 'products' && h !== 'logs' && h !== 'omniful' && h !== 'shipmentId'
+      (h) =>
+        h !== 'sellerIds' &&
+        h !== 'products' &&
+        h !== 'logs' &&
+        h !== 'omniful' &&
+        h !== 'shipmentId' &&
+        h !== 'sellerStatuses'
     );
-    // insert sellerId at 2nd position
+
     const finalReturnHeaders = [...returnHeaders];
     finalReturnHeaders.splice(1, 0, 'sellerId');
     const productHeaders = [
@@ -833,8 +845,8 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       ...productHeaders,
       'pickUpId',
       'deliveryId',
-      ...pickupModelFields.map((h) => `pickup_${h}`),
-      ...deliveryModelFields.map((h) => `delivery_${h}`),
+      ...deliveryModelFields.map((h) => `pickup_${h}`),
+      ...pickupModelFields.map((h) => `delivery_${h}`),
     ];
 
     const simpleFormat = (v) => {
@@ -875,12 +887,32 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       for (const product of filteredProducts) {
         const tempDoc = { ...doc, products: [product] };
 
-        let baseRow = generateDynamicRowData(tempDoc, Return, ['products', 'logs', 'omniful', 'shipmentId']);
-        //  remove sellerIds column value
+        // SELLER STATUS OVERRIDE
+        let sellerStatus = doc.status || 'NA';
+
+        if (Array.isArray(doc.sellerStatuses)) {
+          const sellerStatusObj = doc.sellerStatuses.find((s) => String(s.sellerId) === String(sellerId));
+
+          if (sellerStatusObj?.status) {
+            sellerStatus = sellerStatusObj.status;
+          } else {
+            sellerStatus = 'IN_PROGRESS';
+          }
+        }
+
+        tempDoc.status = sellerStatus;
+
+        let baseRow = generateDynamicRowData(tempDoc, Return, [
+          'products',
+          'logs',
+          'omniful',
+          'shipmentId',
+          'sellerStatuses',
+        ]);
+
         const sellerIdsIndex = returnHeadersRaw.indexOf('sellerIds');
         if (sellerIdsIndex !== -1) baseRow.splice(sellerIdsIndex, 1);
 
-        //  handle returnId display
         const returnIdIndex = returnHeaders.indexOf('returnId');
         if (!isFirstRow && returnIdIndex !== -1) {
           baseRow[returnIdIndex] = '';
@@ -898,17 +930,17 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
           simpleFormat(product.quantity),
           simpleFormat(product.acceptedQuantity),
           simpleFormat(product.rejectedQuantity),
-          simpleFormat(product.price), // unit price
-          simpleFormat(totalPrice), // total price
+          simpleFormat(product.price),
+          simpleFormat(totalPrice),
         ];
         const fullRowArray = [
-          baseRow[0], // returnId
-          String(sellerId), //  sellerId in 2nd position
-          ...baseRow.slice(1), // rest of fields
+          baseRow[0],
+          String(sellerId),
+          ...baseRow.slice(1),
           ...productRow,
           ...shipmentRow,
-          ...pickupRow,
           ...deliveryRow,
+          ...pickupRow,
         ];
 
         const csvLine = fullRowArray

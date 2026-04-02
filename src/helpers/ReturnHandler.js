@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import Return from '../models/Return.js';
 import Channel from '#root/src/models/Channel.js';
 import { RETURN_STATUS } from '#root/src/constants/common.js';
 export const isNameOrEmailSearch = (searchTerm) => {
@@ -39,7 +40,19 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
       throw new Error('Return data is required');
     }
 
-    // Step 1: Build initial product array
+    const returnId = returnData.Id?.toString();
+
+    //  Run DB calls in parallel
+    const [existingReturn, orderData] = await Promise.all([
+      Return.findOne({ returnId }, { sellerStatuses: 1 }).lean(), //  only needed field
+      OrderModel && returnData.MerchantOrderNo
+        ? OrderModel.findOne({
+            merchantOrderNo: returnData.MerchantOrderNo,
+          }).lean()
+        : null,
+    ]);
+
+    // Step 1: Build product array
     let products = Array.isArray(returnData.Lines)
       ? returnData.Lines.map((line) => ({
           productSkuCode: line.MerchantProductNo,
@@ -52,39 +65,54 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
         }))
       : [];
 
-    let orderData = null;
     const sellerIdSet = new Set();
 
-    if (OrderModel && returnData.MerchantOrderNo) {
-      orderData = await OrderModel.findOne({
-        merchantOrderNo: returnData.MerchantOrderNo,
-      }).lean();
+    //  Build SKU → Seller map (O(n))
+    let skuSellerMap = null;
 
-      if (orderData?.orderSkuList?.skuList?.length) {
-        // Create fast lookup map for merchantProductNo -> sellerId
-        const skuSellerMap = new Map();
+    if (orderData?.orderSkuList?.skuList?.length) {
+      skuSellerMap = new Map(
+        orderData.orderSkuList.skuList
+          .filter((sku) => sku.merchantProductNo && sku.sellerId)
+          .map((sku) => [String(sku.merchantProductNo), String(sku.sellerId)])
+      );
+    }
 
-        for (const sku of orderData.orderSkuList.skuList) {
-          if (sku.merchantProductNo && sku.sellerId) {
-            skuSellerMap.set(String(sku.merchantProductNo), sku.sellerId);
-          }
-        }
-
-        // Assign sellerId inside each product
-        for (const product of products) {
-          const sellerId = skuSellerMap.get(String(product.productSkuCode));
-
-          if (sellerId) {
-            product.sellerId = sellerId;
-            sellerIdSet.add(String(sellerId));
-          }
+    //  Assign sellerId (single pass)
+    if (skuSellerMap) {
+      for (const product of products) {
+        const sellerId = skuSellerMap.get(String(product.productSkuCode));
+        if (sellerId) {
+          product.sellerId = sellerId;
+          sellerIdSet.add(sellerId);
         }
       }
     }
-    // Remove products where sellerId is null
+
+    // Remove invalid products
     products = products.filter((p) => p.sellerId);
+
+    //  Convert existing statuses to Map → O(1)
+    const existingStatusMap = new Map((existingReturn?.sellerStatuses || []).map((s) => [String(s.sellerId), s]));
+
+    //  Build sellerStatuses in O(n)
+    const sellerStatuses = [];
+
+    for (const sellerId of sellerIdSet) {
+      const existing = existingStatusMap.get(String(sellerId));
+
+      if (existing && existing.status !== 'IN_PROGRESS') {
+        sellerStatuses.push(existing); // keep old
+      } else {
+        sellerStatuses.push({
+          sellerId,
+          status: returnData.Status,
+        });
+      }
+    }
+
     const sanitizedData = {
-      returnId: returnData.Id?.toString(),
+      returnId,
       reason: returnData.Reason || '',
       customerComment: returnData.CustomerComment || '',
       merchantComment: returnData.MerchantComment || '',
@@ -94,13 +122,19 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
       channelReturnNo: returnData.ChannelReturnNo,
       channelId: returnData.ChannelId,
       orderId: orderData?.orderId || null,
-      sellerIds: Array.from(sellerIdSet), // Return-level sellerIds
+
+      sellerIds: Array.from(sellerIdSet),
+
+      status: returnData.Status,
+
+      // NEW FIELD
+      sellerStatuses,
+
       totalPrice: returnData.RefundInclVat || 0,
       placedOn: returnData.CreatedAt ? new Date(returnData.CreatedAt) : null,
       acknowledgeDate: returnData.AcknowledgedDate ? new Date(returnData.AcknowledgedDate) : null,
-      status: returnData.Status,
       platform: returnData.ChannelName,
-      products, // Now contains sellerId inside each product
+      products,
       returnDate: returnData?.ReturnDate || null,
     };
 
@@ -180,7 +214,7 @@ export const buildReturnAggregationPipeline = () => {
               merchantShipmentNo: 1,
               status: 1,
               createdAt: 1,
-              _id: 1,
+              _id: 0,
               deliveryId: 1,
               pickUpId: 1,
             },
@@ -220,6 +254,7 @@ export const buildReturnAggregationPipeline = () => {
         orderInfo: 1,
         shipmentData: 1,
         sellerIds: 1,
+        sellerStatuses: 1,
       },
     },
   ];
@@ -498,18 +533,18 @@ export const formatReturnDetails = (aggregatedResult) => {
 
   const shippingAddress = orderInfo.orderShippingAddress
     ? {
-        address: orderInfo.orderShippingAddress.line1,
+        address: [orderInfo.orderShippingAddress.line1].filter(Boolean).join(' '),
         city: orderInfo.orderShippingAddress.city || '',
         region: orderInfo.orderShippingAddress.region || '',
         zipCode: orderInfo.orderShippingAddress.zipCode || '',
-        countryIso: orderInfo.orderShippingAddress.countryIso || '',
+        country: orderInfo.orderShippingAddress.countryIso || '',
       }
     : {
         address: '',
         city: '',
         region: '',
         zipCode: '',
-        countryIso: '',
+        country: '',
       };
 
   return {
