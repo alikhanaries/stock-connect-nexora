@@ -13,6 +13,8 @@ import { ordersController, orderDispatch, cancelOrder } from '../controllers/ord
 import { orderCancelValidator, orderDispatchValidator, ordersValidator } from '../validations/orders.js';
 import { updateInventoryValidator } from '../validations/inventory.js';
 import { updateInventory } from '../controllers/inventoryController.js';
+import { getLabelsValidator } from '../validations/shipment.js';
+import { getLabels } from '../controllers/shipmentController.js';
 
 const UniCommerceRouter = express.Router();
 
@@ -714,6 +716,56 @@ UniCommerceRouter.post(
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
   cancelOrder
+);
+
+/**
+ * @openapi
+ * /erp/unicommerce/orders/labels:
+ *   get:
+ *     tags: [UniCommerce]
+ *     summary: Get Labels
+ *     description: |
+ *       Fetches the shipping label (and optionally invoice/pack-slip) as a base64 encoded string
+ *       for marketplace-allocated logistics. Used by Uniware to print labels.
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer access token obtained from Get Authentication API
+ *       - in: query
+ *         name: orderItemIds
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: abc123,abc456
+ *         description: Comma-separated list of order item IDs
+ *     responses:
+ *       200:
+ *         description: Label fetched successfully as base64 encoded string
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: string
+ *               example: JVBERi0xLjMKM........
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Internal server error
+ */
+UniCommerceRouter.get(
+  '/orders/labels',
+  getLabelsValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  getLabels
 );
 
 export default UniCommerceRouter;
