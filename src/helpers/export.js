@@ -194,16 +194,18 @@ export const formatAddressForCSV = (address) => {
   ];
 };
 
-export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
+export const buildExportOrderRow = (order, sku, sellerTotal, sellerId, totalSkuCount) => {
   return {
     orderId: order.orderId,
     sellerId,
+    channelId: order?.channelId,
     channelOrderNumber: order.channelOrderNumber,
     status: order.status,
     channelName: order.channelName,
     orderDate: order.orderDate,
     merchantOrderNo: order.merchantOrderNo,
     isBusinessOrder: order.isBusinessOrder,
+    orderSkuListCount: totalSkuCount,
 
     shippingCostsInclVat: order.shippingCostsInclVat,
     shippingCostsVat: order.shippingCostsVat,
@@ -281,12 +283,14 @@ export const buildExportOrderRow = (order, sku, sellerTotal, sellerId) => {
 export const ORDER_EXPORT_HEADERS = [
   'orderId',
   'sellerId',
+  'channelId',
   'channelOrderNumber',
   'status',
   'channelName',
   'orderDate',
   'merchantOrderNo',
   'isBusinessOrder',
+  'orderSkuListCount',
   'shippingCostsInclVat',
   'shippingCostsVat',
   'originalShippingCostsVat',
@@ -294,7 +298,7 @@ export const ORDER_EXPORT_HEADERS = [
   'originalShippingCostsExclVat',
   'subTotalFee',
   'orderFee',
-  'orderSkuListCount',
+
   'skuId',
   'skuMerchantProductNo',
   'skuDescription',
@@ -354,139 +358,83 @@ export const ORDER_EXPORT_HEADERS = [
   'updatedAt',
 ];
 
-export const buildExportShipmentRow = (shipment, product = {}, pickup = {}, delivery = {}) => {
+export const buildExportShipmentRow = (shipment, product = {}) => {
   const safe = (v) => (v === null || v === undefined ? '' : v);
 
+  const order = shipment.order || {};
+  const latest = shipment.latestTracking || {};
+
   return {
-    shipmentId: safe(shipment?._id),
-    orderId: safe(shipment?.orderId),
-    channelEngineOrderNumber: safe(shipment?.ceOrderId),
-    sellerId: safe(shipment?.sellerId),
+    //  Shipment
+    'Shipment ID': safe(shipment?._id?.toString()),
+    'Shipment Status': safe(shipment.status),
+    'Merchant Shipment Number': safe(shipment.merchantShipmentNo),
+    'Tracking Number (AWB)': safe(shipment.airWaybillNo),
+    'Number of Packages': safe(shipment.pieces),
 
-    status: safe(shipment?.status),
-    type: safe(shipment?.type),
-    shipmentMethod: safe(shipment?.shipmentMethod),
+    'Shipment Created Date': shipment.createdAt ? new Date(shipment.createdAt).toISOString() : '',
+    'Shipment Last Updated Date': shipment.updatedAt ? new Date(shipment.updatedAt).toISOString() : '',
 
-    airWaybillNo: safe(shipment?.airWaybillNo),
-    merchantOrderNo: safe(shipment?.merchantOrderNo),
-    merchantShipmentNo: safe(shipment?.merchantShipmentNo),
+    //  Order
+    'Order ID': safe(order?.orderId || shipment?.orderId),
+    'Merchant Order Number': safe(order?.merchantOrderNo),
+    'Sales Channel': safe(order?.channelName),
+    'Channel Order ID': safe(order?.channelOrderNumber),
+    'Order Date': order?.orderDate ? new Date(order.orderDate).toISOString() : '',
+    'Order Status': safe(order?.status),
 
-    isMerchantCreator: safe(shipment?.isMerchantCreator),
-    pieces: safe(shipment?.pieces),
-    description: safe(shipment?.description),
-    cancelReason: safe(shipment?.cancelReason),
+    //  Aggregated
+    'Total Products': safe(shipment.totalProducts),
+    'Product SKUs': safe(product?.merchantProductNo), // 🔥 PER ROW
+    'Total Quantity': safe(product?.quantity), // 🔥 PER ROW
+    'HS Codes': safe(product?.hsCode), // 🔥 PER ROW
 
-    submissionDate: shipment?.submissionDate ? new Date(shipment.submissionDate).toISOString() : '',
-    pickupDate: shipment?.pickupDate ? new Date(shipment.pickupDate).toISOString() : '',
-    deliveryDate: shipment?.deliveryDate ? new Date(shipment.deliveryDate).toISOString() : '',
+    'Subtotal Amount': safe(order?.subTotalInclVat),
+    'Tax Amount (VAT)': safe(order?.totalVat),
+    'Total Amount': safe(order?.totalInclVat),
+    'Payment Method': safe(order?.orderPaymentDetails?.method),
 
-    createdAt: shipment?.createdAt ? new Date(shipment.createdAt).toISOString() : '',
-    updatedAt: shipment?.updatedAt ? new Date(shipment.updatedAt).toISOString() : '',
+    //  Tracking
+    'Tracking Updates Count': safe(shipment.trackingCount),
+    'Latest Tracking Status Code': safe(latest?.statusCode),
+    'Latest Tracking Status Description': safe(latest?.description),
+    'Latest Tracking Date': latest?.createdAt ? new Date(latest.createdAt).toISOString() : '',
 
-    // SKU
-    skuMerchantProductNo: safe(product?.merchantProductNo),
-    skuOrderLineId: safe(product?.orderLineId),
-    skuQuantity: safe(product?.quantity),
-    skuLineTotalInclVat: safe(product?.lineTotalInclVat),
-    skuHsCode: safe(product?.hsCode),
-
-    // Pickup
-    pickupName: safe(pickup?.name),
-    pickupEmail: safe(pickup?.email),
-    pickupPhone: safe(pickup?.phone),
-    pickupAddressLine1: safe(pickup?.addressLine1),
-    pickupAddressLine2: safe(pickup?.addressLine2),
-    pickupCity: safe(pickup?.city),
-    pickupState: safe(pickup?.state),
-    pickupCountry: safe(pickup?.country),
-    pickupPincode: safe(pickup?.pincode),
-
-    // Delivery
-    deliveryName: safe(delivery?.name),
-    deliveryEmail: safe(delivery?.email),
-    deliveryPhone: safe(delivery?.phone),
-    deliveryAddressLine1: safe(delivery?.addressLine1),
-    deliveryAddressLine2: safe(delivery?.addressLine2),
-    deliveryCity: safe(delivery?.city),
-    deliveryState: safe(delivery?.state),
-    deliveryCountry: safe(delivery?.country),
-    deliveryPincode: safe(delivery?.pincode),
-
-    // Merchant
-    merchantName: safe(shipment?.shipmentMerchantDetails?.name),
-    merchantEmail: safe(shipment?.shipmentMerchantDetails?.email),
+    'Tracking Status History': safe(shipment.trackingHistory),
   };
 };
 
 export const SHIPMENT_EXPORT_HEADERS = [
-  // -------------------------
-  // SHIPMENT LEVEL
-  // -------------------------
-  'shipmentId',
-  'orderId',
-  'channelEngineOrderNumber',
-  'sellerId',
+  'Shipment ID', //  NEW FIELD'
+  'Shipment Status',
+  'Merchant Shipment Number',
+  'Tracking Number (AWB)',
+  'Number of Packages',
+  'Shipment Created Date',
+  'Shipment Last Updated Date',
 
-  'status',
-  'type',
-  'shipmentMethod',
+  'Order ID',
+  'Merchant Order Number',
+  'Sales Channel',
+  'Channel Order ID',
+  'Order Date',
+  'Order Status',
 
-  'airWaybillNo',
-  'merchantOrderNo',
-  'merchantShipmentNo',
+  'Total Products',
+  'Product SKUs',
+  'Total Quantity',
+  'HS Codes',
 
-  'isMerchantCreator',
-  'pieces',
-  'description',
-  'cancelReason',
+  'Subtotal Amount',
+  'Tax Amount (VAT)',
+  'Total Amount',
+  'Payment Method',
 
-  'submissionDate',
-  'pickupDate',
-  'deliveryDate',
-
-  'createdAt',
-  'updatedAt',
-
-  // -------------------------
-  // PRODUCT (LINE LEVEL)
-  // -------------------------
-  'skuMerchantProductNo',
-  'skuOrderLineId',
-  'skuQuantity',
-  'skuLineTotalInclVat',
-  'skuHsCode',
-
-  // -------------------------
-  // PICKUP ADDRESS
-  // -------------------------
-  'pickupName',
-  'pickupEmail',
-  'pickupPhone',
-  'pickupAddressLine1',
-  'pickupAddressLine2',
-  'pickupCity',
-  'pickupState',
-  'pickupCountry',
-  'pickupPincode',
-
-  // -------------------------
-  // DELIVERY ADDRESS
-  // -------------------------
-  'deliveryName',
-  'deliveryEmail',
-  'deliveryPhone',
-  'deliveryAddressLine1',
-  'deliveryAddressLine2',
-  'deliveryCity',
-  'deliveryState',
-  'deliveryCountry',
-  'deliveryPincode',
-
-  // -------------------------
-  // MERCHANT DETAILS
-  // -------------------------
-  'merchantName',
-  'merchantEmail',
+  'Tracking Updates Count',
+  'Latest Tracking Status Code',
+  'Latest Tracking Status Description',
+  'Latest Tracking Date',
+  'Tracking Status History',
 ];
 export default {
   escapeCsv,

@@ -40,7 +40,15 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
           productSkuCode: product.productSkuCode,
           sellerId, //  safer
         },
-        update: { $set: product },
+        update: {
+          $set: {
+            ...product,
+            updatedAt: new Date(),
+          },
+          $setOnInsert: {
+            createdAt: new Date(),
+          },
+        },
         upsert: true,
       },
     }));

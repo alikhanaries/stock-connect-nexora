@@ -16,7 +16,16 @@ export const getEliteStringLaIntimoStock = async (sellerId) => {
       const bulkOps = batch.map((product) => ({
         updateOne: {
           filter: { productSkuCode: product.productSkuCode, sellerId },
-          update: { $set: { ...product, sellerId } },
+          update: {
+            $set: {
+              ...product,
+              sellerId,
+              updatedAt: new Date(),
+            },
+            $setOnInsert: {
+              createdAt: new Date(),
+            },
+          },
           upsert: true,
         },
       }));

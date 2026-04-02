@@ -11,9 +11,9 @@ import {
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
-import { USER_ROLES } from '#constants/common.js';
 import mongoose from 'mongoose';
 import Seller from '#models/Seller.js';
+import { USER_ROLES } from '#constants/common.js';
 
 export const createShipment = async (req, res) => {
   try {

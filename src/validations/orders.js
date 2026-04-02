@@ -71,11 +71,11 @@ export const getAllOrdersValidator = validate(async (req) => {
       })
       .transform((val) => (val ? val : 'orderId')),
 
-    platform: z
+    channel: z
       .string()
       .optional()
       .refine((val) => !val || val.trim().length > 0, {
-        message: 'platform cannot be empty',
+        message: 'channel cannot be empty',
       })
       .transform((val) => (val ? val : '')),
     sellerId: z
@@ -249,7 +249,7 @@ export const exportOrdersValidator = validate(async (req) => {
         }
       ),
 
-    platform: z.string().optional(),
+    channel: z.string().optional(),
 
     search: z.string().optional(),
   });
