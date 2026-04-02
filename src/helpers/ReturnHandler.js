@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Return from '../models/Return.js';
+import Channel from '#root/src/models/Channel.js';
 import { RETURN_STATUS } from '#root/src/constants/common.js';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
@@ -265,8 +266,8 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
   }
 };
 
-export const buildReturnMatchAndPipeline = (query = {}) => {
-  const { status, platform, channelId, returnId, orderID, search, dateFrom, dateTo, sellerId } = query;
+export const buildReturnMatchAndPipeline = async (query = {}) => {
+  const { status, channelId, returnId, orderID, search, dateFrom, dateTo, sellerId } = query;
 
   const matchConditions = {};
 
@@ -290,10 +291,6 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
   // Filters
   addFilter(matchConditions, 'status', status, (v) => ({
     $in: v.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
-  }));
-
-  addFilter(matchConditions, 'platform', platform, (v) => ({
-    $regex: new RegExp(v, 'i'),
   }));
 
   addFilter(matchConditions, 'channelId', channelId, (v) => parseInt(v, 10));
@@ -331,9 +328,23 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
   // Search filter (after lookup because it uses orderInfo)
   if (search) {
     const searchRegex = new RegExp(search, 'i');
+
+    //  Fetch matching channelIds
+    const matchingChannels = await Channel.find({
+      channelName: { $regex: searchRegex },
+    })
+      .select('channelId')
+      .lean();
+
+    const channelIdsFromSearch = matchingChannels.map((c) => c.channelId);
+
     const searchConditions = [
       { returnId: { $regex: searchRegex } },
       { orderId: { $regex: searchRegex } },
+
+      //  Channel name → channelId mapping
+      ...(channelIdsFromSearch.length ? [{ channelId: { $in: channelIdsFromSearch } }] : []),
+
       { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
       { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
       { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
@@ -362,7 +373,11 @@ export const buildReturnMatchAndPipeline = (query = {}) => {
       );
     }
 
-    pipeline.push({ $match: { $or: searchConditions } });
+    pipeline.push({
+      $match: {
+        $or: searchConditions,
+      },
+    });
   }
 
   return { pipeline, matchConditions };

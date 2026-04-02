@@ -65,7 +65,7 @@ const router = express.Router();
  *         name: status
  *         schema: { type: string }
  *       - in: query
- *         name: platform
+ *         name: channel
  *         schema: { type: string }
  *       - in: query
  *         name: sortBy

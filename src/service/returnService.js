@@ -1,8 +1,7 @@
 import { config } from '#config/config.js';
 import Order from '../models/Orders.js';
 import Return from '../models/Return.js';
-import Seller from '../models/Seller.js';
-import Shipment from '../models/Shipment/Shipment.js';
+import Seller from '#root/src/models/Seller.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 import mongoose from 'mongoose';
@@ -754,35 +753,6 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const pipeline = typeof buildReturnAggregationPipeline === 'function' ? buildReturnAggregationPipeline() : [];
     pipeline.push({ $match: { _id: { $in: returnIds } } });
 
-    // ---- shipment lookup (unchanged)
-    pipeline.push({
-      $lookup: {
-        from: Shipment.collection?.collectionName || 'shipments',
-        let: { orderIdFromOrderInfo: '$orderInfo._id', orderIdFromReturn: '$orderId' },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $ne: ['$status', 'CANCELED'] },
-                  {
-                    $or: [
-                      { $eq: ['$orderId', '$$orderIdFromOrderInfo'] },
-                      { $eq: ['$orderId', { $toString: '$$orderIdFromOrderInfo' }] },
-                      { $eq: ['$orderId', '$$orderIdFromReturn'] },
-                      { $eq: ['$_id', '$$orderIdFromReturn'] },
-                    ],
-                  },
-                ],
-              },
-            },
-          },
-          { $limit: 1 },
-        ],
-        as: 'shipments',
-      },
-    });
-
     pipeline.push({ $addFields: { shipment: { $arrayElemAt: ['$shipments', 0] } } });
 
     pipeline.push({
@@ -809,12 +779,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
           {
             $match: {
               $expr: {
-                $and: [
-                  { $ne: ['$$pickupId', null] },
-                  {
-                    $or: [{ $eq: ['$_id', '$$pickupId'] }, { $eq: [{ $toString: '$_id' }, '$$pickupId'] }],
-                  },
-                ],
+                $and: [{ $ne: ['$$pickupId', null] }, { $eq: ['$_id', '$$pickupId'] }],
               },
             },
           },
@@ -833,12 +798,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
           {
             $match: {
               $expr: {
-                $and: [
-                  { $ne: ['$$deliveryId', null] },
-                  {
-                    $or: [{ $eq: ['$_id', '$$deliveryId'] }, { $eq: [{ $toString: '$_id' }, '$$deliveryId'] }],
-                  },
-                ],
+                $and: [{ $ne: ['$$deliveryId', null] }, { $eq: ['$_id', '$$deliveryId'] }],
               },
             },
           },
@@ -847,7 +807,6 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         as: 'deliveryAddress',
       },
     });
-
     pipeline.push({
       $addFields: {
         'shipment.pickupAddress': { $arrayElemAt: ['$pickupAddress', 0] },

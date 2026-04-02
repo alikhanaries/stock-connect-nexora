@@ -10,8 +10,10 @@ import {
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
-import { USER_ROLES } from '#constants/common.js';
 import mongoose from 'mongoose';
+import { SHIPMENT_EXPORT_HEADERS, USER_ROLES } from '#constants/common.js';
+import Seller from '../models/Seller.js';
+import { exportShipmentToCSV } from '../service/shipmentExportService.js';
 
 export const createShipment = async (req, res) => {
   try {
@@ -224,5 +226,57 @@ export const createManualShipment = async (req, res) => {
     errorLog(error);
 
     return errorResponse(res, error?.message || 'Manual shipment could not be created', 400);
+  }
+};
+
+export const exportShipmentController = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const { status, sortOrder, search } = req.query;
+
+    const seller = await Seller.findById(sellerId).select('name').lean();
+
+    if (!seller) {
+      return failResponse(res, req.locale?.SELLER_NOT_FOUND || 'Seller not found', 404);
+    }
+
+    const filters = {};
+    if (status) filters.status = status;
+    if (sortOrder) filters.sortOrder = sortOrder;
+    if (search) filters.search = search;
+
+    const sellerName = seller.name.replace(/[^a-zA-Z0-9]/g, '');
+    const exportDate = new Date().toISOString().split('T')[0];
+    const label = 'shipmentData';
+    const filename = `${sellerName}_${label}_${exportDate}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    res.write('\uFEFF');
+
+    res.write(SHIPMENT_EXPORT_HEADERS.join(',') + '\n');
+
+    await exportShipmentToCSV(sellerId, filters, res);
+
+    return res.end();
+  } catch (error) {
+    console.error('Controller Error: exportShipmentController:', error.message);
+    errorLog(error);
+
+    if (res.headersSent) {
+      try {
+        if (typeof res.end === 'function' && !res.writableEnded) {
+          res.end();
+        }
+      } catch (endError) {
+        console.error('Error while ending response after export failure:', endError.message);
+      }
+      return;
+    }
+
+    return errorResponse(res, error.message, 500);
   }
 };

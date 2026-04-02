@@ -17,18 +17,25 @@ const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
 
 const app = express();
-app.use(
-  '/api-docs',
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerDocument, {
-    requestInterceptor: (req) => {
-      req.headers['Accept-Language'] = 'en';
-      return req;
-    },
-  })
-);
 
-app.use('/unicommerce-docs', swaggerUi.serve, swaggerUi.setup(uniSwaggerDocument));
+function setupSwagger(path, swaggerSpec, options = {}) {
+  app.use(path, swaggerUi.serveFiles(swaggerSpec, {}), swaggerUi.setup(swaggerSpec, options));
+}
+
+setupSwagger('/api-docs', swaggerDocument, {
+  requestInterceptor: (req) => {
+    req.headers['Accept-Language'] = 'en';
+    return req;
+  },
+});
+
+setupSwagger('/unicommerce-docs', uniSwaggerDocument, {
+  requestInterceptor: (req) => {
+    req.headers['Accept-Language'] = 'en';
+    return req;
+  },
+});
+
 app.use(express.json());
 app.use(cors(corsOptions));
 
@@ -48,5 +55,5 @@ app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 // Run cron jobs
-cronJob.fetchReturnsCron();
+cronJob.scheduledCronJobs();
 export default app;
