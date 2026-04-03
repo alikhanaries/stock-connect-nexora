@@ -301,3 +301,203 @@ export const generateDocumentIdValidator = validate(async (req) => {
   // Replace original body skuCodes with normalized array
   req.body.skuCodes = skuCodes;
 });
+
+export const getAnalyticsOrdersValidator = validate(async (req) => {
+  // -------------------------
+  //  HEADERS
+  // -------------------------
+  headerSchema.parse(req.headers);
+
+  const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
+
+  // -------------------------
+  //  QUERY SCHEMA
+  // -------------------------
+  const querySchema = z.object({
+    page: z
+      .string()
+      .optional()
+      .transform((val) => (val ? Number(val) : 1))
+      .refine((val) => Number.isInteger(val) && val > 0, {
+        message: 'page must be a positive integer',
+      }),
+
+    size: z
+      .string()
+      .optional()
+      .transform((val) => (val ? Number(val) : 10))
+      .refine((val) => Number.isInteger(val) && val > 0, {
+        message: 'size must be a positive integer',
+      })
+      .refine((val) => val <= 100, {
+        message: 'size cannot exceed 100',
+      }),
+
+    search: z.string().optional(),
+
+    period: z.string().optional(),
+
+    // -------------------------
+    //  DATE INPUT
+    // -------------------------
+    startDate: z
+      .string()
+      .optional()
+      .refine((val) => !val || /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
+        message: 'startDate must be in DD/MM/YYYY format',
+      }),
+
+    endDate: z
+      .string()
+      .optional()
+      .refine((val) => !val || /^\d{2}\/\d{2}\/\d{4}$/.test(val), {
+        message: 'endDate must be in DD/MM/YYYY format',
+      }),
+
+    // -------------------------
+    //  SELLER IDS → ARRAY + VALIDATION
+    // -------------------------
+    sellerId: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (!val) return [];
+
+        const cleaned = val
+          .trim()
+          .replace(/^"+|"+$/g, '')
+          .replace(/'/g, '');
+
+        if (cleaned.toLowerCase() === 'all') return [];
+
+        return cleaned
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean);
+      })
+      .refine((ids) => ids.every((id) => isValidObjectId(id)), {
+        message: 'One or more sellerIds are invalid ObjectIds',
+      }),
+
+    // -------------------------
+    //  CHANNEL → ARRAY
+    // -------------------------
+    channel: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (!val) return [];
+
+        const cleaned = val
+          .trim()
+          .replace(/^"+|"+$/g, '')
+          .replace(/'/g, '');
+
+        if (cleaned.toLowerCase() === 'all') return [];
+
+        return cleaned
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean);
+      }),
+
+    // -------------------------
+    //  STATUS → ARRAY
+    // -------------------------
+    status: z
+      .string()
+      .optional()
+      .transform((val) => {
+        if (!val) return [];
+
+        return val
+          .split(',')
+          .map((s) =>
+            s
+              .trim()
+              .replace(/^"+|"+$/g, '')
+              .replace(/'/g, '')
+              .toUpperCase()
+          )
+          .filter(Boolean);
+      }),
+
+    sortOrder: z
+      .string()
+      .optional()
+      .transform((val) => (val ? val.toLowerCase() : 'desc')),
+
+    sortBy: z
+      .string()
+      .optional()
+      .transform((val) => val || 'orderDate'),
+  });
+
+  // -------------------------
+  //  PARSE QUERY
+  // -------------------------
+  const validatedQuery = querySchema.parse(req.query);
+
+  const { period, startDate: startDateStr, endDate: endDateStr } = validatedQuery;
+
+  // -------------------------
+  //  DATE HANDLING (SAFE)
+  // -------------------------
+  let fromDate;
+  let toDate;
+
+  if (period === 'all') {
+    fromDate = undefined;
+    toDate = undefined;
+  } else if (startDateStr && endDateStr) {
+    const [sd, sm, sy] = startDateStr.split('/');
+    const [ed, em, ey] = endDateStr.split('/');
+
+    fromDate = new Date(Number(sy), Number(sm) - 1, Number(sd));
+    toDate = new Date(Number(ey), Number(em) - 1, Number(ed));
+
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+      throw new Error('Invalid date values');
+    }
+
+    if (fromDate > toDate) {
+      throw new Error('startDate must be before endDate');
+    }
+
+    fromDate.setHours(0, 0, 0, 0);
+    toDate.setHours(23, 59, 59, 999);
+  } else if (startDateStr || endDateStr) {
+    throw new Error('Both startDate and endDate are required together');
+  }
+
+  // -------------------------
+  //  OPTIONAL: AUTHORIZATION CHECK
+  // -------------------------
+  const userSellerIds = req.user?.sellerIds || []; // assume from auth middleware
+
+  let finalSellerIds = validatedQuery.sellerId;
+
+  if (finalSellerIds.length > 0 && userSellerIds.length > 0) {
+    const allowedSet = new Set(userSellerIds.map(String));
+
+    finalSellerIds = finalSellerIds.filter((id) => allowedSet.has(String(id)));
+
+    if (finalSellerIds.length === 0) {
+      throw new Error('Unauthorized sellerIds provided');
+    }
+  }
+
+  // -------------------------
+  //  FINAL OUTPUT
+  // -------------------------
+  req.validatedQuery = {
+    ...validatedQuery,
+
+    sellerIds: finalSellerIds, //  safe + authorized
+    channels: validatedQuery.channels,
+    statuses: validatedQuery.statuses,
+
+    fromDate,
+    toDate,
+  };
+});

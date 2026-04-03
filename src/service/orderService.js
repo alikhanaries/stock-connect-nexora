@@ -19,7 +19,7 @@ import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
 import { cancelAymakanShipment, createAymakanDocumentId } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
-import { formatDateTime, truncate } from '#helpers/Common.js';
+import { formatDateTime, truncate, resolveDateRange } from '#helpers/Common.js';
 import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
@@ -51,6 +51,7 @@ const formatOrder = (order, channelImage) => {
     platform: order.channelName,
     paymentMethod: order.paymentDetails?.paymentMethod,
     currencyCode: order.paymentDetails?.currencyCode,
+    sellerId: order.sellerId,
   };
 };
 
@@ -1277,7 +1278,227 @@ export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
   await order.save();
   return documentId;
 };
+const getAnalyticsOrders = async (query) => {
+  try {
+    const {
+      page = 1,
+      size = 10,
+      search,
+      status = [],
+      sortOrder = 'desc',
+      sortBy = 'orderDate',
+      sellerId = [],
+      channel = [],
+    } = query;
 
+    const skip = (page - 1) * size;
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+
+    const appliedFilters = {};
+    const filter = {};
+
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // -------------------------
+    // SELLER FILTER
+    // -------------------------
+    let sellerObjectIds = [];
+
+    if (sellerId.length) {
+      sellerObjectIds = sellerId.map((id) => new mongoose.Types.ObjectId(id));
+      appliedFilters.sellerIds = sellerId;
+    }
+
+    // -------------------------
+    // CHANNEL FILTER
+    // -------------------------
+    if (channel.length) {
+      filter.channelName = {
+        $in: channel.map((ch) => new RegExp(escapeRegex(ch), 'i')),
+      };
+      appliedFilters.channel = channel;
+    }
+
+    // -------------------------
+    // SEARCH
+    // -------------------------
+    if (search && search.trim()) {
+      const words = search.trim().split(/\s+/);
+
+      filter.$and = words.map((word) => {
+        const regex = {
+          $regex: escapeRegex(word),
+          $options: 'i',
+        };
+
+        return {
+          $or: [
+            { orderId: regex },
+            { 'orderCustomer.email': regex },
+            { 'orderCustomer.firstName': regex },
+            { 'orderCustomer.lastName': regex },
+            { channelOrderNumber: regex },
+          ],
+        };
+      });
+
+      appliedFilters.search = search;
+    }
+
+    // -------------------------
+    // DATE FILTER
+    // -------------------------
+    const { start, end, appliedPeriod } = resolveDateRange(query);
+
+    if (start && end) {
+      filter.orderDate = {
+        $gte: start,
+        $lte: end,
+      };
+
+      appliedFilters.period = appliedPeriod;
+      appliedFilters.fromDate = start.toISOString();
+      appliedFilters.toDate = end.toISOString();
+    }
+
+    // -------------------------
+    // STATUS HANDLING (FIXED)
+    // -------------------------
+    let statusMatchStage = null;
+
+    // -------------------------
+    // STATUS HANDLING (FIXED)
+    // -------------------------
+    if (status.length) {
+      const statusArray = status.map((s) => s.toUpperCase());
+
+      const validStatuses = Object.values(ORDER_STATUS_MAP);
+
+      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+
+      if (invalid.length) {
+        throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
+      }
+
+      // Map DELIVERED → CLOSED
+      const mappedStatuses = statusArray.map((s) => (s === 'DELIVERED' ? 'CLOSED' : s));
+
+      // Remove duplicates (important if both CLOSED + DELIVERED passed)
+      const uniqueStatuses = [...new Set(mappedStatuses)];
+
+      // Apply filter
+      filter.status = {
+        $in: uniqueStatuses.map((s) => new RegExp(`^${escapeRegex(s)}$`, 'i')),
+      };
+
+      // Applied filters (clean output)
+      appliedFilters.status = status.map((s) => s.toLowerCase());
+    }
+
+    // -------------------------
+    // BASE PIPELINE
+    // -------------------------
+    let pipeline = [{ $match: filter }];
+
+    // -------------------------
+    // SELLER LOOKUP
+    // -------------------------
+    pipeline.push(
+      {
+        $lookup: {
+          from: 'sellers',
+          localField: 'sellerId',
+          foreignField: '_id',
+          as: 'seller',
+        },
+      },
+      { $unwind: '$seller' },
+      {
+        $match: {
+          'seller.isDeleted': false,
+          'seller.type': 'normal',
+        },
+      }
+    );
+
+    // -------------------------
+    // APPLY SELLER IDS FILTER
+    // -------------------------
+    if (sellerObjectIds.length) {
+      pipeline.push({
+        $match: {
+          sellerId: { $in: sellerObjectIds },
+        },
+      });
+    }
+
+    // -------------------------
+    // APPLY STATUS FILTER
+    // -------------------------
+    if (statusMatchStage) {
+      pipeline.push(statusMatchStage);
+    }
+
+    // -------------------------
+    // SORT + PAGINATION
+    // -------------------------
+    pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: size });
+
+    // -------------------------
+    // COUNT PIPELINE
+    // -------------------------
+    const countPipeline = pipeline.slice(0, -3);
+    countPipeline.push({ $count: 'total' });
+
+    // -------------------------
+    // EXECUTION
+    // -------------------------
+    const [orders, countResult, allChannels, sellerSyncs] = await Promise.all([
+      Order.aggregate(pipeline),
+      Order.aggregate(countPipeline),
+      Channel.find().select('_id channelId channelImageUrl'),
+      Seller.find(sellerObjectIds.length ? { _id: { $in: sellerObjectIds } } : {})
+        .select('lastOrderSync')
+        .lean(),
+    ]);
+
+    const totalOrders = countResult[0]?.total || 0;
+
+    // -------------------------
+    // CHANNEL MAP
+    // -------------------------
+    const channelMap = {};
+    allChannels.forEach((c) => {
+      channelMap[c.channelId] = c.channelImageUrl;
+    });
+
+    // -------------------------
+    // LATEST SYNC DATE
+    // -------------------------
+    const latestOrderSyncDate = sellerSyncs.length
+      ? sellerSyncs.reduce((max, s) => {
+          if (!s.lastOrderSync) return max;
+          return !max || s.lastOrderSync > max ? s.lastOrderSync : max;
+        }, null)
+      : null;
+
+    // -------------------------
+    // RESPONSE
+    // -------------------------
+    return {
+      data: orders.map((order) => {
+        const matchingChannel = channelMap[order.channelId] || null;
+        return formatOrder(order, matchingChannel);
+      }),
+      appliedFilters,
+      latestOrderSyncDate,
+      pagination: getPagination(totalOrders, page, size),
+    };
+  } catch (err) {
+    console.error('Error fetching orders:', err);
+    throw err;
+  }
+};
 export default {
   getAllOrders,
   getAdminOrders,
@@ -1292,5 +1513,6 @@ export default {
   cancelFullOrder,
   cancelPartialOrder,
   exportOrdersToCSV,
+  getAnalyticsOrders,
   generateDocumentId,
 };
