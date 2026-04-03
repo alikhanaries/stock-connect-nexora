@@ -31,7 +31,7 @@ import {
 import upload from '#helpers/FileHandler.js';
 const router = express.Router();
 
-// GET ALL ANALYTICA ORDERS
+// GET ALL ANALYTICS ORDERS
 router.get('/getAnalyticsOrders', getAnalyticsOrdersValidator, checkLanguage, authMiddleware, getAnalyticsOrders);
 
 /**
