@@ -301,11 +301,14 @@ export const generateDocumentIdValidator = validate(async (req) => {
   // Replace original body skuCodes with normalized array
   req.body.skuCodes = skuCodes;
 });
+
 export const getAnalyticsOrdersValidator = validate(async (req) => {
   // -------------------------
   //  HEADERS
   // -------------------------
   headerSchema.parse(req.headers);
+
+  const isValidObjectId = (id) => mongoose.Types.ObjectId.isValid(id);
 
   // -------------------------
   //  QUERY SCHEMA
@@ -314,19 +317,28 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
     page: z
       .string()
       .optional()
-      .transform((val) => (val ? Number(val) : 1)),
+      .transform((val) => (val ? Number(val) : 1))
+      .refine((val) => Number.isInteger(val) && val > 0, {
+        message: 'page must be a positive integer',
+      }),
 
     size: z
       .string()
       .optional()
-      .transform((val) => (val ? Number(val) : 10)),
+      .transform((val) => (val ? Number(val) : 10))
+      .refine((val) => Number.isInteger(val) && val > 0, {
+        message: 'size must be a positive integer',
+      })
+      .refine((val) => val <= 100, {
+        message: 'size cannot exceed 100',
+      }),
 
     search: z.string().optional(),
 
     period: z.string().optional(),
 
     // -------------------------
-    //  DATE INPUT (DD/MM/YYYY)
+    //  DATE INPUT
     // -------------------------
     startDate: z
       .string()
@@ -343,7 +355,7 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
       }),
 
     // -------------------------
-    //  SELLER IDS → ARRAY
+    //  SELLER IDS → ARRAY + VALIDATION
     // -------------------------
     sellerId: z
       .string()
@@ -362,6 +374,9 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
           .split(',')
           .map((id) => id.trim())
           .filter(Boolean);
+      })
+      .refine((ids) => ids.every((id) => isValidObjectId(id)), {
+        message: 'One or more sellerIds are invalid ObjectIds',
       }),
 
     // -------------------------
@@ -426,7 +441,7 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
   const { period, startDate: startDateStr, endDate: endDateStr } = validatedQuery;
 
   // -------------------------
-  //  DATE HANDLING
+  //  DATE HANDLING (SAFE)
   // -------------------------
   let fromDate;
   let toDate;
@@ -438,10 +453,10 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
     const [sd, sm, sy] = startDateStr.split('/');
     const [ed, em, ey] = endDateStr.split('/');
 
-    fromDate = new Date(`${sy}-${sm}-${sd}`);
-    toDate = new Date(`${ey}-${em}-${ed}`);
+    fromDate = new Date(Number(sy), Number(sm) - 1, Number(sd));
+    toDate = new Date(Number(ey), Number(em) - 1, Number(ed));
 
-    if (isNaN(fromDate) || isNaN(toDate)) {
+    if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
       throw new Error('Invalid date values');
     }
 
@@ -456,14 +471,31 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
   }
 
   // -------------------------
-  //  FINAL NORMALIZED OUTPUT
+  //  OPTIONAL: AUTHORIZATION CHECK
+  // -------------------------
+  const userSellerIds = req.user?.sellerIds || []; // assume from auth middleware
+
+  let finalSellerIds = validatedQuery.sellerId;
+
+  if (finalSellerIds.length > 0 && userSellerIds.length > 0) {
+    const allowedSet = new Set(userSellerIds.map(String));
+
+    finalSellerIds = finalSellerIds.filter((id) => allowedSet.has(String(id)));
+
+    if (finalSellerIds.length === 0) {
+      throw new Error('Unauthorized sellerIds provided');
+    }
+  }
+
+  // -------------------------
+  //  FINAL OUTPUT
   // -------------------------
   req.validatedQuery = {
     ...validatedQuery,
 
-    sellerIds: validatedQuery.sellerId, // always array
-    channels: validatedQuery.channel, // always array
-    statuses: validatedQuery.status, // always array
+    sellerIds: finalSellerIds, //  safe + authorized
+    channels: validatedQuery.channels,
+    statuses: validatedQuery.statuses,
 
     fromDate,
     toDate,

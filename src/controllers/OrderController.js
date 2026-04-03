@@ -399,16 +399,15 @@ export const getAnalyticsOrders = async (req, res) => {
   try {
     const query = req.validatedQuery;
 
-    const { sellerIds = [], channels = [], statuses = [], fromDate, toDate } = query;
+    const { sellerId = [], channels = [], status = [], fromDate, toDate } = query;
 
     const finalQuery = {
       ...query,
-      sellerIds,
+      sellerId,
       channels: channels.includes('all') ? [] : channels,
-      statuses,
+      status,
       fromDate,
       toDate,
-      isAll: sellerIds.length === 0,
     };
 
     const {

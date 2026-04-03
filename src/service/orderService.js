@@ -1284,11 +1284,11 @@ const getAnalyticsOrders = async (query) => {
       page = 1,
       size = 10,
       search,
-      statuses = [],
+      status = [],
       sortOrder = 'desc',
       sortBy = 'orderDate',
-      sellerIds = [],
-      channels = [],
+      sellerId = [],
+      channel = [],
     } = query;
 
     const skip = (page - 1) * size;
@@ -1304,19 +1304,19 @@ const getAnalyticsOrders = async (query) => {
     // -------------------------
     let sellerObjectIds = [];
 
-    if (sellerIds.length) {
-      sellerObjectIds = sellerIds.map((id) => new mongoose.Types.ObjectId(id));
-      appliedFilters.sellerIds = sellerIds;
+    if (sellerId.length) {
+      sellerObjectIds = sellerId.map((id) => new mongoose.Types.ObjectId(id));
+      appliedFilters.sellerIds = sellerId;
     }
 
     // -------------------------
     // CHANNEL FILTER
     // -------------------------
-    if (channels.length) {
+    if (channel.length) {
       filter.channelName = {
-        $in: channels.map((ch) => new RegExp(escapeRegex(ch), 'i')),
+        $in: channel.map((ch) => new RegExp(escapeRegex(ch), 'i')),
       };
-      appliedFilters.channel = channels;
+      appliedFilters.channel = channel;
     }
 
     // -------------------------
@@ -1362,32 +1362,64 @@ const getAnalyticsOrders = async (query) => {
     }
 
     // -------------------------
+    // STATUS HANDLING (FIXED)
+    // -------------------------
+    let statusMatchStage = null;
+
+    // -------------------------
+    // STATUS HANDLING (FIXED)
+    // -------------------------
+    if (status.length) {
+      const statusArray = status.map((s) => s.toUpperCase());
+
+      const validStatuses = Object.values(ORDER_STATUS_MAP);
+
+      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
+
+      if (invalid.length) {
+        throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
+      }
+
+      // Map DELIVERED → CLOSED
+      const mappedStatuses = statusArray.map((s) => (s === 'DELIVERED' ? 'CLOSED' : s));
+
+      // Remove duplicates (important if both CLOSED + DELIVERED passed)
+      const uniqueStatuses = [...new Set(mappedStatuses)];
+
+      // Apply filter
+      filter.status = {
+        $in: uniqueStatuses.map((s) => new RegExp(`^${escapeRegex(s)}$`, 'i')),
+      };
+
+      // Applied filters (clean output)
+      appliedFilters.status = status.map((s) => s.toLowerCase());
+    }
+
+    // -------------------------
     // BASE PIPELINE
     // -------------------------
     let pipeline = [{ $match: filter }];
 
     // -------------------------
-    // SELLER VALIDATION
+    // SELLER LOOKUP
     // -------------------------
-    pipeline.push({
-      $lookup: {
-        from: 'sellers',
-        localField: 'sellerId',
-        foreignField: '_id',
-        as: 'seller',
+    pipeline.push(
+      {
+        $lookup: {
+          from: 'sellers',
+          localField: 'sellerId',
+          foreignField: '_id',
+          as: 'seller',
+        },
       },
-    });
-
-    pipeline.push({
-      $unwind: '$seller',
-    });
-
-    pipeline.push({
-      $match: {
-        'seller.isDeleted': false,
-        'seller.type': 'normal',
-      },
-    });
+      { $unwind: '$seller' },
+      {
+        $match: {
+          'seller.isDeleted': false,
+          'seller.type': 'normal',
+        },
+      }
+    );
 
     // -------------------------
     // APPLY SELLER IDS FILTER
@@ -1401,47 +1433,16 @@ const getAnalyticsOrders = async (query) => {
     }
 
     // -------------------------
-    // STATUS HANDLING (UPDATED)
+    // APPLY STATUS FILTER
     // -------------------------
-    if (statuses.length) {
-      const statusArray = statuses.map((s) => s.toUpperCase());
-
-      const validStatuses = Object.values(ORDER_STATUS_MAP);
-
-      const invalid = statusArray.filter((s) => !validStatuses.includes(s));
-
-      if (invalid.length) {
-        throw new Error(`Invalid status: ${invalid.join(', ')}. Valid statuses are: ${validStatuses.join(', ')}`);
-      }
-
-      //  MAP: DELIVERED → CLOSED
-      const mappedStatuses = statusArray.map((s) => (s === 'DELIVERED' ? 'CLOSED' : s));
-
-      const hasDelivered = statusArray.includes('DELIVERED');
-
-      if (hasDelivered) {
-        pipeline.push({
-          $match: {
-            status: 'CLOSED',
-          },
-        });
-
-        appliedFilters.status = 'delivered';
-      } else {
-        pipeline[0].$match.status = {
-          $in: mappedStatuses.map((s) => new RegExp(escapeRegex(s), 'i')),
-        };
-
-        appliedFilters.status = Array.isArray(statuses)
-          ? statuses.map((s) => s.toLowerCase())
-          : statuses?.toLowerCase();
-      }
+    if (statusMatchStage) {
+      pipeline.push(statusMatchStage);
     }
 
     // -------------------------
     // SORT + PAGINATION
     // -------------------------
-    pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size) });
+    pipeline.push({ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: size });
 
     // -------------------------
     // COUNT PIPELINE
@@ -1463,11 +1464,17 @@ const getAnalyticsOrders = async (query) => {
 
     const totalOrders = countResult[0]?.total || 0;
 
+    // -------------------------
+    // CHANNEL MAP
+    // -------------------------
     const channelMap = {};
     allChannels.forEach((c) => {
       channelMap[c.channelId] = c.channelImageUrl;
     });
 
+    // -------------------------
+    // LATEST SYNC DATE
+    // -------------------------
     const latestOrderSyncDate = sellerSyncs.length
       ? sellerSyncs.reduce((max, s) => {
           if (!s.lastOrderSync) return max;
@@ -1475,6 +1482,9 @@ const getAnalyticsOrders = async (query) => {
         }, null)
       : null;
 
+    // -------------------------
+    // RESPONSE
+    // -------------------------
     return {
       data: orders.map((order) => {
         const matchingChannel = channelMap[order.channelId] || null;
@@ -1486,7 +1496,7 @@ const getAnalyticsOrders = async (query) => {
     };
   } catch (err) {
     console.error('Error fetching orders:', err);
-    return { success: false, message: err.message };
+    throw err;
   }
 };
 export default {
