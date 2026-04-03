@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import path from 'path';
 // Common language list
 import { VALID_PERIODS, ORDER_STATUS_MAP } from '#constants/common.js';
 import { validate } from './validate.js';
@@ -257,6 +258,49 @@ export const exportOrdersValidator = validate(async (req) => {
   querySchema.parse(req.query);
 });
 
+export const generateDocumentIdValidator = validate(async (req) => {
+  // Normalize body values
+  const body = req.body || {};
+  const file = req.file;
+
+  const skuCodes = body.skuCodes
+    ? Array.isArray(body.skuCodes)
+      ? body.skuCodes.map((s) => s.replace(/^"|"$/g, ''))
+      : [body.skuCodes.replace(/^"|"$/g, '')]
+    : [];
+
+  const bodySchema = z.object({
+    orderId: z
+      .string()
+      .nonempty('orderId is required')
+      .transform((v) => v.replace(/^"|"$/g, '')),
+
+    skuCodes: z.array(z.string().nonempty()).nonempty('skuCodes[] should not be empty'),
+
+    file: z
+      .any()
+      .refine((f) => !!f, { message: 'Please upload a valid file' })
+      .refine(
+        (f) => {
+          if (!f) return false;
+          const allowedExtensions = ['pdf', 'image', 'jpg', 'jpeg', 'png'];
+          const ext = path
+            .extname(f.originalname || '')
+            .slice(1)
+            .toLowerCase();
+          return allowedExtensions.includes(ext);
+        },
+        { message: 'Please upload a valid file' }
+      )
+      .refine((f) => !f || f.size <= 200 * 1024, { message: 'File size should not exceed 200 KB' }),
+  });
+
+  // Parse combined body with normalized skuCodes
+  bodySchema.parse({ ...body, skuCodes, file });
+
+  // Replace original body skuCodes with normalized array
+  req.body.skuCodes = skuCodes;
+});
 export const getAnalyticsOrdersValidator = validate(async (req) => {
   // -------------------------
   //  HEADERS
@@ -426,5 +470,5 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
   };
 
   // Optional debug
-  console.log('✅ validatedQuery:', req.validatedQuery);
+  console.log(' validatedQuery:', req.validatedQuery);
 });

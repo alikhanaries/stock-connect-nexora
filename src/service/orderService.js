@@ -17,7 +17,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
-import { cancelAymakanShipment } from '#service/aymakanService.js';
+import { cancelAymakanShipment, createAymakanDocumentId } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { formatDateTime, truncate, resolveDateRange } from '#helpers/Common.js';
 import { escapeCsv, createCSVExportResponse, validateExportData, generateDynamicHeaders } from '#helpers/export.js';
@@ -25,6 +25,8 @@ import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
+import fs from 'fs';
+import path from 'path';
 
 const EXPORT_CHUNK_SIZE = parseInt(process.env.EXPORT_CHUNK_SIZE || '1000', 10); // Chunk size for CSV export processing
 
@@ -363,6 +365,7 @@ export const getOrderById = async (id) => {
         unshippedItems.push({
           id: sku.id,
           merchantProductNo: sku.merchantProductNo,
+          documentId: sku.documentId,
           channelProductNo: sku.channelProductNo,
           name: sku.description,
           imageUrl: image,
@@ -385,6 +388,7 @@ export const getOrderById = async (id) => {
         shipmentId: shipment._id,
         trackingNumber: shipment.airWaybillNo || null,
         shipmentMode: shipment.shipmentMethod || 'AYMAKAN',
+        documentId: shipment.documentId,
         lineItems:
           shipment.products?.map((p) => {
             const sku = allOrderSkus.find((s) => s.merchantProductNo === p.merchantProductNo);
@@ -400,6 +404,7 @@ export const getOrderById = async (id) => {
               airWaybillNo: shipment.airWaybillNo,
               hsCode: productsMap[p.merchantProductNo]?.hsCode || p.merchantProductNo,
               trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
+              documentId: sku?.documentId,
             };
           }) || [],
       });
@@ -1221,6 +1226,58 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
   }
 };
 
+export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
+  // Normalize from-data inputs
+  const normalizedOrderId = String(orderId)
+    .replace(/^"+|"+$/g, '')
+    .trim();
+  const normalizedSkuCodes = Array.isArray(skuCodes)
+    ? skuCodes.map((s) =>
+        String(s)
+          .replace(/^"+|"+$/g, '')
+          .trim()
+      )
+    : [
+        String(skuCodes)
+          .replace(/^"+|"+$/g, '')
+          .trim(),
+      ];
+
+  // Find the order
+  const order = await Order.findOne({ orderId: normalizedOrderId });
+  if (!order) throw new Error(`Order not found: ${normalizedOrderId}`);
+
+  // Check all requested SKUs exist
+  const skuList = order.orderSkuList?.skuList || [];
+  const missingSkus = normalizedSkuCodes.filter((sku) => !skuList.some((item) => item.merchantProductNo === sku));
+  if (missingSkus.length > 0) {
+    throw new Error(`The following SKU(s) are not in the order: ${missingSkus.join(', ')}`);
+  }
+
+  // Convert file to base64
+  const fileBuffer = await fs.promises.readFile(file.path);
+  const base64String = fileBuffer.toString('base64');
+  const ext = path.extname(file.originalname).slice(1);
+
+  const payload = {
+    document: base64String,
+    document_type: ext,
+    reference: '',
+  };
+
+  // Aymakan API
+  const result = await createAymakanDocumentId(payload);
+  const documentId = result.data.document_id;
+
+  skuList.forEach((skuItem) => {
+    if (normalizedSkuCodes.includes(skuItem.merchantProductNo)) {
+      skuItem.documentId = documentId;
+    }
+  });
+
+  await order.save();
+  return documentId;
+};
 const getAnalyticsOrders = async (query) => {
   try {
     const {
@@ -1447,4 +1504,5 @@ export default {
   cancelPartialOrder,
   exportOrdersToCSV,
   getAnalyticsOrders,
+  generateDocumentId,
 };
