@@ -397,15 +397,9 @@ export const handleOmnifulOrderWebhook = async (req, res) => {
 
 export const getAnalyticsOrders = async (req, res) => {
   try {
-    console.log('🚀 getAnalyticsOrders called');
-
     const query = req.validatedQuery;
 
     const { sellerIds = [], channels = [], statuses = [], fromDate, toDate } = query;
-
-    console.log('sellerIds:', sellerIds);
-    console.log('channels:', channels);
-    console.log('statuses:', statuses);
 
     const finalQuery = {
       ...query,
@@ -431,7 +425,7 @@ export const getAnalyticsOrders = async (req, res) => {
       ...pagination,
     });
   } catch (error) {
-    console.error('❌ Controller Error:', error);
+    console.error(' Controller Error:', error);
     errorLog(error);
 
     return Responses.errorResponse(res, error?.message || 'Something went wrong', 500);

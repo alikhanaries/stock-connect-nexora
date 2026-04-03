@@ -373,7 +373,14 @@ router.put(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
+router.put(
+  '/cancelPartialOrder',
+  cancelPartialOrderValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  cancelPartialOrder
+);
 
 router.post(
   '/generate-documentId',

@@ -468,7 +468,4 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
     fromDate,
     toDate,
   };
-
-  // Optional debug
-  console.log(' validatedQuery:', req.validatedQuery);
 });
