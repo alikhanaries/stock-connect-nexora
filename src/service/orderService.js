@@ -1306,7 +1306,6 @@ const getAnalyticsOrders = async (query) => {
 
     if (sellerId.length) {
       sellerObjectIds = sellerId.map((id) => new mongoose.Types.ObjectId(id));
-      appliedFilters.sellerIds = sellerId;
     }
 
     // -------------------------
