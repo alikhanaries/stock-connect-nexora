@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getReturns } from '#service/returnService.js';
 import { getInventorySkuStatus } from '#service/inventoryStatusService.js';
+import { getReportToken } from '#service/forwardShipmentService.js';
 
 const scheduledCronJobs = () => {
   try {
@@ -8,6 +9,8 @@ const scheduledCronJobs = () => {
     cron.schedule('0 0 * * *', async () => {
       console.log('scheduled cron jobs started');
       try {
+        await getReportToken();
+        console.log('Access token refreshed');
         await getReturns();
         console.log('Return data fetched');
 

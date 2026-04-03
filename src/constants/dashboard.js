@@ -3,7 +3,7 @@ export const ORDER_FLOW_STATUS_CONFIG = [
   { key: 'inProgress', label: 'In Progress', statuses: ['IN_PROGRESS'] },
   { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'] },
   { key: 'shipped', label: 'Shipped', statuses: ['SHIPPED'] },
-  { key: 'delivered', label: 'Delivered', statuses: ['DELIVERED'] },
+  { key: 'closed', label: 'Closed', statuses: ['CLOSED'] },
   { key: 'returned', label: 'Returned', statuses: ['RETURNED'] },
 ];
 

@@ -1,6 +1,7 @@
 import Return from '../models/Return.js';
 import Order from '../models/Orders.js';
 import Shipment from '../models/Shipment/Shipment.js';
+import forwardShipmentService from './forwardShipmentService.js';
 
 export const handleOmnifulQCWebhook = async (webhookPayload) => {
   try {
@@ -130,6 +131,62 @@ export const handleOmnifulQCWebhook = async (webhookPayload) => {
   }
 };
 
+export const handleOmnifulOrdersWebhook = async (payload) => {
+  try {
+    const { data } = payload;
+
+    if (!data?.order_id || !data?.order_status) {
+      return {
+        success: false,
+        message: 'Missing order_id or order_status',
+        statusCode: 400,
+      };
+    }
+    const shipmentId = data.order_id;
+    const omnifulStatusCode = data.order_status;
+    const result = await Shipment.updateOne(
+      {
+        _id: shipmentId,
+      },
+      {
+        $set: {
+          omnifulStatusCode: omnifulStatusCode,
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (result.matchedCount === 0) {
+      throw new Error('OrderId does not exist');
+    }
+    const shipmentData = await Shipment.findOne({
+      _id: shipmentId,
+    }).lean();
+
+    if (omnifulStatusCode === 'ready_to_ship') {
+      await forwardShipmentService.createShipmentwithCE(shipmentData);
+    }
+
+    return {
+      success: true,
+      message: 'Shipment updated',
+      data: {
+        shipmentId,
+        omnifulStatusCode,
+      },
+    };
+  } catch (error) {
+    console.error('Service Error:', error);
+
+    return {
+      success: false,
+      message: error.message,
+      statusCode: 500,
+    };
+  }
+};
+
 export default {
   handleOmnifulQCWebhook,
+  handleOmnifulOrdersWebhook,
 };
