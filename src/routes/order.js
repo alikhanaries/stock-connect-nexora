@@ -9,8 +9,11 @@ import {
   merchantCancelById,
   cancelFullOrder,
   cancelPartialOrder,
+  generateDocumentId,
   exportOrders,
   generateSellerInvoice,
+  getAnalyticsOrders,
+  handleOmnifulOrderWebhook,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -24,8 +27,14 @@ import {
   cancelPartialOrderValidator,
   exportOrdersValidator,
   generateSellerInvoiceValidator,
+  getAnalyticsOrdersValidator,
+  generateDocumentIdValidator,
 } from '#validations/orders.js';
+import upload from '#helpers/FileHandler.js';
 const router = express.Router();
+
+// GET ALL ANALYTICS ORDERS
+router.get('/getAnalyticsOrders', getAnalyticsOrdersValidator, checkLanguage, authMiddleware, getAnalyticsOrders);
 
 /**
  * @swagger
@@ -440,4 +449,15 @@ router.post(
   generateSellerInvoice
 );
 
+router.post(
+  '/generate-documentId',
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  upload.single('file'),
+  generateDocumentIdValidator,
+  generateDocumentId
+);
+
+router.post('/omniful-order-webhook', handleOmnifulOrderWebhook);
 export default router;
