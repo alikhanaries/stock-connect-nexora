@@ -166,7 +166,7 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
     if (omnifulStatusCode === 'ready_to_ship') {
       const omnifulAwbNumber = data?.shipment?.awb_number;
       if (omnifulAwbNumber) {
-        await Shipment.findByIdAndUpdate(shipmentData._id, { 'omniful.awbNumber': omnifulAwbNumber });
+        await Shipment.findByIdAndUpdate(shipmentData._id, { 'omniful.trackingNo': omnifulAwbNumber });
       }
       await forwardShipmentService.createShipmentwithCE(shipmentData);
     }

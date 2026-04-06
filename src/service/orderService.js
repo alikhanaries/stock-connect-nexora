@@ -379,8 +379,13 @@ export const getOrderById = async (id) => {
     const shippedItems = [];
     const deliveredItems = [];
 
-    shipments.forEach((shipment) => {
+    for (const shipment of shipments) {
       const target = shipment.status === 'DELIVERED' ? deliveredItems : shippedItems;
+
+      let dbShipment = null;
+      if (target === shippedItems) {
+        dbShipment = await Shipment.findById(shipment._id).lean();
+      }
 
       target.push({
         shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
@@ -404,10 +409,12 @@ export const getOrderById = async (id) => {
               hsCode: productsMap[p.merchantProductNo]?.hsCode || p.merchantProductNo,
               trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
               documentId: sku?.documentId,
+              ...(target === shippedItems &&
+                dbShipment?.omniful?.trackingNo && { omnifulTrackingNo: dbShipment.omniful.trackingNo }),
             };
           }) || [],
       });
-    });
+    }
 
     // ---------------- FINAL RESPONSE ----------------
     const filteredData = transformOrderResponse(allOrderSkus, order);
