@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS, CHANNEL_STATUS_CONFIG } from '#constants/dashboard.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
+import SellerOrder from '../models/OrderSchema/SellerOrder.js';
 import InventoryStatus from '#models/InventoryStatus.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Return from '../models/Return.js';
@@ -98,80 +99,40 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const comparable = period !== 'all' && (isComparablePeriod(period) || currentRange.kind === 'custom');
   const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
-  const globalChannelFilter = buildGlobalChannelFilter(channel);
-  const baseMatch = {
-    sellerIds: { $in: sellerObjectIds },
-    ...globalChannelFilter,
-  };
+  const channelNames = pickSelectedGlobalNames(channel);
+  const channelFilter = channelNames.length > 0 ? { channelName: { $in: channelNames } } : {};
 
   const aggregateMetrics = async ({ start, end }) => {
-    const [data] = await Order.aggregate([
+    const [data] = await SellerOrder.aggregate([
       {
         $match: {
-          ...baseMatch,
+          sellerId: { $in: sellerObjectIds },
+          ...channelFilter,
           orderDate: { $gte: start, $lte: end },
         },
       },
       {
-        $facet: {
-          orderCount: [{ $count: 'total' }],
-          skuMetrics: [
-            { $unwind: '$orderSkuList.skuList' },
-            { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } },
-            {
-              $group: {
-                _id: '$_id',
-                totalOrderValue: {
-                  $sum: { $ifNull: ['$orderSkuList.skuList.originalLineTotalInclVat', 0] },
-                },
-                deliveredTotal: {
-                  $sum: {
-                    $multiply: [
-                      { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
-                      { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
-                    ],
-                  },
-                },
-                canceledTotal: {
-                  $sum: {
-                    $multiply: [
-                      { $ifNull: ['$orderSkuList.skuList.statusBreakdown.canceled', 0] },
-                      { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
-                    ],
-                  },
-                },
-                returnedTotal: {
-                  $sum: {
-                    $multiply: [
-                      { $ifNull: ['$orderSkuList.skuList.statusBreakdown.returned', 0] },
-                      { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
-                    ],
-                  },
-                },
-                totalProducts: { $sum: '$orderSkuList.skuList.quantity' },
-              },
-            },
-            {
-              $group: {
-                _id: null,
-                totalDeliveredSales: { $sum: '$deliveredTotal' },
-                totalOrderValue: { $sum: '$totalOrderValue' },
-                cancellationValue: { $sum: '$canceledTotal' },
-                returnedValue: { $sum: '$returnedTotal' },
-                avgProductsPerOrder: { $avg: '$totalProducts' },
-              },
-            },
-          ],
+        $group: {
+          _id: null,
+          totalOrders: { $sum: 1 },
+          totalDeliveredSales: { $sum: '$deliveredAmount' },
+          totalOrderValue: { $sum: '$totalAmount' },
+          cancellationValue: { $sum: '$canceledAmount' },
+          returnedValue: { $sum: '$returnedAmount' },
+          totalProducts: { $sum: '$totalSkus' },
         },
       },
       {
         $project: {
-          totalOrders: { $ifNull: [{ $arrayElemAt: ['$orderCount.total', 0] }, 0] },
-          totalDeliveredSales: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.totalDeliveredSales', 0] }, 0] },
-          totalOrderValue: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.totalOrderValue', 0] }, 0] },
-          cancellationValue: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.cancellationValue', 0] }, 0] },
-          returnedValue: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.returnedValue', 0] }, 0] },
-          avgProductsPerOrder: { $ifNull: [{ $arrayElemAt: ['$skuMetrics.avgProductsPerOrder', 0] }, 0] },
+          _id: 0,
+          totalOrders: 1,
+          totalDeliveredSales: 1,
+          totalOrderValue: 1,
+          cancellationValue: 1,
+          returnedValue: 1,
+          avgProductsPerOrder: {
+            $cond: [{ $eq: ['$totalOrders', 0] }, 0, { $divide: ['$totalProducts', '$totalOrders'] }],
+          },
         },
       },
     ]);
@@ -304,7 +265,6 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
 };
 
 const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
-  const globalChannelFilter = buildGlobalChannelFilter(channel);
   const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
   const sellerObjectIds = ids
@@ -314,12 +274,15 @@ const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, mo
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range) throw new Error(`Invalid period "${period}"`);
 
+  const channelNames = pickSelectedGlobalNames(channel);
+  const channelFilter = channelNames.length > 0 ? { channelName: { $in: channelNames } } : {};
+
   const salesPipeline = buildAggregationPipeline({
     sellerObjectIds,
     period,
     metric: 'sales',
     range,
-    ...globalChannelFilter,
+    channelFilter,
   });
 
   const ordersPipeline = buildAggregationPipeline({
@@ -327,10 +290,13 @@ const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, mo
     period,
     metric: 'orders',
     range,
-    ...globalChannelFilter,
+    channelFilter,
   });
 
-  const [salesRaw, ordersRaw] = await Promise.all([Order.aggregate(salesPipeline), Order.aggregate(ordersPipeline)]);
+  const [salesRaw, ordersRaw] = await Promise.all([
+    SellerOrder.aggregate(salesPipeline),
+    SellerOrder.aggregate(ordersPipeline),
+  ]);
 
   return {
     sales: normalizeSeries(period, salesRaw, range),

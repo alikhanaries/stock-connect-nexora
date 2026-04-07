@@ -180,7 +180,7 @@ export const getPreviousRange = (period, currentRange) => {
 export const isComparablePeriod = (period) =>
   ['today', 'weekly', 'monthly', 'month'].includes(period) || /^last_(\d{1,3})_days$/.test(period);
 
-export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, range, ...globalChannelFilter }) => {
+export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, range, channelFilter = {} }) => {
   const isMonthly = period === 'monthly';
   const isToday = period === 'today';
   const isAll = period === 'all';
@@ -234,33 +234,17 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
   const pipeline = [
     {
       $match: {
-        sellerIds: { $in: sellerObjectIds },
+        sellerId: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
-        ...globalChannelFilter,
+        ...channelFilter,
       },
     },
   ];
-  if (metric === 'sales') {
-    pipeline.push(
-      { $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false } },
-      { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } }
-    );
-  }
 
   pipeline.push({
     $group: {
       _id: groupId,
-      value:
-        metric === 'sales'
-          ? {
-              $sum: {
-                $multiply: [
-                  { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
-                  { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
-                ],
-              },
-            }
-          : { $sum: 1 },
+      value: metric === 'sales' ? { $sum: '$deliveredAmount' } : { $sum: 1 },
     },
   });
 
