@@ -8,6 +8,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
+import SellerOrder from '#models/OrderSchema/SellerOrder.js';
 import { cancelAymakanShipment, createAymakanDocumentId } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
@@ -98,6 +99,8 @@ const getAllOrders = async (query, sellerId) => {
     };
     // Escape special regex characters
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // ---------------- SEARCH ----------------
     if (search && search.trim() !== '') {
       const words = search.trim().split(/\s+/);
 
@@ -122,9 +125,10 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.search = search;
     }
 
+    // ---------------- CHANNEL FILTER ----------------
     if (channelId !== undefined && channelId !== null) {
       const ids = []
-        .concat(channelId) // handles number | string | array
+        .concat(channelId)
         .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
         .map((id) => Number(id))
         .filter((id) => !isNaN(id));
@@ -136,6 +140,7 @@ const getAllOrders = async (query, sellerId) => {
       }
     }
 
+    // ---------------- DATE FILTER ----------------
     if (fromDate || toDate) {
       filter.createdAt = {};
 
@@ -149,9 +154,7 @@ const getAllOrders = async (query, sellerId) => {
       }
     }
 
-    // Build aggregation pipeline
-    const pipeline = [{ $match: filter }];
-
+    // ---------------- STATUS FILTER ----------------
     if (status !== undefined && status !== null) {
       const statusArray = []
         .concat(status)
@@ -171,12 +174,14 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.status = status;
     }
 
-    // Sorting, skip, limit
+    // ---------------- PIPELINE ----------------
+    const pipeline = [{ $match: filter }];
+
     pipeline.push({ $sort: { [sortBy]: sortDirection } });
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: parseInt(size) });
 
-    // Execute aggregation and fetch other data
+    // ---------------- EXECUTION ----------------
     const [totalOrders, orders, allChannels, sellerSync] = await Promise.all([
       Order.countDocuments(filter),
       Order.aggregate(pipeline),
@@ -184,20 +189,43 @@ const getAllOrders = async (query, sellerId) => {
       Seller.findById(sellerId).select('-_id lastOrderSync'),
     ]);
 
+    // ---------------- CHANNEL MAP ----------------
     const channelMap = {};
     allChannels.forEach((channel) => {
       channelMap[channel.channelId] = channel.channelImageUrl;
     });
 
+    // ---------------- SELLER ORDER STATUS FETCH (OPTIMIZED) ----------------
+
+    const sellerOrderIds = orders.map((id) => id.orderId.toString());
+
+    const sellerOrders = await SellerOrder.find(
+      { orderId: { $in: sellerOrderIds }, sellerId: sellerObjectId },
+      { sellerOrderId: 1, status: 1, orderId: 1, sellerId: 1 }
+    ).lean();
+
+    const sellerOrderStatusMap = sellerOrders.reduce((acc, so) => {
+      const orderId = so.orderId;
+      acc[orderId] = so.status;
+      return acc;
+    }, {});
+
+    // ---------------- RESPONSE ----------------
     return {
       data: await Promise.all(
-        orders.map((order) => {
+        orders.map(async (order) => {
           const matchingChannel = channelMap[order.channelId] || null;
-          return formatOrder(order, matchingChannel, sellerObjectId);
+
+          const formatted = await formatOrder(order, matchingChannel, sellerObjectId); //  FIX
+
+          return {
+            ...formatted,
+            sellerOrderStatus: sellerOrderStatusMap[order.orderId?.toString()] || null,
+          };
         })
       ),
-      appliedFilters: appliedFilters,
-      latestOrderSyncDate: sellerSync.lastOrderSync || null,
+      appliedFilters,
+      latestOrderSyncDate: sellerSync?.lastOrderSync || null,
       pagination: getPagination(totalOrders, page, size),
     };
   } catch (err) {
