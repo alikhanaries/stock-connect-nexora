@@ -401,7 +401,7 @@ export const getOrderById = async (id) => {
               quantity: p.quantity,
               status: sku?.status,
               airWaybillNo: shipment.airWaybillNo,
-              omnifulTrackingNo: shipment.omniful?.trackingNo || null,
+              omnifulTrackingNo: shipment?.omniful?.trackingNo || null,
               hsCode: productsMap[p.merchantProductNo]?.hsCode || p.merchantProductNo,
               trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
               documentId: sku?.documentId,
