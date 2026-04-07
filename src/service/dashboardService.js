@@ -50,6 +50,8 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
           orderDate: { $gte: range.start, $lte: range.end },
         },
       },
+      { $unwind: '$sellerIds' },
+      { $match: { sellerIds: { $in: sellerObjectIds } } },
       {
         $group: {
           _id: '$status',

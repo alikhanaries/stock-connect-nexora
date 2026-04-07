@@ -240,6 +240,14 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
       },
     },
   ];
+  if (metric === 'sales') {
+    pipeline.push(
+      { $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false } },
+      { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } }
+    );
+  } else if (metric === 'orders') {
+    pipeline.push({ $unwind: '$sellerIds' }, { $match: { sellerIds: { $in: sellerObjectIds } } });
+  }
 
   pipeline.push({
     $group: {
@@ -728,6 +736,24 @@ export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = 
   }
   return [
     { $match: match },
+    { $unwind: '$sellerIds' },
+    { $match: { sellerIds: { $in: sellerObjectIds } } },
+    {
+      $addFields: {
+        sellerStatus: {
+          $arrayElemAt: [
+            {
+              $filter: {
+                input: '$sellerStatuses',
+                as: 'sellerStatuses',
+                cond: { $eq: ['$$sellerStatuses.sellerId', '$sellerIds'] },
+              },
+            },
+            0,
+          ],
+        },
+      },
+    },
 
     {
       $facet: {
@@ -737,7 +763,7 @@ export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = 
           { $sort: { value: -1 } },
         ],
         statusSummary: [
-          { $group: { _id: '$status', value: { $sum: 1 } } },
+          { $group: { _id: '$sellerStatus.status', value: { $sum: 1 } } },
           { $project: { _id: 0, key: '$_id', value: 1 } },
           { $sort: { key: 1 } },
         ],
