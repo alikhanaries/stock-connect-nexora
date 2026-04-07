@@ -1,15 +1,15 @@
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
-import { formatProducts } from '#root/src/integrations/erp/shopify/helpers/formatter.js';
-import { fetchProducts } from '#root/src/integrations/erp/shopify/service/shopifyService.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
+import { fetchCatchProducts } from './shopifyService.js';
+import { formatProducts } from '../helpers/formatter.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
-export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
+export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) => {
   try {
-    const rawResponse = await fetchProducts(sellerData);
+    const rawResponse = await fetchCatchProducts(sellerData);
 
     let upsertCount = 0;
     const rawProducts = rawResponse;
@@ -38,7 +38,7 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
       updateOne: {
         filter: {
           productSkuCode: product.productSkuCode,
-          sellerId, //  safer
+          sellerId,
         },
         update: {
           $set: {
