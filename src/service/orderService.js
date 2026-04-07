@@ -386,6 +386,7 @@ export const getOrderById = async (id) => {
         shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
         shipmentId: shipment._id,
         trackingNumber: shipment.airWaybillNo || null,
+        omnifulTrackingNo: shipment?.omniful?.trackingNo || null,
         shipmentMode: shipment.shipmentMethod || 'AYMAKAN',
         documentId: shipment.documentId,
         lineItems:
