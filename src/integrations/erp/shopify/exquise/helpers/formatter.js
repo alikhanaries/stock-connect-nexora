@@ -1,7 +1,7 @@
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
-import { extractImages } from '#root/src/integrations/erp/shopify/helpers/common.js';
+import { extractImages, getColorImages } from './common.js';
 
 export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500) => {
   if (!Array.isArray(rawProducts) || rawProducts.length === 0) return [];
@@ -15,12 +15,9 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
       if (!variants.length) continue;
 
       /* ---------------- GRAND PARENT ---------------- */
-      const grandParentSku = String(id);
-      const productImages = extractImages(product);
-
-      // Grandparent stock: sum of all variant stocks
+      const grandParentSku = id;
+      const productImages = extractImages(product); // all product images
       const grandParentStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
-
       const categoryTrail = category?.fullName || '';
 
       const grandParentProduct = canonicalProductMapper(
@@ -30,7 +27,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           parentProductSkuCode: null,
           productSkuCode: grandParentSku,
           name: title || '',
-          nameAr: title || '',
+          nameAr: '',
           description: htmlToPlainText(description) || '',
           descriptionAr: '',
           brand: vendor || '',
@@ -51,14 +48,16 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           hsCodeSA: '1111111',
           vatRateType: 'STANDARD',
           productType: 'configurable',
-          primaryImageUrl: productImages.primaryImageUrl || '',
-          imageUrl: productImages.imageUrl || '',
-          images: productImages.images || [],
-          extraImageUrl1: productImages.extraImageUrl1 || '',
-          extraImageUrl2: productImages.extraImageUrl2 || '',
-          extraImageUrl3: productImages.extraImageUrl3 || '',
+          primaryImageUrl: productImages.primaryImageUrl,
+          imageUrl: productImages.imageUrl,
+          images: productImages.images,
+          extraImageUrl1: productImages.extraImageUrl1,
+          extraImageUrl2: productImages.extraImageUrl2,
+          extraImageUrl3: productImages.extraImageUrl3,
           source: 'SHOPIFY',
           status,
+          noonPrice: Number(variants[0]?.price) || 0,
+          namshiPrice: Number(variants[0]?.price) || 0,
         },
         sellerId
       );
@@ -68,9 +67,15 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
       /* ---------------- GROUP VARIANTS BY COLOR ---------------- */
       const groupedByColor = {};
       for (const variant of variants) {
-        const color = variant.color || 'DEFAULT';
+        const color = variant.color || '';
         if (!groupedByColor[color]) groupedByColor[color] = [];
         groupedByColor[color].push(variant);
+      }
+
+      /* Build set of all variant primary image IDs for color-based image slicing */
+      const allVariantImageIds = new Set();
+      for (const variant of variants) {
+        if (variant.image?.id) allVariantImageIds.add(variant.image.id);
       }
 
       /* ---------------- PARENT (COLOR) ---------------- */
@@ -79,19 +84,20 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
         const parentSku = `${grandParentSku}-${safeColor}`;
 
         const parentPrices = colorVariants.map((v) => Number(v.price) || 0);
-        const variantImage =
-          colorVariants.find((v) => v?.image?.url)?.image?.url || productImages.primaryImageUrl || '';
-        // Parent stock: sum of variant stocks
+
+        // Get color-specific images: primary + unassigned neighbors in both directions
+        const colorImages = getColorImages(product.images, colorVariants, allVariantImageIds);
+        const parentImages = extractImages(product, null, colorImages);
         const parentStock = colorVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
 
-        const parentProduct = await canonicalProductMapper(
+        const parentProduct = canonicalProductMapper(
           {
             sellerId,
             grandParentProductSkuCode: grandParentSku,
             parentProductSkuCode: null,
             productSkuCode: parentSku,
             name: title || '',
-            nameAr: title || '',
+            nameAr: '',
             description: htmlToPlainText(description) || '',
             descriptionAr: '',
             brand: vendor || '',
@@ -112,14 +118,16 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
             hsCodeSA: '1111111',
             vatRateType: 'STANDARD',
             productType: 'configurable',
-            primaryImageUrl: variantImage,
-            imageUrl: variantImage,
-            images: variantImage ? [variantImage] : [],
-            extraImageUrl1: variantImage,
-            extraImageUrl2: '',
-            extraImageUrl3: '',
+            primaryImageUrl: parentImages.primaryImageUrl,
+            imageUrl: parentImages.imageUrl,
+            images: parentImages.images,
+            extraImageUrl1: parentImages.extraImageUrl1,
+            extraImageUrl2: parentImages.extraImageUrl2,
+            extraImageUrl3: parentImages.extraImageUrl3,
             source: 'SHOPIFY',
             status,
+            noonPrice: parentPrices[0] || 0,
+            namshiPrice: parentPrices[0] || 0,
           },
           sellerId
         );
@@ -129,20 +137,21 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
         /* ---------------- CHILD (VARIANT) ---------------- */
         for (const variant of colorVariants) {
           const size = variant.size || '';
+          const childSku = size
+            ? `${parentSku}-${size.replace(/\s+/g, '_').toUpperCase()}`
+            : `${parentSku}-${variant.id}`;
 
-          const childSku =
-            variant.sku ||
-            variant.id ||
-            (size ? `${parentSku}-${size.replace(/\s+/g, '_').toUpperCase()}` : `${parentSku}-${variant.id}`);
+          // Child uses same color-specific images as parent
+          const variantImages = extractImages(product, null, colorImages);
 
-          const childProduct = await canonicalProductMapper(
+          const childProduct = canonicalProductMapper(
             {
               sellerId,
               grandParentProductSkuCode: null,
               parentProductSkuCode: parentSku,
               productSkuCode: childSku,
               name: title || '',
-              nameAr: title || '',
+              nameAr: '',
               description: htmlToPlainText(description) || '',
               descriptionAr: '',
               brand: vendor || '',
@@ -163,14 +172,16 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
               hsCodeSA: '1111111',
               vatRateType: 'STANDARD',
               productType: 'simple',
-              primaryImageUrl: variantImage,
-              imageUrl: variantImage,
-              images: variantImage ? [variantImage] : [],
-              extraImageUrl1: variantImage,
-              extraImageUrl2: '',
-              extraImageUrl3: '',
+              primaryImageUrl: variantImages.primaryImageUrl,
+              imageUrl: variantImages.imageUrl,
+              images: variantImages.images,
+              extraImageUrl1: variantImages.extraImageUrl1,
+              extraImageUrl2: variantImages.extraImageUrl2,
+              extraImageUrl3: variantImages.extraImageUrl3,
               source: 'SHOPIFY',
               status,
+              noonPrice: Number(variant.price) || 0,
+              namshiPrice: Number(variant.price) || 0,
             },
             sellerId
           );

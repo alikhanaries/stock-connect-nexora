@@ -1,15 +1,15 @@
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
-import { formatProducts } from '#root/src/integrations/erp/shopify/helpers/formatter.js';
-import { fetchProducts } from '#root/src/integrations/erp/shopify/service/shopifyService.js';
+import { formatProducts } from '../helpers/formatter.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
+import { fetchExquiseProducts } from './shopifyService.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
-export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
+export const fetchAndStoreShopifyExquiseProducts = async (sellerId, sellerData) => {
   try {
-    const rawResponse = await fetchProducts(sellerData);
+    const rawResponse = await fetchExquiseProducts(sellerData);
 
     let upsertCount = 0;
     const rawProducts = rawResponse;
@@ -65,6 +65,6 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
     }
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
   } catch (err) {
-    console.error('fetchAndStoreShopifyProducts error:', err);
+    console.error('fetchAndStoreShopifyExquiseProducts error:', err);
   }
 };

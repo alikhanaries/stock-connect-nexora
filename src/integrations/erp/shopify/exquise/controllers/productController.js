@@ -1,6 +1,7 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
-import { fetchAndStoreShopifyProducts } from '../service/productService.js';
-import { fetchShopifyCredentials } from '#root/src/integrations/erp/shopify/service/shopifyService.js';
+import { fetchAndStoreShopifyExquiseProducts } from '../service/productService.js';
+import { getShopifyConfig } from '../service/shopifyService.js';
+
 export const fetchProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
@@ -8,11 +9,9 @@ export const fetchProducts = async (req, res) => {
     if (!sellerId) {
       return failResponse(res, 'sellerId is missing', 400);
     }
-    const sellerData = await fetchShopifyCredentials(sellerId);
+    const shopifyConfig = await getShopifyConfig(sellerId);
 
-    const shopifyConfig = sellerData?.shopifyConfig;
-
-    if (!shopifyConfig?.url || !shopifyConfig?.apiVersion || !shopifyConfig?.accessToken) {
+    if (!shopifyConfig) {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
@@ -21,7 +20,7 @@ export const fetchProducts = async (req, res) => {
 
     process.nextTick(async () => {
       try {
-        await fetchAndStoreShopifyProducts(sellerId, shopifyConfig);
+        await fetchAndStoreShopifyExquiseProducts(sellerId, shopifyConfig);
       } catch (err) {
         console.error('Background sync failed:', err);
       }
