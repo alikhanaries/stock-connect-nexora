@@ -600,8 +600,6 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
       aggregationPipeline.push({
         $match: { $and: andConditions },
       });
-
-      appliedFilters.search = search;
     }
 
     // Data Pipeline
