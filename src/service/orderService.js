@@ -95,6 +95,7 @@ const getAllOrders = async (query, sellerId) => {
     // Base match stage
     const filter = {
       sellerIds: { $in: [sellerObjectId] },
+      'orderSkuList.skuList.sellerId': sellerObjectId,
     };
     // Escape special regex characters
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1255,6 +1256,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const filter = {
       sellerIds: { $in: [sellerId] },
+      'orderSkuList.skuList.sellerId': sellerId,
     };
 
     if (search) {
