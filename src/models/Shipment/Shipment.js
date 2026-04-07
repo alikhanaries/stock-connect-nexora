@@ -41,6 +41,7 @@ const shipmentSchema = new mongoose.Schema(
     shippedFromStockLocationId: { type: Number, default: 0 },
     method: { type: String, index: true },
     isMerchantCreator: { type: Boolean, default: true },
+    invoiceDocumentId: { type: String, index: true },
     shipmentMethod: {
       type: String,
       enum: ['AYMAKAN', 'CHANNEL_ENGINE', 'AMAZON', 'MANUAL', 'UNICOMMERCE'],
@@ -70,6 +71,10 @@ const shipmentSchema = new mongoose.Schema(
       enum: ['FORWARD', 'REVERSE'],
       default: 'FORWARD',
       index: true,
+    },
+    omniful: {
+      statusCode: { type: String, index: true },
+      trackingNo: { type: String, index: true },
     },
   },
   {

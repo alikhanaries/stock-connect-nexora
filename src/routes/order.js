@@ -9,7 +9,10 @@ import {
   merchantCancelById,
   cancelFullOrder,
   cancelPartialOrder,
+  generateDocumentId,
   exportOrders,
+  getAnalyticsOrders,
+  handleOmnifulOrderWebhook,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -22,8 +25,14 @@ import {
   cancelFullOrderValidator,
   cancelPartialOrderValidator,
   exportOrdersValidator,
+  getAnalyticsOrdersValidator,
+  generateDocumentIdValidator,
 } from '#validations/orders.js';
+import upload from '#helpers/FileHandler.js';
 const router = express.Router();
+
+// GET ALL ANALYTICS ORDERS
+router.get('/getAnalyticsOrders', getAnalyticsOrdersValidator, checkLanguage, authMiddleware, getAnalyticsOrders);
 
 /**
  * @swagger
@@ -292,7 +301,7 @@ router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, veri
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       404: { $ref: "#/components/schemas/FailResponse" }
  */
-router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, getOrderById);
+router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, verifySellerAccess, getOrderById);
 // /* CANCEL ORDER (FULL CANCELLATION) */
 /**
  * @swagger
@@ -320,7 +329,14 @@ router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, getOrde
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMiddleware, cancelFullOrder);
+router.put(
+  '/cancelFullOrder',
+  cancelFullOrderValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  cancelFullOrder
+);
 // /* CANCEL PARTIAL ORDER (PARTIAL CANCELLATION) */
 /**
  * @swagger
@@ -357,5 +373,24 @@ router.put('/cancelFullOrder', cancelFullOrderValidator, checkLanguage, authMidd
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-router.put('/cancelPartialOrder', cancelPartialOrderValidator, checkLanguage, authMiddleware, cancelPartialOrder);
+router.put(
+  '/cancelPartialOrder',
+  cancelPartialOrderValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  cancelPartialOrder
+);
+
+router.post(
+  '/generate-documentId',
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  upload.single('file'),
+  generateDocumentIdValidator,
+  generateDocumentId
+);
+
+router.post('/omniful-order-webhook', handleOmnifulOrderWebhook);
 export default router;
