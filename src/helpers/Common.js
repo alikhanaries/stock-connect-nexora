@@ -54,3 +54,150 @@ export default {
 };
 
 export const truncate = (num) => Math.trunc(num * 100) / 100;
+
+export const resolveDateRange = (query) => {
+  const { period, startDate, endDate } = query;
+
+  let start = null;
+  let end = null;
+
+  // -------------------------
+  // PARSE DD/MM/YYYY
+  // -------------------------
+  const parseStart = (str) => {
+    const [dd, mm, yyyy] = str.split('/').map(Number);
+    const d = new Date(yyyy, mm - 1, dd);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const parseEnd = (str) => {
+    const [dd, mm, yyyy] = str.split('/').map(Number);
+    const d = new Date(yyyy, mm - 1, dd);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  };
+
+  // -------------------------
+  // 1. CUSTOM RANGE (HIGHEST PRIORITY)
+  // -------------------------
+  if (startDate && endDate) {
+    return {
+      start: parseStart(startDate),
+      end: parseEnd(endDate),
+      appliedPeriod: 'custom',
+    };
+  }
+
+  const now = new Date();
+
+  const startOfToday = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const endOfToday = () => {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  };
+
+  const startOfMonth = () => new Date(now.getFullYear(), now.getMonth(), 1);
+
+  switch (period) {
+    case 'today':
+      start = startOfToday();
+      end = endOfToday();
+      break;
+
+    case 'weekly': {
+      const today = new Date();
+      const day = today.getDay(); // 0 (Sun) - 6 (Sat)
+
+      // Convert Sunday (0) → 7 for easier calc
+      const adjustedDay = day === 0 ? 7 : day;
+
+      // Get Monday
+      const diff = adjustedDay - 1;
+
+      const startDate = new Date(today);
+      startDate.setDate(today.getDate() - diff);
+      startDate.setHours(0, 0, 0, 0);
+
+      start = startDate;
+
+      const endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      end = endDate;
+
+      break;
+    }
+
+    case 'monthly':
+      // 1st day of month → today
+      start = startOfMonth();
+      start.setHours(0, 0, 0, 0);
+      end = endOfToday();
+      break;
+
+    case 'last_30_days': {
+      const today = new Date();
+
+      // subtract 29 days (NOT 30)
+      const startDate = new Date(today);
+      startDate.setDate(today.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+
+      start = startDate;
+
+      const endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+
+      end = endDate;
+
+      break;
+    }
+
+    case 'last_60_days':
+      start = new Date();
+      start.setDate(start.getDate() - 60);
+      start.setHours(0, 0, 0, 0);
+      end = endOfToday();
+      break;
+
+    case 'last_90_days':
+      start = new Date();
+      start.setDate(start.getDate() - 90);
+      start.setHours(0, 0, 0, 0);
+      end = endOfToday();
+      break;
+
+    case 'last_120_days':
+      start = new Date();
+      start.setDate(start.getDate() - 120);
+      start.setHours(0, 0, 0, 0);
+      end = endOfToday();
+      break;
+
+    case 'year_to_date':
+      start = new Date(now.getFullYear(), 0, 1);
+      start.setHours(0, 0, 0, 0);
+      end = endOfToday();
+      break;
+
+    default:
+      return {
+        start: null,
+        end: null,
+        appliedPeriod: null,
+      };
+  }
+
+  return {
+    start,
+    end,
+    appliedPeriod: period,
+  };
+};
