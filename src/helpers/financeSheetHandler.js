@@ -1,5 +1,5 @@
 import csv from 'csv-parser';
-import { FINANCE_HEADER_MAP, FINANCE_DATE_FIELDS } from '#constants/finance.js';
+import { FINANCE_HEADER_MAP, FINANCE_DATE_FIELDS, FINANCE_NUMBER_FIELDS } from '#constants/finance.js';
 
 export const parseValue = (field, raw) => {
   const val = typeof raw === 'string' ? raw.trim() : raw;
@@ -8,6 +8,10 @@ export const parseValue = (field, raw) => {
   if (FINANCE_DATE_FIELDS.has(field)) {
     const d = new Date(val);
     return isNaN(d.getTime()) ? null : d;
+  }
+  if (FINANCE_NUMBER_FIELDS.has(field)) {
+    const n = parseFloat(val);
+    return isNaN(n) ? null : n;
   }
   return val;
 };

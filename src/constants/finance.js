@@ -33,3 +33,26 @@ export const FINANCE_HEADER_MAP = {
 };
 
 export const FINANCE_DATE_FIELDS = new Set(['orderDate', 'deliveredDate']);
+
+export const FINANCE_NUMBER_FIELDS = new Set([
+  'chargeableWeight',
+  'itemPrice',
+  'totalOrderAmount',
+  'totalDeliveredOrdersAmount',
+  'orderAmountWithoutVAT',
+  'logisticPriceSharedWithCustomer',
+  'actualLogisticPrice',
+  'logisticsPriceDifference',
+  'adminCharges',
+  'marketplaceCommissionSharedWithCustomer',
+  'actualMarketplaceCommission',
+  'marketplaceCommissionDifference',
+  'ollTekFee',
+  'marketingFee10Percent',
+  'totalCostsForBrand',
+  'whatCustomerReceivesFromOllTek',
+  'importVAT',
+  'marketplaceLastMile',
+  'actualEndToEndLogisticsCost',
+  'ollTekInvestmentExtraProfit',
+]);
