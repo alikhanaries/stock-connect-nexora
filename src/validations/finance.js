@@ -7,6 +7,7 @@ export const financeDashboardValidator = validate(async (req) => {
 
   const querySchema = z
     .object({
+      marketplace: z.string().optional(),
       period: z
         .string()
         .optional()
@@ -29,7 +30,6 @@ export const financeDashboardValidator = validate(async (req) => {
 
       startDate: z.string().optional(),
       endDate: z.string().optional(),
-      marketplace: z.string().optional(),
     })
     .refine((q) => !(q.startDate || q.endDate) || (q.startDate && q.endDate), {
       message: 'Both startDate and endDate are required for custom range',

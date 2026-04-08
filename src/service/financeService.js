@@ -1,20 +1,36 @@
 import FinanceRecord from '#models/FinanceRecord.js';
 import Seller from '#models/Seller.js';
 import { getDateRange } from '#helpers/dashboard.js';
+import mongoose from 'mongoose';
 
-export const getFinanceDashboard = async ({ sellerId, period, month, startDate, endDate, marketplace }) => {
-  const seller = await Seller.findById(sellerId).select('name').lean();
-  if (!seller) throw new Error('Seller not found');
+export const getFinanceDashboard = async (sellerIds, { period, month, startDate, endDate, marketplace } = {}) => {
+  const ids = Array.isArray(sellerIds) ? sellerIds : [sellerIds];
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
 
-  const brandRegex = new RegExp(`^${seller.name.trim()}$`, 'i');
-  const match = { brand: brandRegex };
+  const sellers = await Seller.find({ _id: { $in: sellerObjectIds } })
+    .select('name')
+    .lean();
+  if (!sellers.length) throw new Error('No sellers found');
+
+  const match = { brand: { $in: sellers.map((s) => new RegExp(`^${s.name.trim()}$`, 'i')) } };
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (range) {
     match.orderDate = { $gte: range.start, $lte: range.end };
   }
 
-  if (marketplace) match.marketplace = new RegExp(`^${marketplace.trim()}$`, 'i');
+  const marketplaces = marketplace
+    ? String(marketplace)
+        .split(',')
+        .map((m) => m.trim())
+        .filter(Boolean)
+    : [];
+  if (marketplaces.length) {
+    match.marketplace = { $in: marketplaces.map((m) => new RegExp(`^${m}$`, 'i')) };
+  }
 
   const [result] = await FinanceRecord.aggregate([
     { $match: match },

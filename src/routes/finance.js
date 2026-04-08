@@ -1,4 +1,4 @@
-import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
 import { getFinanceDashboardData } from '#controllers/FinanceController.js';
 import { financeDashboardValidator } from '#validations/finance.js';
 import express from 'express';
@@ -10,7 +10,7 @@ financeRouter.get(
   financeDashboardValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
+  verifyMultipleSellerAccess,
   getFinanceDashboardData
 );
 
