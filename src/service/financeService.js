@@ -30,7 +30,7 @@ export const syncFinance = async () => {
   const bulkOps = docs.map((doc) => ({
     updateOne: {
       filter: {
-        awb: doc.awb,
+        itemRef: doc.itemRef,
       },
       update: { $set: doc },
       upsert: true,
