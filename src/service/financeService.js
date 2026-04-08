@@ -26,7 +26,7 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
     ? String(marketplace)
         .split(',')
         .map((m) => m.trim())
-        .filter(Boolean)
+        .filter((m) => m && m.toLowerCase() !== 'all')
     : [];
   if (marketplaces.length) {
     match.marketplace = { $in: marketplaces.map((m) => new RegExp(`^${m}$`, 'i')) };
