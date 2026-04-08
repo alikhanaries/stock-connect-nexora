@@ -6,6 +6,7 @@ import nebimApiRoutes from './integrations/erp/nebim/routes/api.js';
 import kipApiRoutes from './integrations/erp/gurmenKip/routes/api.js';
 import ramseyApiRoutes from './integrations/erp/gurmenRamsey/routes/api.js';
 import eliteStringLaIntimoApiRoutes from './integrations/erp/eliteStringLaIntimo/routes/api.js';
+import shopifyRoutes from './integrations/erp/shopify/routes/api.js';
 import shopifyExquiseRoutes from './integrations/erp/shopify/exquise/routes/api.js';
 import unicommerceRoutes from './integrations/erp/unicommerce/routes/api.js';
 import cronJob from './cronJobs/index.js';
@@ -49,6 +50,7 @@ app.use('/api/erp/nebim', nebimApiRoutes);
 app.use('/api/erp/kip', kipApiRoutes);
 app.use('/api/erp/ramsey', ramseyApiRoutes);
 app.use('/api/erp/elite_string_la_intimo', eliteStringLaIntimoApiRoutes);
+app.use('/api/erp/shopify', shopifyRoutes);
 app.use('/api/erp/shopify/exquise', shopifyExquiseRoutes);
 app.use('/api/erp/unicommerce', unicommerceRoutes);
 app.use((req, res) => {
