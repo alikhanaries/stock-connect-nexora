@@ -85,7 +85,7 @@ const getAllOrders = async (query, sellerId) => {
       status,
       sortOrder = 'desc',
       sortBy = 'orderDate',
-      channelId,
+      channel,
     } = query;
     const skip = (page - 1) * size;
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
@@ -97,6 +97,7 @@ const getAllOrders = async (query, sellerId) => {
     // Base match stage
     const filter = {
       sellerIds: { $in: [sellerObjectId] },
+      'orderSkuList.skuList.sellerId': sellerObjectId,
     };
     // Escape special regex characters
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -126,19 +127,30 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.search = search;
     }
 
-    // ---------------- CHANNEL FILTER ----------------
-    if (channelId !== undefined && channelId !== null) {
-      const ids = []
-        .concat(channelId)
+    if (channel) {
+      const channelNames = []
+        .concat(channel)
         .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
-        .map((id) => Number(id))
-        .filter((id) => !isNaN(id));
+        .map((c) => String(c).trim())
+        .filter(Boolean);
 
-      if (ids.length === 1) {
-        filter.channelId = ids[0];
-      } else if (ids.length > 1) {
-        filter.channelId = { $in: ids };
+      const regexArray = channelNames.map((name) => ({
+        channelName: { $regex: name, $options: 'i' },
+      }));
+
+      const matchedChannels = await Channel.find({ $or: regexArray }).select('channelId').lean();
+
+      const channelIds = matchedChannels.map((c) => c.channelId);
+
+      if (channelIds.length === 1) {
+        filter.channelId = channelIds[0];
+      } else if (channelIds.length > 1) {
+        filter.channelId = { $in: channelIds };
+      } else {
+        //  No match → force empty result
+        filter.channelId = { $in: [] };
       }
+      appliedFilters.channel = channel;
     }
 
     // ---------------- DATE FILTER ----------------
@@ -1315,10 +1327,11 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       return { success: false, message: 'Seller ID is required for export' };
     }
 
-    const { status, search, sortBy = 'orderDate', sortOrder = 'desc', channelId } = filters;
+    const { status, search, sortBy = 'orderDate', sortOrder = 'desc', channel } = filters;
 
     const filter = {
       sellerIds: { $in: [sellerId] },
+      'orderSkuList.skuList.sellerId': sellerId,
     };
 
     if (search) {
@@ -1344,23 +1357,32 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       }
     }
 
-    if (channelId !== undefined && channelId !== null) {
-      const ids = []
-        .concat(channelId) // handles number | string | array
-        .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
-        .map((id) => Number(id))
-        .filter((id) => !isNaN(id));
+    if (channel) {
+      const channelNames = channel
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean);
 
-      if (ids.length === 1) {
-        filters.channelId = ids[0];
-      } else if (ids.length > 1) {
-        filters.channelId = { $in: ids };
+      const regexArray = channelNames.map((name) => ({
+        channelName: { $regex: name, $options: 'i' },
+      }));
+
+      const matchedChannels = await Channel.find({ $or: regexArray }).select('channelId').lean();
+
+      const channelIds = matchedChannels.map((c) => c.channelId);
+
+      //  If no channel matched → return empty
+      if (!channelIds.length) {
+        return { success: false, message: 'No orders found' };
       }
+
+      //  Apply filter
+      filter.channelId = channelIds.length === 1 ? channelIds[0] : { $in: channelIds };
     }
 
     const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
 
-    const orders = await Order.find(filters).sort(sort).lean();
+    const orders = await Order.find(filter).sort(sort).lean();
 
     if (!orders.length) {
       return { success: false, message: 'No orders found' };

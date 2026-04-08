@@ -169,19 +169,63 @@ export const saveReturnToDatabase = async (returnData) => {
 
 export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
   try {
-    const { status, sortOrder = 'desc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform } = query;
+    const {
+      status,
+      platform,
+      search,
+      size = 100000,
+      sortBy = 'CreatedAt',
+      sortOrder = 'desc',
+      dateFrom,
+      dateTo,
+      page = 1,
+      channel,
+    } = query;
+
+    //   pass sellerId separately (so sellerStatus filter works)
+    const queryObj = {
+      channel,
+      status,
+      platform,
+      search,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortOrder,
+      size,
+      page,
+    };
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
-
-    const appliedFilters = {};
-
-    if (channelId) appliedFilters.channelId = channelId;
-    if (platform) appliedFilters.platform = platform;
-
-    const { pipeline } = await buildReturnMatchAndPipeline(query, {
+    const { pipeline } = await buildReturnMatchAndPipeline(queryObj, {
       includeSearchNameSplit: true,
     });
+    const appliedFilters = {};
+
+    //  Apply channel filter early
+    let channelIdsFromName = [];
+
+    if (channel) {
+      const channelNames = channel
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean);
+
+      const regexArray = channelNames.map((name) => ({
+        channelName: { $regex: name, $options: 'i' },
+      }));
+
+      const matchedChannels = await Channel.find({ $or: regexArray }).select('channelId').lean();
+
+      channelIdsFromName = matchedChannels.map((c) => c.channelId);
+
+      pipeline.push({
+        $match: { channelId: { $in: channelIdsFromName } },
+      });
+
+      appliedFilters.channel = channel;
+    }
 
     let sellerObjectId = null;
 
@@ -210,7 +254,7 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
         );
       }
 
-      appliedFilters.status = statusArray;
+      appliedFilters.status = status;
 
       if (sellerObjectId) {
         pipeline.push({
@@ -707,12 +751,12 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       dateFrom,
       dateTo,
       page = 1,
-      channelId,
+      channel,
     } = filters;
 
     //   pass sellerId separately (so sellerStatus filter works)
     const queryObj = {
-      channelId,
+      channel,
       status,
       platform,
       search,
