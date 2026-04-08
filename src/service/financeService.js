@@ -31,31 +31,27 @@ export const getFinanceDashboard = async ({ sellerId, period, month, startDate, 
         amountPaid: { $sum: { $ifNull: ['$whatCustomerReceivesFromOllTek', 0] } },
       },
     },
-    {
-      $project: {
-        _id: 0,
-        netGMV: 1,
-        platformCommission: 1,
-        marketplaceCommission: 1,
-        logisticCost: 1,
-        totalEarnings: 1,
-        amountPaid: null,
-        amountPending: null,
-      },
-    },
+    { $project: { _id: 0 } },
   ]);
 
-  return (
-    result ?? {
-      netGMV: 0,
-      platformCommission: 0,
-      marketplaceCommission: 0,
-      logisticCost: 0,
-      totalEarnings: 0,
-      amountPaid: 0,
-      amountPending: 0,
-    }
-  );
+  const data = result ?? {
+    netGMV: 0,
+    platformCommission: 0,
+    marketplaceCommission: 0,
+    logisticCost: 0,
+    totalEarnings: 0,
+    amountPaid: 0,
+  };
+
+  return [
+    { key: 'netGMV', label: 'Net GMV', value: data.netGMV },
+    { key: 'platformCommission', label: 'Platform Commission', value: data.platformCommission },
+    { key: 'marketplaceCommission', label: 'Marketplace Commission', value: data.marketplaceCommission },
+    { key: 'logisticCost', label: 'Logistic Cost', value: data.logisticCost },
+    { key: 'totalEarnings', label: 'Total Earning', value: data.totalEarnings },
+    { key: 'amountPaid', label: 'Amount Paid', value: null },
+    { key: 'amountPending', label: 'Amount Pending', value: null },
+  ];
 };
 
 export default {
