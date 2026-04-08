@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
 import Return from '#models/Return.js';
+import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 import { SHIPMENT_EXPORT_HEADERS, buildExportShipmentRow } from '#helpers/export.js';
 import {
   createAymakanShipment,
@@ -2147,6 +2148,27 @@ export const createManualShipmentService = async (shipmentData) => {
     /* -------------------- CREATE SHIPMENT -------------------- */
     const totalPieces = validatedProducts.reduce((s, p) => s + p.quantity, 0);
 
+    try {
+      const ceResult = await createShipmentWithChannelEngine({
+        merchantShipmentNo,
+        merchantOrderNo: order.merchantOrderNo || order.orderId,
+        lines: validatedProducts,
+        trackTraceNo: airWaybillNo,
+        trackTraceUrl,
+        method,
+        shippedFromCountryCode,
+        shipmentDate: new Date(),
+        isMerchantCreator: true,
+        airWaybillNo,
+      });
+
+      if (!ceResult?.success) {
+        console.error(`ChannelEngine create shipment failed: ${ceResult?.message}`);
+      }
+    } catch (error) {
+      console.error(`CE create shipment failed due to ${error.message}`);
+    }
+
     const shipment = await new Shipment({
       orderId,
       sellerId,
@@ -2270,27 +2292,7 @@ export const createManualShipmentService = async (shipmentData) => {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
     }
 
-    try {
-      const ceResult = await createShipmentWithChannelEngine({
-        merchantShipmentNo,
-        merchantOrderNo: order.merchantOrderNo || order.orderId,
-        lines: validatedProducts,
-        trackTraceNo: airWaybillNo,
-        trackTraceUrl,
-        method,
-        shippedFromCountryCode,
-        shipmentDate: new Date(),
-        isMerchantCreator: true,
-        airWaybillNo,
-      });
-
-      if (!ceResult?.success) {
-        console.error(`ChannelEngine create shipment failed: ${ceResult?.message}`);
-      }
-    } catch (error) {
-      console.error(`CE create shipment failed due to ${error.message}`);
-    }
-
+    await syncSellerOrdersFromOrder(orderId);
     return {
       success: true,
       message: 'MANUAL shipment created successfully',

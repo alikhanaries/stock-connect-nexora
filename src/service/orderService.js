@@ -8,6 +8,7 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
+import SellerOrder from '#models/OrderSchema/SellerOrder.js';
 import { cancelAymakanShipment, createAymakanDocumentId } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
@@ -18,6 +19,7 @@ import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
 import fs from 'fs';
 import path from 'path';
+import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 
 const formatOrder = async (order, channelImage, sellerId) => {
   let sellerName = '';
@@ -99,6 +101,8 @@ const getAllOrders = async (query, sellerId) => {
     };
     // Escape special regex characters
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // ---------------- SEARCH ----------------
     if (search && search.trim() !== '') {
       const words = search.trim().split(/\s+/);
 
@@ -149,6 +153,7 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.channel = channel;
     }
 
+    // ---------------- DATE FILTER ----------------
     if (fromDate || toDate) {
       filter.createdAt = {};
 
@@ -162,9 +167,7 @@ const getAllOrders = async (query, sellerId) => {
       }
     }
 
-    // Build aggregation pipeline
-    const pipeline = [{ $match: filter }];
-
+    // ---------------- STATUS FILTER ----------------
     if (status !== undefined && status !== null) {
       const statusArray = []
         .concat(status)
@@ -184,12 +187,14 @@ const getAllOrders = async (query, sellerId) => {
       appliedFilters.status = status;
     }
 
-    // Sorting, skip, limit
+    // ---------------- PIPELINE ----------------
+    const pipeline = [{ $match: filter }];
+
     pipeline.push({ $sort: { [sortBy]: sortDirection } });
     pipeline.push({ $skip: skip });
     pipeline.push({ $limit: parseInt(size) });
 
-    // Execute aggregation and fetch other data
+    // ---------------- EXECUTION ----------------
     const [totalOrders, orders, allChannels, sellerSync] = await Promise.all([
       Order.countDocuments(filter),
       Order.aggregate(pipeline),
@@ -197,20 +202,43 @@ const getAllOrders = async (query, sellerId) => {
       Seller.findById(sellerId).select('-_id lastOrderSync'),
     ]);
 
+    // ---------------- CHANNEL MAP ----------------
     const channelMap = {};
     allChannels.forEach((channel) => {
       channelMap[channel.channelId] = channel.channelImageUrl;
     });
 
+    // ---------------- SELLER ORDER STATUS FETCH (OPTIMIZED) ----------------
+
+    const sellerOrderIds = orders.map((id) => id.orderId.toString());
+
+    const sellerOrders = await SellerOrder.find(
+      { orderId: { $in: sellerOrderIds }, sellerId: sellerObjectId },
+      { sellerOrderId: 1, status: 1, orderId: 1, sellerId: 1 }
+    ).lean();
+
+    const sellerOrderStatusMap = sellerOrders.reduce((acc, so) => {
+      const orderId = so.orderId;
+      acc[orderId] = so.status;
+      return acc;
+    }, {});
+
+    // ---------------- RESPONSE ----------------
     return {
       data: await Promise.all(
-        orders.map((order) => {
+        orders.map(async (order) => {
           const matchingChannel = channelMap[order.channelId] || null;
-          return formatOrder(order, matchingChannel, sellerObjectId);
+
+          const formatted = await formatOrder(order, matchingChannel, sellerObjectId); //  FIX
+
+          return {
+            ...formatted,
+            sellerOrderStatus: sellerOrderStatusMap[order.orderId?.toString()] || null,
+          };
         })
       ),
-      appliedFilters: appliedFilters,
-      latestOrderSyncDate: sellerSync.lastOrderSync || null,
+      appliedFilters,
+      latestOrderSyncDate: sellerSync?.lastOrderSync || null,
       pagination: getPagination(totalOrders, page, size),
     };
   } catch (err) {
@@ -233,17 +261,20 @@ const getAdminOrders = async (query, sellerId, channelId) => {
 
     let sellerObjectId = null;
 
+    // ---------------- SELLER FILTER ----------------
     if (sellerId) {
       sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
       filter.sellerIds = { $in: [sellerObjectId] };
       appliedFilters.sellerId = sellerId;
     }
 
+    // ---------------- CHANNEL FILTER ----------------
     if (channelId) {
       filter.channelId = channelId;
       appliedFilters.channelId = channelId;
     }
 
+    // ---------------- SEARCH ----------------
     const trimmedSearch = search?.trim();
 
     if (trimmedSearch && trimmedSearch.length <= 50) {
@@ -259,32 +290,36 @@ const getAdminOrders = async (query, sellerId, channelId) => {
       appliedFilters.search = trimmedSearch;
     }
 
+    // ---------------- DATE FILTER ----------------
     if (fromDate || toDate) {
       filter.createdAt = {};
       if (fromDate && !isNaN(Date.parse(fromDate))) {
         filter.createdAt.$gte = new Date(fromDate);
       }
       if (toDate && !isNaN(Date.parse(toDate))) {
-        filter.createdAt.$gte = new Date(toDate);
+        filter.createdAt.$lte = new Date(toDate);
       }
       appliedFilters.fromDate = fromDate;
       appliedFilters.toDate = toDate;
     }
 
+    // ---------------- STATUS FILTER ----------------
     if (status) {
       const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
       filter.status = { $in: statusArray };
       appliedFilters.status = status;
     }
 
+    // ---------------- SORT ----------------
     const allowedSortFields = ['orderId', 'createdAt', 'status'];
     const safeSortBy = allowedSortFields.includes(sortBy) ? sortBy : 'orderId';
 
+    // ---------------- FETCH ----------------
     const [totalOrders, orders, allChannels] = await Promise.all([
       Order.countDocuments(filter),
       Order.find(filter)
         .skip(skip)
-        .limit(size)
+        .limit(sizeNum)
         .sort({ [safeSortBy]: sortDirection })
         .collation({ locale: 'en_US', numericOrdering: true })
         .select(SELECTED_FIELDS)
@@ -292,30 +327,60 @@ const getAdminOrders = async (query, sellerId, channelId) => {
       Channel.find().select('_id channelId channelImageUrl'),
     ]);
 
+    // ---------------- CHANNEL MAP ----------------
     const channelMap = {};
     allChannels.forEach((channel) => {
       channelMap[channel.channelId] = channel.channelImageUrl;
     });
 
+    // ---------------- SELLER ORDER STATUS ----------------
+    let sellerOrderStatusMap = {};
+
+    if (sellerObjectId && orders.length) {
+      const sellerOrderIds = orders.map((id) => id.orderId.toString());
+
+      const sellerOrders = await SellerOrder.find(
+        { orderId: { $in: sellerOrderIds }, sellerId: sellerObjectId },
+        { sellerOrderId: 1, status: 1, orderId: 1, sellerId: 1 }
+      ).lean();
+
+      sellerOrderStatusMap = sellerOrders.reduce((acc, so) => {
+        const orderId = so.sellerOrderId.split('_')[0];
+        acc[orderId] = so.status;
+        return acc;
+      }, {});
+    }
+
+    // ---------------- RESPONSE ----------------
     return {
       data: await Promise.all(
-        orders.map((order) => {
+        orders.map(async (order) => {
           const matchingChannel = channelMap[order.channelId] || null;
-          return formatOrder(order, matchingChannel, sellerId);
+
+          const formatted = await formatOrder(order, matchingChannel, sellerObjectId); // ✅ FIX (await)
+
+          return {
+            ...formatted,
+            sellerOrderStatus: sellerObjectId ? sellerOrderStatusMap[order.orderId.toString()] || null : null, //  only when seller context exists
+          };
         })
       ),
       appliedFilters,
-      pagination: getPagination(totalOrders, page, size),
+      pagination: getPagination(totalOrders, pageNum, sizeNum),
     };
   } catch (err) {
+    console.error('Error fetching admin orders:', err.message);
     return { success: false, message: err.message };
   }
 };
 export const getOrderById = async (id, sellerId) => {
   try {
+    // ---------------- FETCH ORDER ----------------
+    const order = await Order.findById(id).lean();
+    if (!order) return false;
     let sellerObjectId = null;
     let sellerName = '';
-
+    let sellerOrderStatus = null;
     // ---------------- OPTIONAL SELLER LOGIC ----------------
     if (sellerId) {
       sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
@@ -327,11 +392,20 @@ export const getOrderById = async (id, sellerId) => {
       }
 
       sellerName = seller.companyName || seller.name || '';
-    }
 
-    // ---------------- FETCH ORDER ----------------
-    const order = await Order.findById(id).lean();
-    if (!order) return false;
+      if (sellerObjectId) {
+        // Single seller → direct lookup
+        const sellerOrder = await SellerOrder.findOne(
+          {
+            orderId: order.orderId.toString(),
+            sellerId: sellerObjectId,
+          },
+          { status: 1 }
+        ).lean();
+
+        sellerOrderStatus = sellerOrder?.status || null;
+      }
+    }
 
     // SECURITY CHECK – only if sellerId provided
     if (sellerObjectId) {
@@ -529,6 +603,7 @@ export const getOrderById = async (id, sellerId) => {
       ...filteredData,
       sellerName: sellerObjectId ? sellerName : null,
       sellerId,
+      sellerOrderStatus,
       skuOrderId,
       shippedItems,
       deliveredItems,
@@ -1020,7 +1095,7 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
       },
       { upsert: true }
     );
-
+    await syncSellerOrdersFromOrder(orderId);
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
@@ -1224,7 +1299,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
       },
       { upsert: true }
     );
-
+    await syncSellerOrdersFromOrder(orderId);
     return { success: true };
   } catch (error) {
     console.error('cancelPartialOrder error:', error);
@@ -1350,6 +1425,24 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     const headers = ORDER_EXPORT_HEADERS;
     const csvRows = [headers.join(',')];
 
+    // ==============================
+    //  FETCH SELLER ORDER STATUS
+    // ==============================
+    const sellerObjectId = String(sellerId);
+
+    const sellerOrderIds = orders.map((i) => i.orderId);
+
+    const sellerOrders = await SellerOrder.find(
+      { orderId: { $in: sellerOrderIds }, sellerId: sellerObjectId },
+      { status: 1, orderId: 1 }
+    ).lean();
+
+    const sellerOrderStatusMap = sellerOrders.reduce((acc, so) => {
+      const orderId = so.orderId;
+      acc[orderId] = so.status;
+      return acc;
+    }, {});
+
     for (const order of orders) {
       /*
       FILTER SELLER SKUS
@@ -1384,6 +1477,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       sellerTotals.subTotalExclVat = sellerTotals.subTotalInclVat - sellerTotals.subTotalVat;
       sellerTotals.totalExclVat = sellerTotals.subTotalExclVat;
 
+      const sellerOrderStatus = sellerOrderStatusMap[order.orderId.toString()] || '';
       /*
       CREATE ROW PER SKU
       */
@@ -1408,7 +1502,8 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
           },
           sellerTotals,
           sellerId,
-          totalSkuCount
+          totalSkuCount,
+          sellerOrderStatus
         );
 
         /*
