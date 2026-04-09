@@ -1,9 +1,70 @@
+import mongoose from 'mongoose';
 import { Readable } from 'stream';
-import { convertGoogleSheetUrlToExport, isValidGoogleSheetUrl } from '#helpers/googleSheetFormaterHandler.js';
-import { mapRowToRecord, parseSheetStream } from '#helpers/financeSheetHandler.js';
 import FinanceRecord from '#models/FinanceRecord.js';
 import { getDateRange } from '#helpers/dashboard.js';
-import mongoose from 'mongoose';
+import { getPagination } from '#helpers/PaginationHandler.js';
+import { convertGoogleSheetUrlToExport, isValidGoogleSheetUrl } from '#helpers/googleSheetFormaterHandler.js';
+import { mapRowToRecord, parseSheetStream } from '#helpers/financeSheetHandler.js';
+
+export const getTransactionHistory = async (
+  sellerIds,
+  { period, month, startDate, endDate, marketplace, search, page = 1, limit = 10 } = {}
+) => {
+  const ids = Array.isArray(sellerIds) ? sellerIds : [sellerIds];
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const match = { sellerId: { $in: sellerObjectIds } };
+
+  const range = getDateRange({ period, startDate, endDate, month });
+  if (range) {
+    match.orderDate = { $gte: range.start, $lte: range.end };
+  }
+
+  const marketplaces = marketplace
+    ? String(marketplace)
+        .split(',')
+        .map((m) => m.trim())
+        .filter((m) => m && m.toLowerCase() !== 'all')
+    : [];
+  if (marketplaces.length) {
+    match.marketplace = { $in: marketplaces.map((m) => new RegExp(`^${m}$`, 'i')) };
+  }
+
+  if (search) {
+    match.orderId = new RegExp(search, 'i');
+  }
+
+  const totalRecords = await FinanceRecord.countDocuments(match);
+  const { page: currentPage, size, totalPages, totalElements } = getPagination(totalRecords, page, limit);
+  const skip = (currentPage - 1) * size;
+
+  const records = await FinanceRecord.find(match)
+    .sort({ orderDate: -1 })
+    .skip(skip)
+    .limit(size)
+    .select('orderId orderAmountWithoutVAT')
+    .lean();
+
+  const content = records.map((r) => ({
+    orderId: r.orderId ?? null,
+    orderValue: r.orderAmountWithoutVAT ?? null,
+    commission: null,
+    netAmount: null,
+    status: null,
+    dateTime: null,
+  }));
+
+  return {
+    content,
+    totalElements,
+    totalPages,
+    page: currentPage,
+    size,
+  };
+};
 
 export const getFinanceDashboard = async (sellerIds, { period, month, startDate, endDate, marketplace } = {}) => {
   const ids = Array.isArray(sellerIds) ? sellerIds : [sellerIds];
@@ -111,6 +172,7 @@ export const syncFinance = async () => {
 };
 
 export default {
+  getTransactionHistory,
   getFinanceDashboard,
   syncFinance,
 };
