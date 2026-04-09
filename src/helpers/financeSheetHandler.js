@@ -10,14 +10,14 @@ export const parseValue = (field, raw) => {
     return isNaN(d.getTime()) ? null : d;
   }
   if (FINANCE_NUMBER_FIELDS.has(field)) {
-    const n = parseFloat(val);
+    const n = parseFloat(String(val).replace(/,/g, ''));
     return isNaN(n) ? null : n;
   }
   return val;
 };
 
-export const mapRowToRecord = (row, sellerId) => {
-  const doc = { sellerId };
+export const mapRowToRecord = (row) => {
+  const doc = {};
   for (const [csvHeader, modelField] of Object.entries(FINANCE_HEADER_MAP)) {
     const rawVal = row[csvHeader];
     doc[modelField] = parseValue(modelField, rawVal);
