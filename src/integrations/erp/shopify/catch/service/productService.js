@@ -65,6 +65,6 @@ export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) =>
     }
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
   } catch (err) {
-    console.error('fetchAndStoreShopifyProducts error:', err);
+    console.error('fetchAndStoreShopifyCatchProducts error:', err);
   }
 };
