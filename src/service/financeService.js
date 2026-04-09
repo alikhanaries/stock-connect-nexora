@@ -10,7 +10,7 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
     .filter(Boolean)
     .map((id) => new mongoose.Types.ObjectId(id));
 
-  const sellers = await Seller.find({ _id: { $in: sellerObjectIds } })
+  const sellers = await Seller.find({ _id: { $in: sellerObjectIds }, status: 'active' })
     .select('name')
     .lean();
   if (!sellers.length) throw new Error('No sellers found');
