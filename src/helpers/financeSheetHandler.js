@@ -16,8 +16,8 @@ export const parseValue = (field, raw) => {
   return val;
 };
 
-export const mapRowToRecord = (row, sellerId) => {
-  const doc = { sellerId };
+export const mapRowToRecord = (row) => {
+  const doc = {};
   for (const [csvHeader, modelField] of Object.entries(FINANCE_HEADER_MAP)) {
     const rawVal = row[csvHeader];
     doc[modelField] = parseValue(modelField, rawVal);
