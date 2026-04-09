@@ -44,13 +44,13 @@ export const getFinanceDashboardData = async (req, res) => {
   }
 };
 
-export const syncFinanceData = async (_req, res) => {
+export const syncFinanceData = async (req, res) => {
   try {
     const result = await syncFinance();
-    return Responses.successResponse(res, result, 200);
+    return Responses.successResponse(res, 'Finance data synced successfully', 200, result);
   } catch (error) {
     console.error('Error syncing finance data:', error);
     errorLog(error);
-    return Responses.errorResponse(res, error, 500);
+    return Responses.errorResponse(res, error.message, 500);
   }
 };
