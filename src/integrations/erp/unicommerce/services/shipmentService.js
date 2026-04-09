@@ -9,6 +9,7 @@ export const getLabelsService = async (sellerId, orderItemIds) => {
 
   const shipment = await Shipment.findOne({
     sellerId,
+    shipmentMethod: 'UNICOMMERCE',
     'products.orderLineId': { $in: ids },
     status: { $nin: ['CANCELED'] },
   })
