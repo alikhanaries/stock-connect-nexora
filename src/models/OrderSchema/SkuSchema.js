@@ -12,7 +12,7 @@ const SkuSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    orderId: {
+    sellerOrderId: {
       type: String,
       required: true,
       default: 'NA',
