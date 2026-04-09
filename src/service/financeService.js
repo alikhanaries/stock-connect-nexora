@@ -2,7 +2,6 @@ import { Readable } from 'stream';
 import { convertGoogleSheetUrlToExport, isValidGoogleSheetUrl } from '#helpers/googleSheetFormaterHandler.js';
 import { mapRowToRecord, parseSheetStream } from '#helpers/financeSheetHandler.js';
 import FinanceRecord from '#models/FinanceRecord.js';
-import Seller from '#models/Seller.js';
 import { getDateRange } from '#helpers/dashboard.js';
 import mongoose from 'mongoose';
 
@@ -13,12 +12,7 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
     .filter(Boolean)
     .map((id) => new mongoose.Types.ObjectId(id));
 
-  const sellers = await Seller.find({ _id: { $in: sellerObjectIds }, status: 'active' })
-    .select('name')
-    .lean();
-  if (!sellers.length) throw new Error('No sellers found');
-
-  const match = { brand: { $in: sellers.map((s) => new RegExp(`^${s.name.trim()}$`, 'i')) } };
+  const match = { sellerId: { $in: sellerObjectIds } };
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (range) {
