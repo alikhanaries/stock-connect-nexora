@@ -1,4 +1,4 @@
-import { getTransactionHistory } from '#service/financeService.js';
+import { getTransactionHistory, syncFinance } from '#service/financeService.js';
 import Responses from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 
@@ -17,7 +17,7 @@ export const getTransactionHistoryData = async (req, res) => {
       limit,
     });
 
-    if (!result || !result.length) {
+    if (!result || !result.content?.length) {
       return Responses.failResponse(res, 'No finance data found', 404);
     }
     return Responses.successResponse(res, 'Finance records fetched successfully', 200, result);
@@ -25,5 +25,16 @@ export const getTransactionHistoryData = async (req, res) => {
     console.error('Error fetching transaction history:', error);
     errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+export const syncFinanceData = async (req, res) => {
+  try {
+    const result = await syncFinance();
+    return Responses.successResponse(res, result, 200);
+  } catch (error) {
+    console.error('Error syncing finance data:', error);
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
   }
 };
