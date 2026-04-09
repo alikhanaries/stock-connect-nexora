@@ -7,11 +7,6 @@ const orderItemIdsSchema = z
   })
   .passthrough();
 
-export const getCourierDetailsValidator = validate(async (req) => {
-  headerSchema.parse(req.headers);
-  Object.assign(req.query, orderItemIdsSchema.parse(req.query));
-});
-
 export const getLabelsValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
   Object.assign(req.query, orderItemIdsSchema.parse(req.query));
