@@ -26,6 +26,12 @@ export const extractImages = (product, variant, colorImages) => {
 export const getColorImages = (productImages, colorVariants, allVariantImageIds) => {
   if (!productImages?.length || !colorVariants?.length) return [];
 
+  // Build a set of image IDs that belong to this color's variants
+  const currentColorImageIds = new Set();
+  for (const variant of colorVariants) {
+    if (variant.image?.id) currentColorImageIds.add(variant.image.id);
+  }
+
   const colorPrimaryImageId = colorVariants[0]?.image?.id;
   if (!colorPrimaryImageId) return [];
 
@@ -44,9 +50,11 @@ export const getColorImages = (productImages, colorVariants, allVariantImageIds)
   }
 
   // Collect images forward (after the primary) that are not assigned to another color
+  // Skip images belonging to THIS color's variants, only break on OTHER color's images
   const afterImages = [];
   for (let i = primaryIdx + 1; i < productImages.length; i++) {
-    if (allVariantImageIds.has(productImages[i].id)) break;
+    const imgId = productImages[i].id;
+    if (allVariantImageIds.has(imgId) && !currentColorImageIds.has(imgId)) break;
     afterImages.push(productImages[i]);
   }
 

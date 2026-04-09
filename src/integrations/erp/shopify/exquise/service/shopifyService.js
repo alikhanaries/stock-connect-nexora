@@ -1,13 +1,12 @@
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
 import Seller from '#root/src/models/Seller.js';
-import { exquiseShopifyConfig } from '../config/config.js';
 /**
- * Bulk Operations query — no `first`/`after` needed.
- * Shopify handles all pagination internally with no cost limits.
+ * Bulk Operations query — Shopify handles pagination internally for bulk ops,
+ * but connection fields still require `first`/`last` arguments.
  */
 const BULK_PRODUCTS_QUERY = `
 {
-  products {
+  products(first: 250) {
     edges {
       node {
         id
@@ -36,7 +35,7 @@ const BULK_PRODUCTS_QUERY = `
             fullName
           }
         }
-        images {
+        images(first: 250) {
           edges {
             node {
               id
@@ -47,7 +46,7 @@ const BULK_PRODUCTS_QUERY = `
             }
           }
         }
-        variants {
+        variants(first: 250) {
           edges {
             node {
               id
@@ -77,7 +76,7 @@ const BULK_PRODUCTS_QUERY = `
               }
               inventoryItem {
                 id
-                inventoryLevels {
+                inventoryLevels(first: 10) {
                   edges {
                     node {
                       id
@@ -160,32 +159,39 @@ function sleep(ms) {
  *
  * JSONL structure from Shopify Bulk Operations:
  * - Product lines:         id = gid://shopify/Product/...
- * - ProductImage lines:    id = gid://shopify/ProductImage/...,    __parentId = Product GID
- * - ProductVariant lines:  id = gid://shopify/ProductVariant/...,  __parentId = Product GID
- * - InventoryLevel lines:  id = gid://shopify/InventoryLevel/...,  __parentId = InventoryItem GID
+ * - Image lines:           id = gid://shopify/Image/... (or MediaImage), __parentId = Product GID
+ * - ProductVariant lines:  id = gid://shopify/ProductVariant/...,        __parentId = Product GID
+ * - InventoryItem lines:   id = gid://shopify/InventoryItem/...,         __parentId = ProductVariant GID
+ * - InventoryLevel lines:  id = gid://shopify/InventoryLevel/...,        __parentId = InventoryItem GID
  */
 function parseBulkJsonl(lines) {
   const productsMap = new Map();
   const variantsMap = new Map();
+  const inventoryItemToVariantMap = new Map();
 
   for (const obj of lines) {
     const id = obj.id || '';
     const parentId = obj.__parentId || '';
 
-    if (id.includes('/Product/') && !id.includes('/ProductImage/') && !id.includes('/ProductVariant/')) {
+    if (id.includes('/Product/') && !id.includes('/ProductVariant/')) {
       productsMap.set(id, { ...obj, _images: [], _variants: [] });
-    } else if (id.includes('/ProductImage/')) {
-      const product = productsMap.get(parentId);
-      if (product) product._images.push(obj);
     } else if (id.includes('/ProductVariant/')) {
       const variant = { ...obj, _inventoryLevels: [] };
       const product = productsMap.get(parentId);
       if (product) product._variants.push(variant);
       variantsMap.set(id, variant);
+    } else if (id.includes('/InventoryItem/')) {
+      // Map InventoryItem -> its parent ProductVariant
+      inventoryItemToVariantMap.set(id, parentId);
     } else if (id.includes('/InventoryLevel/')) {
-      // __parentId points directly to ProductVariant
-      const variant = variantsMap.get(parentId);
+      // __parentId is an InventoryItem GID, resolve to the owning variant
+      const variantId = inventoryItemToVariantMap.get(parentId);
+      const variant = variantId ? variantsMap.get(variantId) : null;
       if (variant) variant._inventoryLevels.push(obj);
+    } else if (obj.url && parentId && productsMap.has(parentId)) {
+      // Image lines (gid://shopify/Image/... or similar) — parent is the Product
+      const product = productsMap.get(parentId);
+      if (product) product._images.push(obj);
     }
   }
 
@@ -211,10 +217,12 @@ export const fetchExquiseProducts = async (sellerData) => {
     }
     console.log(`Bulk operation started: ${bulkOperation.id}, status: ${bulkOperation.status}`);
 
-    // 3. Poll until complete
+    // 3. Poll until complete (max 30 minutes)
+    const MAX_POLL_ATTEMPTS = 900;
+    const POLL_INTERVAL_MS = 2000;
     let operation;
-    while (true) {
-      await sleep(2000);
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+      await sleep(POLL_INTERVAL_MS);
       const pollData = await shopifyGraphQL(url, apiVersion, accessToken, POLL_QUERY);
       operation = pollData.currentBulkOperation;
 
@@ -225,6 +233,10 @@ export const fetchExquiseProducts = async (sellerData) => {
       if (['FAILED', 'CANCELED', 'EXPIRED'].includes(operation.status)) {
         throw new Error(`Bulk operation ${operation.status}: ${operation.errorCode || ''}`);
       }
+
+      if (attempt === MAX_POLL_ATTEMPTS - 1) {
+        throw new Error(`Bulk operation timed out after ${(MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 1000}s`);
+      }
     }
 
     if (!operation.url) {
@@ -234,27 +246,22 @@ export const fetchExquiseProducts = async (sellerData) => {
 
     // 4. Download and parse JSONL
     const fileResponse = await fetch(operation.url);
+    if (!fileResponse.ok) {
+      throw new Error(`Bulk operation download failed: ${fileResponse.status} ${fileResponse.statusText}`);
+    }
     const text = await fileResponse.text();
-    const lines = text
-      .trim()
-      .split('\n')
-      .map((line) => JSON.parse(line));
+    const trimmedText = text.trim();
+    if (!trimmedText) {
+      console.log('Bulk operation completed with empty data file');
+      return [];
+    }
+    const lines = trimmedText.split('\n').map((line) => JSON.parse(line));
 
     // 5. Reassemble flat JSONL into nested products
     const productsMap = parseBulkJsonl(lines);
     const allProducts = [];
 
     for (const [, node] of productsMap) {
-      // const sarPriceNamshi = node.sarPriceNamshi?.value
-      //   ? parseFloat(JSON.parse(node.sarPriceNamshi.value)?.amount)
-      //   : null;
-
-      // const sarPriceNoon = node.sarPriceNoon?.value ? parseFloat(JSON.parse(node.sarPriceNoon.value)?.amount) : null;
-
-      // if (sarPriceNamshi === null || sarPriceNoon === null) {
-      //   continue;
-      // }
-
       const hasAllVariantsValid = node._variants.every((variant) => {
         const color = variant.selectedOptions?.find((o) => o.name.toLowerCase() === 'renk')?.value;
         const size = variant.selectedOptions?.find(
@@ -314,8 +321,6 @@ export const fetchExquiseProducts = async (sellerData) => {
         createdAt: node.createdAt,
         updatedAt: node.updatedAt,
         publishedAt: node.publishedAt,
-        // sarPriceNamshi,
-        // sarPriceNoon,
         category: node.productCategory
           ? {
               id: node.productCategory.productTaxonomyNode.id,
@@ -349,17 +354,15 @@ export const getShopifyConfig = async (sellerId) => {
 
     const dbConfig = sellerData?.shopifyConfig;
 
-    const config = {
-      url: dbConfig?.url || exquiseShopifyConfig.SHOP_URL,
-      apiVersion: dbConfig?.apiVersion || exquiseShopifyConfig.API_VERSION,
-      accessToken: dbConfig?.accessToken || exquiseShopifyConfig.ACCESS_TOKEN,
-    };
-
-    if (!config.url || !config.apiVersion || !config.accessToken) {
+    if (!dbConfig?.url || !dbConfig?.apiVersion || !dbConfig?.accessToken) {
       return null;
     }
 
-    return config;
+    return {
+      url: dbConfig.url,
+      apiVersion: dbConfig.apiVersion,
+      accessToken: dbConfig.accessToken,
+    };
   } catch (error) {
     console.error('getShopifyConfig error:', error);
     throw error;
