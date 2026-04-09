@@ -1,7 +1,6 @@
 import mongoose from 'mongoose';
 import { Readable } from 'stream';
 import FinanceRecord from '#models/FinanceRecord.js';
-import Seller from '#models/Seller.js';
 import { getDateRange } from '#helpers/dashboard.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { convertGoogleSheetUrlToExport, isValidGoogleSheetUrl } from '#helpers/googleSheetFormaterHandler.js';
@@ -17,14 +16,7 @@ export const getTransactionHistory = async (
     .filter(Boolean)
     .map((id) => new mongoose.Types.ObjectId(id));
 
-  const sellers = await Seller.find({ _id: { $in: sellerObjectIds }, status: 'active' })
-    .select('name')
-    .lean();
-  if (!sellers.length) throw new Error('No sellers found');
-
-  const brandNames = sellers.map((s) => s.name.trim());
-
-  const match = { brand: { $in: brandNames.map((name) => new RegExp(`^${name}$`, 'i')) } };
+  const match = { sellerId: { $in: sellerObjectIds } };
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (range) {
