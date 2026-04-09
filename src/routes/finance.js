@@ -1,8 +1,18 @@
-import { authMiddleware, checkLanguage } from '#middleware/index.js';
-import { syncFinanceData } from '#controllers/FinanceController.js';
+import { authMiddleware, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
+import { getFinanceDashboardData, syncFinanceData } from '#controllers/FinanceController.js';
+import { financeDashboardValidator } from '#validations/finance.js';
 import express from 'express';
 
 const financeRouter = express.Router();
+
+financeRouter.get(
+  '/finance-overview',
+  financeDashboardValidator,
+  checkLanguage,
+  authMiddleware,
+  verifyMultipleSellerAccess,
+  getFinanceDashboardData
+);
 
 financeRouter.get('/finance-sync', checkLanguage, authMiddleware, syncFinanceData);
 
