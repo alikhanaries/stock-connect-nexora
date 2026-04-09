@@ -12,6 +12,7 @@ import shipmentRoutes from './shipment.js';
 import dashboardRoutes from './dashboard.js';
 import inventoryRoutes from './inventory.js';
 import priceRoutes from './price.js';
+import financeRoutes from './finance.js';
 
 const router = express.Router();
 
@@ -28,4 +29,5 @@ router.use('/shipment', shipmentRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/price', priceRoutes);
+router.use('/finance', financeRoutes);
 export default router;

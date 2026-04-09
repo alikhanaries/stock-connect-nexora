@@ -1,5 +1,5 @@
 import { authMiddleware, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
-import { getFinanceDashboardData } from '#controllers/FinanceController.js';
+import { getFinanceDashboardData, syncFinanceData } from '#controllers/FinanceController.js';
 import { financeDashboardValidator } from '#validations/finance.js';
 import express from 'express';
 
@@ -13,5 +13,7 @@ financeRouter.get(
   verifyMultipleSellerAccess,
   getFinanceDashboardData
 );
+
+financeRouter.get('/finance-sync', checkLanguage, authMiddleware, syncFinanceData);
 
 export default financeRouter;
