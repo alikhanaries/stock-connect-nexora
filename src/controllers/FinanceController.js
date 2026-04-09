@@ -16,10 +16,14 @@ export const getTransactionHistoryData = async (req, res) => {
       page,
       limit,
     });
+
+    if (!result || !result.length) {
+      return Responses.failResponse(res, 'No finance data found', 404);
+    }
     return Responses.successResponse(res, 'Finance records fetched successfully', 200, result);
   } catch (error) {
     console.error('Error fetching transaction history:', error);
     errorLog(error);
-    return Responses.errorResponse(res, error, 500);
+    return Responses.errorResponse(res, error.message, 500);
   }
 };
