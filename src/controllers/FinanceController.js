@@ -31,8 +31,8 @@ export const getTransactionHistoryData = async (req, res) => {
 export const getFinanceDashboardData = async (req, res) => {
   try {
     const sellerIds = req.sellerIds;
-    const { period, month, startDate, endDate, marketplace } = req.query;
-    const result = await getFinanceDashboard(sellerIds, { period, month, startDate, endDate, marketplace });
+    const { period, month, startDate, endDate, channel } = req.query;
+    const result = await getFinanceDashboard(sellerIds, { period, month, startDate, endDate, channel });
     if (!result || !result.length) {
       return Responses.failResponse(res, 'No finance data found', 404);
     }

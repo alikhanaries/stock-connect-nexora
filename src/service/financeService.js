@@ -66,7 +66,7 @@ export const getTransactionHistory = async (
   };
 };
 
-export const getFinanceDashboard = async (sellerIds, { period, month, startDate, endDate, marketplace } = {}) => {
+export const getFinanceDashboard = async (sellerIds, { period, month, startDate, endDate, channel } = {}) => {
   const ids = Array.isArray(sellerIds) ? sellerIds : [sellerIds];
   const sellerObjectIds = ids
     .map(String)
@@ -80,8 +80,8 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
     match.orderDate = { $gte: range.start, $lte: range.end };
   }
 
-  const marketplaces = marketplace
-    ? String(marketplace)
+  const marketplaces = channel
+    ? String(channel)
         .split(',')
         .map((m) => m.trim())
         .filter((m) => m && m.toLowerCase() !== 'all')
