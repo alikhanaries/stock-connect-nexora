@@ -16,6 +16,8 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     ean: item.ean || '',
     categoryTrail: item.categoryTrail || '',
     price: item.price || 0,
+    noonPrice: item.noonPrice || 0,
+    namshiPrice: item.namshiPrice || 0,
     minPrice: item.minPrice || null,
     maxPrice: item.maxPrice || null,
     msrp: item.msrp || 0,

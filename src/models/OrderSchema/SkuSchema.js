@@ -87,6 +87,11 @@ const SkuSchema = new mongoose.Schema(
       enum: ['NEW', 'USED', 'REFURBISHED', 'UNKNOWN'],
       default: 'UNKNOWN',
     },
+    documentId: {
+      type: String,
+      trim: true,
+      index: true,
+    },
     exactDeliveryDate: Date,
     expectedDeliveryDate: Date,
     latestDeliveryDate: Date,
@@ -97,5 +102,6 @@ const SkuSchema = new mongoose.Schema(
   },
   { _id: false }
 );
+SkuSchema.index({ merchantProductNo: 1 });
 
 export default SkuSchema;
