@@ -786,11 +786,6 @@ export const ayMakanWebHookService = async (data) => {
     if (shipmentStatus === 'DELIVERED' || shipmentStatus === 'HUB_RECIEVED') {
       omnifulResponse = await forwardShipmentService.forwardAymakanShipment(shipmentData);
       await safeExecute(async () => {
-        // await updateShipmentDeliveryStateChannelEngine(
-        //   'DELIVERED',
-        //   data?.tracking?.delivery_date || new Date(),
-        //   shipmentData.merchantShipmentNo
-        // );
       }, 'Updating delivery state in ChannelEngine');
     }
 
