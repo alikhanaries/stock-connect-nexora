@@ -2810,13 +2810,15 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
       return { success: false, message: 'Seller ID is required for export' };
     }
 
+    const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+
     const { status, search, shipmentMethod, type, sortBy = 'createdAt', sortOrder = 'desc' } = filters;
 
     // -------------------------
     // MATCH
     // -------------------------
     const match = {
-      sellerId: new mongoose.Types.ObjectId(sellerId),
+      sellerId: sellerObjectId,
     };
 
     if (search) {
@@ -2849,68 +2851,69 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
           localField: 'orderId',
           foreignField: '_id',
           as: 'order',
+          pipeline: [
+            {
+              $project: {
+                orderId: 1,
+                channelName: 1,
+                channelOrderNumber: 1,
+                orderDate: 1,
+                status: 1,
+                orderSkuList: 1,
+                merchantOrderNo: 1,
+              },
+            },
+          ],
         },
       },
       { $unwind: { path: '$order', preserveNullAndEmptyArrays: true } },
 
-      //  PRODUCT AGGREGATION
+      //  SELLER ORDER STATUS
       {
-        $addFields: {
-          totalProducts: { $size: { $ifNull: ['$products', []] } },
-          totalQuantity: { $sum: '$products.quantity' },
-
-          productSKUs: {
-            $reduce: {
-              input: '$products',
-              initialValue: '',
-              in: {
-                $concat: ['$$value', { $cond: [{ $eq: ['$$value', ''] }, '', ', '] }, '$$this.merchantProductNo'],
-              },
-            },
+        $lookup: {
+          from: 'sellerorders',
+          let: {
+            orderIdStr: '$order.orderId',
+            sellerId: sellerObjectId,
           },
-
-          hsCodes: {
-            $reduce: {
-              input: '$products',
-              initialValue: '',
-              in: {
-                $concat: [
-                  '$$value',
-                  { $cond: [{ $eq: ['$$value', ''] }, '', ', '] },
-                  { $ifNull: ['$$this.hsCode', ''] },
-                ],
-              },
-            },
-          },
-        },
-      },
-
-      //  TRACKING PROCESSING
-      {
-        $addFields: {
-          trackingCount: { $size: { $ifNull: ['$trackingInfo', []] } },
-
-          latestTracking: {
-            $arrayElemAt: [
-              {
-                $sortArray: {
-                  input: { $ifNull: ['$trackingInfo', []] },
-                  sortBy: { date: -1 },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [{ $eq: ['$orderId', '$$orderIdStr'] }, { $eq: ['$sellerId', '$$sellerId'] }],
                 },
               },
-              0,
-            ],
-          },
+            },
+            { $project: { status: 1 } },
+          ],
+          as: 'sellerOrder',
+        },
+      },
 
-          trackingHistory: {
-            $reduce: {
-              input: { $ifNull: ['$trackingInfo', []] },
-              initialValue: '',
-              in: {
-                $concat: [
-                  '$$value',
-                  { $cond: [{ $eq: ['$$value', ''] }, '', ' | '] },
-                  { $ifNull: ['$$this.statusCode', ''] },
+      //  PREP
+      {
+        $addFields: {
+          shipmentProductNos: {
+            $map: {
+              input: { $ifNull: ['$products', []] },
+              as: 'p',
+              in: '$$p.merchantProductNo',
+            },
+          },
+        },
+      },
+
+      //  FILTER SKU (CORE)
+      {
+        $addFields: {
+          filteredSkus: {
+            $filter: {
+              input: '$order.orderSkuList.skuList',
+              as: 'sku',
+              cond: {
+                $and: [
+                  { $in: ['$$sku.merchantProductNo', '$shipmentProductNos'] },
+                  { $eq: ['$$sku.sellerId', sellerObjectId] },
                 ],
               },
             },
@@ -2918,6 +2921,49 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
         },
       },
 
+      //  TOTALS (IMPORTANT)
+      {
+        $addFields: {
+          shipmentSubtotal: { $sum: '$filteredSkus.lineTotalExclVat' },
+          shipmentTax: { $sum: '$filteredSkus.lineVat' },
+          shipmentTotal: { $sum: '$filteredSkus.lineTotalInclVat' },
+        },
+      },
+
+      // SELLER STATUS
+      {
+        $addFields: {
+          sellerOrderStatus: {
+            $ifNull: [{ $arrayElemAt: ['$sellerOrder.status', 0] }, ''],
+          },
+        },
+      },
+
+      // TRACKING
+      {
+        $addFields: {
+          omnifulTrackingCode: {
+            $ifNull: ['$omniful.trackingNo', ''],
+          },
+        },
+      },
+      //  PREP
+      {
+        $addFields: {
+          shipmentProductNos: {
+            $map: {
+              input: { $ifNull: ['$products', []] },
+              as: 'p',
+              in: '$$p.merchantProductNo',
+            },
+          },
+
+          //  ADD THIS
+          totalProducts: {
+            $size: { $ifNull: ['$products', []] },
+          },
+        },
+      },
       { $sort: sort },
     ]);
 
@@ -2934,8 +2980,19 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
     for (const shipment of shipments) {
       const products = shipment.products || [];
 
+      //  Attach values for row builder
+      shipment.subtotalAmount = shipment.shipmentSubtotal || 0;
+      shipment.taxAmount = shipment.shipmentTax || 0;
+      shipment.totalAmount = shipment.shipmentTotal || 0;
+
+      //  NEW FIELD
+      shipment.shipmentTotalAmount = shipment.shipmentTotal || 0;
+
+      shipment.omnifulTrackingCode = shipment.omnifulTrackingCode || '';
+      shipment.orderStatus = shipment.sellerOrderStatus || '';
+
       // -------------------------
-      // NO PRODUCTS CASE
+      // NO PRODUCTS
       // -------------------------
       if (!products.length) {
         const rowObject = buildExportShipmentRow(shipment, {});
