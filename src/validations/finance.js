@@ -7,7 +7,7 @@ export const transactionHistoryValidator = validate(async (req) => {
 
   const querySchema = z
     .object({
-      marketplace: z.string().optional(),
+      channel: z.string().optional(),
       search: z.string().optional(),
       period: z
         .string()
@@ -67,7 +67,7 @@ export const financeDashboardValidator = validate(async (req) => {
 
   const querySchema = z
     .object({
-      marketplace: z.string().optional(),
+      channel: z.string().optional(),
       period: z
         .string()
         .optional()

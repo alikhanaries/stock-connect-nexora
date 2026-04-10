@@ -5,13 +5,13 @@ import { errorLog } from '#middleware/index.js';
 export const getTransactionHistoryData = async (req, res) => {
   try {
     const sellerIds = req.sellerIds;
-    const { period, month, startDate, endDate, marketplace, search, page, limit } = req.query;
+    const { period, month, startDate, endDate, channel, search, page, limit } = req.query;
     const result = await getTransactionHistory(sellerIds, {
       period,
       month,
       startDate,
       endDate,
-      marketplace,
+      channel,
       search,
       page,
       limit,
@@ -31,8 +31,8 @@ export const getTransactionHistoryData = async (req, res) => {
 export const getFinanceDashboardData = async (req, res) => {
   try {
     const sellerIds = req.sellerIds;
-    const { period, month, startDate, endDate, marketplace } = req.query;
-    const result = await getFinanceDashboard(sellerIds, { period, month, startDate, endDate, marketplace });
+    const { period, month, startDate, endDate, channel } = req.query;
+    const result = await getFinanceDashboard(sellerIds, { period, month, startDate, endDate, channel });
     if (!result || !result.length) {
       return Responses.failResponse(res, 'No finance data found', 404);
     }
