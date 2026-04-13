@@ -699,20 +699,35 @@ export const getOrderById = async (id, sellerId) => {
 
 const getOrderStats = async (sellerId) => {
   try {
-    const statuses = Object.keys(ORDER_STATUS_MAP);
     const sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
-    const counts = await Promise.all(
-      statuses.map((status) =>
-        Order.countDocuments({
-          status,
-          sellerIds: [sellerObjectId], // matches inside array automatically
-        })
-      )
-    );
-    const stats = statuses.reduce((acc, status, i) => {
-      acc[status] = counts[i];
-      return acc;
-    }, {});
+    const statuses = Object.keys(ORDER_STATUS_MAP);
+    //  Aggregation
+    const result = await SellerOrder.aggregate([
+      {
+        $match: {
+          sellerId: sellerObjectId,
+        },
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    //  Initialize all statuses with 0
+    const stats = {};
+    statuses.forEach((status) => {
+      stats[status] = 0;
+    });
+
+    //  Fill actual counts
+    result.forEach((item) => {
+      stats[item._id] = item.count;
+    });
+
+    //  Final API response
     return stats;
   } catch (error) {
     console.error('Error getting order stats:', error.message);
