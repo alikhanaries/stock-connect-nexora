@@ -174,7 +174,7 @@ export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
       platform,
       search,
       size = 100000,
-      sortBy = 'CreatedAt',
+      sortBy = 'createdAt',
       sortOrder = 'desc',
       dateFrom,
       dateTo,

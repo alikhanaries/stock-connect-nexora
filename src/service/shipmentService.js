@@ -522,7 +522,7 @@ export const createFullShipmentService = async (shipmentData) => {
       },
       { upsert: true }
     );
-
+    await syncSellerOrdersFromOrder(id);
     return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
     console.error('Error in createPartialShipmentService:', error);
@@ -746,7 +746,7 @@ export const ayMakanWebHookService = async (data) => {
     if (!data?.tracking) {
       return { success: false, message: 'Missing tracking in webhook payload' };
     }
-
+    let omnifulResponse = null;
     // ---------------- FIND SHIPMENT ----------------
     const shipmentData = await Shipment.findOne(
       { airWaybillNo: data.tracking },
@@ -783,29 +783,28 @@ export const ayMakanWebHookService = async (data) => {
       };
     }
 
-    if (shipmentStatus === 'DELIVERED') {
-      await forwardShipmentService.forwardAymakanShipment(shipmentData);
-      await safeExecute(async () => {
-        await updateShipmentDeliveryStateChannelEngine(
-          'DELIVERED',
-          data?.tracking?.delivery_date || new Date(),
-          shipmentData.merchantShipmentNo
-        );
-      }, 'Updating delivery state in ChannelEngine');
+    if (shipmentStatus === 'DELIVERED' || shipmentStatus === 'HUB_RECIEVED') {
+      omnifulResponse = await forwardShipmentService.forwardAymakanShipment(shipmentData);
+      await safeExecute(async () => {}, 'Updating delivery state in ChannelEngine');
     }
 
     // ---------------- UPDATE SHIPMENT ----------------
     const updateData = {
-      status: shipmentStatus,
+      status: omnifulResponse?.id ? 'OMNIFUL_PROCESSED' : shipmentStatus,
       trackingInfo: (data.tracking_info || []).map((i) => ({
         statusCode: i.status_code,
         description: i.description,
         createdAt: i.created_at,
       })),
+
+      omniful: {
+        omnifulId: omnifulResponse?.id,
+        omnifulOrderId: omnifulResponse?.orderId,
+      },
     };
 
     // Add submissionDate only when status is SHIPPED and submissionDate is not already set
-    if (shipmentStatus === 'SHIPPED' && !shipmentData.submissionDate) {
+    if (shipmentStatus === 'SHIPMENT_PROCESSED' && !shipmentData.submissionDate) {
       updateData.submissionDate = new Date();
     }
 
@@ -817,7 +816,12 @@ export const ayMakanWebHookService = async (data) => {
     let deliveredDelta = 0;
     let canceledDelta = 0;
 
-    if (shipmentStatus === 'SHIPPED' || shipmentStatus === 'DELIVERED' || shipmentStatus === 'CANCELED') {
+    if (
+      shipmentStatus === 'SHIPMENT_PROCESSED' ||
+      shipmentStatus === 'DELIVERED' ||
+      shipmentStatus === 'CANCELED' ||
+      shipmentStatus === 'HUB_RECIEVED'
+    ) {
       const orderDoc = await Order.findById(shipmentData.orderId);
 
       if (orderDoc?.orderSkuList?.skuList?.length) {
@@ -833,28 +837,6 @@ export const ayMakanWebHookService = async (data) => {
 
           const sb = sku.statusBreakdown || {};
           const safe = (n) => Math.max(n, 0);
-
-          // SHIPPED
-
-          if (shipmentStatus === 'SHIPPED') {
-            const moveQty = Math.min(sb.shipmentCreated || 0, qty);
-
-            sb.shipmentCreated = safe(sb.shipmentCreated - moveQty);
-            sb.shipped = safe((sb.shipped || 0) + moveQty);
-
-            shippedDelta += moveQty;
-          }
-
-          //  DELIVERED
-
-          if (shipmentStatus === 'DELIVERED') {
-            const moveQty = Math.min(sb.shipped || 0, qty);
-
-            sb.shipped = safe(sb.shipped - moveQty);
-            sb.delivered = safe((sb.delivered || 0) + moveQty);
-
-            deliveredDelta += moveQty;
-          }
 
           //  CANCELED
 
@@ -891,64 +873,8 @@ export const ayMakanWebHookService = async (data) => {
     // ORDER STATUS DERIVATION (BREAKDOWN DRIVEN)
 
     const order = await Order.findById(shipmentData.orderId).lean();
-    const skuList = order.orderSkuList?.skuList || [];
 
-    const aggregated = skuList.reduce(
-      (acc, sku) => {
-        const sb = sku.statusBreakdown || {};
-        acc.totalQty += sku.quantity || 0;
-        acc.confirmed += sb.confirmed || 0;
-        acc.shipmentCreated += sb.shipmentCreated || 0;
-        acc.shipped += sb.shipped || 0;
-        acc.delivered += sb.delivered || 0;
-        acc.canceled += sb.canceled || 0;
-        acc.returned += sb.returned || 0;
-        return acc;
-      },
-      {
-        totalQty: 0,
-        confirmed: 0,
-        shipmentCreated: 0,
-        shipped: 0,
-        delivered: 0,
-        canceled: 0,
-        returned: 0,
-      }
-    );
-
-    const activeShipmentsCount = await Shipment.countDocuments({
-      orderId: shipmentData.orderId,
-      status: { $ne: 'CANCELED' },
-    });
-
-    let finalOrderStatus;
-
-    if (activeShipmentsCount === 0 && aggregated.canceled === aggregated.totalQty) {
-      //  All canceled, no shipments
-      finalOrderStatus = 'NEW';
-    } else if (aggregated.delivered === aggregated.totalQty) {
-      //  Fully delivered
-      finalOrderStatus = 'DELIVERED';
-    } else if (aggregated.delivered + aggregated.canceled === aggregated.totalQty) {
-      //  Finished: some delivered, some canceled
-      finalOrderStatus = 'CLOSED';
-    } else if (
-      aggregated.shipped > 0 &&
-      aggregated.confirmed === 0 &&
-      aggregated.shipmentCreated === 0 &&
-      aggregated.delivered === 0 &&
-      aggregated.returned === 0
-    ) {
-      //  Shipped, nothing pending
-      finalOrderStatus = 'SHIPPED';
-    } else {
-      //  Anything still pending
-      finalOrderStatus = 'IN_PROGRESS';
-    }
-    // FORCE RULE: Delivered orders must be Closed
-    if (finalOrderStatus === 'DELIVERED') {
-      finalOrderStatus = 'CLOSED';
-    }
+    let finalOrderStatus = 'IN_PROGRESS';
 
     // STATUS PRIORITY GUARD
 
@@ -973,29 +899,31 @@ export const ayMakanWebHookService = async (data) => {
       const descriptionParts = [];
 
       // AWB based message
-      if (shipmentStatus === 'SHIPPED') {
-        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been shipped`);
+      if (shipmentStatus === 'SHIPMENT_PROCESSED') {
+        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been shipped by Aymakan`);
       }
 
-      if (shipmentStatus === 'DELIVERED') {
-        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been delivered`);
+      if (shipmentStatus === 'DELIVERED' || shipmentStatus === 'HUB_RECIEVED') {
+        descriptionParts.push(
+          `Shipment with AWB ${shipmentData.airWaybillNo} has been delivered to Omniful by Aymakan`
+        );
       }
 
       if (shipmentStatus === 'CANCELED') {
-        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been canceled`);
+        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been canceled by Aymakan`);
       }
 
       // Quantity-based messages
       if (deliveredDelta > 0) {
-        descriptionParts.push(`${deliveredDelta} item(s) delivered`);
+        descriptionParts.push(`${deliveredDelta} item(s) delivered to Omniful by Aymakan`);
       }
 
       if (shippedDelta > 0) {
-        descriptionParts.push(`${shippedDelta} item(s) shipped`);
+        descriptionParts.push(`${shippedDelta} item(s) shipped by Aymakan`);
       }
 
       if (canceledDelta > 0) {
-        descriptionParts.push(`${canceledDelta} item(s) canceled`);
+        descriptionParts.push(`${canceledDelta} item(s) canceled by Aymakan`);
       }
 
       // Status-based meaning
@@ -1007,7 +935,7 @@ export const ayMakanWebHookService = async (data) => {
         descriptionParts.push('Order fully canceled');
       } else if (finalOrderStatus === 'NEW') {
         descriptionParts.push('All shipments canceled, order reset');
-      } else if (finalOrderStatus === 'SHIPPED' && shippedDelta === 0) {
+      } else if (finalOrderStatus === 'SHIPMENT_PROCESSED' && shippedDelta === 0) {
         descriptionParts.push('All shippable items shipped');
       } else if (finalOrderStatus === 'IN_PROGRESS' && descriptionParts.length === 0) {
         descriptionParts.push('Order in progress');
@@ -1039,7 +967,7 @@ export const ayMakanWebHookService = async (data) => {
         { upsert: true }
       );
     }
-
+    await syncSellerOrdersFromOrder(order?._id);
     return {
       success: true,
       message: `Shipment ${data.tracking} updated successfully`,
@@ -2777,33 +2705,6 @@ export const formatChannelEngineShipments = ({ content = [], order, userId }) =>
   });
 };
 
-const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
-  const confirmed = sb.confirmed || 0;
-  const shipped = sb.shipped || 0;
-  const delivered = sb.delivered || 0;
-  const canceled = sb.canceled || 0;
-  const shipmentCreated = sb.shipmentCreated || 0;
-  const returned = sb.returned || 0;
-
-  // 1️ Fully delivered
-  if (delivered + canceled === quantity) {
-    return 'DELIVERED';
-  }
-
-  // 2️ Fully canceled
-  if (canceled === quantity) {
-    return 'CANCELED';
-  }
-
-  // 3️ Shipped but nothing pending
-  if (shipped > 0 && confirmed === 0 && shipmentCreated === 0 && delivered === 0 && returned === 0) {
-    return 'SHIPPED';
-  }
-
-  // 4️ Anything partially done
-  return 'IN_PROGRESS';
-};
-
 export const exportShipmentsToCSVService = async (sellerId, filters = {}, sellerName = '') => {
   try {
     if (!sellerId) {
@@ -2994,6 +2895,33 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
     console.error('Error exporting shipments:', error.message);
     throw error;
   }
+};
+
+const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
+  const confirmed = sb.confirmed || 0;
+  const shipped = sb.shipped || 0;
+  const delivered = sb.delivered || 0;
+  const canceled = sb.canceled || 0;
+  const shipmentCreated = sb.shipmentCreated || 0;
+  const returned = sb.returned || 0;
+
+  // 1️ Fully delivered
+  if (delivered + canceled === quantity) {
+    return 'IN_PROGRESS';
+  }
+
+  // 2️ Fully canceled
+  if (canceled === quantity) {
+    return 'CANCELED';
+  }
+
+  // 3️ Shipped but nothing pending
+  if (shipped > 0 && confirmed === 0 && shipmentCreated === 0 && delivered === 0 && returned === 0) {
+    return 'IN_PROGRESS';
+  }
+
+  // 4️ Anything partially done
+  return 'IN_PROGRESS';
 };
 
 export default {

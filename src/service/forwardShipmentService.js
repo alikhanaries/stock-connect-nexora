@@ -181,14 +181,32 @@ export const forwardAymakanShipment = async (shipmentData) => {
         type: 'b2b',
       };
 
-      await fetch(`${OMNIFUL_API_URL}/sales-channel/public/v1/orders`, {
+      const res = await fetch(`${OMNIFUL_API_URL}/sales-channel/public/v1/orders`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
+          Accept: 'application/json',
+          Connection: 'keep-alive',
           Authorization: `Bearer ${omnifulAccessToken}`,
         },
         body: JSON.stringify(createOrderPayload),
       });
+
+      if (!res.ok) {
+        throw new Error(`API failed with status ${res.status}`);
+      }
+
+      const json = await res.json();
+
+      if (!json?.data) {
+        throw new Error('Invalid response structure');
+      }
+
+      const result = {
+        id: json.data.id,
+        orderId: json.data.order_id,
+      };
+      return result;
     }
   }
 };
@@ -198,16 +216,7 @@ export const createShipmentwithCE = async (shipmentData) => {
   if (!omnifulAccessToken) {
     throw new Error('Access token not available');
   }
-  const orderId = shipmentData._id.toString();
-  const getOrderResponse = await fetch(`${OMNIFUL_API_URL}/sales-channel/public/v1/orders/${orderId}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${omnifulAccessToken}`,
-    },
-  });
 
-  const getOrderResponseData = await getOrderResponse.json();
   const CEPayload = {
     MerchantShipmentNo: shipmentData.merchantShipmentNo,
     MerchantOrderNo: shipmentData.merchantOrderNo,
@@ -216,14 +225,14 @@ export const createShipmentwithCE = async (shipmentData) => {
       OrderLineId: product.orderLineId,
       Quantity: product.quantity,
     })),
-    TrackTraceNo: getOrderResponseData?.data?.shipment?.awb_number || '',
+    TrackTraceNo: shipmentData?.omniful?.trackingNo || '',
     ReturnTrackTraceNo: '',
     Method: '',
-    ShippedFromCountryCode: getOrderResponseData?.data?.billing_address?.country,
-    ShipmentDate: getOrderResponseData?.data?.order_created_at,
+    ShippedFromCountryCode: shipmentData?.shippedFromStockLocationId || '',
+    ShipmentDate: shipmentData?.submissionDate,
     ReturnMethod: '',
     IsMerchantCreator: true,
-    AirWaybillNo: getOrderResponseData?.data?.shipment?.awb_number,
+    AirWaybillNo: shipmentData?.omniful?.trackingNo || '',
   };
 
   const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
