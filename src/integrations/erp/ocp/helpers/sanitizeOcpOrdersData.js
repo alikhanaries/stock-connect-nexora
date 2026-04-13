@@ -48,7 +48,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
     const allRawItems = [
       ...(data.unShippedItems || []).map((item) => ({ ...item, _source: 'unshipped' })),
       ...flattenShippedItems(data.shippedItems).map((item) => ({ ...item, _source: 'shipped' })),
-      ...(data.cancelledItems || []).map((item) => ({ ...item, _source: 'cancelled' })),
+      ...(data.cancelledItems || []).map((item) => ({ ...item, _source: 'canceled' })),
     ];
 
     const validItems = allRawItems.filter((item) => item.id);
@@ -289,7 +289,7 @@ const getSourceBreakdown = (source, shipmentStatus, qty) => {
     shipmentCreated: 0,
   };
 
-  if (source === 'cancelled') {
+  if (source === 'canceled') {
     return { ...empty, canceled: qty };
   }
 
