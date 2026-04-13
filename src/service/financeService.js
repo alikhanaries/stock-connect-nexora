@@ -8,8 +8,10 @@ import { mapRowToRecord, parseSheetStream } from '#helpers/financeSheetHandler.j
 
 export const getTransactionHistory = async (
   sellerIds,
-  { period, month, startDate, endDate, channel, search, page = 1, limit = 10 } = {}
+  { period, month, startDate, endDate, channel, search, page = 1, size = 10 } = {}
 ) => {
+  const parsedLimit = Math.max(parseInt(size) || 10, 1);
+
   const ids = Array.isArray(sellerIds) ? sellerIds : [sellerIds];
   const sellerObjectIds = ids
     .map(String)
@@ -38,13 +40,13 @@ export const getTransactionHistory = async (
   }
 
   const totalRecords = await FinanceRecord.countDocuments(match);
-  const { page: currentPage, size, totalPages, totalElements } = getPagination(totalRecords, page, limit);
+  const { page: currentPage, totalPages, totalElements } = getPagination(totalRecords, page, parsedLimit);
   const skip = (currentPage - 1) * size;
 
   const records = await FinanceRecord.find(match)
     .sort({ orderDate: -1 })
     .skip(skip)
-    .limit(size)
+    .limit(parsedLimit)
     .select('orderId orderAmountWithoutVAT')
     .lean();
 
