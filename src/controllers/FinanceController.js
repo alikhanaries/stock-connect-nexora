@@ -5,7 +5,7 @@ import { errorLog } from '#middleware/index.js';
 export const getTransactionHistoryData = async (req, res) => {
   try {
     const sellerIds = req.sellerIds;
-    const { period, month, startDate, endDate, channel, search, page, limit } = req.query;
+    const { period, month, startDate, endDate, channel, search, page, size } = req.query;
     const result = await getTransactionHistory(sellerIds, {
       period,
       month,
@@ -14,7 +14,7 @@ export const getTransactionHistoryData = async (req, res) => {
       channel,
       search,
       page,
-      limit,
+      size,
     });
 
     if (!result || !result.content?.length) {
