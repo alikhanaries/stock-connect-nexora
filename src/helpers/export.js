@@ -363,13 +363,15 @@ export const buildExportShipmentRow = (shipment, product = {}) => {
 
   const order = shipment.order || {};
   const latest = shipment.latestTracking || {};
+  const skuData = shipment.filteredSkus?.find((sku) => sku.merchantProductNo === product.merchantProductNo) || {};
 
   return {
     //  Shipment
     'Shipment ID': safe(shipment?._id?.toString()),
     'Shipment Status': safe(shipment.status),
     'Merchant Shipment Number': safe(shipment.merchantShipmentNo),
-    'Tracking Number (AWB)': safe(shipment.airWaybillNo),
+    'Aymakan Tracking Number': safe(shipment.airWaybillNo),
+    'Omniful Tracking Number': safe(shipment.omnifulTrackingCode),
     'Number of Packages': safe(shipment.pieces),
 
     'Shipment Created Date': shipment.createdAt ? new Date(shipment.createdAt).toISOString() : '',
@@ -381,7 +383,7 @@ export const buildExportShipmentRow = (shipment, product = {}) => {
     'Sales Channel': safe(order?.channelName),
     'Channel Order ID': safe(order?.channelOrderNumber),
     'Order Date': order?.orderDate ? new Date(order.orderDate).toISOString() : '',
-    'Order Status': safe(order?.status),
+    'Order Status': safe(shipment.orderStatus),
 
     //  Aggregated
     'Total Products': safe(shipment.totalProducts),
@@ -389,9 +391,10 @@ export const buildExportShipmentRow = (shipment, product = {}) => {
     'Total Quantity': safe(product?.quantity), //  PER ROW
     'HS Codes': safe(product?.hsCode), //  PER ROW
 
-    'Subtotal Amount': safe(order?.subTotalInclVat),
-    'Tax Amount (VAT)': safe(order?.totalVat),
-    'Total Amount': safe(order?.totalInclVat),
+    'Subtotal Amount': skuData.lineTotalExclVat || 0,
+    'Tax Amount (VAT)': skuData.lineVat || 0,
+    'Total Amount': skuData.lineTotalInclVat || 0,
+    'Shipment Total Amount': shipment.shipmentTotalAmount || 0,
     'Payment Method': safe(order?.orderPaymentDetails?.method),
 
     //  Tracking
@@ -406,19 +409,20 @@ export const buildExportShipmentRow = (shipment, product = {}) => {
 
 export const SHIPMENT_EXPORT_HEADERS = [
   'Shipment ID', //  NEW FIELD'
+  'Order ID',
   'Shipment Status',
+  'Order Status',
   'Merchant Shipment Number',
-  'Tracking Number (AWB)',
+  'Aymakan Tracking Number',
+  'Omniful Tracking Number',
   'Number of Packages',
   'Shipment Created Date',
   'Shipment Last Updated Date',
 
-  'Order ID',
   'Merchant Order Number',
   'Sales Channel',
   'Channel Order ID',
   'Order Date',
-  'Order Status',
 
   'Total Products',
   'Product SKUs',
@@ -428,6 +432,7 @@ export const SHIPMENT_EXPORT_HEADERS = [
   'Subtotal Amount',
   'Tax Amount (VAT)',
   'Total Amount',
+  'Shipment Total Amount',
   'Payment Method',
 
   'Tracking Updates Count',
