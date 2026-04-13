@@ -134,11 +134,23 @@ export const createOrUpdateProduct = async (sellerId, product, categories, isIma
   if (parents.length > 0) {
     await Promise.all(
       parents.map((p) =>
-        Product.findOneAndUpdate({ productSkuCode: p.productSkuCode }, p, {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
-        })
+        Product.findOneAndUpdate(
+          { productSkuCode: p.productSkuCode },
+          {
+            $set: {
+              ...p,
+              updatedAt: new Date(), // always update
+            },
+            $setOnInsert: {
+              createdAt: new Date(), // only on insert
+            },
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+          }
+        )
       )
     );
   }
@@ -149,11 +161,23 @@ export const createOrUpdateProduct = async (sellerId, product, categories, isIma
   if (children.length > 0) {
     await Promise.all(
       children.map((c) =>
-        Product.findOneAndUpdate({ productSkuCode: c.productSkuCode }, c, {
-          upsert: true,
-          new: true,
-          setDefaultsOnInsert: true,
-        })
+        Product.findOneAndUpdate(
+          { productSkuCode: c.productSkuCode },
+          {
+            $set: {
+              ...c,
+              updatedAt: new Date(), // always update
+            },
+            $setOnInsert: {
+              createdAt: new Date(), // only on insert
+            },
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+          }
+        )
       )
     );
   }
