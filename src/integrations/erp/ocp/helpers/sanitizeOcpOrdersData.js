@@ -10,7 +10,11 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const skuSet = new Set();
 
   orders.forEach((order) => {
-    const items = [...(order.unShippedItems || []), ...(order.shippedItems || []), ...(order.cancelledItems || [])];
+    const items = [
+      ...(order.unShippedItems || []),
+      ...flattenShippedItems(order.shippedItems),
+      ...(order.cancelledItems || []),
+    ];
 
     items.forEach((item) => {
       if (item?.sku) skuSet.add(item.sku.trim());
@@ -41,52 +45,87 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
     const mappedStatus = OCP_STATUS_MAP[rawStatus] || 'NEW';
     const sellerIDsSet = new Set();
 
-    const allRawItems = [...(data.unShippedItems || []), ...(data.shippedItems || []), ...(data.cancelledItems || [])];
+    const allRawItems = [
+      ...(data.unShippedItems || []).map((item) => ({ ...item, _source: 'unshipped' })),
+      ...flattenShippedItems(data.shippedItems).map((item) => ({ ...item, _source: 'shipped' })),
+      ...(data.cancelledItems || []).map((item) => ({ ...item, _source: 'canceled' })),
+    ];
 
     const validItems = allRawItems.filter((item) => item.id);
     const merchantOrderNo = `${channelNo?.channelId ?? 6}_OCP_${orderId}`;
     const existingSkuMap = new Map(existingOrder?.orderSkuList?.skuList?.map((s) => [s.id, s]) || []);
 
-    const skuList = validItems.map((line) => {
-      const lineId = String(line.id);
+    // Aggregate items by SKU code — same product can appear across unShippedItems, shippedItems, cancelledItems
+    const skuAggMap = new Map();
+
+    validItems.forEach((line) => {
       const trimmedSku = line.sku?.trim();
+      if (!trimmedSku) return;
+
+      const qty = Number(line.quantity ?? 0);
+      const breakdown = getSourceBreakdown(line._source, line.shipmentStatus, qty);
+
+      if (skuAggMap.has(trimmedSku)) {
+        const agg = skuAggMap.get(trimmedSku);
+        agg.totalQty += qty;
+        agg.breakdown.confirmed += breakdown.confirmed;
+        agg.breakdown.shipped += breakdown.shipped;
+        agg.breakdown.delivered += breakdown.delivered;
+        agg.breakdown.returned += breakdown.returned;
+        agg.breakdown.canceled += breakdown.canceled;
+        agg.breakdown.shipmentCreated += breakdown.shipmentCreated;
+        // keep first encountered line as the representative
+      } else {
+        skuAggMap.set(trimmedSku, {
+          line,
+          totalQty: qty,
+          breakdown: { ...breakdown },
+        });
+      }
+    });
+
+    const skuList = Array.from(skuAggMap.values()).map(({ line, totalQty, breakdown }) => {
+      const trimmedSku = line.sku?.trim();
+      const lineId = String(line.id);
       const skuSellerId = productSellerMap.get(trimmedSku) || sellerId;
       if (skuSellerId) {
         sellerIDsSet.add(String(skuSellerId));
       }
       const existingSku = existingSkuMap.get(lineId);
 
-      const qty = Number(line.quantity ?? 0);
       const rawPrice = line.effectiveLineItemPrice ?? line.price ?? 0;
       const price = Number(rawPrice);
 
       const rawLineStatus = (line.status ?? line.Status ?? 'PENDING').toUpperCase();
       const lineStatus = OCP_STATUS_MAP[rawLineStatus] || 'NEW';
 
+      const statusBreakdown = existingSku?.statusBreakdown ?? breakdown;
+
       return {
         id: lineId,
         sellerId: skuSellerId,
         channelOrderLineNo: lineId,
         status: lineStatus,
+        statusBreakdown,
         isFulfillmentByMarketplace: false,
         gtin: null,
         description: line.name ?? line.slug ?? '',
         stockLocation: null,
 
         unitVat: 0,
-        lineTotalInclVat: price * qty,
+        lineTotalInclVat: price * totalQty,
         lineVat: 0,
         originalUnitPriceInclVat: price,
         originalUnitVat: 0,
-        originalLineTotalInclVat: price * qty,
+        originalLineTotalInclVat: price * totalQty,
         originalLineTotalExclVat: 0,
         unitPriceExclVat: 0,
         lineTotalExclVat: 0,
 
         channelProductNo: String(line.nodeId ?? ''),
-        merchantProductNo: line.sku ?? '',
+        merchantProductNo: trimmedSku ?? '',
 
-        quantity: qty,
+        quantity: totalQty,
         cancellationRequestedQuantity: existingSku?.cancellationRequestedQuantity ?? 0,
 
         unitPriceInclVat: price,
@@ -104,12 +143,20 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
         airWaybillNo: existingSku?.airWaybillNo ?? null,
         extraData: [
           {
-            Key: 'imageURI',
-            Value: line.image?.imageURI ?? null,
+            key: 'imageURI',
+            value: line.image?.imageURI ?? '',
           },
           {
-            Key: 'slug',
-            Value: line.slug ?? null,
+            key: 'status',
+            value: String(lineStatus).toLowerCase(),
+          },
+          {
+            key: 'sellerId',
+            value: String(skuSellerId ?? ''),
+          },
+          {
+            key: 'slug',
+            value: line.slug ?? null,
           },
         ],
       };
@@ -217,4 +264,43 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       },
     };
   });
+};
+
+const flattenShippedItems = (shippedItems) => {
+  if (!shippedItems?.length) return [];
+  return shippedItems.flatMap((shipment) =>
+    (shipment.lineItems || []).map((item) => ({
+      ...item,
+      _trackingNumber: shipment.trackingNumber ?? null,
+      _shipmentId: shipment.shipmentId ?? null,
+      _externalShipmentId: shipment.externalShipmentId ?? null,
+      _shipmentReferenceId: shipment.shipmentReferenceId ?? null,
+    }))
+  );
+};
+
+const getSourceBreakdown = (source, shipmentStatus, qty) => {
+  const empty = {
+    confirmed: 0,
+    shipped: 0,
+    delivered: 0,
+    returned: 0,
+    canceled: 0,
+    shipmentCreated: 0,
+  };
+
+  if (source === 'canceled') {
+    return { ...empty, canceled: qty };
+  }
+
+  if (source === 'shipped') {
+    const upper = (shipmentStatus || '').toUpperCase();
+    if (upper === 'SHIPMENT_CREATED') return { ...empty, shipmentCreated: qty };
+    if (upper === 'OUT_FOR_DELIVERY') return { ...empty, shipped: qty };
+    if (upper === 'DELIVERED') return { ...empty, delivered: qty };
+    return { ...empty, shipmentCreated: qty };
+  }
+
+  // unshipped items are confirmed
+  return { ...empty, confirmed: qty };
 };

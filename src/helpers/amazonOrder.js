@@ -307,6 +307,18 @@ export const sanitizeAmazonOrdersData = async (orders) => {
 
   for (const [orderId, orderData] of orderMap) {
     const { orderInfo, items } = orderData;
+
+    // Skip order if any item's SKU is not found in product collection
+    const hasUnknownSku = items.some((item) => {
+      const sku = item.sku?.trim();
+      return !sku || !productSellerMap.has(sku);
+    });
+
+    if (hasUnknownSku) {
+      console.log(`Skipping order ${orderId}: one or more SKUs not found in product collection`);
+      continue;
+    }
+
     const existingOrder = existingOrdersMap.get(orderId);
 
     const purchaseDate = parseAmazonDate(orderInfo.purchaseDate);
