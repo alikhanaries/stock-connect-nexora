@@ -31,6 +31,8 @@ const getRateToSar = async (baseCurrency = 'USD') => {
       USD: 3.75,
       INR: 0.042,
       SAR: 1,
+      TRY: 0.084,
+      TRL: 0.084,
     };
 
     rateCache[baseCurrency] = fallbackRates[baseCurrency] ?? 1;
