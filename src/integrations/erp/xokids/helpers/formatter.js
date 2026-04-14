@@ -50,7 +50,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
     sellerId,
     name: product.name,
     description: product.details,
-    brand: 'XO Kids',
+    brand: 'XOkids',
     categoryTrail: product.category_path,
     vatRateType: product.vat && Number(product.vat) > 0 ? 'STANDARD' : 'ZERO',
     ...processed,
