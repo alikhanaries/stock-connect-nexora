@@ -119,6 +119,8 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       modelName: p.mpn || '',
 
       currentStockCount: safeNumber(p.quantity),
+      noonPrice: gpPrice || 0,
+      namshiPrice: gpPrice || 0,
     };
 
     // ---------- PARENT IMAGES ----------
@@ -177,6 +179,8 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         categoryTrail: categoryName,
         gender,
         modelName: p.mpn || '',
+        noonPrice: childPrice || 0,
+        namshiPrice: childPrice || 0,
       };
 
       if (isImageUpdate && parentImages.length) {
