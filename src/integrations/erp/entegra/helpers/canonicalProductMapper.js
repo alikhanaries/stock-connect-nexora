@@ -118,5 +118,8 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
 
     // Product type
     productType: item.productType || 'simple',
+
+    noonPrice: item.noonPrice || 0,
+    namshiPrice: item.namshiPrice || 0,
   };
 };
