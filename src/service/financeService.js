@@ -41,30 +41,42 @@ export const getTransactionHistory = async (
 
   const totalRecords = await FinanceRecord.countDocuments(match);
   const { page: currentPage, totalPages, totalElements } = getPagination(totalRecords, page, parsedLimit);
-  const skip = (currentPage - 1) * size;
+
+  const skip = (currentPage - 1) * parsedLimit;
 
   const records = await FinanceRecord.find(match)
     .sort({ orderDate: -1 })
     .skip(skip)
     .limit(parsedLimit)
-    .select('orderId orderAmountWithoutVAT')
+    .select(
+      'orderId orderAmountWithoutVAT adminCharges customersEarning logisticPrice marketplaceCommission ollTekFee paymentStatus'
+    )
     .lean();
 
-  const content = records.map((r) => ({
-    orderId: r.orderId ?? null,
-    orderValue: r.orderAmountWithoutVAT ?? null,
-    commission: null,
-    netAmount: null,
-    status: null,
-    dateTime: null,
-  }));
+  const content = records.map((r) => {
+    //Platform Commission + Marketplace commission + Marketing Fee + Logistic Cost.
+    const commission =
+      (r.adminCharges || 0) +
+      (r.ollTekFee || 0) +
+      (r.marketplaceCommission || 0) +
+      (r.logisticPrice || 0) +
+      (r.marketingFee || 0);
+    return {
+      orderId: r.orderId ?? null,
+      orderValue: r.orderAmountWithoutVAT ?? null,
+      commission,
+      netAmount: null,
+      status: r.paymentStatus,
+      dateTime: null,
+    };
+  });
 
   return {
     content,
     totalElements,
     totalPages,
     page: currentPage,
-    size,
+    size: parsedLimit,
   };
 };
 
