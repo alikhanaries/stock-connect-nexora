@@ -8,3 +8,5 @@ export const NEBIM_ENDPOINTS = {
   RUN_PROC: 'IntegratorService/RunProc',
   CONNECT: 'IntegratorService/Connect',
 };
+
+export const MIN_STOCK = 1;
