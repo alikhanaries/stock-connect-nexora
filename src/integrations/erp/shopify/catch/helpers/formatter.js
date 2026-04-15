@@ -10,7 +10,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
 
   await processInBatches(rawProducts, batchSize, async (batch) => {
     for (const product of batch) {
-      const { id, title, description, vendor, variants = [], category, status, sarPriceNamshi, sarPriceNoon } = product;
+      const { id, title, description, variants = [], category, status, sarPriceNamshi, sarPriceNoon } = product;
 
       if (!variants.length) continue;
 
@@ -30,7 +30,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           nameAr: '',
           description: htmlToPlainText(description) || '',
           descriptionAr: '',
-          brand: vendor || '',
+          brand: 'Catch',
           color: '',
           size: '',
           ean: '',
@@ -100,7 +100,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
             nameAr: '',
             description: htmlToPlainText(description) || '',
             descriptionAr: '',
-            brand: vendor || '',
+            brand: 'Catch',
             color,
             size: '',
             ean: '',
@@ -154,7 +154,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
               nameAr: '',
               description: htmlToPlainText(description) || '',
               descriptionAr: '',
-              brand: vendor || '',
+              brand: 'Catch',
               color,
               size,
               ean: variant.barcode || '',
