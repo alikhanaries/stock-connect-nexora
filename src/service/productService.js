@@ -1189,7 +1189,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const dataPipeline = [
     ...pipeline,
     { $skip: (currentPage - 1) * limit },
-    { $limit: limit + 1 },
+    { $limit: limit },
     {
       $project: {
         'productDetails._id': 1,
