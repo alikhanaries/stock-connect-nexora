@@ -4,6 +4,7 @@ import { corsOptions } from './config/cors.js';
 import apiRoutes from './routes/api.js';
 import nebimApiRoutes from './integrations/erp/nebim/routes/api.js';
 import kipApiRoutes from './integrations/erp/gurmenKip/routes/api.js';
+import entegraRoutes from './integrations/erp/entegra/routes/api.js';
 import ramseyApiRoutes from './integrations/erp/gurmenRamsey/routes/api.js';
 import eliteStringLaIntimoApiRoutes from './integrations/erp/eliteStringLaIntimo/routes/api.js';
 import shopifyRoutes from './integrations/erp/shopify/routes/api.js';
@@ -11,7 +12,6 @@ import shopifyExquiseRoutes from './integrations/erp/shopify/exquise/routes/api.
 import shopifyCatchRoutes from './integrations/erp/shopify/catch/routes/api.js';
 import unicommerceRoutes from './integrations/erp/unicommerce/routes/api.js';
 import cronJob from './cronJobs/index.js';
-
 import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
 
@@ -49,6 +49,7 @@ app.get('/', (req, res) => {
 app.use('/api', apiRoutes);
 app.use('/api/erp/nebim', nebimApiRoutes);
 app.use('/api/erp/kip', kipApiRoutes);
+app.use('/api/erp/entegra', entegraRoutes);
 app.use('/api/erp/ramsey', ramseyApiRoutes);
 app.use('/api/erp/elite_string_la_intimo', eliteStringLaIntimoApiRoutes);
 app.use('/api/erp/shopify', shopifyRoutes);
@@ -58,6 +59,8 @@ app.use('/api/erp/unicommerce', unicommerceRoutes);
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
+
 // Run cron jobs
 cronJob.scheduledCronJobs();
+
 export default app;
