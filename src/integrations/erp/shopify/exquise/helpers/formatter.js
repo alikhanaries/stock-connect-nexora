@@ -10,7 +10,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
 
   await processInBatches(rawProducts, batchSize, async (batch) => {
     for (const product of batch) {
-      const { id, title, description, vendor, variants = [], category, status } = product;
+      const { id, title, description, variants = [], category, status, sarPrices } = product;
 
       if (!variants.length) continue;
 
@@ -19,6 +19,9 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
       const productImages = extractImages(product); // all product images
       const grandParentStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
       const categoryTrail = category?.fullName || '';
+
+      // Use sarPrices as the base price when available, otherwise fall back to variant price
+      const basePrice = sarPrices ?? (Number(variants[0]?.price) || 0);
 
       const grandParentProduct = canonicalProductMapper(
         {
@@ -30,16 +33,16 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           nameAr: '',
           description: htmlToPlainText(description) || '',
           descriptionAr: '',
-          brand: vendor || '',
+          brand: 'exquise',
           color: '',
           size: '',
           ean: '',
           categoryTrail,
-          price: Number(variants[0]?.price) || 0,
+          price: basePrice,
           minPrice: null,
           maxPrice: null,
-          msrp: Number(variants[0]?.price) || 0,
-          purchasePrice: Number(variants[0]?.price) || 0,
+          msrp: basePrice,
+          purchasePrice: basePrice,
           shippingCost: 0,
           shippingTime: 0,
           currentStockCount: grandParentStock,
@@ -56,8 +59,8 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           extraImageUrl3: productImages.extraImageUrl3,
           source: 'SHOPIFY',
           status,
-          noonPrice: Number(variants[0]?.price) || 0,
-          namshiPrice: Number(variants[0]?.price) || 0,
+          noonPrice: basePrice,
+          namshiPrice: basePrice,
         },
         sellerId
       );
@@ -100,16 +103,16 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
             nameAr: '',
             description: htmlToPlainText(description) || '',
             descriptionAr: '',
-            brand: vendor || '',
+            brand: 'exquise',
             color,
             size: '',
             ean: '',
             categoryTrail,
-            price: parentPrices[0] || 0,
+            price: sarPrices ?? (parentPrices[0] || 0),
             minPrice: null,
             maxPrice: null,
-            msrp: parentPrices[0] || 0,
-            purchasePrice: parentPrices[0] || 0,
+            msrp: sarPrices ?? (parentPrices[0] || 0),
+            purchasePrice: sarPrices ?? (parentPrices[0] || 0),
             shippingCost: 0,
             shippingTime: 0,
             currentStockCount: parentStock,
@@ -126,8 +129,8 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
             extraImageUrl3: parentImages.extraImageUrl3,
             source: 'SHOPIFY',
             status,
-            noonPrice: parentPrices[0] || 0,
-            namshiPrice: parentPrices[0] || 0,
+            noonPrice: sarPrices ?? (parentPrices[0] || 0),
+            namshiPrice: sarPrices ?? (parentPrices[0] || 0),
           },
           sellerId
         );
@@ -154,16 +157,16 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
               nameAr: '',
               description: htmlToPlainText(description) || '',
               descriptionAr: '',
-              brand: vendor || '',
+              brand: 'exquise',
               color,
               size,
               ean: variant.barcode || '',
               categoryTrail,
-              price: Number(variant.price) || 0,
+              price: sarPrices ?? (Number(variant.price) || 0),
               minPrice: null,
               maxPrice: null,
-              msrp: Number(variant.price) || 0,
-              purchasePrice: Number(variant.price) || 0,
+              msrp: sarPrices ?? (Number(variant.price) || 0),
+              purchasePrice: sarPrices ?? (Number(variant.price) || 0),
               shippingCost: 0,
               shippingTime: 0,
               currentStockCount: Number(variant.stock) || 0,
@@ -180,8 +183,8 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
               extraImageUrl3: variantImages.extraImageUrl3,
               source: 'SHOPIFY',
               status,
-              noonPrice: Number(variant.price) || 0,
-              namshiPrice: Number(variant.price) || 0,
+              noonPrice: sarPrices ?? (Number(variant.price) || 0),
+              namshiPrice: sarPrices ?? (Number(variant.price) || 0),
             },
             sellerId
           );
