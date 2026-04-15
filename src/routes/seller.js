@@ -13,7 +13,7 @@ import {
   deletePickupAddress,
   getAllSeller,
 } from '#controllers/SellerController.js';
-import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
+import { authMiddleware, authorize, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 import {
   softDeleteSellerValidator,
@@ -238,6 +238,7 @@ seller.get(
   getAllPickupAddressesValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   getAllPickupAddresses
 );
 
@@ -390,6 +391,7 @@ seller.post(
   checkLanguage,
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
+  verifySellerAccess,
   savePickupAddress
 );
 

@@ -2,6 +2,11 @@ import mongoose from 'mongoose';
 
 const PickupAddressSchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
+      required: true,
+    },
     email: {
       type: String,
       required: true,

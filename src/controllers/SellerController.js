@@ -176,8 +176,9 @@ export const getAllSeller = async (req, res) => {
 
 export const getAllPickupAddresses = async (req, res) => {
   try {
+    const sellerId = req.sellerId;
     // Directly query PickupAddress collection
-    const pickupAddresses = await sellerService.getAllPickupAddresses();
+    const pickupAddresses = await sellerService.getAllPickupAddresses(sellerId);
     const message =
       pickupAddresses && pickupAddresses.length > 0
         ? 'Pickup addresses fetched successfully'
@@ -191,7 +192,8 @@ export const getAllPickupAddresses = async (req, res) => {
 
 export const savePickupAddress = async (req, res) => {
   try {
-    const result = await sellerService.saveSellerPickUpAdressDetails(req.body);
+    const sellerId = req.sellerId;
+    const result = await sellerService.saveSellerPickUpAdressDetails(req.body, sellerId);
 
     if (!result) {
       return response.failResponse(res, 'Failed to save seller pick up address.', 500);

@@ -205,7 +205,7 @@ export const getSellerById = async (id) => {
 
   return formatSellerResponse(seller);
 };
-export const saveSellerPickUpAdressDetails = async (payload) => {
+export const saveSellerPickUpAdressDetails = async (payload, sellerId) => {
   try {
     const { city, address, postcode, country, phone, description, email } = payload;
 
@@ -216,6 +216,7 @@ export const saveSellerPickUpAdressDetails = async (payload) => {
 
     // Prepare pickup address data
     const pickupData = {
+      sellerId,
       email,
       city,
       address,
@@ -227,7 +228,7 @@ export const saveSellerPickUpAdressDetails = async (payload) => {
     };
 
     // Use sellerId + address as unique key to decide update vs insert
-    const filter = { address: address };
+    const filter = { address: address, sellerId };
 
     const savedAddress = await PickupAddress.findOneAndUpdate(
       filter,
@@ -241,8 +242,8 @@ export const saveSellerPickUpAdressDetails = async (payload) => {
   }
 };
 
-export const getAllPickupAddresses = async () => {
-  return await PickupAddress.find({ status: 'active' }).sort({ createdAt: -1 });
+export const getAllPickupAddresses = async (sellerId) => {
+  return await PickupAddress.find({ status: 'active', sellerId }).sort({ createdAt: -1 });
 };
 
 // Update a pickup address
