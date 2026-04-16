@@ -217,7 +217,7 @@ export const saveSellerPickUpAdressDetails = async (payload, sellerId) => {
     // Check if address already exists for this seller
     const existingAddress = await PickupAddress.findOne({
       sellerId,
-      address,
+      address: new RegExp(`^${address}$`, 'i'), // case-insensitive
     });
 
     if (existingAddress) {
