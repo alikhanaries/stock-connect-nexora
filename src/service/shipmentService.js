@@ -32,6 +32,7 @@ import Seller from '#models/Seller.js';
 import forwardShipmentService from './forwardShipmentService.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
+  console.log('Creating Aymakan shipment with data:', JSON.stringify(shipmentData));
   try {
     const { userId, declaredValue, deliveryData, collectionData, pieces = 0 } = shipmentData;
 
@@ -63,6 +64,10 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       cod_amount: shipmentData.codAmount || 0,
       currency: shipmentData.currency || 'SAR',
       ...buildPartyPayload(deliveryData, 'delivery'),
+      delivery_city: process.env.AYMAKAN_DELIVERY_CITY,
+      delivery_address: process.env.AYMAKAN_DELIVERY_ADDRESS,
+      delivery_country: process.env.AYMAKAN_DELIVERY_COUNTRY,
+      delivery_phone: process.env.AYMAKAN_DELIVERY_PHONE,
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
       ...(hasInternationalMetadata && {
@@ -74,6 +79,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
         },
       }),
     };
+    console.log('Final payload for Aymakan:', JSON.stringify(payload));
 
     // ---  Call Aymakan API ---
     const result = await createAymakanShipment(payload);
