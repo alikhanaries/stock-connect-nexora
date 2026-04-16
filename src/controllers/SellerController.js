@@ -192,15 +192,27 @@ export const getAllPickupAddresses = async (req, res) => {
 export const savePickupAddress = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const result = await sellerService.saveSellerPickUpAdressDetails(req.body, sellerId);
 
-    if (!result) {
-      return response.failResponse(res, 'Failed to save seller pick up address.', 500);
+    if (!sellerId) {
+      return response.failResponse(res, 'Seller ID is required', 400);
     }
 
-    return response.successResponse(res, 'Seller pick up adress saved successfully', 201, null);
+    const result = await sellerService.saveSellerPickUpAdressDetails(req.body, sellerId);
+
+    return response.successResponse(res, 'Seller pickup address saved successfully', 201, result);
   } catch (error) {
-    console.error('Error creating seller:', error);
+    console.error('Error saving pickup address:', error);
+
+    // Duplicate address (manual throw OR Mongo duplicate key)
+    if (error.message === 'Address already exists' || error.code === 11000) {
+      return response.failResponse(res, 'Address already exists', 409);
+    }
+
+    // Validation / missing fields
+    if (error.message === 'Missing required fields') {
+      return response.failResponse(res, error.message, 400);
+    }
+
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }
 };
