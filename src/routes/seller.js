@@ -315,7 +315,6 @@ seller.put(
   updatePickupAddressValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
   updatePickupAddress
 );
 
@@ -344,7 +343,6 @@ seller.delete(
   deletePickupAddressValidator,
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
   deletePickupAddress
 );
 
