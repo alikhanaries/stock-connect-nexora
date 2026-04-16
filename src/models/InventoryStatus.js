@@ -5,6 +5,7 @@ const InventoryStatusSchema = new mongoose.Schema(
     sellerId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
+      index: true,
     },
     productSkuCode: {
       type: String,

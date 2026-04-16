@@ -10,6 +10,7 @@ const OrderSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      index: true,
     },
     channelOrderNumber: {
       type: String,
@@ -37,6 +38,7 @@ const OrderSchema = new mongoose.Schema(
       type: String,
       enum: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'CANCELED', 'CLOSED', 'RETURNED'],
       required: true,
+      index: true,
     },
     globalChannelName: {
       type: String,
