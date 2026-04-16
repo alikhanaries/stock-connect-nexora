@@ -214,7 +214,17 @@ export const saveSellerPickUpAdressDetails = async (payload, sellerId) => {
       throw new Error('Missing required fields');
     }
 
-    // Prepare pickup address data
+    // Check if address already exists for this seller
+    const existingAddress = await PickupAddress.findOne({
+      sellerId,
+      address: new RegExp(`^${address}$`, 'i'), // case-insensitive
+    });
+
+    if (existingAddress) {
+      throw new Error('Address already exists');
+    }
+
+    // Create new pickup address
     const pickupData = {
       sellerId,
       email,
@@ -227,27 +237,48 @@ export const saveSellerPickUpAdressDetails = async (payload, sellerId) => {
       status: 'active',
     };
 
-    // Use sellerId + address as unique key to decide update vs insert
-    const filter = { address: address, sellerId };
-
-    const savedAddress = await PickupAddress.findOneAndUpdate(
-      filter,
-      { $set: pickupData },
-      { new: true, upsert: true } // update if exists, insert if not
-    );
+    const savedAddress = await PickupAddress.create(pickupData);
 
     return savedAddress;
   } catch (error) {
     throw new Error(error.message);
   }
 };
-
 export const getAllPickupAddresses = async () => {
   return await PickupAddress.find({ status: 'active' }).sort({ createdAt: -1 });
 };
 // Update a pickup address
 export const updatePickupAddress = async (id, payload) => {
   try {
+    const { address } = payload;
+
+    // Get current record
+    const existingData = await PickupAddress.findOne(
+      { _id: id, status: { $ne: 'removed' } },
+      { sellerId: 1, address: 1 }
+    );
+
+    if (!existingData) {
+      throw new Error('Pickup address not found');
+    }
+
+    const sellerId = existingData.sellerId;
+
+    // Only check duplicate if address is being changed
+    if (address && address !== existingData.address) {
+      const existingAddress = await PickupAddress.findOne({
+        sellerId,
+        address: new RegExp(`^${address}$`, 'i'), // case-insensitive
+        _id: { $ne: id },
+      });
+
+    
+
+      if (existingAddress) {
+        throw new Error('Address already exists');
+      }
+    }
+
     const updatedAddress = await PickupAddress.findOneAndUpdate(
       { _id: id, status: { $ne: 'removed' } },
       { $set: payload },
