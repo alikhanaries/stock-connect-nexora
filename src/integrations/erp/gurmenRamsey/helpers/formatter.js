@@ -77,11 +77,11 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
       parentProductSkuCode: null,
       grandParentProductSkuCode: null,
       productType: 'configurable',
-      price: parseFloat(product.price_special_vat_included || product.price_special || 0),
-      noonPrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
-      namshiPrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
-      purchasePrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
-      msrp: parseFloat(product.price_special_vat_included || product.price_special || 0),
+      price: parseFloat(product.price_special || 0),
+      noonPrice: parseFloat(product.price_special || 0),
+      namshiPrice: parseFloat(product.price_special || 0),
+      purchasePrice: parseFloat(product.price_special || 0),
+      msrp: parseFloat(product.price_special || 0),
       currentStockCount: totalStock,
       status: totalStock < MIN_STOCK ? 'inactive' : 'active',
       color: '',
@@ -110,11 +110,11 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
         color,
         size: '',
         ean: '',
-        price: parseFloat(product.price_special_vat_included || product.price_special || 0),
-        noonPrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
-        namshiPrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
-        purchasePrice: parseFloat(product.price_special_vat_included || product.price_special || 0),
-        msrp: parseFloat(product.price_special_vat_included || product.price_special || 0),
+        price: parseFloat(product.price_special || 0),
+        noonPrice: parseFloat(product.price_special || 0),
+        namshiPrice: parseFloat(product.price_special || 0),
+        purchasePrice: parseFloat(product.price_special || 0),
+        msrp: parseFloat(product.price_special || 0),
         currentStockCount: parentStock,
         status: parentStock < MIN_STOCK ? 'inactive' : 'active',
       });
@@ -154,23 +154,13 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
           grandParentProductSkuCode: null,
           productType: 'simple',
           ...processedChild, // only applied when true
-          price: parseFloat(
-            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
-          ),
-          noonPrice: parseFloat(
-            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
-          ),
-          namshiPrice: parseFloat(
-            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
-          ),
-          msrp: parseFloat(
-            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
-          ),
+          price: parseFloat(product.price_special || 0),
+          noonPrice: parseFloat(product.price_special || 0),
+          namshiPrice: parseFloat(product.price_special || 0),
+          msrp: parseFloat(product.price_special || 0),
           minPrice: null,
           maxPrice: null,
-          purchasePrice: parseFloat(
-            variant.price_tl_vat_included_discount || product.price_special_vat_included || product.price_special || 0
-          ),
+          purchasePrice: parseFloat(product.price_special || 0),
           color,
           size,
           ean: variant.barcode || '',

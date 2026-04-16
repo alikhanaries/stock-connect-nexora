@@ -328,11 +328,7 @@ export const getAnalyticsOrdersValidator = validate(async (req) => {
       .transform((val) => (val ? Number(val) : 10))
       .refine((val) => Number.isInteger(val) && val > 0, {
         message: 'size must be a positive integer',
-      })
-      .refine((val) => val <= 100, {
-        message: 'size cannot exceed 100',
       }),
-
     search: z.string().optional(),
 
     period: z.string().optional(),

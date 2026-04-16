@@ -31,5 +31,8 @@ const SyncSellerHistory = new Schema(
     timestamps: true,
   }
 );
+SyncSellerHistory.index({ sellerId: 1, createdAt: -1 });
+SyncSellerHistory.index({ sellerId: 1, syncType: 1 });
+
 const SyncHistory = mongoose.model('SyncHistory', SyncSellerHistory);
 export default SyncHistory;
