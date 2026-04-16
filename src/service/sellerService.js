@@ -250,9 +250,6 @@ export const getAllPickupAddresses = async () => {
 // Update a pickup address
 export const updatePickupAddress = async (id, payload) => {
   try {
-    console.log('id', id);
-    console.log('payload', payload);
-
     const { address } = payload;
 
     // Get current record
