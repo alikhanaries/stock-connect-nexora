@@ -365,14 +365,7 @@ seller.delete(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-seller.get(
-  '/getAyMakanCities',
-  getAymaknCityValidator,
-  checkLanguage,
-  authMiddleware,
-  authorize(USER_ROLES.MASTER_ADMIN),
-  getAyMakanCities
-);
+seller.get('/getAyMakanCities', getAymaknCityValidator, checkLanguage, authMiddleware, getAyMakanCities);
 
 // SAVE SELLER PICKUP ADDRESS API
 /**
