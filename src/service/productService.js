@@ -859,73 +859,113 @@ const deleteProduct = async (id, locale, sellerId) => {
 };
 
 const getProductById = async (id, locale) => {
-  const product = await Product.findOne({ _id: id, status: { $ne: 'removed' } })
-    .select('-__v')
-    .lean();
+  try {
+    // ---------------- FETCH PRODUCT ----------------
+    const product = await Product.findOne({
+      _id: id,
+      status: { $ne: 'removed' },
+    })
+      .select('-__v')
+      .lean();
 
-  if (!product) return { success: false, message: locale?.PRODUCT_NOT_FOUND };
-
-  const rootSku = product.grandParentProductSkuCode || product.parentProductSkuCode || product.productSkuCode;
-
-  const relatedProducts = await Product.find({
-    status: { $ne: 'removed' },
-    $or: [
-      { productSkuCode: rootSku },
-      { parentProductSkuCode: rootSku },
-      { grandParentProductSkuCode: rootSku },
-      { productSkuCode: { $regex: `^${rootSku.split('-')[0].replace(/[.*+?^${}()|[]\]/g, '//$&')}` } },
-    ],
-  })
-    .select('-__v')
-    .lean();
-
-  if (!relatedProducts.length) {
-    return { success: false, message: locale?.PRODUCT_NOT_FOUND };
-  }
-
-  const map = {};
-  relatedProducts.forEach((p) => {
-    map[p.productSkuCode] = { ...p, children: [] };
-  });
-
-  Object.values(map).forEach((node) => {
-    if (node.parentProductSkuCode && map[node.parentProductSkuCode]) {
-      map[node.parentProductSkuCode].children.push(node);
-    } else if (node.grandParentProductSkuCode && map[node.grandParentProductSkuCode]) {
-      map[node.grandParentProductSkuCode].children.push(node);
+    if (!product) {
+      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
-  });
 
-  let root = map[rootSku] || map[product.productSkuCode];
-  let safety = 0;
-  while (root && safety < 10) {
-    safety++;
-    const parent = map[root.parentProductSkuCode];
-    const grand = map[root.grandParentProductSkuCode];
+    // ---------------- ROOT SKU ----------------
+    const rootSku = product.grandParentProductSkuCode || product.parentProductSkuCode || product.productSkuCode;
 
-    if (parent) root = parent;
-    else if (grand) root = grand;
-    else break;
+    const prefix = rootSku.split('-')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // ---------------- FETCH RELATED PRODUCTS ----------------
+    const relatedProducts = await Product.find({
+      status: { $ne: 'removed' },
+      $or: [
+        { productSkuCode: rootSku },
+        { parentProductSkuCode: rootSku },
+        { grandParentProductSkuCode: rootSku },
+        { productSkuCode: { $regex: `^${prefix}` } },
+      ],
+    })
+      .select('-__v')
+      .lean();
+
+    if (!relatedProducts.length) {
+      return { success: false, message: locale?.PRODUCT_NOT_FOUND };
+    }
+
+    // ---------------- CREATE MAP ----------------
+    const map = {};
+    relatedProducts.forEach((p) => {
+      map[p.productSkuCode] = { ...p, children: [] };
+    });
+
+    // ---------------- BUILD TREE (SAFE) ----------------
+    Object.values(map).forEach((node) => {
+      const parentSku = node.parentProductSkuCode;
+      const grandSku = node.grandParentProductSkuCode;
+
+      if (parentSku && map[parentSku] && parentSku !== node.productSkuCode) {
+        map[parentSku].children.push(node);
+      } else if (grandSku && map[grandSku] && grandSku !== node.productSkuCode) {
+        map[grandSku].children.push(node);
+      }
+    });
+
+    // ---------------- FIND ROOT ----------------
+    let root = map[rootSku] || map[product.productSkuCode];
+
+    let safety = 0;
+    while (root && safety < 10) {
+      safety++;
+
+      const parent = map[root.parentProductSkuCode];
+      const grand = map[root.grandParentProductSkuCode];
+
+      if (parent && parent.productSkuCode !== root.productSkuCode) {
+        root = parent;
+      } else if (grand && grand.productSkuCode !== root.productSkuCode) {
+        root = grand;
+      } else {
+        break;
+      }
+    }
+
+    // ---------------- FORMAT TREE (CYCLE SAFE) ----------------
+    const formatNode = (node, visited = new Set()) => {
+      if (!node || visited.has(node.productSkuCode)) {
+        return null; // prevent infinite recursion
+      }
+
+      visited.add(node.productSkuCode);
+
+      return {
+        id: node._id,
+        name: node.name,
+        sku: node.productSkuCode,
+        price: node.price,
+        type: node.parentProductSkuCode ? 'child' : node.grandParentProductSkuCode ? 'parent' : 'grandparent',
+        barcode: node.ean,
+        children: node.children.map((child) => formatNode(child, new Set(visited))).filter(Boolean),
+      };
+    };
+
+    // ---------------- FINAL RESPONSE ----------------
+    return {
+      success: true,
+      message: locale?.PRODUCT_FETCH_SUCCESS,
+      data: {
+        ...product,
+        variations: root ? [formatNode(root)] : [],
+      },
+    };
+  } catch (error) {
+    console.error('Error in getProductById:', error);
+    return {
+      success: false,
+      message: locale?.SOMETHING_WENT_WRONG || 'Something went wrong',
+    };
   }
-
-  const formatNode = (node) => ({
-    id: node._id,
-    name: node.name,
-    sku: node.productSkuCode,
-    price: node.price,
-    type: node.parentProductSkuCode ? 'child' : node.grandParentProductSkuCode ? 'parent' : 'grandparent',
-    barcode: node.ean,
-    children: node.children.map(formatNode),
-  });
-
-  return {
-    success: true,
-    message: locale?.PRODUCT_FETCH_SUCCESS,
-    data: {
-      ...product,
-      variations: [formatNode(root)],
-    },
-  };
 };
 
 /* DELETE MULTIPLE PRODUCTS BY ID*/
@@ -1149,7 +1189,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   const dataPipeline = [
     ...pipeline,
     { $skip: (currentPage - 1) * limit },
-    { $limit: limit + 1 },
+    { $limit: limit },
     {
       $project: {
         'productDetails._id': 1,
