@@ -315,7 +315,6 @@ seller.put(
   updatePickupAddressValidator,
   checkLanguage,
   authMiddleware,
-  authorize(USER_ROLES.MASTER_ADMIN),
   verifySellerAccess,
   updatePickupAddress
 );
@@ -345,7 +344,6 @@ seller.delete(
   deletePickupAddressValidator,
   checkLanguage,
   authMiddleware,
-  authorize(USER_ROLES.MASTER_ADMIN),
   verifySellerAccess,
   deletePickupAddress
 );
@@ -402,7 +400,6 @@ seller.post(
   savePickupAddressValidator,
   checkLanguage,
   authMiddleware,
-  authorize(USER_ROLES.MASTER_ADMIN),
   verifySellerAccess,
   savePickupAddress
 );
