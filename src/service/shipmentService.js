@@ -62,7 +62,8 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       declared_value: declaredValue || 0,
       cod_amount: shipmentData.codAmount || 0,
       currency: shipmentData.currency || 'SAR',
-      ...buildPartyPayload(deliveryData, 'delivery'),
+      delivery_name: deliveryData?.name || deliveryData?.email || '',
+      delivery_email: deliveryData?.email || '',
       delivery_city: process.env.AYMAKAN_DELIVERY_CITY,
       delivery_address: process.env.AYMAKAN_DELIVERY_ADDRESS,
       delivery_country: process.env.AYMAKAN_DELIVERY_COUNTRY,
@@ -397,7 +398,13 @@ export const createFullShipmentService = async (shipmentData) => {
     // Step 9: Delivery & Pickup
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
-    const deliveryDetails = await saveDeliveryAddress(deliveryData);
+    const aymakanDeliveryAddress = {
+      city: process.env.AYMAKAN_DELIVERY_CITY,
+      address: process.env.AYMAKAN_DELIVERY_ADDRESS,
+      country: process.env.AYMAKAN_DELIVERY_COUNTRY,
+      phone: process.env.AYMAKAN_DELIVERY_PHONE,
+    };
+    const deliveryDetails = await saveDeliveryAddress(aymakanDeliveryAddress);
 
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
