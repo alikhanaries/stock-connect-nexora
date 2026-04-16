@@ -1,5 +1,5 @@
 import { errorResponse, successResponse } from '#root/src/helpers/response.js';
-import { getEliteStringLaIntimoStock } from '../services/productService.js';
+import { getEliteStringLaIntimoStock } from '../services/inventoryService.js';
 
 export const syncEliteStringLaIntimoStock = (req, res) => {
   try {
