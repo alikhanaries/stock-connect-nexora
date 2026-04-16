@@ -242,10 +242,9 @@ export const saveSellerPickUpAdressDetails = async (payload, sellerId) => {
   }
 };
 
-export const getAllPickupAddresses = async (sellerId) => {
-  return await PickupAddress.find({ status: 'active', sellerId }).sort({ createdAt: -1 });
+export const getAllPickupAddresses = async () => {
+  return await PickupAddress.find({ status: 'active' }).sort({ createdAt: -1 });
 };
-
 // Update a pickup address
 export const updatePickupAddress = async (id, payload) => {
   try {
@@ -273,7 +272,9 @@ export const deletePickupAddress = async (id) => {
     throw new Error(error.message);
   }
 };
-
+export const getSellerPickupAddresses = async (sellerId) => {
+  return await PickupAddress.find({ status: 'active', sellerId }).sort({ createdAt: -1 });
+};
 export default {
   createSeller,
   getAllSeller,
@@ -285,4 +286,5 @@ export default {
   getAllPickupAddresses,
   updatePickupAddress,
   deletePickupAddress,
+  getSellerPickupAddresses,
 };

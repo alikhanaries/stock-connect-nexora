@@ -176,9 +176,8 @@ export const getAllSeller = async (req, res) => {
 
 export const getAllPickupAddresses = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
     // Directly query PickupAddress collection
-    const pickupAddresses = await sellerService.getAllPickupAddresses(sellerId);
+    const pickupAddresses = await sellerService.getAllPickupAddresses();
     const message =
       pickupAddresses && pickupAddresses.length > 0
         ? 'Pickup addresses fetched successfully'
@@ -253,6 +252,23 @@ export const deletePickupAddress = async (req, res) => {
     const deleted = await sellerService.deletePickupAddress(id);
 
     return response.successResponse(res, 'Pickup address deleted successfully', 200, deleted);
+  } catch (error) {
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
+
+// GET SELLER PICKUP ADDRESS
+
+export const getSellerPickupAddresses = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const pickupAddresses = await sellerService.getSellerPickupAddresses(sellerId);
+    const message =
+      pickupAddresses && pickupAddresses.length > 0
+        ? 'Pickup addresses fetched successfully'
+        : 'No Pickup addresse found';
+
+    return response.successResponse(res, message, 200, pickupAddresses);
   } catch (error) {
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }
