@@ -10,7 +10,7 @@ const ProductSchema = new mongoose.Schema(
 
     grandParentProductSkuCode: { type: String, trim: true, default: null },
     parentProductSkuCode: { type: String, trim: true, default: null },
-    productSkuCode: { type: String, trim: true, index: true },
+    productSkuCode: { type: String, trim: true },
     name: { type: String, required: true, trim: true },
     nameAr: { type: String, trim: true },
     description: { type: String },
@@ -99,16 +99,15 @@ const ProductSchema = new mongoose.Schema(
 // Indexes for performance
 ProductSchema.index({ productSkuCode: 1 }, { unique: true });
 ProductSchema.index({ sellerId: 1, productSkuCode: 1 });
+ProductSchema.index({ sellerId: 1, name: 1, status: 1 });
+ProductSchema.index({ sellerId: 1, status: 1, createdAt: 1 });
 ProductSchema.index({ sellerId: 1, ean: 1 });
 ProductSchema.index({ sellerId: 1, brand: 1 });
 ProductSchema.index({ sellerId: 1, marketPlace: 1 });
-ProductSchema.index({
-  sellerId: 1,
-  name: 'text',
-  brand: 'text',
-  description: 'text',
-});
-ProductSchema.index({ sellerId: 1, status: 1, createdAt: 1 });
 ProductSchema.index({ sellerId: 1, syncedAt: 1, updatedAt: 1 });
+ProductSchema.index({ grandParentProductSkuCode: 1, status: 1 });
+ProductSchema.index({ parentProductSkuCode: 1, status: 1 });
+ProductSchema.index({ sellerId: 1, status: 1, name: 1 });
+ProductSchema.index({ sellerId: 1, name: 'text', brand: 'text', description: 'text' });
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;
