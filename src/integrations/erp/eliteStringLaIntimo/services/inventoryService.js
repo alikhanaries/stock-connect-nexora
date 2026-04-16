@@ -17,13 +17,23 @@ export const getEliteStringLaIntimoStock = async (sellerId) => {
     const adapter = createEliteStringLaIntimoAdapter();
     const products = await adapter.fetchProducts();
 
+    if (!products.length) {
+      return { message: 'No elite string laintimo  products found for inventory sync.' };
+    }
+
     const sellerName = await getSellerNameById(sellerId);
+
+    if (!sellerName) {
+      return { message: 'Seller not found. Inventory sync cannot proceed.' };
+    }
 
     const handleBatch = async (batch) => {
       const productBulkOps = [];
       const inventoryBulkOps = [];
 
       for (const product of batch) {
+        if (!product.productSkuCode) continue;
+
         const prodStatus = getProductStatus(sellerName, product.currentStockCount);
 
         // Product update operation
