@@ -272,7 +272,7 @@ export const updatePickupAddress = async (id, payload) => {
         _id: { $ne: id },
       });
 
-      console.log('existingAddress', existingAddress);
+    
 
       if (existingAddress) {
         throw new Error('Address already exists');
