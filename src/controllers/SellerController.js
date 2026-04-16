@@ -191,7 +191,8 @@ export const getAllPickupAddresses = async (req, res) => {
 
 export const savePickupAddress = async (req, res) => {
   try {
-    const result = await sellerService.saveSellerPickUpAdressDetails(req.body);
+    const sellerId = req.sellerId;
+    const result = await sellerService.saveSellerPickUpAdressDetails(req.body, sellerId);
 
     if (!result) {
       return response.failResponse(res, 'Failed to save seller pick up address.', 500);
@@ -251,6 +252,27 @@ export const deletePickupAddress = async (req, res) => {
     const deleted = await sellerService.deletePickupAddress(id);
 
     return response.successResponse(res, 'Pickup address deleted successfully', 200, deleted);
+  } catch (error) {
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
+export const getSellerPickupAddresses = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+
+    if (!sellerId) {
+      return response.failResponse(res, 'Seller ID is required', 400);
+    }
+
+    const pickupAddresses = await sellerService.getSellerPickupAddresses(sellerId);
+
+    const hasData = Array.isArray(pickupAddresses) && pickupAddresses.length > 0;
+
+    if (!hasData) {
+      return response.failResponse(res, 'No pickup addresses found', 404, []);
+    }
+
+    return response.successResponse(res, 'Pickup addresses fetched successfully', 200, pickupAddresses);
   } catch (error) {
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }

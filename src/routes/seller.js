@@ -12,8 +12,9 @@ import {
   updatePickupAddress,
   deletePickupAddress,
   getAllSeller,
+  getSellerPickupAddresses,
 } from '#controllers/SellerController.js';
-import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
+import { authMiddleware, authorize, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 import {
   softDeleteSellerValidator,
@@ -27,9 +28,18 @@ import {
   getAllPickupAddressesValidator,
   updatePickupAddressValidator,
   deletePickupAddressValidator,
+  getSellerPickupAddressesValidator,
 } from '#validations/sellers.js';
 const seller = express.Router();
-
+//GET SELLER PICKUP ADDRESS
+seller.get(
+  '/getSellerPickupAddresses',
+  getSellerPickupAddressesValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getSellerPickupAddresses
+);
 /**
  * @swagger
  * tags:
@@ -238,6 +248,7 @@ seller.get(
   getAllPickupAddressesValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   getAllPickupAddresses
 );
 
@@ -305,6 +316,7 @@ seller.put(
   checkLanguage,
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
+  verifySellerAccess,
   updatePickupAddress
 );
 
@@ -334,6 +346,7 @@ seller.delete(
   checkLanguage,
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
+  verifySellerAccess,
   deletePickupAddress
 );
 
@@ -390,6 +403,7 @@ seller.post(
   checkLanguage,
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
+  verifySellerAccess,
   savePickupAddress
 );
 
