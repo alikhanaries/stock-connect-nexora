@@ -6,12 +6,14 @@ const PickupAddressSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Seller',
       required: true,
+      index: true,
     },
     email: {
       type: String,
       required: true,
       trim: true,
       lowercase: true,
+      index: true,
       validate: {
         validator: function (v) {
           // Simple email regex validation

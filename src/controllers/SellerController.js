@@ -256,19 +256,23 @@ export const deletePickupAddress = async (req, res) => {
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }
 };
-
-// GET SELLER PICKUP ADDRESS
-
 export const getSellerPickupAddresses = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const pickupAddresses = await sellerService.getSellerPickupAddresses(sellerId);
-    const message =
-      pickupAddresses && pickupAddresses.length > 0
-        ? 'Pickup addresses fetched successfully'
-        : 'No Pickup addresse found';
 
-    return response.successResponse(res, message, 200, pickupAddresses);
+    if (!sellerId) {
+      return response.failResponse(res, 'Seller ID is required', 400);
+    }
+
+    const pickupAddresses = await sellerService.getSellerPickupAddresses(sellerId);
+
+    const hasData = Array.isArray(pickupAddresses) && pickupAddresses.length > 0;
+
+    if (!hasData) {
+      return response.failResponse(res, 'No pickup addresses found', 404, []);
+    }
+
+    return response.successResponse(res, 'Pickup addresses fetched successfully', 200, pickupAddresses);
   } catch (error) {
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }
