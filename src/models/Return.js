@@ -6,6 +6,7 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      index: true,
     },
     merchantReturnNo: {
       type: String,
@@ -48,6 +49,7 @@ const ReturnSchema = new mongoose.Schema(
     },
     status: {
       type: String,
+      index: true,
     },
     platform: {
       type: String,
