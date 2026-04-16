@@ -250,9 +250,30 @@ export const updatePickupAddress = async (req, res) => {
     const id = req.params.id;
     const payload = req.body;
 
+    if (!id) {
+      return response.failResponse(res, 'Address ID is required', 400);
+    }
+
     const updated = await sellerService.updatePickupAddress(id, payload);
+
+    if (!updated) {
+      return response.failResponse(res, 'Pickup address not found', 404);
+    }
+
     return response.successResponse(res, 'Pickup address updated successfully', 200, updated);
   } catch (error) {
+    console.error('Error updating pickup address:', error);
+
+    // Duplicate address case
+    if (error.message === 'Address already exists' || error.code === 11000) {
+      return response.failResponse(res, 'Address already exists', 409);
+    }
+
+    // Validation / bad input
+    if (error.message === 'Missing required fields') {
+      return response.failResponse(res, error.message, 400);
+    }
+
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }
 };

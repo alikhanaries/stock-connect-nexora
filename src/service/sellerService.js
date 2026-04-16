@@ -250,6 +250,38 @@ export const getAllPickupAddresses = async () => {
 // Update a pickup address
 export const updatePickupAddress = async (id, payload) => {
   try {
+    console.log('id', id);
+    console.log('payload', payload);
+
+    const { address } = payload;
+
+    // Get current record
+    const existingData = await PickupAddress.findOne(
+      { _id: id, status: { $ne: 'removed' } },
+      { sellerId: 1, address: 1 }
+    );
+
+    if (!existingData) {
+      throw new Error('Pickup address not found');
+    }
+
+    const sellerId = existingData.sellerId;
+
+    // Only check duplicate if address is being changed
+    if (address && address !== existingData.address) {
+      const existingAddress = await PickupAddress.findOne({
+        sellerId,
+        address: new RegExp(`^${address}$`, 'i'), // case-insensitive
+        _id: { $ne: id },
+      });
+
+      console.log('existingAddress', existingAddress);
+
+      if (existingAddress) {
+        throw new Error('Address already exists');
+      }
+    }
+
     const updatedAddress = await PickupAddress.findOneAndUpdate(
       { _id: id, status: { $ne: 'removed' } },
       { $set: payload },
