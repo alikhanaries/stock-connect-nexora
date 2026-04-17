@@ -12,8 +12,9 @@ import {
   updatePickupAddress,
   deletePickupAddress,
   getAllSeller,
+  getSellerPickupAddresses,
 } from '#controllers/SellerController.js';
-import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
+import { authMiddleware, authorize, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 import {
   softDeleteSellerValidator,
@@ -27,9 +28,18 @@ import {
   getAllPickupAddressesValidator,
   updatePickupAddressValidator,
   deletePickupAddressValidator,
+  getSellerPickupAddressesValidator,
 } from '#validations/sellers.js';
 const seller = express.Router();
-
+//GET SELLER PICKUP ADDRESS
+seller.get(
+  '/getSellerPickupAddresses',
+  getSellerPickupAddressesValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getSellerPickupAddresses
+);
 /**
  * @swagger
  * tags:
@@ -238,6 +248,7 @@ seller.get(
   getAllPickupAddressesValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   getAllPickupAddresses
 );
 
@@ -304,7 +315,6 @@ seller.put(
   updatePickupAddressValidator,
   checkLanguage,
   authMiddleware,
-  authorize(USER_ROLES.MASTER_ADMIN),
   updatePickupAddress
 );
 
@@ -333,7 +343,6 @@ seller.delete(
   deletePickupAddressValidator,
   checkLanguage,
   authMiddleware,
-  authorize(USER_ROLES.MASTER_ADMIN),
   deletePickupAddress
 );
 
@@ -354,14 +363,7 @@ seller.delete(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-seller.get(
-  '/getAyMakanCities',
-  getAymaknCityValidator,
-  checkLanguage,
-  authMiddleware,
-  authorize(USER_ROLES.MASTER_ADMIN),
-  getAyMakanCities
-);
+seller.get('/getAyMakanCities', getAymaknCityValidator, checkLanguage, authMiddleware, getAyMakanCities);
 
 // SAVE SELLER PICKUP ADDRESS API
 /**
@@ -389,7 +391,7 @@ seller.post(
   savePickupAddressValidator,
   checkLanguage,
   authMiddleware,
-  authorize(USER_ROLES.MASTER_ADMIN),
+  verifySellerAccess,
   savePickupAddress
 );
 

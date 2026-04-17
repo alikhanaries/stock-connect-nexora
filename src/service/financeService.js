@@ -65,7 +65,7 @@ export const getTransactionHistory = async (
       orderId: r.orderId ?? null,
       orderValue: r.orderAmountWithoutVAT ?? null,
       commission,
-      netAmount: null,
+      netAmount: r.customersEarning ?? null,
       status: r.paymentStatus,
       dateTime: null,
     };
