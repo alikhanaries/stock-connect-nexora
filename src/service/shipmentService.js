@@ -33,7 +33,7 @@ import forwardShipmentService from './forwardShipmentService.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, declaredValue, deliveryData, collectionData, pieces = 0 } = shipmentData;
+    const { userId, declaredValue, collectionData, pieces = 0 } = shipmentData;
 
     // --- 1Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
@@ -62,8 +62,8 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       declared_value: declaredValue || 0,
       cod_amount: shipmentData.codAmount || 0,
       currency: shipmentData.currency || 'SAR',
-      delivery_name: deliveryData?.name || deliveryData?.email || '',
-      delivery_email: deliveryData?.email || '',
+      delivery_name: config.AYMAKAN_DELIVERY_NAME,
+      delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
       delivery_city: config.AYMAKAN_DELIVERY_CITY,
       delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
       delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
@@ -400,6 +400,8 @@ export const createFullShipmentService = async (shipmentData) => {
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
     const aymakanDeliveryAddress = {
+      name: config.AYMAKAN_DELIVERY_NAME,
+      email: config.AYMAKAN_DELIVERY_EMAIL,
       city: config.AYMAKAN_DELIVERY_CITY,
       address: config.AYMAKAN_DELIVERY_ADDRESS,
       country: config.AYMAKAN_DELIVERY_COUNTRY,
