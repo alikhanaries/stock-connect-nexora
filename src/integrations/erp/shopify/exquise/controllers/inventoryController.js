@@ -1,8 +1,8 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
-import { fetchAndStoreShopifyExquiseProducts } from '../service/productService.js';
+import { syncShopifyExquiseInventory } from '../service/inventoryService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
 
-export const fetchProducts = async (req, res) => {
+export const syncExquiseInventory = async (req, res) => {
   try {
     const sellerId = req.sellerId;
 
@@ -16,13 +16,13 @@ export const fetchProducts = async (req, res) => {
     }
 
     ///  Accepted for async/background processing
-    successResponse(res, 'Shopify product sync started in background', 202);
+    successResponse(res, 'Shopify inventory sync started in background', 202);
 
     setImmediate(async () => {
       try {
-        await fetchAndStoreShopifyExquiseProducts(sellerId, shopifyConfig);
+        await syncShopifyExquiseInventory(sellerId, shopifyConfig);
       } catch (err) {
-        console.error('Background sync failed:', err);
+        console.error('Background inventory sync failed:', err);
       }
     });
   } catch (error) {
