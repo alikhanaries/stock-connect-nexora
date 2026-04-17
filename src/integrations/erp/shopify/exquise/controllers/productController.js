@@ -18,7 +18,7 @@ export const fetchProducts = async (req, res) => {
     ///  Accepted for async/background processing
     successResponse(res, 'Shopify product sync started in background', 202);
 
-    process.nextTick(async () => {
+    setImmediate(async () => {
       try {
         await fetchAndStoreShopifyExquiseProducts(sellerId, shopifyConfig);
       } catch (err) {

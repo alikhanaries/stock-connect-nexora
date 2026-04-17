@@ -18,7 +18,7 @@ export const syncExquiseInventory = async (req, res) => {
     ///  Accepted for async/background processing
     successResponse(res, 'Shopify inventory sync started in background', 202);
 
-    process.nextTick(async () => {
+    setImmediate(async () => {
       try {
         await syncShopifyExquiseInventory(sellerId, shopifyConfig);
       } catch (err) {
