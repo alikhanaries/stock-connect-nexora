@@ -3,7 +3,8 @@ import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { fetchCatchProducts } from './shopifyService.js';
+import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
+import { fetchCatchProducts } from '../utils/fetch.js';
 import { formatProducts } from '../helpers/formatter.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
@@ -63,6 +64,12 @@ export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) =>
     if (categoryTrails.size > 0) {
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
+
+    await resolveHierarchyStatus(
+      sellerId,
+      canonicalProducts.map((p) => p.productSkuCode)
+    );
+
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
   } catch (err) {
     console.error('fetchAndStoreShopifyCatchProducts error:', err);
