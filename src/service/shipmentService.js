@@ -64,10 +64,11 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       currency: shipmentData.currency || 'SAR',
       delivery_name: deliveryData?.name || deliveryData?.email || '',
       delivery_email: deliveryData?.email || '',
-      delivery_city: process.env.AYMAKAN_DELIVERY_CITY,
-      delivery_address: process.env.AYMAKAN_DELIVERY_ADDRESS,
-      delivery_country: process.env.AYMAKAN_DELIVERY_COUNTRY,
-      delivery_phone: process.env.AYMAKAN_DELIVERY_PHONE,
+      delivery_city: config.AYMAKAN_DELIVERY_CITY,
+      delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
+      delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
+      delivery_postcode: config.AYMAKAN_DELIVERY_POSTCODE,
+      delivery_phone: config.AYMAKAN_DELIVERY_PHONE,
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
       ...(hasInternationalMetadata && {
@@ -399,10 +400,11 @@ export const createFullShipmentService = async (shipmentData) => {
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
     const aymakanDeliveryAddress = {
-      city: process.env.AYMAKAN_DELIVERY_CITY,
-      address: process.env.AYMAKAN_DELIVERY_ADDRESS,
-      country: process.env.AYMAKAN_DELIVERY_COUNTRY,
-      phone: process.env.AYMAKAN_DELIVERY_PHONE,
+      city: config.AYMAKAN_DELIVERY_CITY,
+      address: config.AYMAKAN_DELIVERY_ADDRESS,
+      country: config.AYMAKAN_DELIVERY_COUNTRY,
+      phone: config.AYMAKAN_DELIVERY_PHONE,
+      postcode: config.AYMAKAN_DELIVERY_POSTCODE,
     };
     const deliveryDetails = await saveDeliveryAddress(aymakanDeliveryAddress);
 
