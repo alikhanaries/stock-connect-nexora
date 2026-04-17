@@ -197,6 +197,9 @@ export const fetchCatchProducts = async (sellerData) => {
     const { url, apiVersion, accessToken } = sellerData;
 
     const shopData = await shopifyGraphQL(url, apiVersion, accessToken, SHOP_QUERY);
+    if (!shopData?.shop) {
+      throw new Error('Failed to fetch shop data');
+    }
     const currencyCode = shopData.shop.currencyCode;
 
     const bulkData = await shopifyGraphQL(url, apiVersion, accessToken, BULK_MUTATION, {
@@ -270,40 +273,46 @@ export const fetchCatchProducts = async (sellerData) => {
         continue;
       }
 
-      const variants = await Promise.all(
-        node._variants.map(async (variant) => {
-          const stock = variant._inventoryLevels?.[0]?.quantities?.find((q) => q.name === 'available')?.quantity ?? 0;
+      const BATCH_SIZE = 10;
+      const variants = [];
+      for (let i = 0; i < node._variants.length; i += BATCH_SIZE) {
+        const batch = node._variants.slice(i, i + BATCH_SIZE);
+        const batchResults = await Promise.all(
+          batch.map(async (variant) => {
+            const stock = variant._inventoryLevels?.[0]?.quantities?.find((q) => q.name === 'available')?.quantity ?? 0;
 
-          const color = variant.selectedOptions?.find((o) => o.name.toLowerCase() === 'renk')?.value || 'DEFAULT';
-          const size =
-            variant.selectedOptions?.find((o) => o.name.toLowerCase() === 'boyut' || o.name.toLowerCase() === 'beden')
-              ?.value || 'DEFAULT';
+            const color = variant.selectedOptions?.find((o) => o.name.toLowerCase() === 'renk')?.value || 'DEFAULT';
+            const size =
+              variant.selectedOptions?.find((o) => o.name.toLowerCase() === 'boyut' || o.name.toLowerCase() === 'beden')
+                ?.value || 'DEFAULT';
 
-          const finalPrice = await priceConverter(currencyCode, Number(variant.price));
+            const finalPrice = await priceConverter(currencyCode, Number(variant.price));
 
-          return {
-            id: variant.id.split('/').pop(),
-            title: variant.title,
-            price: finalPrice,
-            compareAtPrice: variant.compareAtPrice ? Number(variant.compareAtPrice) : null,
-            sku: variant.sku,
-            taxable: variant.taxable,
-            inventoryPolicy: variant.inventoryPolicy,
-            stock,
-            color,
-            size,
-            options: variant.selectedOptions,
-            barcode: variant.barcode,
-            image: variant.image
-              ? {
-                  id: variant.image.id,
-                  url: variant.image.url,
-                  altText: variant.image.altText || '',
-                }
-              : null,
-          };
-        })
-      );
+            return {
+              id: variant.id.split('/').pop(),
+              title: variant.title,
+              price: finalPrice,
+              compareAtPrice: variant.compareAtPrice ? Number(variant.compareAtPrice) : null,
+              sku: variant.sku,
+              taxable: variant.taxable,
+              inventoryPolicy: variant.inventoryPolicy,
+              stock,
+              color,
+              size,
+              options: variant.selectedOptions,
+              barcode: variant.barcode,
+              image: variant.image
+                ? {
+                    id: variant.image.id,
+                    url: variant.image.url,
+                    altText: variant.image.altText || '',
+                  }
+                : null,
+            };
+          })
+        );
+        variants.push(...batchResults);
+      }
 
       allProducts.push({
         id: node.id.split('/').pop(),
