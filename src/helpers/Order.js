@@ -377,7 +377,7 @@ export const buildStatuses = ({ line, existingSku }) => {
 const sanitizeOrdersData = async (orders) => {
   const orderIds = [];
   const skuSet = new Set();
-
+  orders = orders?.filter((item) => item.Id === 1723);
   // Step 1: collect IDs & SKUs
   orders.forEach((order) => {
     if (order.Id) orderIds.push(order.Id);
@@ -438,9 +438,10 @@ const sanitizeOrdersData = async (orders) => {
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
             unitPriceInclVat: line.UnitPriceInclVat ?? 0,
-            status: normalizeSkuStatus(line.Status),
             statusBreakdown: buildStatusBreakdown({ line, existingSku }),
-
+            status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
+              ? existingSku.status
+              : normalizeSkuStatus(line.Status),
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
 
