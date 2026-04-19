@@ -1,3 +1,4 @@
+import { Readable } from 'stream';
 import mongoose from 'mongoose';
 import Shipment from '../models/Shipment/Shipment.js';
 import User from '../models/User.js';
@@ -2777,6 +2778,29 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
   // 4️ Anything partially done
   return 'IN_PROGRESS';
 };
+
+export const downloadShipmentLabelService = async (shipmentId, sellerId, res) => {
+  const shipment = await Shipment.findOne({ _id: shipmentId, sellerId }).select('extraData airWaybillNo').lean();
+
+  if (!shipment) return { success: false, message: 'Shipment not found', status: 404 };
+
+  const pdfLabelUrl = shipment.extraData?.aymakan?.shipping?.pdf_label;
+  if (!pdfLabelUrl) return { success: false, message: 'PDF label not available for this shipment', status: 404 };
+
+  const pdfResponse = await fetch(pdfLabelUrl);
+  if (!pdfResponse.ok) return { success: false, message: 'Failed to fetch PDF from Aymakan', status: 502 };
+
+  const filename = `label-${shipment.airWaybillNo || shipmentId}.pdf`;
+  const contentLength = pdfResponse.headers.get('content-length');
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  if (contentLength) res.setHeader('Content-Length', contentLength);
+
+  Readable.fromWeb(pdfResponse.body).pipe(res);
+  return { success: true };
+};
+
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -2796,4 +2820,5 @@ export default {
   syncReturnShipmentStatus,
   createManualShipmentService,
   getChannelEngineShipmentDetailsService,
+  downloadShipmentLabelService,
 };

@@ -7,6 +7,7 @@ import {
   cancelShipmentService,
   createReverseShipmentService,
   createManualShipmentService,
+  downloadShipmentLabelService,
 } from '#service/shipmentService.js';
 import { errorResponse, successResponse, failResponse } from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
@@ -270,6 +271,21 @@ export const exportShipmentController = async (req, res) => {
       return;
     }
 
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+export const downloadAymakanShipmentLabel = async (req, res) => {
+  try {
+    const { shipmentId } = req.params;
+    const { sellerId } = req.query;
+
+    const result = await downloadShipmentLabelService(shipmentId, sellerId, res);
+
+    if (!result.success) {
+      return failResponse(res, result.message, result.status || 400);
+    }
+  } catch (error) {
     return errorResponse(res, error.message, 500);
   }
 };
