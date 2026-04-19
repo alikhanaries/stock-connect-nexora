@@ -22,7 +22,7 @@ import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 import { validateFullShipmentProducts } from '#util/validateShipmentProductQuantity.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
-import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
+import { ORDER_STATUS_MAP, ORDER_PRIORITY, toInProgressStatus } from '#constants/common.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
@@ -968,7 +968,7 @@ export const ayMakanWebHookService = async (data) => {
       (finalOrderStatus === 'NEW' && !['DELIVERED', 'CLOSED', 'CANCELED', 'PAYMENT_FAILED'].includes(order.status));
 
     if (canUpdate) {
-      await Order.findByIdAndUpdate(order._id, { status: finalOrderStatus });
+      await Order.findByIdAndUpdate(order._id, { status: toInProgressStatus(finalOrderStatus) });
     }
 
     // ORDER LOGS (STATUS + QTY AWARE + CLOSED AWARE)
@@ -1369,13 +1369,8 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }
 
-    // Step 6: Determine final order status and save order in one operation
-    const hasActiveShipment = await Shipment.exists({
-      orderId,
-      status: { $ne: 'CANCELED' },
-    });
-
-    order.status = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
+    // Step 6: Update order status
+    order.status = ORDER_STATUS_MAP.IN_PROGRESS;
     await order.save();
 
     // Order logs
@@ -1658,7 +1653,7 @@ async function handleShipmentStatusUpdate({ shipment, tracking, shipmentStatus, 
   // Apply only if moving forward
   if (ORDER_PRIORITY.indexOf(finalOrderStatus) > ORDER_PRIORITY.indexOf(order.status)) {
     await Order.findByIdAndUpdate(orderId, {
-      $set: { status: finalOrderStatus },
+      $set: { status: toInProgressStatus(finalOrderStatus) },
     });
 
     const orderLog = createLogEntry(finalOrderStatus, airWaybillNo, tracking, trackingInfo, true);
@@ -2208,10 +2203,8 @@ export const createManualShipmentService = async (shipmentData) => {
         return shippedQty > 0 && shippedQty < availableQty;
       });
 
-    if (allShipped) {
-      await Order.findByIdAndUpdate(orderId, { status: 'SHIPPED' });
-    } else if (partiallyShipped) {
-      await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' });
+    if (allShipped || partiallyShipped) {
+      await Order.findByIdAndUpdate(orderId, { status: ORDER_STATUS_MAP.IN_PROGRESS });
     }
 
     const updatedSkuList = updatedOrder.orderSkuList.skuList.map((sku) => {

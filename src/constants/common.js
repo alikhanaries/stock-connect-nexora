@@ -71,6 +71,8 @@ export const ORDER_STATUS_MAP = {
   DELIVERED: 'DELIVERED',
 };
 
+export const toInProgressStatus = () => 'IN_PROGRESS';
+
 export const syncFunctions = {
   ORDER: 'lastOrderSync',
   PRODUCT: 'lastProductSync',
