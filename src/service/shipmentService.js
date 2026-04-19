@@ -504,7 +504,7 @@ export const createFullShipmentService = async (shipmentData) => {
 
     const logEntry = {
       status: 'SHIPMENT CREATED',
-      description: `Shipment created with AWB - ${trackingNumber}. Items shipped: ${qtyMessage}.`,
+      description: `Shipment created at Aymakan with AWB - ${trackingNumber}. Items to be picked: ${qtyMessage}.`,
       createdAt: new Date(),
     };
 
@@ -900,12 +900,14 @@ export const ayMakanWebHookService = async (data) => {
 
       // AWB based message
       if (shipmentStatus === 'SHIPMENT_PROCESSED') {
-        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been shipped by Aymakan`);
+        descriptionParts.push(
+          `Shipment with AWB ${shipmentData.airWaybillNo} has been picked by Aymakan from collection point`
+        );
       }
 
       if (shipmentStatus === 'DELIVERED' || shipmentStatus === 'HUB_RECIEVED') {
         descriptionParts.push(
-          `Shipment with AWB ${shipmentData.airWaybillNo} has been delivered to Omniful by Aymakan`
+          `Shipment with AWB ${shipmentData.airWaybillNo} has been delivered at ware house by Aymakan`
         );
       }
 
@@ -941,8 +943,33 @@ export const ayMakanWebHookService = async (data) => {
         descriptionParts.push('Order in progress');
       }
 
+      const logEntries = [];
+
+      // First log
       const description = `${descriptionParts.join('. ')}.`;
 
+      logEntries.push({
+        status: finalOrderStatus,
+        shippedQty: shippedDelta || 0,
+        deliveredQty: deliveredDelta || 0,
+        canceledQty: canceledDelta || 0,
+        description,
+        createdAt: convetDateToUTC(new Date()),
+      });
+
+      // Second log (only if omnifulResponse exists)
+      if (omnifulResponse) {
+        logEntries.push({
+          status: finalOrderStatus,
+          shippedQty: shippedDelta || 0,
+          deliveredQty: deliveredDelta || 0,
+          canceledQty: canceledDelta || 0,
+          description: `Shipment Order with id ${omnifulResponse?.id} has been generated at Omniful`,
+          createdAt: convetDateToUTC(new Date()),
+        });
+      }
+
+      // Single DB call
       await OrderLogs.updateOne(
         {
           orderId: order._id,
@@ -950,14 +977,7 @@ export const ayMakanWebHookService = async (data) => {
         },
         {
           $push: {
-            details: {
-              status: finalOrderStatus,
-              shippedQty: shippedDelta || 0,
-              deliveredQty: deliveredDelta || 0,
-              canceledQty: canceledDelta || 0,
-              description,
-              createdAt: convetDateToUTC(new Date()),
-            },
+            details: { $each: logEntries },
           },
           $setOnInsert: {
             orderId: order._id,
