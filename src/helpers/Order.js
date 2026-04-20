@@ -586,7 +586,7 @@ const sanitizeOrdersData = async (orders) => {
 
       status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
         ? existingOrder.status
-        : normalizeOrderStatus(data?.Status),
+        : (data?.Status ?? 'IN_PROGRESS'),
     };
 
     return {
