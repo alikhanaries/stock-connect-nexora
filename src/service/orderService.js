@@ -389,7 +389,7 @@ export const getOrderById = async (id) => {
         trackingNumber: shipment.airWaybillNo || null,
         omnifulTrackingNo: shipment?.omniful?.trackingNo || null,
         shipmentMode: shipment.shipmentMethod || 'AYMAKAN',
-        documentId: shipment.documentId,
+        documentId: shipment.invoiceDocumentId ?? null,
         lineItems:
           shipment.products?.map((p) => {
             const sku = allOrderSkus.find((s) => s.merchantProductNo === p.merchantProductNo);
