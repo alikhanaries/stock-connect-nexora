@@ -1,4 +1,5 @@
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
+import { ORDER_STATUS_MAP } from '#root/src/constants/common.js';
 import OrderLogs from '#root/src/models/OrderLogs.js';
 import Order from '#root/src/models/Orders.js';
 import DeliveryAddress from '#root/src/models/Shipment/DeliveryAdress.js';
@@ -333,10 +334,8 @@ export const createManualShipmentService = async (shipmentData) => {
         return shippedQty > 0 && shippedQty < availableQty;
       });
 
-    if (allShipped) {
-      await Order.findByIdAndUpdate(orderId, { status: 'SHIPPED' });
-    } else if (partiallyShipped) {
-      await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' });
+    if (allShipped || partiallyShipped) {
+      await Order.findByIdAndUpdate(orderId, { status: ORDER_STATUS_MAP.IN_PROGRESS });
     }
 
     const updatedSkuList = updatedOrder.orderSkuList.skuList.map((sku) => {
