@@ -2,7 +2,7 @@ import SellerOrder from '#root/src/models/OrderSchema/SellerOrder.js';
 import Order from '#root/src/models/Orders.js';
 export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
   try {
-    const { orderId, orderDate, channelId, channelName, status, orderSkuList } = orderPayload;
+    const { orderId, orderDate, channelId, channelName, orderSkuList } = orderPayload;
 
     const skuList = orderSkuList?.skuList || [];
 
@@ -83,6 +83,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
       sellerMap[sellerId].statusBreakdown.canceled += canceled;
       sellerMap[sellerId].statusBreakdown.returned += returned;
       sellerMap[sellerId].statusBreakdown.shipmentCreated += shipmentCreated;
+      sellerMap[sellerId].status = sku.status;
     });
 
     if (!Object.keys(sellerMap).length) {
@@ -114,7 +115,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
               orderDate,
               channelId,
               channelName,
-              status,
+              status: data.status,
 
               products: data.products, //  NEW
 

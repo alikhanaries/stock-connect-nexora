@@ -430,6 +430,10 @@ const sanitizeOrdersData = async (orders) => {
           sellerIdSet.add(String(sellerId));
 
           const sellerOrderId = `${data.Id}_${sellerId}`;
+          const extraStatus = getExtraStatus(line?.ExtraData);
+
+          const mainStatus =
+            extraStatus && extraStatus === 'delivered' ? extraStatus.toUpperCase() : normalizeSkuStatus(line.Status);
 
           return {
             id: line.Id,
@@ -438,9 +442,10 @@ const sanitizeOrdersData = async (orders) => {
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
             unitPriceInclVat: line.UnitPriceInclVat ?? 0,
-            status: normalizeSkuStatus(line.Status),
             statusBreakdown: buildStatusBreakdown({ line, existingSku }),
-
+            status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED', 'DELIVERED'].includes(existingSku?.status)
+              ? existingSku.status
+              : mainStatus,
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
 
