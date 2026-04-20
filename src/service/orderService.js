@@ -6,7 +6,6 @@ import {
   SELECTED_FIELDS,
   BLOCKED_STATUSES,
   ORDER_EXPORT_EXCLUDED_COLUMNS,
-  toInProgressStatus,
 } from '#constants/common.js';
 import orderhelper, {
   flattenAggregatedOrder,
@@ -48,7 +47,7 @@ const formatOrder = (order, channelImage) => {
     placedOn: order.orderDate,
     email: order.orderCustomer?.email,
     phoneNumber: order.orderCustomer?.phone,
-    status: toInProgressStatus(order.status),
+    status: order.status,
     platform: order.channelName,
     paymentMethod: order.paymentDetails?.paymentMethod,
     currencyCode: order.paymentDetails?.currencyCode,
@@ -746,7 +745,7 @@ const transformOrderResponse = (allOrderSkus, response) => {
     paymentInfo,
     customerInfo,
     shippingAddress,
-    status: toInProgressStatus(data.status),
+    status: data.status,
 
     // Calculated values
     subtotal: truncate(totals.subtotal),
@@ -1043,7 +1042,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA') => {
       else orderStatus = ORDER_STATUS_MAP.CANCELED;
     }
 
-    await Order.updateOne({ _id: orderId }, { $set: { status: toInProgressStatus(orderStatus) } });
+    await Order.updateOne({ _id: orderId }, { $set: { status: orderStatus } });
 
     // ----------------------------------------------------
     // LOG
@@ -1201,7 +1200,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     const processChunk = async (chunk) => {
       return chunk.map((order) => {
         // Flatten the aggregated order data
-        const flattenedOrder = flattenAggregatedOrder({ ...order, status: toInProgressStatus(order.status) });
+        const flattenedOrder = flattenAggregatedOrder(order);
 
         // Get organized row data
         const rowData = getOrganizedOrderRowData(flattenedOrder, organizedHeaders);
