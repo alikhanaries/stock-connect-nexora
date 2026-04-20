@@ -2777,6 +2777,18 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
   // 4️ Anything partially done
   return 'IN_PROGRESS';
 };
+
+export const downloadShipmentLabelService = async (shipmentId, sellerId) => {
+  const shipment = await Shipment.findOne({ _id: shipmentId, sellerId }).select('extraData').lean();
+
+  if (!shipment) return { success: false, message: 'Shipment not found', status: 404 };
+
+  const pdfLabelUrl = shipment.extraData?.aymakan?.shipping?.pdf_label;
+  if (!pdfLabelUrl) return { success: false, message: 'PDF label not available for this shipment', status: 404 };
+
+  return { success: true, data: { url: pdfLabelUrl } };
+};
+
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -2796,4 +2808,5 @@ export default {
   syncReturnShipmentStatus,
   createManualShipmentService,
   getChannelEngineShipmentDetailsService,
+  downloadShipmentLabelService,
 };
