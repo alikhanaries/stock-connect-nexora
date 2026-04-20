@@ -9,6 +9,7 @@ import ramseyApiRoutes from './integrations/erp/gurmenRamsey/routes/api.js';
 import eliteStringLaIntimoApiRoutes from './integrations/erp/eliteStringLaIntimo/routes/api.js';
 import shopifyRoutes from './integrations/erp/shopify/routes/api.js';
 import unicommerceRoutes from './integrations/erp/unicommerce/routes/api.js';
+import xokidsRoutes from './integrations/erp/xokids/routes/api.js';
 import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
@@ -52,6 +53,7 @@ app.use('/api/erp/ramsey', ramseyApiRoutes);
 app.use('/api/erp/elite_string_la_intimo', eliteStringLaIntimoApiRoutes);
 app.use('/api/erp/shopify', shopifyRoutes);
 app.use('/api/erp/unicommerce', unicommerceRoutes);
+app.use('/api/erp/xokids', xokidsRoutes);
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
