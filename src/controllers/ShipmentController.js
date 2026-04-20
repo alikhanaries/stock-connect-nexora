@@ -280,11 +280,13 @@ export const downloadAymakanShipmentLabel = async (req, res) => {
     const { shipmentId } = req.params;
     const { sellerId } = req.query;
 
-    const result = await downloadShipmentLabelService(shipmentId, sellerId, res);
+    const result = await downloadShipmentLabelService(shipmentId, sellerId);
 
     if (!result.success) {
       return failResponse(res, result.message, result.status || 400);
     }
+
+    return successResponse(res, 'PDF label fetched successfully', 200, result.data);
   } catch (error) {
     return errorResponse(res, error.message, 500);
   }
