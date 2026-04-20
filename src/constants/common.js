@@ -71,12 +71,6 @@ export const ORDER_STATUS_MAP = {
   DELIVERED: 'DELIVERED',
 };
 
-export const toInProgressStatus = (status) => {
-  const upper = status?.toUpperCase();
-  if (upper === 'NEW' || upper === 'CLOSED') return upper;
-  return 'IN_PROGRESS';
-};
-
 export const syncFunctions = {
   ORDER: 'lastOrderSync',
   PRODUCT: 'lastProductSync',
