@@ -473,7 +473,6 @@ const sanitizeOrdersData = async (orders) => {
               ? existingSku.status
               : mainStatus,
             statusBreakdown: buildStatusBreakdown({ line, existingSku }),
-
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
 

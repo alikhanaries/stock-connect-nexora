@@ -783,7 +783,7 @@ export const ayMakanWebHookService = async (data) => {
       };
     }
 
-    if (shipmentStatus === 'DELIVERED' || shipmentStatus === 'HUB_RECIEVED') {
+    if (shipmentStatus === 'HUB_RECIEVED') {
       omnifulResponse = await forwardShipmentService.forwardAymakanShipment(shipmentData);
       await safeExecute(async () => {}, 'Updating delivery state in ChannelEngine');
     }
@@ -816,12 +816,7 @@ export const ayMakanWebHookService = async (data) => {
     let deliveredDelta = 0;
     let canceledDelta = 0;
 
-    if (
-      shipmentStatus === 'SHIPMENT_PROCESSED' ||
-      shipmentStatus === 'DELIVERED' ||
-      shipmentStatus === 'CANCELED' ||
-      shipmentStatus === 'HUB_RECIEVED'
-    ) {
+    if (shipmentStatus === 'SHIPMENT_PROCESSED' || shipmentStatus === 'CANCELED' || shipmentStatus === 'HUB_RECIEVED') {
       const orderDoc = await Order.findById(shipmentData.orderId);
 
       if (orderDoc?.orderSkuList?.skuList?.length) {
@@ -887,7 +882,7 @@ export const ayMakanWebHookService = async (data) => {
       // forward progress
       nextPriority > currentPriority ||
       // reset to NEW only if not final
-      (finalOrderStatus === 'NEW' && !['DELIVERED', 'CLOSED', 'CANCELED', 'PAYMENT_FAILED'].includes(order.status));
+      (finalOrderStatus === 'NEW' && !['HUB_RECIEVED', 'CLOSED', 'CANCELED', 'PAYMENT_FAILED'].includes(order.status));
 
     if (canUpdate) {
       await Order.findByIdAndUpdate(order._id, { status: finalOrderStatus });
@@ -905,7 +900,7 @@ export const ayMakanWebHookService = async (data) => {
         );
       }
 
-      if (shipmentStatus === 'DELIVERED' || shipmentStatus === 'HUB_RECIEVED') {
+      if (shipmentStatus === 'HUB_RECIEVED') {
         descriptionParts.push(
           `Shipment with AWB ${shipmentData.airWaybillNo} has been delivered at ware house by Aymakan`
         );
@@ -938,7 +933,7 @@ export const ayMakanWebHookService = async (data) => {
       } else if (finalOrderStatus === 'NEW') {
         descriptionParts.push('All shipments canceled, order reset');
       } else if (finalOrderStatus === 'SHIPMENT_PROCESSED' && shippedDelta === 0) {
-        descriptionParts.push('All shippable items shipped');
+        descriptionParts.push('All shippable items to be shipped');
       } else if (finalOrderStatus === 'IN_PROGRESS' && descriptionParts.length === 0) {
         descriptionParts.push('Order in progress');
       }
@@ -1321,7 +1316,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       sku.statusBreakdown.confirmed += qty;
 
       // SKU status correction
-      sku.status = sku.statusBreakdown.confirmed === sku.quantity ? 'NEW' : 'IN_PROGRESS';
+      sku.status = 'IN_PROGRESS';
 
       const stockResult = await increaseStock(product.merchantProductNo, qty, shipment.sellerId, sellerName, 'CE');
       if (!stockResult?.success) {
@@ -1333,13 +1328,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }
 
-    // Step 6: Determine final order status and save order in one operation
-    const hasActiveShipment = await Shipment.exists({
-      orderId,
-      status: { $ne: 'CANCELED' },
-    });
-
-    order.status = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
+    order.status = 'IN_PROGRESS';
     await order.save();
 
     // Order logs
@@ -2012,7 +2001,7 @@ export const createManualShipmentService = async (shipmentData) => {
 
     const existingShipments = await Shipment.find({
       orderId,
-      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'] },
+      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED', 'OUT_FOR_DELIVERY'] },
       'products.orderLineId': { $in: productLineIds },
     }).lean();
 
@@ -2130,7 +2119,7 @@ export const createManualShipmentService = async (shipmentData) => {
       shippedFromCountryCode,
       products: validatedProducts,
       pieces: totalPieces,
-      status: 'SHIPPED',
+      status: 'OUT_FOR_DELIVERY',
       submissionDate: new Date(),
       shipmentMethod: 'MANUAL',
       isMerchantCreator: true,
