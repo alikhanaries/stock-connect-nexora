@@ -72,15 +72,16 @@ const shipmentSchema = new mongoose.Schema(
       default: 'FORWARD',
       index: true,
     },
-    omnifulStatusCode: {
-      type: String,
-      index: true,
+    omniful: {
+      statusCode: { type: String, index: true },
+      trackingNo: { type: String, index: true },
     },
   },
   {
     timestamps: true,
   }
 );
+shipmentSchema.index({ _id: 1, sellerId: 1 });
 
 const Shipment = mongoose.model('Shipment', shipmentSchema);
 export default Shipment;

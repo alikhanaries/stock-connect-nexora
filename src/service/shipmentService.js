@@ -33,7 +33,7 @@ import forwardShipmentService from './forwardShipmentService.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, declaredValue, deliveryData, collectionData, pieces = 0 } = shipmentData;
+    const { userId, declaredValue, collectionData, pieces = 0 } = shipmentData;
 
     // --- 1Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
@@ -49,6 +49,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       [`${prefix}_email`]: data?.email || '',
       [`${prefix}_city`]: data?.city || '',
       [`${prefix}_address`]: data?.address || '',
+      [`${prefix}_postcode`]: data?.postcode ?? null,
       [`${prefix}_country`]: data?.country || '',
       [`${prefix}_phone`]: data?.phone || '',
     });
@@ -62,7 +63,13 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       declared_value: declaredValue || 0,
       cod_amount: shipmentData.codAmount || 0,
       currency: shipmentData.currency || 'SAR',
-      ...buildPartyPayload(deliveryData, 'delivery'),
+      delivery_name: config.AYMAKAN_DELIVERY_NAME,
+      delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
+      delivery_city: config.AYMAKAN_DELIVERY_CITY,
+      delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
+      delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
+      delivery_postcode: config.AYMAKAN_DELIVERY_POSTCODE,
+      delivery_phone: config.AYMAKAN_DELIVERY_PHONE,
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
       ...(hasInternationalMetadata && {
@@ -74,7 +81,6 @@ export const createShipmentWithAymakan = async (shipmentData) => {
         },
       }),
     };
-
     // ---  Call Aymakan API ---
     const result = await createAymakanShipment(payload);
 
@@ -394,7 +400,16 @@ export const createFullShipmentService = async (shipmentData) => {
     // Step 9: Delivery & Pickup
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
-    const deliveryDetails = await saveDeliveryAddress(deliveryData);
+    const aymakanDeliveryAddress = {
+      name: config.AYMAKAN_DELIVERY_NAME,
+      email: config.AYMAKAN_DELIVERY_EMAIL,
+      city: config.AYMAKAN_DELIVERY_CITY,
+      address: config.AYMAKAN_DELIVERY_ADDRESS,
+      country: config.AYMAKAN_DELIVERY_COUNTRY,
+      phone: config.AYMAKAN_DELIVERY_PHONE,
+      postcode: config.AYMAKAN_DELIVERY_POSTCODE,
+    };
+    const deliveryDetails = await saveDeliveryAddress(aymakanDeliveryAddress);
 
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
@@ -1257,7 +1272,15 @@ const transformShipmentResponse = (response) => {
     customerInfo,
     status: data.status,
     shipmentDate: data?.submissionDate,
-    products: data.products,
+    products: data.products?.map((p) => ({
+      merchantProductNo: p.merchantProductNo,
+      channelProductNo: p.channelProductNo,
+      name: p.productInfo?.name ?? p.description ?? null,
+      imageUrl: p.productInfo?.images?.[0] ?? null,
+      quantity: p.quantity,
+      status: p.status,
+      hsCode: p.hsCode ?? p.merchantProductNo,
+    })),
     airWaybillNo: data.airWaybillNo,
     merchantShipmentNo: data.merchantShipmentNo,
     createdAt: data?.createdAt,
@@ -2763,6 +2786,18 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
   // 4️ Anything partially done
   return 'IN_PROGRESS';
 };
+
+export const downloadShipmentLabelService = async (shipmentId, sellerId) => {
+  const shipment = await Shipment.findOne({ _id: shipmentId, sellerId }).select('extraData').lean();
+
+  if (!shipment) return { success: false, message: 'Shipment not found', status: 404 };
+
+  const pdfLabelUrl = shipment.extraData?.aymakan?.shipping?.pdf_label;
+  if (!pdfLabelUrl) return { success: false, message: 'PDF label not available for this shipment', status: 404 };
+
+  return { success: true, data: { url: pdfLabelUrl } };
+};
+
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -2782,4 +2817,5 @@ export default {
   syncReturnShipmentStatus,
   createManualShipmentService,
   getChannelEngineShipmentDetailsService,
+  downloadShipmentLabelService,
 };

@@ -394,3 +394,39 @@ export const handleOmnifulOrderWebhook = async (req, res) => {
     return Responses.errorResponse(res, error.message, 500);
   }
 };
+
+export const getAnalyticsOrders = async (req, res) => {
+  try {
+    const query = req.validatedQuery;
+
+    const { sellerId = [], channels = [], status = [], fromDate, toDate } = query;
+
+    const finalQuery = {
+      ...query,
+      sellerId,
+      channels: channels.includes('all') ? [] : channels,
+      status,
+      fromDate,
+      toDate,
+    };
+
+    const {
+      data = [],
+      appliedFilters = {},
+      pagination = {},
+      latestOrderSyncDate = null,
+    } = await orderService.getAnalyticsOrders(finalQuery);
+
+    return Responses.successResponse(res, data.length ? 'Orders fetched successfully' : 'No orders found', 200, {
+      content: data,
+      appliedFilters,
+      latestOrderSyncDate,
+      ...pagination,
+    });
+  } catch (error) {
+    console.error(' Controller Error:', error);
+    errorLog(error);
+
+    return Responses.errorResponse(res, error?.message || 'Something went wrong', 500);
+  }
+};

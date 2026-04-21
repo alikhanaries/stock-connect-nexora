@@ -11,6 +11,7 @@ import {
   cancelPartialOrder,
   generateDocumentId,
   exportOrders,
+  getAnalyticsOrders,
   handleOmnifulOrderWebhook,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
@@ -24,10 +25,14 @@ import {
   cancelFullOrderValidator,
   cancelPartialOrderValidator,
   exportOrdersValidator,
+  getAnalyticsOrdersValidator,
   generateDocumentIdValidator,
 } from '#validations/orders.js';
 import upload from '#helpers/FileHandler.js';
 const router = express.Router();
+
+// GET ALL ANALYTICS ORDERS
+router.get('/getAnalyticsOrders', getAnalyticsOrdersValidator, checkLanguage, authMiddleware, getAnalyticsOrders);
 
 /**
  * @swagger
