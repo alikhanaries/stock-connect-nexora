@@ -6,7 +6,8 @@ import { createGurmanKipAdapter } from '../gurmenKip/gurmanAdapter.js';
 import { createGurmanRamseyAdapter } from '../gurmenRamsey/ramseyAdapter.js';
 import { createOcpAdapter } from '../ocp/ocpAdapter.js';
 import { ocpConfig as defualtOcpConfig } from '../ocp/config/config.js';
-
+import { createXokidsAdapter } from '../xokids/xokidsAdapter.js';
+import { xokidsConfig as defaultXokidsConfig } from '../xokids/config/config.js';
 export const createERPAdapter = (type, configOverride = null) => {
   switch (type.toLowerCase()) {
     case 'nebim':
@@ -17,6 +18,8 @@ export const createERPAdapter = (type, configOverride = null) => {
       return createGurmanRamseyAdapter(configOverride || defaultGurmanRamseyConfig);
     case 'ocp':
       return createOcpAdapter(configOverride || defualtOcpConfig);
+    case 'xokids':
+      return createXokidsAdapter(configOverride || defaultXokidsConfig);
     default:
       throw new Error(`Unknown ERP type: ${type}`);
   }

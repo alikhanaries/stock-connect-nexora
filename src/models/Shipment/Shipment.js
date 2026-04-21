@@ -81,6 +81,7 @@ const shipmentSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+shipmentSchema.index({ _id: 1, sellerId: 1 });
 
 const Shipment = mongoose.model('Shipment', shipmentSchema);
 export default Shipment;
