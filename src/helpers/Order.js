@@ -3,7 +3,7 @@ import Product from '../models/Product.js';
 import { upsertSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
-
+import OrderLogs from '#models/OrderLogs.js';
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -403,6 +403,7 @@ const sanitizeOrdersData = async (orders) => {
   //  final outputs
   const bulkOps = [];
   const sellerOrderPromises = [];
+  const pendingLogs = [];
 
   //  LOOP (NO async map)
   for (const data of orders) {
@@ -431,10 +432,36 @@ const sanitizeOrdersData = async (orders) => {
 
           const sellerOrderId = `${data.Id}_${sellerId}`;
           const extraStatus = getExtraStatus(line?.ExtraData);
+          const normalizedExtraStatus = extraStatus?.toLowerCase();
 
-          const mainStatus =
-            extraStatus && extraStatus === 'delivered' ? extraStatus.toUpperCase() : normalizeSkuStatus(line.Status);
+          const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
 
+          //  DELIVERY DETECTION
+
+          const alreadyDelivered = existingSku?.status === 'DELIVERED';
+          const isNowDelivered = normalizedExtraStatus === 'delivered' && !alreadyDelivered;
+          //  RETURN DETECTION
+          const alreadyReturned = existingSku?.status === 'RETURNED';
+          const isNowReturned = normalizedExtraStatus === 'returned' && !alreadyReturned;
+
+          if (isNowDelivered) {
+            pendingLogs.push({
+              orderId: data.Id, // string ID (important)
+              sellerId,
+              description: `SKU ${line.MerchantProductNo} has been delivered`,
+              createdAt: new Date(),
+              status: 'DELIVERED',
+            });
+          }
+          if (isNowReturned) {
+            pendingLogs.push({
+              orderId: data.Id,
+              sellerId,
+              description: `SKU ${line.MerchantProductNo} has been returned`,
+              createdAt: new Date(),
+              status: 'RETURNED',
+            });
+          }
           return {
             id: line.Id,
             sellerOrderId,
@@ -442,10 +469,10 @@ const sanitizeOrdersData = async (orders) => {
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
             unitPriceInclVat: line.UnitPriceInclVat ?? 0,
-            statusBreakdown: buildStatusBreakdown({ line, existingSku }),
             status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED', 'DELIVERED'].includes(existingSku?.status)
               ? existingSku.status
               : mainStatus,
+            statusBreakdown: buildStatusBreakdown({ line, existingSku }),
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
 
@@ -644,8 +671,56 @@ const sanitizeOrdersData = async (orders) => {
     });
   }
 
-  //  wait for seller orders
+  //  STEP 1: create/update orders FIRST
+  if (bulkOps.length) {
+    await Order.bulkWrite(bulkOps);
+  }
+
   await Promise.all(sellerOrderPromises);
+
+  //  STEP 2: fetch orders again to get ObjectIds
+  const insertedOrders = await Order.find({
+    orderId: { $in: pendingLogs.map((l) => l.orderId) },
+  }).select('_id orderId');
+
+  const orderIdMap = new Map(insertedOrders.map((o) => [String(o.orderId), o._id]));
+
+  //  STEP 3: build logs
+  const orderLogsBulkOps = [];
+
+  for (const log of pendingLogs) {
+    const orderObjectId = orderIdMap.get(String(log.orderId));
+    if (!orderObjectId) continue;
+
+    orderLogsBulkOps.push({
+      updateOne: {
+        filter: {
+          orderId: orderObjectId,
+          sellerId: log.sellerId,
+          'details.description': { $ne: log.description },
+        },
+        update: {
+          $push: {
+            details: {
+              status: log.status,
+              description: log.description,
+              createdAt: log.createdAt,
+            },
+          },
+          $setOnInsert: {
+            orderId: orderObjectId,
+            sellerId: log.sellerId,
+          },
+        },
+        upsert: true,
+      },
+    });
+  }
+
+  //  STEP 4: execute logs
+  if (orderLogsBulkOps.length) {
+    await OrderLogs.bulkWrite(orderLogsBulkOps);
+  }
 
   return bulkOps;
 };

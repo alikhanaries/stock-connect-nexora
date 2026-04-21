@@ -1,9 +1,11 @@
 import Return from '../models/Return.js';
+import OrderLogs from '#models/OrderLogs.js';
 import Order from '../models/Orders.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import forwardShipmentService from './forwardShipmentService.js';
 import { updateOrderSkuStatusToShipped } from '#root/src/service/orderService.js';
 import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
+import { convetDateToUTC } from '#root/src/helpers/Common.js';
 export const handleOmnifulQCWebhook = async (webhookPayload) => {
   try {
     const {
@@ -176,7 +178,29 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
 
     if (omnifulStatusCode === 'ready_to_ship') {
       await forwardShipmentService.createShipmentwithCE(shipmentData);
+
+      await OrderLogs.updateOne(
+        {
+          orderId: shipmentData?.orderId,
+          sellerId: shipmentData?.sellerId,
+        },
+        {
+          $push: {
+            details: {
+              status: 'SHIPMENT_SHIPPED',
+              description: `Shipment with Omniful Tracking Id - ${awbNumber} has been shipped`,
+              createdAt: convetDateToUTC(new Date()),
+            },
+          },
+          $setOnInsert: {
+            orderId: shipmentData?.orderId,
+            sellerId: shipmentData?.sellerId,
+          },
+        },
+        { upsert: true }
+      );
     }
+
     await syncSellerOrdersFromOrder(shipmentData?.orderId);
 
     return {

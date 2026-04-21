@@ -1386,7 +1386,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
         $push: {
           details: {
             status: orderStatus,
-            description: `Partial cancel: ${products.map((p) => `${p.merchantProductNo} x${p.quantity}`).join(', ')}`,
+            description: `Canceled: ${products.map((p) => `${p.merchantProductNo} x ${p.quantity}`).join(', ')}`,
             createdAt: new Date(),
           },
         },
