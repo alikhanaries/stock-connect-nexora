@@ -49,6 +49,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       [`${prefix}_email`]: data?.email || '',
       [`${prefix}_city`]: data?.city || '',
       [`${prefix}_address`]: data?.address || '',
+      [`${prefix}_postcode`]: data?.postcode ?? null,
       [`${prefix}_country`]: data?.country || '',
       [`${prefix}_phone`]: data?.phone || '',
     });
