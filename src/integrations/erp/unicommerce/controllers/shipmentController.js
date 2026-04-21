@@ -3,7 +3,22 @@ import {
   failResponse,
   successResponse,
 } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
-import { getLabelsService } from '../services/shipmentService.js';
+import { getCourierDetailsService, getLabelsService } from '../services/shipmentService.js';
+
+export const getCourierDetails = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    if (!sellerId) {
+      return failResponse(res, 400, { message: 'sellerId is missing' });
+    }
+    const { orderItemIds } = req.query;
+    const courierDetails = await getCourierDetailsService(sellerId, orderItemIds);
+    return successResponse(res, 200, courierDetails);
+  } catch (error) {
+    console.error('getCourierDetails error:', error.message, error.stack);
+    return errorResponse(res, 500, error.message);
+  }
+};
 
 export const getLabels = async (req, res) => {
   try {
