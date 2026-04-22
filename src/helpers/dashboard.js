@@ -240,15 +240,6 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
       },
     },
   ];
-  if (metric === 'sales') {
-    pipeline.push(
-      { $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false } },
-      { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } }
-    );
-  } else if (metric === 'orders') {
-    pipeline.push({ $unwind: '$sellerIds' }, { $match: { sellerIds: { $in: sellerObjectIds } } });
-  }
-
   pipeline.push({
     $group: {
       _id: groupId,

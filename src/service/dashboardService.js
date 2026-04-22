@@ -40,39 +40,42 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     // Calculate previous range
     const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
 
-    const globalChannelFilter = buildGlobalChannelFilter(channel);
-    // Aggregate current & previous
+    const channelIds = pickChannelIdsFromChannel(channel);
+    const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
+
     const buildAgg = (range) => [
       {
         $match: {
-          sellerIds: { $in: sellerObjectIds },
-          ...globalChannelFilter,
+          sellerId: { $in: sellerObjectIds },
+          ...channelFilter,
           orderDate: { $gte: range.start, $lte: range.end },
         },
       },
-      { $unwind: '$sellerIds' },
-      { $match: { sellerIds: { $in: sellerObjectIds } } },
       {
         $group: {
-          _id: '$status',
-          count: { $sum: 1 },
+          _id: null,
+          confirmed: { $sum: '$statusBreakdown.confirmed' },
+          shipmentCreated: { $sum: '$statusBreakdown.shipmentCreated' },
+          canceled: { $sum: '$statusBreakdown.canceled' },
+          shipped: { $sum: '$statusBreakdown.shipped' },
+          delivered: { $sum: '$statusBreakdown.delivered' },
         },
       },
     ];
 
     const [currentAgg, previousAgg] = await Promise.all(
-      [currentRange, previousRange].map((range) => Order.aggregate(buildAgg(range)))
+      [currentRange, previousRange].map((range) => SellerOrder.aggregate(buildAgg(range)))
     );
 
-    const toMap = (arr) => Object.fromEntries(arr.map((s) => [s._id.toUpperCase(), s.count]));
+    const toMap = (arr) => (arr.length ? arr[0] : {});
     const [currentStatus, previousStatus] = [toMap(currentAgg), toMap(previousAgg)];
 
     // Final data mapping
-    return ORDER_FLOW_STATUS_CONFIG.map(({ key, label, statuses }) => {
-      const currentValue = statuses.reduce((sum, s) => sum + (currentStatus[s.toUpperCase()] || 0), 0);
+    return ORDER_FLOW_STATUS_CONFIG.map(({ key, label, breakdownKey }) => {
+      const currentValue = currentStatus[breakdownKey] || 0;
       if (period === 'all') return { key, label, value: currentValue, changePercent: 100, trend: 'up' };
       if (!comparable) return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
-      const previousValue = statuses.reduce((sum, s) => sum + (previousStatus[s.toUpperCase()] || 0), 0);
+      const previousValue = previousStatus[breakdownKey] || 0;
 
       let changePercent =
         previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : currentValue > 0 ? 100 : 0;
@@ -119,8 +122,9 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalOrders: { $sum: 1 },
           totalDeliveredSales: { $sum: '$deliveredAmount' },
           totalOrderValue: { $sum: '$totalAmount' },
-          cancellationValue: { $sum: '$canceledAmount' },
-          returnedValue: { $sum: '$returnedAmount' },
+          cancellationValue: { $sum: { $multiply: ['$statusBreakdown.canceled', '$totalAmount'] } },
+          returnedValue: { $sum: { $multiply: ['$statusBreakdown.returned', '$totalAmount'] } },
+          netAmount: { $sum: '$netAmount' },
           totalProducts: { $sum: '$totalSkus' },
         },
       },
@@ -132,6 +136,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalOrderValue: 1,
           cancellationValue: 1,
           returnedValue: 1,
+          netAmount: 1,
           avgProductsPerOrder: {
             $cond: [{ $eq: ['$totalOrders', 0] }, 0, { $divide: ['$totalProducts', '$totalOrders'] }],
           },
@@ -146,6 +151,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
         totalOrderValue: 0,
         cancellationValue: 0,
         returnedValue: 0,
+        netAmount: 0,
         avgProductsPerOrder: 0,
       }
     );
@@ -180,9 +186,6 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const prevAvgOrderValue = previous.totalOrders > 0 ? previous.totalOrderValue / previous.totalOrders : 0;
 
-  const currNetGmv = current.totalOrderValue - current.cancellationValue - current.returnedValue;
-  const prevNetGmv = previous.totalOrderValue - previous.cancellationValue - previous.returnedValue;
-
   return [
     buildMetric(
       'totalSales',
@@ -196,7 +199,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
       current.totalOrderValue,
       previous.totalOrderValue
     ),
-    buildMetric('netGmv', 'Net GMV', currNetGmv, prevNetGmv),
+    buildMetric('netGmv', 'Net GMV', current.netAmount, previous.netAmount),
     buildMetric('orders', 'Orders', current.totalOrders, previous.totalOrders),
     buildMetric('avgOrderValue', 'Avg Order Value', currAvgOrderValue, prevAvgOrderValue),
     buildMetric(
@@ -276,24 +279,11 @@ const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, mo
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range) throw new Error(`Invalid period "${period}"`);
 
-  const channelNames = pickSelectedGlobalNames(channel);
-  const channelFilter = channelNames.length > 0 ? { channelName: { $in: channelNames } } : {};
+  const channelIds = pickChannelIdsFromChannel(channel);
+  const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
 
-  const salesPipeline = buildAggregationPipeline({
-    sellerObjectIds,
-    period,
-    metric: 'sales',
-    range,
-    channelFilter,
-  });
-
-  const ordersPipeline = buildAggregationPipeline({
-    sellerObjectIds,
-    period,
-    metric: 'orders',
-    range,
-    channelFilter,
-  });
+  const salesPipeline = buildAggregationPipeline({ sellerObjectIds, period, metric: 'sales', range, channelFilter });
+  const ordersPipeline = buildAggregationPipeline({ sellerObjectIds, period, metric: 'orders', range, channelFilter });
 
   const [salesRaw, ordersRaw] = await Promise.all([
     SellerOrder.aggregate(salesPipeline),
