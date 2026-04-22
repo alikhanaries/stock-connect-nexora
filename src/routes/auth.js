@@ -52,7 +52,6 @@ const router = express.Router();
  */
 router.post('/login', loginValidator, checkLanguage, login);
 
-
 /**
  * @openapi
  * /auth/register:
@@ -91,7 +90,6 @@ router.post('/login', loginValidator, checkLanguage, login);
  */
 router.post('/register', registerValidator, checkLanguage, authMiddleware, authorize(allowedRoles), register);
 
-
 /**
  * @openapi
  * /auth/refresh-token:
@@ -118,7 +116,6 @@ router.post('/register', registerValidator, checkLanguage, authMiddleware, autho
  *         description: Invalid refresh token
  */
 router.post('/refresh-token', checkLanguage, refreshToken);
-
 
 /**
  * @openapi
@@ -147,7 +144,6 @@ router.post('/refresh-token', checkLanguage, refreshToken);
  */
 router.post('/forget-password', forgetPasswordValidator, checkLanguage, forgotPassword);
 
-
 /**
  * @openapi
  * /auth/validate-reset-token:
@@ -174,7 +170,6 @@ router.post('/forget-password', forgetPasswordValidator, checkLanguage, forgotPa
  *         description: Invalid or expired token
  */
 router.post('/validate-reset-token', resetTokenValidator, checkLanguage, validateResetToken);
-
 
 /**
  * @openapi

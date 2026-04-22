@@ -148,6 +148,17 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
     const shipmentId = data.order_id;
     const omnifulStatusCode = data.order_status;
     const awbNumber = data?.shipment?.awb_number;
+    await Shipment.updateOne(
+      {
+        _id: shipmentId,
+      },
+      {
+        $set: {
+          'omniful.statusCode': omnifulStatusCode,
+          updatedAt: new Date(),
+        },
+      }
+    );
 
     const updateFields = {
       'omniful.statusCode': omnifulStatusCode,
@@ -177,6 +188,10 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
     }
 
     if (omnifulStatusCode === 'ready_to_ship') {
+      const omnifulAwbNumber = data?.shipment?.awb_number;
+      if (omnifulAwbNumber) {
+        await Shipment.findByIdAndUpdate(shipmentData._id, { 'omniful.trackingNo': omnifulAwbNumber });
+      }
       await forwardShipmentService.createShipmentwithCE(shipmentData);
 
       await OrderLogs.updateOne(
@@ -208,7 +223,8 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
       message: 'Shipment updated',
       data: {
         shipmentId,
-        omnifulStatusCode,
+        omnifulStatusCode: omnifulStatusCode,
+        omnifulAwbNumber: data?.shipment?.awb_number,
       },
     };
   } catch (error) {

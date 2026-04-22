@@ -48,7 +48,6 @@ export const updateSeller = async (req, res) => {
     };
 
     const updatedSeller = await sellerService.updateSeller(id, payload);
-  
 
     if (!updatedSeller) {
       return response.failResponse(res, req.locale.SELLER_NOT_FOUND, 404);
@@ -192,15 +191,28 @@ export const getAllPickupAddresses = async (req, res) => {
 
 export const savePickupAddress = async (req, res) => {
   try {
-    const result = await sellerService.saveSellerPickUpAdressDetails(req.body);
+    const sellerId = req.sellerId;
 
-    if (!result) {
-      return response.failResponse(res, 'Failed to save seller pick up address.', 500);
+    if (!sellerId) {
+      return response.failResponse(res, 'Seller ID is required', 400);
     }
 
-    return response.successResponse(res, 'Seller pick up adress saved successfully', 201, null);
+    const result = await sellerService.saveSellerPickUpAdressDetails(req.body, sellerId);
+
+    return response.successResponse(res, 'Seller pickup address saved successfully', 201, result);
   } catch (error) {
-    console.error('Error creating seller:', error);
+    console.error('Error saving pickup address:', error);
+
+    // Duplicate address (manual throw OR Mongo duplicate key)
+    if (error.message === 'Address already exists' || error.code === 11000) {
+      return response.failResponse(res, 'Address already exists', 409);
+    }
+
+    // Validation / missing fields
+    if (error.message === 'Missing required fields') {
+      return response.failResponse(res, error.message, 400);
+    }
+
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }
 };
@@ -238,9 +250,30 @@ export const updatePickupAddress = async (req, res) => {
     const id = req.params.id;
     const payload = req.body;
 
+    if (!id) {
+      return response.failResponse(res, 'Address ID is required', 400);
+    }
+
     const updated = await sellerService.updatePickupAddress(id, payload);
+
+    if (!updated) {
+      return response.failResponse(res, 'Pickup address not found', 404);
+    }
+
     return response.successResponse(res, 'Pickup address updated successfully', 200, updated);
   } catch (error) {
+    console.error('Error updating pickup address:', error);
+
+    // Duplicate address case
+    if (error.message === 'Address already exists' || error.code === 11000) {
+      return response.failResponse(res, 'Address already exists', 409);
+    }
+
+    // Validation / bad input
+    if (error.message === 'Missing required fields') {
+      return response.failResponse(res, error.message, 400);
+    }
+
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }
 };
@@ -252,6 +285,27 @@ export const deletePickupAddress = async (req, res) => {
     const deleted = await sellerService.deletePickupAddress(id);
 
     return response.successResponse(res, 'Pickup address deleted successfully', 200, deleted);
+  } catch (error) {
+    return response.errorResponse(res, error.message || 'Internal server error', 500);
+  }
+};
+export const getSellerPickupAddresses = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+
+    if (!sellerId) {
+      return response.failResponse(res, 'Seller ID is required', 400);
+    }
+
+    const pickupAddresses = await sellerService.getSellerPickupAddresses(sellerId);
+
+    const hasData = Array.isArray(pickupAddresses) && pickupAddresses.length > 0;
+
+    if (!hasData) {
+      return response.failResponse(res, 'No pickup addresses found', 404, []);
+    }
+
+    return response.successResponse(res, 'Pickup addresses fetched successfully', 200, pickupAddresses);
   } catch (error) {
     return response.errorResponse(res, error.message || 'Internal server error', 500);
   }

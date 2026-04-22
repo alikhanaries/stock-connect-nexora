@@ -10,6 +10,7 @@ import {
   createManualShipment,
   createReverseShipment,
   exportShipmentsToCSV,
+  downloadAymakanShipmentLabel,
 } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -20,6 +21,7 @@ import {
   createManualShipmentValidator,
   createReverseShipmentValidator,
   exportShipmentsToCSVValidator,
+  downloadLabelValidator,
 } from '#validations/shipment.js';
 
 const router = express.Router();
@@ -358,6 +360,16 @@ router.post(
   authMiddleware,
   verifySellerAccess,
   createReverseShipment
+);
+
+router.get('/exportShipment', exportShipmentsToCSVValidator, authMiddleware, verifySellerAccess, exportShipmentsToCSV);
+
+router.get(
+  '/downloadLabel/:shipmentId',
+  downloadLabelValidator,
+  authMiddleware,
+  verifySellerAccess,
+  downloadAymakanShipmentLabel
 );
 
 export default router;

@@ -612,8 +612,9 @@ export const getOrderById = async (id, sellerId) => {
         shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
         shipmentId: shipment._id,
         trackingNumber: shipment.airWaybillNo || null,
+        omnifulTrackingNo: shipment?.omniful?.trackingNo || null,
         shipmentMode: shipment.shipmentMethod || 'AYMAKAN',
-        documentId: shipment.documentId,
+        documentId: shipment.invoiceDocumentId ?? null,
         lineItems:
           shipment.products?.map((p) => {
             const sku = allOrderSkus.find((s) => s.merchantProductNo === p.merchantProductNo);
@@ -631,6 +632,7 @@ export const getOrderById = async (id, sellerId) => {
               quantity: p.quantity,
               status: sku?.status,
               airWaybillNo: shipment.airWaybillNo,
+              omnifulTrackingNo: shipment?.omniful?.trackingNo || null,
               hsCode: productsMap[p.merchantProductNo]?.hsCode || p.merchantProductNo,
               trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
               documentId: sku?.documentId,

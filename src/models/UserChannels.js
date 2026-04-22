@@ -40,5 +40,7 @@ const userChannelsSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+userChannelsSchema.index({ sellerId: 1 }, { unique: true });
+
 const UserChannels = mongoose.model('UserChannels', userChannelsSchema);
 export default UserChannels;
