@@ -122,8 +122,6 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalOrders: { $sum: 1 },
           totalDeliveredSales: { $sum: '$deliveredAmount' },
           totalOrderValue: { $sum: '$totalAmount' },
-          cancellationValue: { $sum: { $multiply: ['$statusBreakdown.canceled', '$totalAmount'] } },
-          returnedValue: { $sum: { $multiply: ['$statusBreakdown.returned', '$totalAmount'] } },
           netAmount: { $sum: '$netAmount' },
           totalProducts: { $sum: '$totalSkus' },
         },
@@ -134,8 +132,6 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalOrders: 1,
           totalDeliveredSales: 1,
           totalOrderValue: 1,
-          cancellationValue: 1,
-          returnedValue: 1,
           netAmount: 1,
           avgProductsPerOrder: {
             $cond: [{ $eq: ['$totalOrders', 0] }, 0, { $divide: ['$totalProducts', '$totalOrders'] }],
@@ -149,8 +145,6 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
         totalOrders: 0,
         totalDeliveredSales: 0,
         totalOrderValue: 0,
-        cancellationValue: 0,
-        returnedValue: 0,
         netAmount: 0,
         avgProductsPerOrder: 0,
       }
