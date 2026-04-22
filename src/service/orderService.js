@@ -52,7 +52,7 @@ const formatOrder = async (order, channelImage, sellerId) => {
   }
 
   return {
-    _id: order._id,
+    _id: order?.orderData?._id,
     skuOrderId,
     //  Added seller details
     sellerId: sellerObjectId || null,
@@ -194,7 +194,7 @@ const getAllOrders = async (query, sellerId) => {
       // JOIN ORDER
       {
         $lookup: {
-          from: 'orders',
+          from: 'channelengineorders',
           localField: 'orderId',
           foreignField: 'orderId',
           as: 'orderData',
