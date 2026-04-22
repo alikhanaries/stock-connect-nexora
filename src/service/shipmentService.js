@@ -974,7 +974,7 @@ export const ayMakanWebHookService = async (data) => {
           shippedQty: shippedDelta || 0,
           deliveredQty: deliveredDelta || 0,
           canceledQty: canceledDelta || 0,
-          description: `Shipment Order with id ${omnifulResponse?.id} has been generated at Omniful`,
+          description: `Shipment Order with id ${omnifulResponse?.orderId} has been generated at Omniful`,
           createdAt: convetDateToUTC(new Date()),
         });
       }
