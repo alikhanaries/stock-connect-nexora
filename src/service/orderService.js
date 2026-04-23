@@ -829,7 +829,6 @@ export const processOrders = async (orders, sellerId) => {
             filter: {
               orderId: orderObjectId,
               sellerId: log.sellerId,
-              'details.description': { $ne: log.description },
             },
             update: {
               $push: {
