@@ -101,6 +101,21 @@ const OrderSchema = new mongoose.Schema(
     orderBillingAddress: AddressSchema,
     orderCustomer: CustomerDetailsSchema,
     orderPaymentDetails: PaymentDetailsSchema,
+    shopifySync: {
+      shopifySyncStatus: {
+        type: String,
+        enum: ['PENDING', 'SYNCED', 'FAILED'],
+        default: 'PENDING',
+        index: true,
+      },
+      shopifyOrderId: {
+        type: String,
+        index: true,
+      },
+      pushedToShopifyAt: {
+        type: Date,
+      },
+    },
   },
   { timestamps: true }
 );
