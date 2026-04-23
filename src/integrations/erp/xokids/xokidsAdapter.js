@@ -16,11 +16,7 @@ export const createXokidsAdapter = () => {
       const parsed = await parseXMLFeed(xmlString);
       const products = parsed?.products?.product || [];
       const productArray = Array.isArray(products) ? products : [products];
-      const xokidsOnly = productArray.filter((p) => {
-        const brand = (p?.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '');
-        return brand === 'xokids';
-      });
-      return xokidsOnly;
+      return productArray;
     },
   };
 };
