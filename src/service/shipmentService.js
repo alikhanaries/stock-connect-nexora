@@ -1170,6 +1170,8 @@ export const getSingleShipmentService = async (id) => {
         paymentInfo: '$orderDetails.orderPaymentDetails',
         orderId: '$orderDetails.orderId',
         orderMongoId: '$orderDetails._id',
+        invoiceDocumentId: 1,
+        omniful: 1,
       },
     }
   );
@@ -1262,6 +1264,8 @@ const transformShipmentResponse = (response) => {
     deliveryDetails,
     pickUpDetails,
     shipmentMethod: data?.shipmentMethod,
+    invoiceDocumentId: data?.invoiceDocumentId,
+    omniful: data?.omniful,
   };
 };
 export const formatShipmentTrackingInfo = (data) => {
