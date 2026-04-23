@@ -6,4 +6,6 @@ const router = express.Router();
 
 router.use('/inventory', inventoryRouter);
 router.use('/products', productsRouter);
+
+
 export default router;
