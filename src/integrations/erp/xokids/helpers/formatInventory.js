@@ -14,11 +14,7 @@ export const formatXokidsInventory = (raw = [], sellerId) => {
     const baseSku = normalize(item.ws_code);
     if (!baseSku) continue;
 
-    // Only consider subproducts with BOTH color (type1) and size (type2) — matches product sync
-    const subProducts = toArray(item?.subproducts?.subproduct).filter(
-      (s) => (s.type1 || '').trim() && (s.type2 || '').trim()
-    );
-    if (!subProducts.length) continue;
+    const subProducts = toArray(item?.subproducts?.subproduct);
     let totalStock = 0;
 
     // Group by color (type1 in xokids)
@@ -37,7 +33,7 @@ export const formatXokidsInventory = (raw = [], sellerId) => {
         const size = safe(v.type2, 'NOSIZE');
         const childSku = `${parentSku}-${size}`;
 
-        const stock = Math.max(0, Number(v.variant_stock || v.stock || 0));
+        const stock = Number(v.stock || 0);
         parentStock += stock;
         totalStock += stock;
 
