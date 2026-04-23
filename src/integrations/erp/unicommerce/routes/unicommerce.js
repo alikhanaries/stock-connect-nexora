@@ -13,6 +13,8 @@ import { ordersController, orderDispatch, cancelOrder } from '../controllers/ord
 import { orderCancelValidator, orderDispatchValidator, ordersValidator } from '../validations/orders.js';
 import { updateInventoryValidator } from '../validations/inventory.js';
 import { updateInventory } from '../controllers/inventoryController.js';
+import { getCourierDetailsValidator, getLabelsValidator } from '../validations/shipment.js';
+import { getCourierDetails, getLabels } from '../controllers/shipmentController.js';
 
 const UniCommerceRouter = express.Router();
 
@@ -627,7 +629,7 @@ UniCommerceRouter.post(
  *         required: true
  *         schema:
  *           type: string
- *         description: Bearer access token (Authorization: Bearer token)
+ *         description: "Bearer access token (Authorization: Bearer token)"
  *
  *     requestBody:
  *       required: true
@@ -714,6 +716,133 @@ UniCommerceRouter.post(
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
   cancelOrder
+);
+
+/**
+ * @openapi
+ * /erp/unicommerce/orders/labels:
+ *   get:
+ *     tags: [UniCommerce]
+ *     summary: Get Labels
+ *     description: |
+ *       Fetches the shipping label (and optionally invoice/pack-slip) as a base64 encoded string
+ *       for marketplace-allocated logistics. Used by Uniware to print labels.
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer access token obtained from Get Authentication API
+ *       - in: query
+ *         name: orderItemIds
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: abc123,abc456
+ *         description: Comma-separated list of order item IDs
+ *     responses:
+ *       200:
+ *         description: Label fetched successfully as base64 encoded string
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: string
+ *               example: JVBERi0xLjMKM........
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Internal server error
+ */
+UniCommerceRouter.get(
+  '/orders/labels',
+  getLabelsValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  getLabels
+);
+
+/**
+ * @openapi
+ * /erp/unicommerce/courierDetails:
+ *   get:
+ *     tags: [UniCommerce]
+ *     summary: Get Courier Details
+ *     description: |
+ *       Fetches the courier details for marketplace-shipped orders.
+ *       Returns the shipper name and AWB number (tracking number) used to generate labels in Uniware.
+ *       This API is used only when orders are shipped by the marketplace.
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         description: Preferred response language
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer access token obtained from Get Authentication API
+ *       - in: query
+ *         name: orderItemIds
+ *         required: true
+ *         schema:
+ *           type: string
+ *         example: abc123,abc456
+ *         description: Comma-separated list of order item IDs
+ *     responses:
+ *       200:
+ *         description: Courier details fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 awbNo:
+ *                   type: string
+ *                   description: Airway bill number (shipment tracking number)
+ *                   example: IPX509924343
+ *                 status:
+ *                   type: string
+ *                   description: Courier availability status
+ *                   enum: [AVAILABLE, SELLER_SHIPPING, COURIER_NOT_ASSIGNED]
+ *                   example: AVAILABLE
+ *                 courierCode:
+ *                   type: string
+ *                   description: Code of shipping provider
+ *                   example: widect
+ *                 courierName:
+ *                   type: string
+ *                   description: Name of shipping provider
+ *                   example: Widect
+ *                 additionalInfo:
+ *                   type: string
+ *                   description: Any additional information
+ *                   example: ""
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/FailResponse"
+ *       500:
+ *         description: Internal server error
+ */
+UniCommerceRouter.get(
+  '/courierDetails',
+  getCourierDetailsValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  getCourierDetails
 );
 
 export default UniCommerceRouter;
