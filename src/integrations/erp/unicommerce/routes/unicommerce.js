@@ -629,7 +629,7 @@ UniCommerceRouter.post(
  *         required: true
  *         schema:
  *           type: string
- *         description: Bearer access token (Authorization: Bearer token)
+ *         description: "Bearer access token (Authorization: Bearer token)"
  *
  *     requestBody:
  *       required: true
