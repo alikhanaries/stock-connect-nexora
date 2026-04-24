@@ -372,6 +372,7 @@ export const getOrderById = async (id) => {
           quantity: pendingQty,
           status: sku.status, // stays IN_PROGRESS
           hsCode,
+          originalLineTotalInclVat: sku.originalLineTotalInclVat,
         });
       }
     });
