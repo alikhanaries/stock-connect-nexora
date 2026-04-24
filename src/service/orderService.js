@@ -1500,10 +1500,38 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
     const { status, search, sortBy = 'orderDate', sortOrder = 'desc', channel } = filters;
 
+    let allowedOrderIdsByStatus = null;
+
+    if (status !== undefined && status !== null) {
+      const statusArray = []
+        .concat(status)
+        .flatMap((s) => (typeof s === 'string' ? s.split(',') : s))
+        .map((s) => String(s).trim().toUpperCase())
+        .filter(Boolean);
+
+      const sellerOrdersByStatus = await SellerOrder.find(
+        {
+          sellerId: String(sellerId),
+          status: statusArray.length === 1 ? statusArray[0] : { $in: statusArray },
+        },
+        { orderId: 1 }
+      ).lean();
+
+      allowedOrderIdsByStatus = new Set(sellerOrdersByStatus.map((so) => so.orderId));
+
+      if (!allowedOrderIdsByStatus.size) {
+        return { success: false, message: 'No orders found' };
+      }
+    }
+
     const filter = {
       sellerIds: { $in: [sellerId] },
       'orderSkuList.skuList.sellerId': sellerId,
     };
+
+    if (allowedOrderIdsByStatus) {
+      filter.orderId = { $in: [...allowedOrderIdsByStatus] };
+    }
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
@@ -1513,19 +1541,6 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
         { 'orderCustomer.firstName': regex },
         { 'orderCustomer.lastName': regex },
       ];
-    }
-    if (status !== undefined && status !== null) {
-      const statusArray = []
-        .concat(status)
-        .flatMap((s) => (typeof s === 'string' ? s.split(',') : s))
-        .map((s) => String(s).trim().toUpperCase())
-        .filter((s) => s); // remove empty
-
-      if (statusArray.length === 1) {
-        filter.status = statusArray[0];
-      } else if (statusArray.length > 1) {
-        filter.status = { $in: statusArray };
-      }
     }
 
     if (channel) {
@@ -1558,21 +1573,12 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     if (!orders.length) {
       return { success: false, message: 'No orders found' };
     }
-
-    /*
-     FETCH ALL SHIPMENTS IN ONE GO (OPTIMIZED)
-    */
-    const orderIds = orders.map((o) => o._id);
+    const orderObjectIds = orders.map((o) => o._id);
 
     const shipments = await Shipment.find({
-      orderId: { $in: orderIds },
+      orderId: { $in: orderObjectIds },
     }).lean();
 
-    /*
-     BUILD LOOKUP MAP
-    key = orderId_merchantProductNo
-    value = [airWaybillNos]
-    */
     const airwaybillMap = {};
 
     shipments.forEach((shipment) => {
@@ -1583,9 +1589,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
         const key = `${orderIdStr}_${product.merchantProductNo}`;
 
-        if (!airwaybillMap[key]) {
-          airwaybillMap[key] = [];
-        }
+        if (!airwaybillMap[key]) airwaybillMap[key] = [];
 
         if (shipment.airWaybillNo) {
           airwaybillMap[key].push(shipment.airWaybillNo);
@@ -1593,40 +1597,33 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       });
     });
 
-    const headers = ORDER_EXPORT_HEADERS;
-    const csvRows = [headers.join(',')];
-
-    // ==============================
-    //  FETCH SELLER ORDER STATUS
-    // ==============================
-    const sellerObjectId = String(sellerId);
-
-    const sellerOrderIds = orders.map((i) => i.orderId);
+    const sellerOrderIds = [...new Set(orders.map((i) => i.orderId))];
 
     const sellerOrders = await SellerOrder.find(
-      { orderId: { $in: sellerOrderIds }, sellerId: sellerObjectId },
+      {
+        orderId: { $in: sellerOrderIds },
+        sellerId: String(sellerId),
+      },
       { status: 1, orderId: 1 }
     ).lean();
 
     const sellerOrderStatusMap = sellerOrders.reduce((acc, so) => {
-      const orderId = so.orderId;
-      acc[orderId] = so.status;
+      acc[so.orderId] = so.status;
       return acc;
     }, {});
 
+    const headers = ORDER_EXPORT_HEADERS;
+    const csvRows = [headers.join(',')];
+
     for (const order of orders) {
-      /*
-      FILTER SELLER SKUS
-      */
-      const sellerSkus = (order.orderSkuList?.skuList || []).filter((sku) => {
-        return String(sku.sellerId) === String(sellerId);
-      });
+      const sellerOrderStatus = sellerOrderStatusMap[order.orderId?.toString()] || 'NA';
+
+      const sellerSkus = (order.orderSkuList?.skuList || []).filter((sku) => String(sku.sellerId) === String(sellerId));
 
       if (!sellerSkus.length) continue;
-      const totalSkuCount = sellerSkus?.length;
-      /*
-      CALCULATE TOTALS
-      */
+
+      const totalSkuCount = sellerSkus.length;
+
       const sellerTotals = sellerSkus.reduce(
         (totals, sku) => {
           const cancelledQty = sku.cancellationRequestedQuantity || 0;
@@ -1648,28 +1645,20 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
       sellerTotals.subTotalExclVat = sellerTotals.subTotalInclVat - sellerTotals.subTotalVat;
       sellerTotals.totalExclVat = sellerTotals.subTotalExclVat;
 
-      const sellerOrderStatus = sellerOrderStatusMap[order.orderId.toString()] || '';
-      /*
-      CREATE ROW PER SKU
-      */
       for (let i = 0; i < sellerSkus.length; i++) {
         const sku = sellerSkus[i];
 
-        /*
-         GET AIRWAYBILL NUMBER
-        */
         const key = `${order._id}_${sku.merchantProductNo}`;
+        const airwaybillNumber = (airwaybillMap[key] || []).join('|');
 
-        const airwaybillNumber = (airwaybillMap[key] || []).join('|'); // multiple AWBs handled
-
-        /*
-        PASS TO ROW BUILDER
-        */
         const rowObject = buildExportOrderRow(
-          order,
+          {
+            ...order,
+            status: sellerOrderStatus,
+          },
           {
             ...sku,
-            airwaybillNumber, //  injected here
+            airwaybillNumber,
           },
           sellerTotals,
           sellerId,
@@ -1677,9 +1666,6 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
           sellerOrderStatus
         );
 
-        /*
-        SHOW ORDERID ONLY FIRST ROW
-        */
         if (i > 0) {
           rowObject.orderId = '';
           rowObject.orderSkuListCount = '';
