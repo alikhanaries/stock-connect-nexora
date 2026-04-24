@@ -1,3 +1,4 @@
+import { filterInStockSubproducts } from '../../common/helpers/filterInStockSubproducts.js';
 import { parseXMLFeed } from '../../common/helpers/xmlParser.js';
 import { createBaseERPAdapter } from '../base/BaseERPAdapter.js';
 import { gurmanRamseyConfig } from './config/config.js';
@@ -16,7 +17,7 @@ export const createGurmanRamseyAdapter = () => {
       const products = parsed?.products?.product || [];
       if (!products) throw new Error('Invalid Ramsey (Gürmen Group) XML response structure');
       const productArray = Array.isArray(products) ? products : [products];
-      return productArray;
+      return filterInStockSubproducts(productArray);
     },
   };
 };
