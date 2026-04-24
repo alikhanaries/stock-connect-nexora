@@ -2654,7 +2654,7 @@ const mapCEShipmentStatus = (ceShipment) => {
   if (ceShipment.DeliveredAt) return 'DELIVERED';
 
   if (ceShipment.Lines?.some((l) => l.ShipmentStatus === 'SHIPPED')) {
-    return 'SHIPPED';
+    return 'OUT_FOR_DELIVERY';
   }
 
   return 'SHIPMENT_CREATED';
