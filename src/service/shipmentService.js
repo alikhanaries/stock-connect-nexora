@@ -2240,7 +2240,7 @@ export const createManualShipmentService = async (shipmentData) => {
             status: allShipped ? 'SHIPPED' : 'IN_PROGRESS',
             description: allShipped
               ? `Shipment with AWB ${airWaybillNo} has been shipped. All available items shipped`
-              : `Shipment with AWB ${airWaybillNo} has been shipped. Order partially shipped`,
+              : `Shipment with AWB ${airWaybillNo} has been shipped.`,
             createdAt: convetDateToUTC(new Date()),
           },
         },

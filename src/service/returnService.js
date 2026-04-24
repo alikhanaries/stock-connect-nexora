@@ -4,6 +4,7 @@ import Return from '../models/Return.js';
 import Seller from '#root/src/models/Seller.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
+import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 import mongoose from 'mongoose';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import {
@@ -64,12 +65,13 @@ export const getReturns = async (queryParams = {}) => {
       }
 
       const bulkOps = [];
+      const normalizedReturns = []; //  for order updates
 
       for (const returnData of Content) {
         // Sanitize return data using helper
         const sanitizationResult = await sanitizeReturnData(returnData, Order);
         if (!sanitizationResult.success) {
-          console.warn('Sanitization failed for return:', returnData.Id);
+          console.warn('Sanitization failed for return:', returnData?.Id);
           continue;
         }
 
@@ -78,11 +80,30 @@ export const getReturns = async (queryParams = {}) => {
         // Add bulk upsert operation
         bulkOps.push({
           updateOne: {
-            filter: { returnId: simplifiedReturnDocument.returnId },
-            update: { $set: simplifiedReturnDocument },
+            filter: {
+              returnId: simplifiedReturnDocument.returnId,
+            },
+            update: {
+              $set: simplifiedReturnDocument,
+            },
             upsert: true,
           },
         });
+
+        //  Prepare for Order SKU update
+        if (Array.isArray(simplifiedReturnDocument.products)) {
+          for (const product of simplifiedReturnDocument.products) {
+            normalizedReturns.push({
+              returnId: simplifiedReturnDocument.returnId,
+              orderId: simplifiedReturnDocument.orderId,
+
+              //  IMPORTANT: match with your Order schema field
+              channelOrderLineNo: String(product.orderLineId),
+
+              quantity: product.quantity || 0,
+            });
+          }
+        }
       }
 
       if (bulkOps.length > 0) {
@@ -90,6 +111,11 @@ export const getReturns = async (queryParams = {}) => {
 
         totalUpserted += result.upsertedCount || 0;
         totalModified += result.modifiedCount || 0;
+
+        //  Update SKU breakdown in Orders
+        if (normalizedReturns.length > 0) {
+          await applyReturnToOrder(normalizedReturns);
+        }
       }
 
       totalProcessed += Content.length;
@@ -1060,6 +1086,125 @@ export const getReturnsForWebhook = async (queryParams = {}) => {
   }
 };
 
+export const applyReturnToOrder = async (returns = []) => {
+  try {
+    if (!returns.length) {
+      console.log(' No returns received');
+      return;
+    }
+    returns = returns?.filter((item) => item?.orderId === '1791');
+    const bulkOps = [];
+    const orderIdsToSync = new Set();
+
+    //  STEP 1: Aggregate returns per orderId + lineId
+    const returnMap = {};
+
+    for (const ret of returns) {
+      const { orderId, channelOrderLineNo, quantity = 0, returnId } = ret;
+
+      if (!orderId || !channelOrderLineNo) {
+        console.warn(' Skipping invalid return:', ret);
+        continue;
+      }
+
+      const lineId = Number(channelOrderLineNo);
+      const key = `${orderId}_${lineId}`;
+
+      if (!returnMap[key]) {
+        returnMap[key] = {
+          orderId,
+          lineId,
+          quantity: 0,
+          returnIds: [],
+        };
+      }
+
+      returnMap[key].quantity += quantity;
+      returnMap[key].returnIds.push(returnId);
+    }
+
+    //  STEP 2: Build bulkOps using aggregated values
+    for (const key in returnMap) {
+      const { orderId, lineId, quantity } = returnMap[key];
+
+      //  REPLACE returned value (not increment)
+      const updateOperation = [
+        {
+          $set: {
+            'orderSkuList.skuList': {
+              $map: {
+                input: '$orderSkuList.skuList',
+                as: 'sku',
+                in: {
+                  $cond: [
+                    { $eq: ['$$sku.id', lineId] },
+
+                    {
+                      $mergeObjects: [
+                        '$$sku',
+                        {
+                          statusBreakdown: {
+                            $mergeObjects: [
+                              '$$sku.statusBreakdown',
+                              {
+                                returned: quantity,
+                              },
+                            ],
+                          },
+
+                          status: {
+                            $cond: [
+                              {
+                                $eq: [quantity, '$$sku.quantity'],
+                              },
+                              'RETURNED',
+                              '$$sku.status',
+                            ],
+                          },
+                        },
+                      ],
+                    },
+
+                    '$$sku',
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ];
+
+      bulkOps.push({
+        updateOne: {
+          filter: {
+            orderId,
+            'orderSkuList.skuList.id': lineId,
+          },
+          update: updateOperation,
+        },
+      });
+
+      orderIdsToSync.add(orderId);
+    }
+
+    if (bulkOps.length) {
+      await Order.bulkWrite(bulkOps);
+
+      //  Sync sellers
+      const orderDocs = await Order.find({ orderId: { $in: [...orderIdsToSync] } }, { _id: 1 }).lean();
+
+      const orderIdsArray = orderDocs.map((o) => o._id);
+
+      for (const id of orderIdsArray) {
+        await syncSellerOrdersFromOrder(id);
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error(' Error updating order SKU returns:', err);
+  }
+};
 export default {
   getReturns,
   getReturnsFromDatabase,
