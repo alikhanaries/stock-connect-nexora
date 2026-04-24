@@ -16,7 +16,15 @@ export const createGurmanRamseyAdapter = () => {
       const products = parsed?.products?.product || [];
       if (!products) throw new Error('Invalid Ramsey (Gürmen Group) XML response structure');
       const productArray = Array.isArray(products) ? products : [products];
-      return productArray;
+      const toArr = (v) => (Array.isArray(v) ? v : v ? [v] : []);
+      return productArray.reduce((acc, p) => {
+        const subs = toArr(p?.subproducts?.subproduct);
+        if (!subs.length) return acc.concat(p);
+        const inStock = subs.filter((s) => Number(s.stock || 0) > 0);
+        if (!inStock.length) return acc;
+        acc.push({ ...p, subproducts: { ...p.subproducts, subproduct: inStock } });
+        return acc;
+      }, []);
     },
   };
 };
