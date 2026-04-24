@@ -1,3 +1,4 @@
+import { filterInStockSubproducts } from '../../common/helpers/filterInStockSubproducts.js';
 import { parseXMLFeed } from '../../common/helpers/xmlParser.js';
 import { createBaseERPAdapter } from '../base/BaseERPAdapter.js';
 import { gurmanKipConfig } from './config/config.js';
@@ -16,15 +17,7 @@ export const createGurmanKipAdapter = () => {
       const parsed = await parseXMLFeed(xmlString);
       const products = parsed?.products?.product || [];
       const productArray = Array.isArray(products) ? products : [products];
-      const toArr = (v) => (Array.isArray(v) ? v : v ? [v] : []);
-      return productArray.reduce((acc, p) => {
-        const subs = toArr(p?.subproducts?.subproduct);
-        if (!subs.length) return acc.concat(p);
-        const inStock = subs.filter((s) => Number(s.stock || 0) > 0);
-        if (!inStock.length) return acc;
-        acc.push({ ...p, subproducts: { ...p.subproducts, subproduct: inStock } });
-        return acc;
-      }, []);
+      return filterInStockSubproducts(productArray);
     },
   };
 };
