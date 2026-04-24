@@ -974,7 +974,7 @@ export const ayMakanWebHookService = async (data) => {
           shippedQty: shippedDelta || 0,
           deliveredQty: deliveredDelta || 0,
           canceledQty: canceledDelta || 0,
-          description: `Shipment Order with id ${omnifulResponse?.id} has been generated at Omniful`,
+          description: `Shipment Order with id ${omnifulResponse?.orderId} has been generated at Omniful`,
           createdAt: convetDateToUTC(new Date()),
         });
       }
@@ -1170,6 +1170,8 @@ export const getSingleShipmentService = async (id) => {
         paymentInfo: '$orderDetails.orderPaymentDetails',
         orderId: '$orderDetails.orderId',
         orderMongoId: '$orderDetails._id',
+        invoiceDocumentId: 1,
+        omniful: 1,
       },
     }
   );
@@ -1262,6 +1264,8 @@ const transformShipmentResponse = (response) => {
     deliveryDetails,
     pickUpDetails,
     shipmentMethod: data?.shipmentMethod,
+    invoiceDocumentId: data?.invoiceDocumentId,
+    omniful: data?.omniful,
   };
 };
 export const formatShipmentTrackingInfo = (data) => {

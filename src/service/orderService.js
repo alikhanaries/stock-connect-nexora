@@ -1,5 +1,6 @@
 import Order from '#models/Orders.js';
 import mongoose from 'mongoose';
+import { upsertSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
 import orderhelper from '#helpers/Order.js';
@@ -738,8 +739,13 @@ const getOrderStats = async (sellerId) => {
 
 export const processOrders = async (orders, sellerId) => {
   try {
-    const operations = await orderhelper.sanitizeOrdersData(orders, sellerId);
-    const result = await Order.bulkWrite(operations);
+    const { bulkOps, sellerOrderPayloads, pendingLogs } = await orderhelper.sanitizeOrdersData(orders, sellerId);
+
+    const result = await Order.bulkWrite(bulkOps, { ordered: false });
+
+    //  Now safe
+    await Promise.all(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
+
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
     const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
@@ -771,13 +777,82 @@ export const processOrders = async (orders, sellerId) => {
       }
     }
 
-    if (orderLogs.length > 0) {
-      await OrderLogs.insertMany(orderLogs, { ordered: false });
+    const orderLogsBulkOps = [];
+
+    for (const log of orderLogs) {
+      for (const detail of log.details) {
+        orderLogsBulkOps.push({
+          updateOne: {
+            filter: {
+              orderId: log.orderId,
+              sellerId: log.sellerId,
+            },
+            update: {
+              $addToSet: {
+                details: {
+                  status: detail.status,
+                  description: detail.description,
+                  createdAt: detail.createdAt,
+                },
+              },
+            },
+            upsert: true,
+          },
+        });
+      }
+    }
+
+    if (orderLogsBulkOps.length) {
+      await OrderLogs.bulkWrite(orderLogsBulkOps);
       console.log('Inserted order logs:', orderLogs.length);
     } else {
       console.log('No new orders created — skipping log insertion');
     }
 
+    if (pendingLogs.length) {
+      // 1 Fetch order _ids
+      const insertedOrders = await Order.find({
+        orderId: { $in: pendingLogs.map((l) => l.orderId) },
+      }).select('_id orderId');
+
+      const orderIdMap = new Map(insertedOrders.map((o) => [String(o.orderId), o._id]));
+
+      // 2️ Build bulk ops
+      const orderLogsBulkOps = [];
+
+      for (const log of pendingLogs) {
+        const orderObjectId = orderIdMap.get(String(log.orderId));
+        if (!orderObjectId) continue;
+
+        orderLogsBulkOps.push({
+          updateOne: {
+            filter: {
+              orderId: orderObjectId,
+              sellerId: log.sellerId,
+            },
+            update: {
+              $push: {
+                details: {
+                  status: log.status,
+                  description: log.description,
+                  createdAt: log.createdAt,
+                },
+              },
+              $setOnInsert: {
+                orderId: orderObjectId,
+                sellerId: log.sellerId,
+              },
+            },
+            upsert: true,
+          },
+        });
+      }
+
+      // 3️ Execute
+      if (orderLogsBulkOps.length) {
+        await OrderLogs.bulkWrite(orderLogsBulkOps);
+      }
+    }
     return {
       success: true,
       data: {
@@ -798,7 +873,7 @@ export async function getNewOrders() {
     let allOrders = [];
     let hasMore = true;
 
-    while (hasMore && page <= 5) {
+    while (hasMore && page <= 55) {
       const response = await fetch(
         `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
       );

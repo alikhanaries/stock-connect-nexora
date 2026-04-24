@@ -87,7 +87,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
     });
 
     if (!Object.keys(sellerMap).length) {
-      console.warn(' No seller data for order:', orderId);
+      // console.warn(' No seller data for order:', orderId);
       return true;
     }
 

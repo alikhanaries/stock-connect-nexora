@@ -1,9 +1,8 @@
 import Order from '#models/Orders.js';
 import Product from '../models/Product.js';
-import { upsertSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
-import OrderLogs from '#models/OrderLogs.js';
+
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -374,7 +373,7 @@ export const buildStatuses = ({ line, existingSku }) => {
   ];
 };
 
-const sanitizeOrdersData = async (orders) => {
+export const sanitizeOrdersData = async (orders) => {
   const orderIds = [];
   const skuSet = new Set();
 
@@ -402,7 +401,7 @@ const sanitizeOrdersData = async (orders) => {
 
   //  final outputs
   const bulkOps = [];
-  const sellerOrderPromises = [];
+  const sellerOrderPayloads = [];
   const pendingLogs = [];
 
   //  LOOP (NO async map)
@@ -413,7 +412,9 @@ const sanitizeOrdersData = async (orders) => {
     let finalSellerId = null;
     if (Array.isArray(data.Lines) && data.Lines.length > 0) {
       const firstSku = data.Lines[0].MerchantProductNo;
-      if (firstSku) finalSellerId = productSellerMap.get(firstSku) || null;
+      if (firstSku) {
+        finalSellerId = productSellerMap.get(firstSku) || null;
+      }
     }
 
     const sellerIdSet = new Set();
@@ -654,77 +655,27 @@ const sanitizeOrdersData = async (orders) => {
         : normalizeOrderStatus(data?.Status),
     };
 
-    // SellerOrder sync
-    sellerOrderPromises.push(
-      upsertSellerOrdersFromOrder({
-        orderPayload: updatePayload,
-      })
-    );
+    //  Prepare SellerOrder payload (NO DB CALL HERE)
+    sellerOrderPayloads.push({
+      orderPayload: updatePayload,
+    });
 
     // Order bulk
     bulkOps.push({
       updateOne: {
-        filter: { orderId: data.Id },
+        filter: { orderId: String(data.Id), channelOrderNumber: data.ChannelOrderNo }, // FIXED UNIQUE FILTER
         update: { $set: updatePayload },
         upsert: true,
       },
     });
   }
 
-  //  STEP 1: create/update orders FIRST
-  if (bulkOps.length) {
-    await Order.bulkWrite(bulkOps);
-  }
-
-  await Promise.all(sellerOrderPromises);
-
-  //  STEP 2: fetch orders again to get ObjectIds
-  const insertedOrders = await Order.find({
-    orderId: { $in: pendingLogs.map((l) => l.orderId) },
-  }).select('_id orderId');
-
-  const orderIdMap = new Map(insertedOrders.map((o) => [String(o.orderId), o._id]));
-
-  //  STEP 3: build logs
-  const orderLogsBulkOps = [];
-
-  for (const log of pendingLogs) {
-    const orderObjectId = orderIdMap.get(String(log.orderId));
-    if (!orderObjectId) continue;
-
-    orderLogsBulkOps.push({
-      updateOne: {
-        filter: {
-          orderId: orderObjectId,
-          sellerId: log.sellerId,
-          'details.description': { $ne: log.description },
-        },
-        update: {
-          $push: {
-            details: {
-              status: log.status,
-              description: log.description,
-              createdAt: log.createdAt,
-            },
-          },
-          $setOnInsert: {
-            orderId: orderObjectId,
-            sellerId: log.sellerId,
-          },
-        },
-        upsert: true,
-      },
-    });
-  }
-
-  //  STEP 4: execute logs
-  if (orderLogsBulkOps.length) {
-    await OrderLogs.bulkWrite(orderLogsBulkOps);
-  }
-
-  return bulkOps;
+  return {
+    bulkOps,
+    sellerOrderPayloads,
+    pendingLogs,
+  };
 };
-
 export const deriveOrderStatusFromSkus = (skuList = []) => {
   const s = aggregateSkuStatus(skuList);
 
