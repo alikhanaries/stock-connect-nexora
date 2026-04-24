@@ -251,7 +251,7 @@ export const getAllPickupAddresses = async () => {
 // Update a pickup address
 export const updatePickupAddress = async (id, payload) => {
   try {
-    const { address, name } = payload;
+    const { address } = payload;
 
     // Get current record
     const existingData = await PickupAddress.findOne(
@@ -275,19 +275,6 @@ export const updatePickupAddress = async (id, payload) => {
 
       if (existingAddress) {
         throw new Error('Address already exists');
-      }
-    }
-
-    // Only check duplicate if name is being changed
-    if (name && name !== existingData.name) {
-      const existingName = await PickupAddress.findOne({
-        sellerId,
-        name: new RegExp(`^${name}$`, 'i'), // case-insensitive
-        _id: { $ne: id },
-      });
-
-      if (existingName) {
-        throw new Error('Name already exists');
       }
     }
 
