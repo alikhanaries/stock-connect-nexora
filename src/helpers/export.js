@@ -368,7 +368,9 @@ export const buildExportShipmentRow = (shipment, product = {}) => {
   return {
     //  Shipment
     'Shipment ID': safe(shipment?._id?.toString()),
+    'Shipment Menthod': shipment?.shipmentMethod,
     'Shipment Status': safe(shipment.status),
+    'Shipment Merchant': shipment?.method || 'N/A',
     'Merchant Shipment Number': safe(shipment.merchantShipmentNo),
     'Aymakan Tracking Number': safe(shipment.airWaybillNo),
     'Omniful Tracking Number': safe(shipment.omnifulTrackingCode),
@@ -386,7 +388,7 @@ export const buildExportShipmentRow = (shipment, product = {}) => {
     'Order Status': safe(shipment.orderStatus),
 
     //  Aggregated
-    'Total Products': safe(shipment.totalProducts),
+    'Total Products': safe(shipment?.products?.length),
     'Product SKUs': safe(product?.merchantProductNo), //  PER ROW
     'Total Quantity': safe(product?.quantity), //  PER ROW
     'HS Codes': safe(product?.hsCode), //  PER ROW
@@ -410,8 +412,10 @@ export const buildExportShipmentRow = (shipment, product = {}) => {
 export const SHIPMENT_EXPORT_HEADERS = [
   'Shipment ID', //  NEW FIELD'
   'Order ID',
+  'Shipment Menthod',
   'Shipment Status',
   'Order Status',
+  'Shipment Merchant',
   'Merchant Shipment Number',
   'Aymakan Tracking Number',
   'Omniful Tracking Number',

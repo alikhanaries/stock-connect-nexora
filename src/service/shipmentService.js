@@ -2752,6 +2752,25 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
     const { status, search, shipmentMethod, type, sortBy = 'createdAt', sortOrder = 'desc' } = filters;
 
     // -------------------------
+    // FIND ORDER _IDs FROM ORDER COLLECTION
+    // -------------------------
+    let orderObjectIds = [];
+
+    if (search) {
+      const regex = new RegExp(search, 'i');
+
+      const matchedOrders = await Order.find({
+        $or: [
+          { orderId: regex }, // numeric/string orderId (e.g. 1783)
+          { channelOrderNumber: regex },
+          { merchantOrderNo: regex },
+        ],
+      }).select('_id');
+
+      orderObjectIds = matchedOrders.map((o) => o._id);
+    }
+
+    // -------------------------
     // MATCH
     // -------------------------
     const match = {
@@ -2760,7 +2779,13 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
 
     if (search) {
       const regex = { $regex: search, $options: 'i' };
-      match.$or = [{ airWaybillNo: regex }, { merchantOrderNo: regex }, { merchantShipmentNo: regex }];
+
+      match.$or = [
+        { airWaybillNo: regex },
+        { merchantOrderNo: regex },
+        { merchantShipmentNo: regex },
+        ...(orderObjectIds.length ? [{ orderId: { $in: orderObjectIds } }] : []),
+      ];
     }
 
     if (status) {
@@ -2884,23 +2909,6 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
           },
         },
       },
-      //  PREP
-      {
-        $addFields: {
-          shipmentProductNos: {
-            $map: {
-              input: { $ifNull: ['$products', []] },
-              as: 'p',
-              in: '$$p.merchantProductNo',
-            },
-          },
-
-          //  ADD THIS
-          totalProducts: {
-            $size: { $ifNull: ['$products', []] },
-          },
-        },
-      },
       { $sort: sort },
     ]);
 
@@ -2973,7 +2981,8 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
     // -------------------------
     // FILENAME
     // -------------------------
-    const sanitizedSellerName = sellerName.replace(/[^a-zA-Z0-9]/g, '');
+    const sanitizedSellerName = sellerName ? sellerName.trim().replace(/[^a-zA-Z0-9]/g, '_') : 'Seller';
+
     const exportDate = new Date().toISOString().split('T')[0];
 
     const filename = `${sanitizedSellerName}_ShipmentExport_${exportDate}.csv`;

@@ -8,6 +8,9 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
 
     const sellerMap = {};
 
+    // -----------------------------
+    // PROCESS SKUs
+    // -----------------------------
     skuList.forEach((sku) => {
       const sellerId = sku.sellerId?.toString();
       if (!sellerId) return;
@@ -34,8 +37,20 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
             returned: 0,
             shipmentCreated: 0,
           },
+
+          statusCounts: {
+            NEW: 0,
+            IN_PROGRESS: 0,
+            SHIPPED: 0,
+            DELIVERED: 0,
+            CANCELED: 0,
+            RETURNED: 0,
+            SHIPMENT_CREATED: 0,
+          },
         };
       }
+
+      const data = sellerMap[sellerId];
 
       const price = sku.unitPriceInclVat || 0;
       const qty = sku.quantity || 0;
@@ -52,7 +67,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
       // -----------------------------
       //  PRODUCTS ARRAY BUILD
       // -----------------------------
-      sellerMap[sellerId].products.push({
+      data.products.push({
         productId: sku.id || null,
         merchantProductNo: sku.merchantProductNo || null,
         quantity: qty,
@@ -66,36 +81,52 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
       // -----------------------------
       // TOTALS
       // -----------------------------
-      sellerMap[sellerId].totalSkus += 1;
-      sellerMap[sellerId].totalQuantity += qty;
+      data.totalQuantity += qty;
+      data.totalSkus += 1;
 
-      sellerMap[sellerId].totalAmount += qty * price;
-      sellerMap[sellerId].deliveredAmount += delivered * price;
-      sellerMap[sellerId].canceledAmount += canceled * price;
-      sellerMap[sellerId].returnedAmount += returned * price;
+      data.totalAmount += qty * price;
+      data.deliveredAmount += delivered * price;
+      data.canceledAmount += canceled * price;
+      data.returnedAmount += returned * price;
 
       // -----------------------------
-      // STATUS BREAKDOWN
+      // BREAKDOWN
       // -----------------------------
-      sellerMap[sellerId].statusBreakdown.confirmed += confirmed;
-      sellerMap[sellerId].statusBreakdown.shipped += shipped;
-      sellerMap[sellerId].statusBreakdown.delivered += delivered;
-      sellerMap[sellerId].statusBreakdown.canceled += canceled;
-      sellerMap[sellerId].statusBreakdown.returned += returned;
-      sellerMap[sellerId].statusBreakdown.shipmentCreated += shipmentCreated;
-      sellerMap[sellerId].status = sku.status;
+      data.statusBreakdown.confirmed += confirmed;
+      data.statusBreakdown.shipped += shipped;
+      data.statusBreakdown.delivered += delivered;
+      data.statusBreakdown.canceled += canceled;
+      data.statusBreakdown.returned += returned;
+      data.statusBreakdown.shipmentCreated += shipmentCreated;
+
+      // -----------------------------
+      // DERIVE SKU STATUS
+      // -----------------------------
+      let skuStatus = (sku.status || '').toUpperCase();
+
+      if (!skuStatus) {
+        if (canceled === qty) skuStatus = STATUS.CANCELED;
+        else if (returned === qty) skuStatus = STATUS.RETURNED;
+        else if (delivered === qty) skuStatus = STATUS.DELIVERED;
+        else if (shipped > 0) skuStatus = STATUS.SHIPPED;
+        else if (shipmentCreated > 0) skuStatus = STATUS.IN_PROGRESS;
+        else if (confirmed > 0) skuStatus = STATUS.IN_PROGRESS;
+        else skuStatus = STATUS.NEW;
+      }
+
+      if (data.statusCounts[skuStatus] !== undefined) {
+        data.statusCounts[skuStatus] += 1;
+      }
     });
 
-    if (!Object.keys(sellerMap).length) {
-      // console.warn(' No seller data for order:', orderId);
-      return true;
-    }
+    if (!Object.keys(sellerMap).length) return true;
 
     // -----------------------------
     // NET AMOUNT
     // -----------------------------
     Object.values(sellerMap).forEach((data) => {
       data.netAmount = data.totalAmount - data.canceledAmount - data.returnedAmount;
+      data.finalStatus = deriveSellerStatus(data.statusCounts, data.totalSkus);
     });
 
     // -----------------------------
@@ -115,9 +146,10 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
               orderDate,
               channelId,
               channelName,
-              status: data.status,
 
-              products: data.products, //  NEW
+              status: data.finalStatus,
+
+              products: data.products,
 
               totalAmount: Number(data.totalAmount.toFixed(2)),
               deliveredAmount: Number(data.deliveredAmount.toFixed(2)),
