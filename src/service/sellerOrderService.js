@@ -109,8 +109,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
         else if (returned === qty) skuStatus = STATUS.RETURNED;
         else if (delivered === qty) skuStatus = STATUS.DELIVERED;
         else if (shipped > 0) skuStatus = STATUS.SHIPPED;
-        else if (shipmentCreated > 0) skuStatus = STATUS.IN_PROGRESS;
-        else if (confirmed > 0) skuStatus = STATUS.IN_PROGRESS;
+        else if (shipmentCreated > 0 || confirmed > 0) skuStatus = STATUS.IN_PROGRESS;
         else skuStatus = STATUS.NEW;
       }
 
@@ -268,8 +267,7 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
         else if (returned === qty) skuStatus = STATUS.RETURNED;
         else if (delivered === qty) skuStatus = STATUS.DELIVERED;
         else if (shipped > 0) skuStatus = STATUS.SHIPPED;
-        else if (shipmentCreated > 0) skuStatus = STATUS.IN_PROGRESS;
-        else if (confirmed > 0) skuStatus = STATUS.IN_PROGRESS;
+        else if (shipmentCreated > 0 || confirmed > 0) skuStatus = STATUS.IN_PROGRESS;
         else skuStatus = STATUS.NEW;
       }
 
@@ -277,6 +275,8 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
         data.statusCounts[skuStatus] += 1;
       }
     });
+
+    if (!Object.keys(sellerMap).length) return true;
 
     // -----------------------------
     // FINAL CALCULATIONS
@@ -365,13 +365,14 @@ const deriveSellerStatus = (counts, total) => {
   // 2. SPECIAL MIX RULES
   // -----------------------------
 
-  //  Delivered dominates everything
-  if (DELIVERED > 0) return 'CLOSED';
+  // KEY FIX: SHIPPED overrides RETURNED / CANCELED mix
+  if (SHIPPED > 0) return 'SHIPPED';
 
-  //  Only shipped + canceled → SHIPPED
-  if (SHIPPED > 0 && CANCELED > 0 && SHIPPED + CANCELED === total) {
-    return 'SHIPPED';
-  }
+  // If not shipped, but something is progressing
+  if (IN_PROGRESS > 0) return 'IN_PROGRESS';
+
+  // Optional: handle partial delivered (if you want different behavior)
+  if (DELIVERED > 0) return 'IN_PROGRESS';
 
   // -----------------------------
   // 3. DEFAULT MIXED CASE
