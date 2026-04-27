@@ -223,7 +223,7 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
     {
       $match: {
         sellerId: { $in: sellerObjectIds },
-        status: { $in: SHIPMENT_STATUS.map((s) => s.key) },
+        status: { $in: SHIPMENT_STATUS.flatMap((s) => s.statuses) },
         ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
       },
     },
@@ -259,7 +259,7 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
   const map = new Map(raw.map((r) => [r._id, r.value]));
   return SHIPMENT_STATUS.map((s) => ({
     label: s.label,
-    value: map.get(s.key) || 0,
+    value: s.statuses.reduce((sum, status) => sum + (map.get(status) || 0), 0),
   }));
 };
 
