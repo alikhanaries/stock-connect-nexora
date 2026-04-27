@@ -33,7 +33,7 @@ import forwardShipmentService from './forwardShipmentService.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, declaredValue, collectionData, pieces = 0 } = shipmentData;
+    const { userId, collectionData, pieces = 0 } = shipmentData;
 
     // --- 1Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
@@ -60,7 +60,8 @@ export const createShipmentWithAymakan = async (shipmentData) => {
     // ---  Build final payload for Aymakan ---
     const payload = {
       requested_by: requestedBy,
-      declared_value: declaredValue || 0,
+      declared_value: (shipmentData.products || []).reduce((sum, p) => sum + (p.originalLineTotalInclVat || 0), 0),
+      items_count: (shipmentData.products || []).reduce((sum, p) => sum + (p.quantity || 0), 0),
       cod_amount: shipmentData.codAmount || 0,
       currency: shipmentData.currency || 'SAR',
       delivery_name: config.AYMAKAN_DELIVERY_NAME,
@@ -340,7 +341,7 @@ export const createFullShipmentService = async (shipmentData) => {
       productsData = validProducts.map((item) => ({
         sku: item.merchantProductNo,
         qty: Number(item.quantity || 0),
-        price: Number(item.lineTotalInclVat || 0),
+        price: Number(item.originalLineTotalInclVat || 0),
         hs_code: item.hsCode || '1111111',
       }));
     }
