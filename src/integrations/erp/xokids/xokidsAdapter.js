@@ -1,3 +1,4 @@
+import { filterInStockSubproducts } from '../../common/helpers/filterInStockSubproducts.js';
 import { parseXMLFeed } from '../../common/helpers/xmlParser.js';
 import { createBaseERPAdapter } from '../base/BaseERPAdapter.js';
 import { xokidsConfig } from './config/config.js';
@@ -20,7 +21,7 @@ export const createXokidsAdapter = () => {
         const brand = (p?.brand || '').toString().trim().toLowerCase().replace(/\s+/g, '');
         return brand === 'xokids';
       });
-      return xokidsOnly;
+      return filterInStockSubproducts(xokidsOnly);
     },
   };
 };
