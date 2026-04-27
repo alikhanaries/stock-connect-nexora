@@ -447,6 +447,12 @@ export const formatReturnDetails = (aggregatedResult) => {
   const returnData = aggregatedResult;
   const orderInfo = aggregatedResult.orderInfo;
 
+  // Build product image map (O(n))
+  const productMap = {};
+  (returnData.productData || []).forEach((p) => {
+    productMap[p.productSkuCode] = p;
+  });
+
   if (!orderInfo) {
     return {
       _id: returnData._id,
@@ -505,13 +511,18 @@ export const formatReturnDetails = (aggregatedResult) => {
     subtotal += lineTotalExclVat;
     tax += lineVat;
 
+    // Get image from productMap
+    const productMatch = productMap[returnProduct.productSkuCode];
+
+    const imageUrl = productMatch?.primaryImageUrl || productMatch?.imageUrl || productMatch?.images?.[0] || null;
+
     return {
       id: index + 1,
       orderLineId: returnProduct.orderLineId,
       merchantProductNo: returnProduct.productSkuCode,
       channelProductNo: matchingSku?.channelProductNo || null,
       name: matchingSku?.description || 'Product',
-      imageUrl: null,
+      imageUrl,
       unitPriceInclVat,
       unitPriceExclVat,
       unitVat,
@@ -565,8 +576,8 @@ export const formatReturnDetails = (aggregatedResult) => {
       email: orderInfo.orderCustomer?.email || null,
       phoneNo: orderInfo.orderCustomer?.phone || null,
     },
-    shippingAddress: shippingAddress,
-    products: products,
+    shippingAddress,
+    products,
     omniful: returnData.omniful || null,
     status: returnData.status || 'UNKNOWN',
     subtotal: parseFloat(subtotal.toFixed(2)),

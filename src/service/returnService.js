@@ -684,6 +684,32 @@ export const getReturnById = async (id, sellerId) => {
           preserveNullAndEmptyArrays: true,
         },
       },
+
+      // Product lookup for images
+      {
+        $lookup: {
+          from: 'products',
+          let: { skuCodes: '$products.productSkuCode' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ['$productSkuCode', { $ifNull: ['$$skuCodes', []] }],
+                },
+              },
+            },
+            {
+              $project: {
+                productSkuCode: 1,
+                primaryImageUrl: 1,
+                imageUrl: 1,
+                images: 1,
+              },
+            },
+          ],
+          as: 'productData',
+        },
+      },
     ]);
 
     if (!returnData) return null;
