@@ -1118,7 +1118,7 @@ export const applyReturnToOrder = async (returns = []) => {
       console.log(' No returns received');
       return;
     }
-    returns = returns?.filter((item) => item?.orderId === '1791');
+
     const bulkOps = [];
     const orderIdsToSync = new Set();
 
