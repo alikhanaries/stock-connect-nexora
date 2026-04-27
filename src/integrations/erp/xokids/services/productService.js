@@ -4,22 +4,31 @@ import { erpCommonConfig } from '#root/src/integrations/common/config/config.js'
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import Product from '#root/src/models/Product.js';
+import Seller from '#root/src/models/Seller.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { createXokidsAdapter } from '../xokidsAdapter.js';
+import { getMappingBySellerSlug } from '../helpers/brandMapping.js';
 import { formatXokidsProduct } from '../helpers/formatter.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
 export const getXokidsProducts = async (sellerId, isImageUpdate) => {
   try {
+    const seller = await Seller.findById(sellerId, { slug: 1 }).lean();
+    if (!seller?.slug) throw new Error(`Seller ${sellerId} not found or missing slug`);
+
+    const mapping = getMappingBySellerSlug(seller.slug);
+    if (!mapping) throw new Error(`Seller slug "${seller.slug}" is not a supported brand`);
+    const { displayBrand } = mapping;
+
     const adapter = createXokidsAdapter();
-    const fetched = await adapter.fetchProducts();
+    const fetched = await adapter.fetchProducts(seller.slug);
 
     if (!fetched.length) {
-      return { message: 'No Xokids products to sync.' };
+      return { message: `No ${displayBrand} products to sync.` };
     }
 
-    console.log(`[Xokids Sync] Started — Batch Size: ${MAX_BATCH_SIZE}, Concurrency: ${BATCH_CONCURRENCY}`);
+    console.log(`[${displayBrand} Sync] Started — Batch Size: ${MAX_BATCH_SIZE}, Concurrency: ${BATCH_CONCURRENCY}`);
     let upsertCount = 0;
 
     await processInBatches(
@@ -135,9 +144,9 @@ export const getXokidsProducts = async (sellerId, isImageUpdate) => {
     );
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
-    console.log(`\n[Xokids Sync] ALL BATCHES COMPLETED SUCCESSFULLY`);
+    console.log(`\n[${displayBrand} Sync] ALL BATCHES COMPLETED SUCCESSFULLY`);
   } catch (error) {
-    console.error('Failed to sync Xokids products:', error);
+    console.error('Failed to sync products:', error);
     throw error;
   }
 };
