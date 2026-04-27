@@ -53,12 +53,8 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
       },
       {
         $group: {
-          _id: null,
-          confirmed: { $sum: '$statusBreakdown.confirmed' },
-          shipmentCreated: { $sum: '$statusBreakdown.shipmentCreated' },
-          canceled: { $sum: '$statusBreakdown.canceled' },
-          shipped: { $sum: '$statusBreakdown.shipped' },
-          delivered: { $sum: '$statusBreakdown.delivered' },
+          _id: '$status',
+          count: { $sum: 1 },
         },
       },
     ];
@@ -67,15 +63,15 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
       [currentRange, previousRange].map((range) => SellerOrder.aggregate(buildAgg(range)))
     );
 
-    const toMap = (arr) => (arr.length ? arr[0] : {});
-    const [currentStatus, previousStatus] = [toMap(currentAgg), toMap(previousAgg)];
+    const toStatusMap = (arr) => Object.fromEntries(arr.map(({ _id, count }) => [_id, count]));
+    const [currentStatus, previousStatus] = [toStatusMap(currentAgg), toStatusMap(previousAgg)];
 
     // Final data mapping
-    return ORDER_FLOW_STATUS_CONFIG.map(({ key, label, breakdownKey }) => {
-      const currentValue = currentStatus[breakdownKey] || 0;
+    return ORDER_FLOW_STATUS_CONFIG.map(({ key, label, statuses }) => {
+      const currentValue = statuses.reduce((sum, s) => sum + (currentStatus[s] || 0), 0);
       if (period === 'all') return { key, label, value: currentValue, changePercent: 100, trend: 'up' };
       if (!comparable) return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
-      const previousValue = previousStatus[breakdownKey] || 0;
+      const previousValue = statuses.reduce((sum, s) => sum + (previousStatus[s] || 0), 0);
 
       let changePercent =
         previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : currentValue > 0 ? 100 : 0;
@@ -544,29 +540,30 @@ const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate,
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
 
-  const selectedNames = pickSelectedGlobalNames(channel);
-  const hasChannel = selectedNames.length > 0;
+  const channelIds = pickChannelIdsFromChannel(channel);
+  const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
 
   const pipeline = [
     {
       $match: {
-        sellerIds: { $in: sellerObjectIds },
+        sellerId: { $in: sellerObjectIds },
+        ...channelFilter,
         orderDate: { $gte: range.start, $lte: range.end },
-        globalChannelName: { $type: 'string', $ne: '' },
+        channelName: { $type: 'string', $ne: '' },
       },
     },
-    { $group: { _id: '$globalChannelName', count: { $sum: 1 } } },
+    { $group: { _id: '$channelName', count: { $sum: 1 } } },
     {
       $project: {
         _id: 0,
         key: '$_id',
-        value: hasChannel ? { $cond: [{ $in: ['$_id', selectedNames] }, '$count', 0] } : '$count',
+        value: '$count',
       },
     },
     { $sort: { value: -1, key: 1 } },
   ];
 
-  const data = await Order.aggregate(pipeline).allowDiskUse(true);
+  const data = await SellerOrder.aggregate(pipeline).allowDiskUse(true);
   return Array.isArray(data) ? data : [];
 };
 

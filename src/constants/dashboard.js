@@ -1,9 +1,9 @@
 export const ORDER_FLOW_STATUS_CONFIG = [
-  { key: 'placed', label: 'New Orders', statuses: ['NEW'], breakdownKey: 'confirmed' },
-  { key: 'inProgress', label: 'In Progress', statuses: ['IN_PROGRESS'], breakdownKey: 'shipmentCreated' },
-  { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'], breakdownKey: 'canceled' },
-  { key: 'shipped', label: 'Shipped', statuses: ['SHIPPED'], breakdownKey: 'shipped' },
-  { key: 'closed', label: 'Closed', statuses: ['CLOSED'], breakdownKey: 'delivered' },
+  { key: 'placed', label: 'New Orders', statuses: ['NEW'] },
+  { key: 'inProgress', label: 'In Progress', statuses: ['IN_PROGRESS'] },
+  { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'] },
+  { key: 'shipped', label: 'Shipped', statuses: ['SHIPPED'] },
+  { key: 'closed', label: 'Closed', statuses: ['CLOSED'] },
 ];
 
 export const SHIPMENT_STATUS = [
