@@ -1,16 +1,16 @@
 export const ORDER_FLOW_STATUS_CONFIG = [
-  { key: 'placed', label: 'New Orders', statuses: ['NEW'], breakdownKey: 'confirmed' },
-  { key: 'inProgress', label: 'In Progress', statuses: ['IN_PROGRESS'], breakdownKey: 'shipmentCreated' },
-  { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'], breakdownKey: 'canceled' },
-  { key: 'shipped', label: 'Shipped', statuses: ['SHIPPED'], breakdownKey: 'shipped' },
-  { key: 'closed', label: 'Closed', statuses: ['CLOSED'], breakdownKey: 'delivered' },
+  { key: 'placed', label: 'New Orders', statuses: ['NEW'] },
+  { key: 'inProgress', label: 'In Progress', statuses: ['IN_PROGRESS'] },
+  { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'] },
+  { key: 'shipped', label: 'Shipped', statuses: ['SHIPPED'] },
+  { key: 'closed', label: 'Closed', statuses: ['CLOSED'] },
 ];
 
 export const SHIPMENT_STATUS = [
-  { key: 'SHIPMENT_CREATED', label: 'Ready to ship' },
-  { key: 'SHIPPED', label: 'In transit' },
-  { key: 'DELIVERED', label: 'Delivered' },
-  { key: 'CANCELED', label: 'Canceled' },
+  { statuses: ['SHIPMENT_CREATED'], label: 'Ready to ship' },
+  { statuses: ['SHIPMENT_PROCESSED', 'HUB_RECIEVED', 'OUT_FOR_DELIVERY', 'OMNIFUL_PROCESSED'], label: 'In transit' },
+  { statuses: ['DELIVERED'], label: 'Delivered' },
+  { statuses: ['CANCELED'], label: 'Canceled' },
 ];
 
 export const CHANNEL_TO_GLOBAL_NAMES = Object.freeze({
