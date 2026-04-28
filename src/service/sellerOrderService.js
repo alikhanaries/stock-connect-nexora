@@ -351,31 +351,36 @@ const STATUS = {
 const deriveSellerStatus = (counts, total) => {
   const { NEW = 0, IN_PROGRESS = 0, SHIPPED = 0, DELIVERED = 0, CANCELED = 0, RETURNED = 0 } = counts;
 
-  // -----------------------------
-  // 1. ALL SAME
-  // -----------------------------
-  if (NEW === total) return 'NEW';
-  if (IN_PROGRESS === total) return 'IN_PROGRESS';
-  if (SHIPPED === total) return 'SHIPPED';
-  if (DELIVERED === total) return 'CLOSED';
-  if (CANCELED === total) return 'CANCELED';
-  if (RETURNED === total) return 'RETURNED';
+  const closedCount = DELIVERED + RETURNED + CANCELED;
 
   // -----------------------------
-  // 2. SPECIAL MIX RULES
+  // 1. FULLY CLOSED (FINAL STATES ONLY)
   // -----------------------------
-
-  // KEY FIX: SHIPPED overrides RETURNED / CANCELED mix
-  if (SHIPPED > 0) return 'SHIPPED';
-
-  // If not shipped, but something is progressing
-  if (IN_PROGRESS > 0) return 'IN_PROGRESS';
-
-  // Optional: handle partial delivered (if you want different behavior)
-  if (DELIVERED > 0) return 'IN_PROGRESS';
+  if (closedCount === total) return STATUS.CLOSED;
 
   // -----------------------------
-  // 3. DEFAULT MIXED CASE
+  // 2. ALL SAME (non-closed states)
   // -----------------------------
-  return 'IN_PROGRESS';
+  if (NEW === total) return STATUS.NEW;
+  if (IN_PROGRESS === total) return STATUS.IN_PROGRESS;
+  if (SHIPPED === total) return STATUS.SHIPPED;
+
+  // -----------------------------
+  // 3. PRIORITY RULES (ACTIVE STATES)
+  // -----------------------------
+  if (SHIPPED > 0) return STATUS.SHIPPED;
+
+  if (IN_PROGRESS > 0) return STATUS.IN_PROGRESS;
+
+  // -----------------------------
+  // 4. FALLBACK (partial completion)
+  // -----------------------------
+  if (DELIVERED > 0 || RETURNED > 0 || CANCELED > 0) {
+    return STATUS.IN_PROGRESS;
+  }
+
+  // -----------------------------
+  // 5. DEFAULT
+  // -----------------------------
+  return STATUS.IN_PROGRESS;
 };
