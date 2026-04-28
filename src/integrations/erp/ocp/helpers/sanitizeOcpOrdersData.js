@@ -4,7 +4,7 @@ import Product from '#root/src/models/Product.js';
 import { OCP_STATUS_MAP } from '../constants/common.js';
 
 export const sanitizeOcpOrdersData = async (orders, sellerId) => {
-  if (!orders?.length) return [];
+  if (!orders?.length) return { bulkOps: [], sellerOrderPayloads: [] };
 
   const orderIds = orders.map((data) => `${sellerId}${data.id}`);
   const skuSet = new Set();
@@ -37,7 +37,10 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
   const existingOrdersMap = new Map(existingOrdersDb.map((order) => [order.orderId, order]));
   const productSellerMap = new Map(productDocs.map((p) => [p.productSkuCode, p.sellerId]));
 
-  return orders.map((data) => {
+  const bulkOps = [];
+  const sellerOrderPayloads = [];
+
+  for (const data of orders) {
     const orderId = `${sellerId}${data.id}`;
     const existingOrder = existingOrdersMap.get(orderId);
 
@@ -253,7 +256,9 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       },
     };
 
-    return {
+    sellerOrderPayloads.push({ orderPayload: updatePayload });
+
+    bulkOps.push({
       updateOne: {
         filter: { orderId },
         update: {
@@ -262,8 +267,9 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
         },
         upsert: true,
       },
-    };
-  });
+    });
+  }
+  return { bulkOps, sellerOrderPayloads };
 };
 
 const flattenShippedItems = (shippedItems) => {

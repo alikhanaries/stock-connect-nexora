@@ -304,6 +304,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
   });
 
   const operations = [];
+  const sellerOrderPayloads = [];
 
   for (const [orderId, orderData] of orderMap) {
     const { orderInfo, items } = orderData;
@@ -492,6 +493,8 @@ export const sanitizeAmazonOrdersData = async (orders) => {
       },
     };
 
+    sellerOrderPayloads.push({ orderPayload: updatePayload });
+
     operations.push({
       updateOne: {
         filter: { orderId: orderId },
@@ -502,7 +505,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
   }
 
   console.log('Total operations to execute:', operations.length);
-  return operations;
+  return { bulkOps: operations, sellerOrderPayloads };
 };
 
 const parseAmazonDate = (dateStr) => {
