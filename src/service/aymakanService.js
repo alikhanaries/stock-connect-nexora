@@ -1,11 +1,52 @@
 import { config } from '../config/config.js';
 const { AYMAKAN_API_KEY, AYMAKAN_API_URL } = config;
 
+// export const createAymakanShipment = async (payload) => {
+//   try {
+//     payload.fulfilment_customer_name = payload.delivery_name; // <-- ADD THIS
+//     console.log('Creating Aymakan shipment with payload:', JSON.stringify(payload, null, 2));
+//     // Call Aymakan API
+//     const response = await fetch(`${AYMAKAN_API_URL}shipping/create`, {
+//       method: 'POST',
+//       headers: {
+//         'Content-Type': 'application/json',
+//         Authorization: AYMAKAN_API_KEY,
+//       },
+//       body: JSON.stringify(payload),
+//     });
+
+//     console.log('Aymakan API response status:', JSON.stringify(response, null, 2));
+
+//     if (!response.ok) {
+//       const errorData = await response.json();
+//       throw new Error(errorData?.message);
+//     }
+
+//     //  Parse JSON body
+//     const result = await response.json().catch(async () => {
+//       const errorData = await response.json();
+//       throw new Error(errorData?.message);
+//     });
+
+//     console.log('Aymakan API result:', JSON.stringify(result, null, 2));
+
+//     // Validate response
+//     if (!result?.shipping?.tracking_number) {
+//       throw new Error('Invalid response from Aymakan API: Missing tracking number');
+//     }
+
+//     return result;
+//   } catch (error) {
+//     console.error('Aymakan Service Error:', error.message, error.stack);
+//     throw error;
+//   }
+// };
+
 export const createAymakanShipment = async (payload) => {
   try {
-    payload.fulfilment_customer_name = payload.delivery_name; // <-- ADD THIS
+    payload.fulfilment_customer_name = payload.delivery_name;
     console.log('Creating Aymakan shipment with payload:', JSON.stringify(payload, null, 2));
-    // Call Aymakan API
+
     const response = await fetch(`${AYMAKAN_API_URL}shipping/create`, {
       method: 'POST',
       headers: {
@@ -15,33 +56,27 @@ export const createAymakanShipment = async (payload) => {
       body: JSON.stringify(payload),
     });
 
-    console.log('Aymakan API response status:', JSON.stringify(response, null, 2));
+    // ✅ Log actual status info, not the Response object
+    console.log('Aymakan API response status:', response.status, response.statusText);
+
+    // ✅ Read the body ONCE, then decide what to do with it
+    const data = await response.json().catch(() => null);
+    console.log('Aymakan API raw response:', JSON.stringify(data, null, 2));
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData?.message);
+      throw new Error(data?.message || `Aymakan API error: ${response.status} ${response.statusText}`);
     }
 
-    //  Parse JSON body
-    const result = await response.json().catch(async () => {
-      const errorData = await response.json();
-      throw new Error(errorData?.message);
-    });
-
-    console.log('Aymakan API result:', JSON.stringify(result, null, 2));
-
-    // Validate response
-    if (!result?.shipping?.tracking_number) {
+    if (!data?.shipping?.tracking_number) {
       throw new Error('Invalid response from Aymakan API: Missing tracking number');
     }
 
-    return result;
+    return data;
   } catch (error) {
-    console.error('Aymakan Service Error:', error.message, error.stack);
+    console.error('Aymakan Service Error: ', error.message, error.stack);
     throw error;
   }
 };
-
 export const trackAymakanShipment = async (trackingNumber) => {
   try {
     if (!trackingNumber) {
