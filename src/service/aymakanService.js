@@ -4,6 +4,7 @@ const { AYMAKAN_API_KEY, AYMAKAN_API_URL } = config;
 export const createAymakanShipment = async (payload) => {
   try {
     payload.fulfilment_customer_name = payload.delivery_name; // <-- ADD THIS
+    console.log('Creating Aymakan shipment with payload:', JSON.stringify(payload, null, 2));
     // Call Aymakan API
     const response = await fetch(`${AYMAKAN_API_URL}shipping/create`, {
       method: 'POST',
@@ -24,6 +25,8 @@ export const createAymakanShipment = async (payload) => {
       const errorData = await response.json();
       throw new Error(errorData?.message);
     });
+
+    console.log('Aymakan API result:', JSON.stringify(result, null, 2));
 
     // Validate response
     if (!result?.shipping?.tracking_number) {
