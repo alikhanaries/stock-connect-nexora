@@ -1,6 +1,7 @@
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
+import { MAX_PRICE } from '../constants/common.js';
 import { extractImages, getColorImages } from './common.js';
 
 export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500) => {
@@ -22,6 +23,8 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
 
       // Use sarPrices as the base price when available, otherwise fall back to variant price
       const basePrice = sarPrices ?? (Number(variants[0]?.price) || 0);
+      const isPriceInactive = Number(basePrice) >= MAX_PRICE;
+      const grandParentStatus = isPriceInactive ? 'inactive' : status;
 
       const grandParentProduct = canonicalProductMapper(
         {
@@ -58,7 +61,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           extraImageUrl2: productImages.extraImageUrl2,
           extraImageUrl3: productImages.extraImageUrl3,
           source: 'SHOPIFY',
-          status,
+          status: grandParentStatus,
           noonPrice: basePrice,
           namshiPrice: basePrice,
         },
@@ -128,7 +131,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
             extraImageUrl2: parentImages.extraImageUrl2,
             extraImageUrl3: parentImages.extraImageUrl3,
             source: 'SHOPIFY',
-            status,
+            status: isPriceInactive ? 'inactive' : status,
             noonPrice: sarPrices ?? (parentPrices[0] || 0),
             namshiPrice: sarPrices ?? (parentPrices[0] || 0),
           },
@@ -182,7 +185,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
               extraImageUrl2: variantImages.extraImageUrl2,
               extraImageUrl3: variantImages.extraImageUrl3,
               source: 'SHOPIFY',
-              status,
+              status: isPriceInactive ? 'inactive' : status,
               noonPrice: sarPrices ?? (Number(variant.price) || 0),
               namshiPrice: sarPrices ?? (Number(variant.price) || 0),
             },

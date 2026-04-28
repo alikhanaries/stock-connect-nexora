@@ -4,7 +4,6 @@ import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { formatProducts } from '../helpers/formatter.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
 import { fetchExquiseProducts } from '../utils/fetch.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
@@ -64,11 +63,6 @@ export const fetchAndStoreShopifyExquiseProducts = async (sellerId, sellerData) 
     if (categoryTrails.size > 0) {
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
-
-    await resolveHierarchyStatus(
-      sellerId,
-      canonicalProducts.map((p) => p.productSkuCode)
-    );
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
   } catch (err) {
