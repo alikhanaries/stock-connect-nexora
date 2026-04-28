@@ -8,7 +8,6 @@ const FinanceRecordSchema = new Schema(
     sellerId: { type: ObjectId, ref: 'Seller', required: true },
     marketplace: { type: String, trim: true },
     orderId: { type: String, trim: true, index: true },
-    itemRef: { type: String, trim: true },
     brand: { type: String, trim: true },
     sku: { type: String, trim: true },
     skuStatus: { type: String, trim: true },
@@ -27,6 +26,7 @@ const FinanceRecordSchema = new Schema(
   { timestamps: true }
 );
 
+FinanceRecordSchema.index({ orderId: 1, sku: 1 });
 FinanceRecordSchema.index({ sellerId: 1, orderId: 1 });
 FinanceRecordSchema.index({ sellerId: 1, marketplace: 1 });
 FinanceRecordSchema.index({ sellerId: 1, orderDate: -1 });

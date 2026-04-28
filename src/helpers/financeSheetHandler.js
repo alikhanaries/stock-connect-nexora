@@ -10,7 +10,12 @@ export const parseValue = (field, raw) => {
     return isNaN(d.getTime()) ? null : d;
   }
   if (FINANCE_NUMBER_FIELDS.has(field)) {
-    const n = parseFloat(String(val).replace(/,/g, ''));
+    const n = parseFloat(
+      String(val)
+        .replace(/[A-Z]{3}/g, '')
+        .replace(/,/g, '')
+        .trim()
+    );
     return isNaN(n) ? null : n;
   }
   return val;

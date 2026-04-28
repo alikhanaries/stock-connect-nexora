@@ -19,6 +19,10 @@ export const getTransactionHistory = async (
     .map((id) => new mongoose.Types.ObjectId(id));
 
   const match = { sellerId: { $in: sellerObjectIds } };
+  console.log('[getTransactionHistory] querying sellerIds:', sellerObjectIds.map(String));
+  console.log('[getTransactionHistory] total docs in collection:', await FinanceRecord.countDocuments({}));
+  const sampleDoc = await FinanceRecord.findOne({}).lean();
+  console.log('[getTransactionHistory] sample doc sellerId in DB:', sampleDoc?.sellerId, typeof sampleDoc?.sellerId);
 
   const range = getDateRange({ period, startDate, endDate, month });
   if (range) {
@@ -146,41 +150,73 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
 };
 
 export const syncFinance = async () => {
+  console.log('[syncFinance] Starting sync...');
+
   const url = process.env.FINANCE_GOOGLE_SHEET_URL;
+  console.log('[syncFinance] Sheet URL from env:', url);
 
   if (!isValidGoogleSheetUrl(url)) {
+    console.error('[syncFinance] URL validation failed for:', url);
     throw new Error('Invalid Google Sheets URL');
   }
 
   const exportUrl = await convertGoogleSheetUrlToExport(url);
+  console.log('[syncFinance] Export URL:', exportUrl);
 
+  console.log('[syncFinance] Fetching sheet...');
   const sheetRes = await fetch(exportUrl);
+  console.log('[syncFinance] Fetch response status:', sheetRes.status, sheetRes.statusText);
 
   if (!sheetRes.ok) {
     throw new Error('Failed to fetch Google Sheet');
   }
 
+  console.log('[syncFinance] Parsing sheet stream...');
   const stream = Readable.fromWeb(sheetRes.body);
   const rawRows = await parseSheetStream(stream);
+  console.log('[syncFinance] Raw rows parsed:', rawRows.length);
 
   if (!rawRows.length) {
     throw new Error('Google Sheet is empty or has no data rows');
   }
 
-  const docs = rawRows.map((row) => mapRowToRecord(row));
+  console.log('[syncFinance] First raw row sample:', rawRows[0]);
+
+  const docs = rawRows.map((row) => {
+    const doc = mapRowToRecord(row);
+    if (doc.sellerId) {
+      try {
+        doc.sellerId = mongoose.Types.ObjectId.createFromHexString(doc.sellerId);
+      } catch {
+        doc.sellerId = null;
+      }
+    }
+    return doc;
+  });
+  console.log('[syncFinance] Mapped docs count:', docs.length);
+  console.log('[syncFinance] First mapped doc sample:', docs[0]);
 
   const bulkOps = docs.map((doc) => ({
     updateOne: {
       filter: {
-        itemRef: doc.itemRef,
+        orderId: doc.orderId,
+        sku: doc.sku,
       },
       update: { $set: doc },
       upsert: true,
     },
   }));
+
+  console.log('[syncFinance] Running bulkWrite with', bulkOps.length, 'operations...');
   const result = await FinanceRecord.bulkWrite(bulkOps, {
     ordered: false,
   });
+  console.log('[syncFinance] bulkWrite result:', {
+    upserted: result.upsertedCount,
+    modified: result.modifiedCount,
+    matched: result.matchedCount,
+  });
+
   return {
     totalRows: rawRows.length,
     inserted: result.upsertedCount,
