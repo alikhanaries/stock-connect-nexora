@@ -108,8 +108,9 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
         if (canceled === qty) skuStatus = STATUS.CANCELED;
         else if (returned === qty) skuStatus = STATUS.RETURNED;
         else if (delivered === qty) skuStatus = STATUS.DELIVERED;
-        else if (shipped > 0) skuStatus = STATUS.SHIPPED;
+        // IN_PROGRESS must come before SHIPPED
         else if (shipmentCreated > 0 || confirmed > 0) skuStatus = STATUS.IN_PROGRESS;
+        else if (shipped > 0) skuStatus = STATUS.SHIPPED;
         else skuStatus = STATUS.NEW;
       }
 
@@ -258,22 +259,31 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
       data.statusBreakdown.shipmentCreated += shipmentCreated;
 
       // -----------------------------
-      // DERIVE SKU STATUS
+      //  FINAL SKU STATUS LOGIC
       // -----------------------------
-      let skuStatus = (sku.status || '').toUpperCase();
+      let skuStatus;
 
-      if (!skuStatus) {
-        if (canceled === qty) skuStatus = STATUS.CANCELED;
-        else if (returned === qty) skuStatus = STATUS.RETURNED;
-        else if (delivered === qty) skuStatus = STATUS.DELIVERED;
-        else if (shipped > 0) skuStatus = STATUS.SHIPPED;
-        else if (shipmentCreated > 0 || confirmed > 0) skuStatus = STATUS.IN_PROGRESS;
-        else skuStatus = STATUS.NEW;
+      if (canceled === qty) {
+        skuStatus = STATUS.CANCELED;
+      } else if (returned === qty) {
+        skuStatus = STATUS.RETURNED;
+      } else if (delivered === qty) {
+        skuStatus = STATUS.DELIVERED;
+      }
+      //  PARTIAL vs FULL SHIPPED HANDLING
+      else if (shipmentCreated > 0 || confirmed > 0) {
+        if (shipped === qty) {
+          skuStatus = STATUS.SHIPPED; // fully shipped
+        } else {
+          skuStatus = STATUS.IN_PROGRESS; // partially processed
+        }
+      } else if (shipped > 0) {
+        skuStatus = STATUS.SHIPPED;
+      } else {
+        skuStatus = STATUS.NEW;
       }
 
-      if (data.statusCounts[skuStatus] !== undefined) {
-        data.statusCounts[skuStatus] += 1;
-      }
+      data.statusCounts[skuStatus] += 1;
     });
 
     if (!Object.keys(sellerMap).length) return true;
@@ -354,26 +364,26 @@ const deriveSellerStatus = (counts, total) => {
   const closedCount = DELIVERED + RETURNED + CANCELED;
 
   // -----------------------------
-  // 1. FULLY CLOSED (FINAL STATES ONLY)
+  // 1. FULLY CLOSED
   // -----------------------------
   if (closedCount === total) return STATUS.CLOSED;
 
   // -----------------------------
-  // 2. ALL SAME (non-closed states)
+  // 2. ALL SAME
   // -----------------------------
   if (NEW === total) return STATUS.NEW;
   if (IN_PROGRESS === total) return STATUS.IN_PROGRESS;
   if (SHIPPED === total) return STATUS.SHIPPED;
 
   // -----------------------------
-  // 3. PRIORITY RULES (ACTIVE STATES)
+  // 3. PRIORITY RULES (FIXED)
   // -----------------------------
-  if (SHIPPED > 0) return STATUS.SHIPPED;
-
   if (IN_PROGRESS > 0) return STATUS.IN_PROGRESS;
 
+  if (SHIPPED > 0) return STATUS.SHIPPED;
+
   // -----------------------------
-  // 4. FALLBACK (partial completion)
+  // 4. PARTIAL FINAL STATES
   // -----------------------------
   if (DELIVERED > 0 || RETURNED > 0 || CANCELED > 0) {
     return STATUS.IN_PROGRESS;
