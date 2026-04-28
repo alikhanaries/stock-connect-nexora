@@ -15,6 +15,8 @@ export const createAymakanShipment = async (payload) => {
       body: JSON.stringify(payload),
     });
 
+    console.log('Aymakan API response status:', JSON.stringify(response, null, 2));
+
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(errorData?.message);
