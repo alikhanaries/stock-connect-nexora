@@ -15,6 +15,7 @@ export const syncXokidsProducts = async (req, res) => {
     if (!mapping) return errorResponse(res, `Seller slug "${seller.slug}" is not a supported brand`);
 
     const { displayBrand } = mapping;
+    if (!displayBrand) return errorResponse(res, `Display brand is missing for seller slug "${seller.slug}"`);
 
     setImmediate(() => {
       getXokidsProducts(sellerId, isImageUpdate).catch((err) =>
@@ -24,7 +25,7 @@ export const syncXokidsProducts = async (req, res) => {
 
     return successResponse(res, `${displayBrand} product sync started in background`, 202);
   } catch (error) {
-    console.error('Failed to start product sync:', error);
+    console.error('Failed to start Xokids sync:', error);
     return errorResponse(res, error.message);
   }
 };

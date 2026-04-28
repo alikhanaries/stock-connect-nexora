@@ -14,6 +14,7 @@ export const syncXokidsInventory = async (req, res) => {
     if (!mapping) return errorResponse(res, `Seller slug "${seller.slug}" is not a supported brand`);
 
     const { displayBrand } = mapping;
+    if (!displayBrand) return errorResponse(res, `Display brand is missing for seller slug "${seller.slug}"`);
 
     setImmediate(() => {
       xokidsInventorySync(sellerId).catch((err) => console.error(`${displayBrand} inventory sync failed:`, err));
@@ -21,7 +22,7 @@ export const syncXokidsInventory = async (req, res) => {
 
     return successResponse(res, `${displayBrand} inventory sync started in background`, 202);
   } catch (error) {
-    console.error('Failed to start inventory sync:', error);
+    console.error('Failed to start Xokids inventory sync:', error);
     return errorResponse(res, error.message);
   }
 };
