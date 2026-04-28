@@ -119,7 +119,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalDeliveredSales: { $sum: '$deliveredAmount' },
           totalOrderValue: { $sum: '$totalAmount' },
           netAmount: { $sum: '$netAmount' },
-          totalProducts: { $sum: '$totalSkus' },
+          totalProducts: { $sum: '$totalQuantity' },
         },
       },
       {
