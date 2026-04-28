@@ -292,7 +292,7 @@ export const generateDocumentIdValidator = validate(async (req) => {
         },
         { message: 'Please upload a valid file' }
       )
-      .refine((f) => !f || f.size <= 1024 * 1024, { message: 'File size should not exceed 1 MB' }),
+      .refine((f) => !f || f.size <= 5 * 1024 * 1024, { message: 'File size should not exceed 5 MB' }),
   });
 
   // Parse combined body with normalized skuCodes
