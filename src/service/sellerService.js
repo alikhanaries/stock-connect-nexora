@@ -207,10 +207,10 @@ export const getSellerById = async (id) => {
 };
 export const saveSellerPickUpAdressDetails = async (payload, sellerId) => {
   try {
-    const { city, address, postcode, country, phone, description, email } = payload;
+    const { name, city, address, postcode, country, phone, description, email } = payload;
 
     // Check mandatory fields
-    if (!city || !address || !postcode || !country || !phone || !email) {
+    if (!name || !city || !address || !postcode || !country || !phone || !email) {
       throw new Error('Missing required fields');
     }
 
@@ -226,6 +226,7 @@ export const saveSellerPickUpAdressDetails = async (payload, sellerId) => {
 
     // Create new pickup address
     const pickupData = {
+      name,
       sellerId,
       email,
       city,
@@ -255,7 +256,7 @@ export const updatePickupAddress = async (id, payload) => {
     // Get current record
     const existingData = await PickupAddress.findOne(
       { _id: id, status: { $ne: 'removed' } },
-      { sellerId: 1, address: 1 }
+      { sellerId: 1, address: 1, name: 1 }
     );
 
     if (!existingData) {

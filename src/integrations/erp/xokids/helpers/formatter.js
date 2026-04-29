@@ -1,5 +1,6 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import { MIN_STOCK } from '../constants/common.js';
+import { getBrandMapping } from './brandMapping.js';
 
 const toArray = (value) => {
   if (value === null || value === undefined) return [];
@@ -24,7 +25,7 @@ const shouldUploadImages = (sku, existingSkus, isImageUpdate) => {
   return isImageUpdate === true;
 };
 
-const formatBaseProduct = async (product, sellerId, subproductImages, uploadImages) => {
+const formatBaseProduct = async (product, sellerId, subproductImages, uploadImages, brandName) => {
   const imgItems = toArray(product.img_item).map((i) => i?.trim());
   const rawImages = cleanImages(product.image_url, product.additional_image_url, imgItems, subproductImages);
 
@@ -50,7 +51,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
     sellerId,
     name: product.name,
     description: product.details,
-    brand: 'XOkids',
+    brand: brandName,
     categoryTrail: product.category_path,
     vatRateType: product.vat && Number(product.vat) > 0 ? 'STANDARD' : 'ZERO',
     ...processed,
@@ -68,6 +69,8 @@ export const formatXokidsProduct = async (raw = [], sellerId, isImageUpdate = fa
   const categoryTrails = new Set();
 
   for (const product of raw) {
+    const mapping = getBrandMapping(product?.brand);
+    if (!mapping) continue;
     if (product.category_path) categoryTrails.add(product.category_path);
 
     const subproducts = toArray(product?.subproducts?.subproduct).filter(
@@ -80,7 +83,7 @@ export const formatXokidsProduct = async (raw = [], sellerId, isImageUpdate = fa
     const subproductImages = extractSubproductImages(subproducts);
     const grandParentSku = product.ws_code || product.code;
     const uploadBaseImages = shouldUploadImages(grandParentSku, existingSkus, isImageUpdate);
-    const base = await formatBaseProduct(product, sellerId, subproductImages, uploadBaseImages);
+    const base = await formatBaseProduct(product, sellerId, subproductImages, uploadBaseImages, mapping.displayBrand);
 
     if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
 

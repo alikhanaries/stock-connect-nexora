@@ -1,5 +1,6 @@
 import Product from '#models/Product.js';
 import { entegraConfig } from '#root/src/integrations/erp/entegra/config/config.js';
+import { filterInStockProducts } from '../helpers/filterInStockProducts.js';
 import { mapProductToDB } from '../helpers/formatter.js';
 import { fetchCategories } from './categoryService.js';
 import { getAccessToken } from '../utils/accessTokenGenerator.js';
@@ -47,6 +48,10 @@ export const fetchProductsPage = async (page = 1, AUTH_TOKEN) => {
 
       if (!json || typeof json !== 'object') {
         throw new Error('API returned empty or malformed JSON');
+      }
+
+      if (Array.isArray(json.productList)) {
+        json.productList = filterInStockProducts(json.productList);
       }
 
       // Optional: add a small delay to avoid rate-limit
