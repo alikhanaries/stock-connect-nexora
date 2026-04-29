@@ -428,15 +428,14 @@ export const createFullShipmentService = async (shipmentData) => {
     if (!collectionData) throw new Error('Invalid pickup information');
 
     // Step 10: Create shipment via Aymakan (external, before transaction)
-    const aymakanPayload = {
+    const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
       collectionData,
       pieces,
       taxData,
       productsData,
-    };
-    const aymakanResult = await createShipmentWithAymakan(aymakanPayload);
+    });
 
     if (!aymakanResult?.success) {
       return { success: false, message: 'Shipment by Aymakan encountered an error.' };
