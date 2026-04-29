@@ -30,10 +30,11 @@ import { decreaseStock, increaseStock, validateStockAvailability } from '../help
 import { sendStockBatch } from '../service/InventoryService.js';
 import Seller from '#models/Seller.js';
 import forwardShipmentService from './forwardShipmentService.js';
+import Product from '#models/Product.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, declaredValue, collectionData, pieces = 0 } = shipmentData;
+    const { userId, collectionData, pieces = 0 } = shipmentData;
 
     // --- 1Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
@@ -53,14 +54,15 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       [`${prefix}_country`]: data?.country || '',
       [`${prefix}_phone`]: data?.phone || '',
     });
-    const { documentId, taxData = {} } = shipmentData;
+    const { documentId, taxData = {}, productsData } = shipmentData;
     const hasInternationalMetadata =
       documentId && taxData.tax_identification_number && taxData.invoice_number && taxData.invoice_date;
 
     // ---  Build final payload for Aymakan ---
     const payload = {
       requested_by: requestedBy,
-      declared_value: declaredValue || 0,
+      declared_value: (shipmentData.products || []).reduce((sum, p) => sum + (p.originalLineTotalInclVat || 0), 0),
+      items_count: (shipmentData.products || []).reduce((sum, p) => sum + (p.quantity || 0), 0),
       cod_amount: shipmentData.codAmount || 0,
       currency: shipmentData.currency || 'SAR',
       delivery_name: config.AYMAKAN_DELIVERY_NAME,
@@ -70,8 +72,10 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
       delivery_postcode: config.AYMAKAN_DELIVERY_POSTCODE,
       delivery_phone: config.AYMAKAN_DELIVERY_PHONE,
+      delivery_duty_type: 'DDP',
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
+      ...(productsData?.length && { products: productsData }),
       ...(hasInternationalMetadata && {
         international_metadata: {
           document_id: documentId,
@@ -337,11 +341,18 @@ export const createFullShipmentService = async (shipmentData) => {
         invoice_date: invoiceData.invoiceData?.invoiceDate || '',
       };
 
+      const skus = validProducts.map((item) => item.merchantProductNo);
+      const productDocs = await Product.find({ productSkuCode: { $in: skus } })
+        .select('productSkuCode countryOfOrigin')
+        .lean();
+      const originMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.countryOfOrigin || '']));
+
       productsData = validProducts.map((item) => ({
         sku: item.merchantProductNo,
         qty: Number(item.quantity || 0),
-        price: Number(item.lineTotalInclVat || 0),
+        price: Number(item.originalLineTotalInclVat || 0),
         hs_code: item.hsCode || '1111111',
+        origin_country: originMap[item.merchantProductNo] || '',
       }));
     }
 
