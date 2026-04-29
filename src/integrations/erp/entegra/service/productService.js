@@ -50,10 +50,6 @@ export const fetchProductsPage = async (page = 1, AUTH_TOKEN) => {
         throw new Error('API returned empty or malformed JSON');
       }
 
-      if (Array.isArray(json.productList)) {
-        json.productList = filterInStockProducts(json.productList);
-      }
-
       // Optional: add a small delay to avoid rate-limit
       await new Promise((r) => setTimeout(r, 200));
 
@@ -93,11 +89,13 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
     }
 
     // Validate response format
-    const list = result?.productList;
-    if (!Array.isArray(list) || list.length === 0) {
+    const rawList = result?.productList;
+    if (!Array.isArray(rawList) || rawList.length === 0) {
       console.log(' No more products. Import completed.');
       break;
     }
+
+    const list = filterInStockProducts(rawList);
 
     let importedThisPage = 0;
 
