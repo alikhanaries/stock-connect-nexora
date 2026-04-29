@@ -2,6 +2,7 @@
 export const FINANCE_HEADER_MAP = {
   Marketplace: 'marketplace',
   'Order ID': 'orderId',
+  Item_Ref: 'itemRef',
   Brand: 'brand',
   'Seller ID': 'sellerId',
   SKU: 'sku',
