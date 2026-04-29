@@ -1,4 +1,3 @@
-import { filterInStockSubproducts } from '../../common/helpers/filterInStockSubproducts.js';
 import { parseXMLFeed } from '../../common/helpers/xmlParser.js';
 import { createBaseERPAdapter } from '../base/BaseERPAdapter.js';
 import { xokidsConfig } from './config/config.js';
@@ -19,8 +18,7 @@ export const createXokidsAdapter = () => {
       const parsed = await parseXMLFeed(xmlString);
       const products = parsed?.products?.product || [];
       const productArray = Array.isArray(products) ? products : [products];
-      const forSeller = productArray.filter((p) => isBrandForSeller(p?.brand, sellerSlug));
-      return filterInStockSubproducts(forSeller);
+      return productArray.filter((p) => isBrandForSeller(p?.brand, sellerSlug));
     },
   };
 };
