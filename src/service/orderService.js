@@ -598,6 +598,7 @@ export const getOrderById = async (id, sellerId) => {
           hsCode,
           sellerId: sku.sellerId,
           sellerName: dynamicSellerName,
+          originalLineTotalInclVat: sku.originalLineTotalInclVat,
         });
       }
     });

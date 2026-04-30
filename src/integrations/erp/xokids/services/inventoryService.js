@@ -3,7 +3,9 @@ import { erpCommonConfig } from '#root/src/integrations/common/config/config.js'
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import Product from '#root/src/models/Product.js';
 import Inventory from '#root/src/models/Inventory.js';
+import Seller from '#root/src/models/Seller.js';
 import { createXokidsAdapter } from '../xokidsAdapter.js';
+import { getMappingBySellerSlug } from '../helpers/brandMapping.js';
 import { formatXokidsInventory } from '../helpers/formatInventory.js';
 import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
 
@@ -13,14 +15,21 @@ const normalize = (sku) => sku?.trim().toUpperCase();
 
 export const xokidsInventorySync = async (sellerId) => {
   try {
+    const seller = await Seller.findById(sellerId, { slug: 1 }).lean();
+    if (!seller?.slug) throw new Error(`Seller ${sellerId} not found or missing slug`);
+
+    const mapping = getMappingBySellerSlug(seller.slug);
+    if (!mapping) throw new Error(`Seller slug "${seller.slug}" is not a supported brand`);
+    const { displayBrand } = mapping;
+
     const adapter = createXokidsAdapter();
-    const productsFromApi = await adapter.fetchProducts();
+    const productsFromApi = await adapter.fetchProducts(seller.slug);
 
     if (!productsFromApi.length) {
-      return { message: 'No Xokids products found for inventory sync.' };
+      return { message: `No ${displayBrand} products found for inventory sync.` };
     }
 
-    console.log(`[Xokids Inventory Sync] Started`);
+    console.log(`[${displayBrand} Inventory Sync] Started`);
 
     let updatedCount = 0;
 
@@ -145,11 +154,11 @@ export const xokidsInventorySync = async (sellerId) => {
 
     await updateSyncDate(sellerId, 'INVENTORY', updatedCount);
 
-    console.log(`[Xokids Inventory Sync] Completed — Updated: ${updatedCount}`);
+    console.log(`[${displayBrand} Inventory Sync] Completed — Updated: ${updatedCount}`);
 
     return { success: true, updatedCount };
   } catch (error) {
-    console.error('[Xokids Inventory Sync] Failed:', error);
+    console.error('[Inventory Sync] Failed:', error);
     throw error;
   }
 };

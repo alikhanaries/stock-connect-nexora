@@ -167,12 +167,25 @@ export const syncFinance = async () => {
     throw new Error('Google Sheet is empty or has no data rows');
   }
 
-  const docs = rawRows.map((row) => mapRowToRecord(row));
+  const allDocs = rawRows.map((row) => mapRowToRecord(row));
+
+  const filteredDocs = new Map();
+  for (const doc of allDocs) {
+    const key = `${doc.sellerId}|${doc.orderId}`;
+    const existing = filteredDocs.get(key);
+    if (!existing) {
+      filteredDocs.set(key, doc);
+    } else if (doc.orderAmountWithoutVAT != null && existing.orderAmountWithoutVAT == null) {
+      filteredDocs.set(key, doc);
+    }
+  }
+  const docs = [...filteredDocs.values()];
 
   const bulkOps = docs.map((doc) => ({
     updateOne: {
       filter: {
-        itemRef: doc.itemRef,
+        sellerId: doc.sellerId,
+        orderId: doc.orderId,
       },
       update: { $set: doc },
       upsert: true,

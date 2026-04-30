@@ -8,6 +8,11 @@ const PickupAddressSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     email: {
       type: String,
       required: true,

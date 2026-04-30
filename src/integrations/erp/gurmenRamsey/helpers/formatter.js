@@ -1,5 +1,5 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
-import { MIN_STOCK } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
+import { MIN_STOCK, MAX_PRICE } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
@@ -70,6 +70,8 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
     const base = await formatBaseProduct(product, sellerId, subproductImages, uploadBaseImages);
     if (base.categoryTrail) categoryTrails.add(base.categoryTrail);
     const totalStock = subproducts.reduce((s, v) => s + Number(v.stock || 0), 0);
+    const priceSpecial = parseFloat(product.price_special || 0);
+    const isPriceInactive = priceSpecial >= MAX_PRICE;
 
     formatted.push({
       ...base,
@@ -83,7 +85,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
       purchasePrice: parseFloat(product.price_special || 0),
       msrp: parseFloat(product.price_special || 0),
       currentStockCount: totalStock,
-      status: totalStock < MIN_STOCK ? 'inactive' : 'active',
+      status: totalStock < MIN_STOCK || isPriceInactive ? 'inactive' : 'active',
       color: '',
       size: '',
       ean: '',
@@ -116,7 +118,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
         purchasePrice: parseFloat(product.price_special || 0),
         msrp: parseFloat(product.price_special || 0),
         currentStockCount: parentStock,
-        status: parentStock < MIN_STOCK ? 'inactive' : 'active',
+        status: parentStock < MIN_STOCK || isPriceInactive ? 'inactive' : 'active',
       });
 
       for (const variant of variants) {
@@ -165,7 +167,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
           size,
           ean: variant.barcode || '',
           currentStockCount: Number(variant.stock || 0),
-          status: Number(variant.stock) < MIN_STOCK ? 'inactive' : 'active',
+          status: Number(variant.stock) < MIN_STOCK || isPriceInactive ? 'inactive' : 'active',
         });
       }
     }
