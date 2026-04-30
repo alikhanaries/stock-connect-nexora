@@ -72,6 +72,11 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
       delivery_postcode: config.AYMAKAN_DELIVERY_POSTCODE,
       delivery_phone: config.AYMAKAN_DELIVERY_PHONE,
+      delivery_national_address: {
+        short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
+      },
+      lat: config.AYMAKAN_DELIVERY_LAT,
+      long: config.AYMAKAN_DELIVERY_LONG,
       delivery_duty_type: 'DDP',
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
@@ -419,6 +424,9 @@ export const createFullShipmentService = async (shipmentData) => {
       country: config.AYMAKAN_DELIVERY_COUNTRY,
       phone: config.AYMAKAN_DELIVERY_PHONE,
       postcode: config.AYMAKAN_DELIVERY_POSTCODE,
+      short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
+      lat: config.AYMAKAN_DELIVERY_LAT,
+      long: config.AYMAKAN_DELIVERY_LONG,
     };
     const deliveryDetails = await saveDeliveryAddress(aymakanDeliveryAddress);
 
