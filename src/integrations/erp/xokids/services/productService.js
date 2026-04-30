@@ -3,6 +3,7 @@ import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calc
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
+import { filterInStockSubproducts } from '#root/src/integrations/common/helpers/filterInStockSubproducts.js';
 import Product from '#root/src/models/Product.js';
 import Seller from '#root/src/models/Seller.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
@@ -22,7 +23,8 @@ export const getXokidsProducts = async (sellerId, isImageUpdate) => {
     const { displayBrand } = mapping;
 
     const adapter = createXokidsAdapter();
-    const fetched = await adapter.fetchProducts(seller.slug);
+    const productsFromApi = await adapter.fetchProducts(seller.slug);
+    const fetched = filterInStockSubproducts(productsFromApi);
 
     if (!fetched.length) {
       return { message: `No ${displayBrand} products to sync.` };

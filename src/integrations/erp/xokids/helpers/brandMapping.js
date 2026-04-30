@@ -1,6 +1,8 @@
 import { XOKIDS_BRAND_MAP } from '../constants/common.js';
 
-const normalize = (value) => (value || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+// Strip diacritics so accented brand names match (e.g. NK KİDS, MİDİ MOD, ÇİKOBY, Bebüş)
+const normalize = (value) =>
+  (value || '').toString().normalize('NFKD').replace(/[̀-ͯ]/g, '').trim().toLowerCase().replace(/\s+/g, '');
 
 const BY_NORMALIZED_BRAND = new Map(XOKIDS_BRAND_MAP.map((entry) => [normalize(entry.erpBrand), entry]));
 

@@ -3,6 +3,7 @@ import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calc
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
+import { filterInStockSubproducts } from '#root/src/integrations/common/helpers/filterInStockSubproducts.js';
 import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { formatRamseyProduct } from '../helpers/formatter.js';
@@ -18,7 +19,8 @@ const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 export const getRamseyProducts = async (sellerId, isImageUpdate) => {
   try {
     const ramsey = createGurmanRamseyAdapter();
-    const fetched = await ramsey.fetchProducts();
+    const productsFromApi = await ramsey.fetchProducts();
+    const fetched = filterInStockSubproducts(productsFromApi);
     if (!fetched || fetched.length === 0) {
       return { message: 'No Ramsey (Gürmen Group) products to sync.' };
     }
