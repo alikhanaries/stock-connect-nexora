@@ -49,18 +49,19 @@ export const getTransactionHistory = async (
     .skip(skip)
     .limit(parsedLimit)
     .select(
-      'orderId orderAmountWithoutVAT adminCharges customersEarning logisticPrice marketplaceCommission ollTekFee paymentStatus'
+      'orderId orderAmountWithoutVAT adminCharges customersEarning logisticPrice marketplaceCommission ollTekFee marketingFee paymentStatus'
     )
     .lean();
 
   const content = records.map((r) => {
     //Platform Commission + Marketplace commission + Marketing Fee + Logistic Cost.
-    const commission =
+    const commissionRaw =
       (r.adminCharges || 0) +
       (r.ollTekFee || 0) +
       (r.marketplaceCommission || 0) +
       (r.logisticPrice || 0) +
       (r.marketingFee || 0);
+    const commission = Math.ceil(commissionRaw * 100) / 100;
     return {
       orderId: r.orderId ?? null,
       orderValue: r.orderAmountWithoutVAT ?? null,
