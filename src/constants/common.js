@@ -205,3 +205,7 @@ export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int S
 export const LOW_STOCK_THRESHOLD_SELLERS = ['kip', 'ramsey'];
 
 export const LOW_STOCK_THRESHOLD = 3;
+
+export const MAX_PRICE_SELLERS = ['kip', 'ramsey', 'exquise'];
+
+export const MAX_PRICE = 1145;
