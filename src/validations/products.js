@@ -729,3 +729,135 @@ export const syncProductsValidator = validate(async (req) => {
   });
   paramsSchema.parse(req.params);
 });
+
+// /* GET EXPRESS WAREHOUSE PRODUCTS VALIDATOR */
+export const getExpressWareHouseProductsValidator = validate(async (req) => {
+  // -----------------------------
+  // HEADERS
+  // -----------------------------
+  headerSchema.parse(req.headers);
+
+  // -----------------------------
+  // PARAMS
+  // -----------------------------
+  const paramsSchema = z.object({
+    sellerId: z
+      .string()
+      .length(24, 'sellerId must be 24 characters long')
+      .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a valid hex string'),
+  });
+
+  paramsSchema.parse(req.params);
+
+  // -----------------------------
+  // QUERY
+  // -----------------------------
+  const querySchema = z
+    .object({
+      page: z
+        .string()
+        .regex(/^\d+$/, 'page must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, { message: 'page must be at least 1' })
+        .optional(),
+
+      size: z
+        .string()
+        .regex(/^\d+$/, 'size must be a number string')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, { message: 'size must be at least 1' })
+        .optional(),
+
+      channelId: z
+        .string()
+        .length(24, 'channelId must be 24 characters long')
+        .regex(/^[0-9a-fA-F]+$/, 'channelId must be a valid hex string')
+        .optional(),
+
+      status: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['active', 'inactive'].includes(val), {
+          message: "status must be either 'active' or 'inactive'",
+        })
+        .optional(),
+
+      productType: z
+        .string()
+        .toLowerCase()
+        .transform((val) => val.split(',').map((v) => v.trim().replace(/'/g, '')))
+        .refine((arr) => arr.every((v) => ['simple', 'configurable'].includes(v)), {
+          message: "productType must be 'simple', 'configurable' or comma-separated list",
+        })
+        .optional(),
+
+      minStockCount: z
+        .string()
+        .regex(/^\d+$/, 'minStockCount must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, {
+          message: 'minStockCount cannot be negative',
+        })
+        .optional(),
+
+      maxStockCount: z
+        .string()
+        .regex(/^\d+$/, 'maxStockCount must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, {
+          message: 'maxStockCount cannot be negative',
+        })
+        .optional(),
+
+      minPrice: z
+        .string()
+        .regex(/^\d+$/, 'minPrice must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, {
+          message: 'minPrice cannot be negative',
+        })
+        .optional(),
+
+      maxPrice: z
+        .string()
+        .regex(/^\d+$/, 'maxPrice must be a number string')
+        .transform((val) => parseFloat(val))
+        .refine((val) => val >= 0, {
+          message: 'maxPrice cannot be negative',
+        })
+        .optional(),
+
+      search: z.string().optional(),
+
+      sortBy: z.string().optional(),
+
+      sortOrder: z
+        .string()
+        .toLowerCase()
+        .refine((val) => ['asc', 'desc'].includes(val), {
+          message: "sortOrder must be either 'asc' or 'desc'",
+        })
+        .optional(),
+
+      filter: z.union([z.string(), z.array(z.string())]).optional(),
+    })
+    .refine((data) => !(data.minPrice !== undefined && data.maxPrice !== undefined && data.minPrice > data.maxPrice), {
+      message: 'minPrice cannot be greater than maxPrice',
+      path: ['minPrice'],
+    })
+    .refine(
+      (data) =>
+        !(
+          data.minStockCount !== undefined &&
+          data.maxStockCount !== undefined &&
+          data.minStockCount > data.maxStockCount
+        ),
+      {
+        message: 'minStockCount cannot be greater than maxStockCount',
+        path: ['minStockCount'],
+      }
+    )
+    .passthrough();
+
+  querySchema.parse(req.query);
+});

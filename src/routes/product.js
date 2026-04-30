@@ -17,6 +17,7 @@ import {
   exportUserChannelProducts,
   searchProducts,
   freezeOrUnfreezeProducts,
+  getExpressWareHouseProducts,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -39,6 +40,7 @@ import {
   getTopSellingProductValidator,
   updateProductStatusValidator,
   syncProductsValidator,
+  getExpressWareHouseProductsValidator,
 } from '#validations/products.js';
 import upload from '#helpers/FileHandler.js'; // the above multer setup
 
@@ -46,6 +48,93 @@ const productsRouter = express.Router();
 
 //productsRouter.use(authMiddleware);
 
+/**
+ * @openapi
+ * /products/getExpressWareHouseProducts/{sellerId}:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get Express Warehouse Products
+ *
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *
+ *       - in: path
+ *         name: sellerId
+ *         required: true
+ *         schema: { type: string }
+ *
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer }
+ *
+ *       - in: query
+ *         name: size
+ *         schema: { type: integer }
+ *
+ *       - in: query
+ *         name: channelId
+ *         schema: { type: string }
+ *
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [active, inactive] }
+ *
+ *       - in: query
+ *         name: productType
+ *         schema: { type: string, example: simple,configurable }
+ *
+ *       - in: query
+ *         name: minStockCount
+ *         schema: { type: number }
+ *
+ *       - in: query
+ *         name: maxStockCount
+ *         schema: { type: number }
+ *
+ *       - in: query
+ *         name: minPrice
+ *         schema: { type: number }
+ *
+ *       - in: query
+ *         name: maxPrice
+ *         schema: { type: number }
+ *
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *
+ *       - in: query
+ *         name: sortBy
+ *         schema: { type: string }
+ *
+ *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc] }
+ *
+ *       - in: query
+ *         name: filter
+ *         schema:
+ *           oneOf:
+ *             - type: string
+ *             - type: array
+ *               items: { type: string }
+ *
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ *       401: { $ref: "#/components/schemas/UnauthorizedResponse" }
+ *       500: { $ref: "#/components/schemas/ErrorResponse" }
+ */
+productsRouter.get(
+  '/getExpressWareHouseProducts/:sellerId',
+  getExpressWareHouseProductsValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  getExpressWareHouseProducts
+);
 /**
  * @openapi
  * /products:

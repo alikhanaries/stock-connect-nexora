@@ -545,6 +545,41 @@ export const searchProducts = async (req, res) => {
   }
 };
 
+export const getExpressWareHouseProducts = async (req, res) => {
+  try {
+    const sellerId = req.params.sellerId;
+    const { channelId } = req.query;
+    const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
+
+    const { products, pagination, channel, latestProductSyncDate, latestInventorySync, latestPriceSync } =
+      await productService.fetchExpressWareHouseProducts(filters, req.query, sellerId, channelId);
+
+    const responseData = channelId
+      ? {
+          channel,
+          content: products || [],
+          latestProductSyncDate,
+          latestInventorySync,
+          latestPriceSync,
+          ...pagination,
+        }
+      : {
+          content: products || [],
+          latestProductSyncDate,
+          latestInventorySync,
+          latestPriceSync,
+          ...pagination,
+        };
+
+    const message = products.length ? req.locale.PRODUCTS_FETCHED_SUCCESSFULLY : req.locale.NO_PRODUCTS_FOUND;
+
+    return successResponse(res, message, 200, responseData);
+  } catch (error) {
+    console.error('Error fetching express warehouse products:', error);
+    errorLog(error);
+    return errorResponse(res, error, 500);
+  }
+};
 export default {
   getProducts,
   getTopSellingProduct,
@@ -564,4 +599,5 @@ export default {
   searchProducts,
   freezeOrUnfreezeProducts,
   syncProducts,
+  getExpressWareHouseProducts,
 };
