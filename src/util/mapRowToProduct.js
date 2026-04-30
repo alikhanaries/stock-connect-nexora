@@ -18,6 +18,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
   // Required validations
   const errorData = [];
   if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
+  if ((parseInt(r.stock, 10) || 0) <= 0) errorData.push('Product skipped due to zero stock');
   if (isNewSku) {
     if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
     if (!r.primaryimageurl) errorData.push('Primary image url is missing');

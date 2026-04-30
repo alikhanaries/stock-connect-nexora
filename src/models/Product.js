@@ -109,5 +109,7 @@ ProductSchema.index({ grandParentProductSkuCode: 1, status: 1 });
 ProductSchema.index({ parentProductSkuCode: 1, status: 1 });
 ProductSchema.index({ sellerId: 1, status: 1, name: 1 });
 ProductSchema.index({ sellerId: 1, name: 'text', brand: 'text', description: 'text' });
+ProductSchema.index({ productSkuCode: 1, sellerId: 1, name: 1, status: 1 });
+ProductSchema.index({ sellerId: 1, name: 1, imageUrl: 1, status: 1 });
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;
