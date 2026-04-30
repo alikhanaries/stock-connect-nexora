@@ -90,9 +90,11 @@ export const createShipmentWithAymakan = async (shipmentData) => {
         },
       }),
     };
+    console.log('createShipmentWithAymakan payload:', JSON.stringify(payload, null, 2));
     // ---  Call Aymakan API ---
     const result = await createAymakanShipment(payload);
 
+    console.log('createShipmentWithAymakan result:', JSON.stringify(result, null, 2));
     // ---  Validate Aymakan response ---
     if (!result?.success || !result?.shipping?.tracking_number) {
       throw new Error('Aymakan shipment creation failed');
