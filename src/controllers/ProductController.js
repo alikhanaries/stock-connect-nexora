@@ -553,7 +553,15 @@ export const getExpressWareHouseProducts = async (req, res) => {
 
     const { products, pagination, channel, latestProductSyncDate, latestInventorySync, latestPriceSync } =
       await productService.fetchExpressWareHouseProducts(filters, req.query, sellerId, channelId);
-
+    if (!products || products.length === 0) {
+      return failResponse(res, 'No products found', 404, {
+        content: [],
+        latestProductSyncDate,
+        latestInventorySync,
+        latestPriceSync,
+        ...pagination,
+      });
+    }
     const responseData = channelId
       ? {
           channel,

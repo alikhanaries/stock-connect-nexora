@@ -100,7 +100,6 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       name: `${p.name}`,
       description: htmlToPlainText(p.description),
       descriptionAr: p.descriptionAr || '',
-
       brand: 'manijero',
       price: gpPrice,
       minPrice: gpSpecial,

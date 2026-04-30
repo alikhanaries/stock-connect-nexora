@@ -1514,7 +1514,6 @@ export const searchProuctsByFilter = async (filters = [], query, sellerId, chann
 };
 
 export const fetchExpressWareHouseProducts = async (filters = [], query, sellerId, channelId) => {
-  console.log('in service');
   const { page = 1, size = 10, sortBy = 'name', sortOrder = 'asc', search } = query;
 
   const currentPage = Math.max(1, Number(page));

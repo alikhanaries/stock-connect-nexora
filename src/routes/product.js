@@ -598,7 +598,14 @@ productsRouter.get(
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  */
-productsRouter.get('/searchProducts/:sellerId', checkLanguage, authMiddleware, verifySellerAccess, searchProducts);
+productsRouter.get(
+  '/searchProducts/:sellerId',
+  getProductsValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  searchProducts
+);
 
 /**
  * @openapi
