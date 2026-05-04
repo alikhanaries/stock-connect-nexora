@@ -22,7 +22,8 @@ import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 import { validateFullShipmentProducts } from '#util/validateShipmentProductQuantity.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
-import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
+import { ORDER_STATUS_MAP, ORDER_PRIORITY, AYMAKAN_VAT_DIVISOR, AYMAKAN_PRICE_CURRENCY } from '#constants/common.js';
+import { convertFromSar } from '../integrations/common/helpers/currencyConverter.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
@@ -64,7 +65,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       declared_value: Number((productsData || []).reduce((sum, p) => sum + (p.price || 0), 0).toFixed(2)),
       items_count: (shipmentData.products || []).reduce((sum, p) => sum + (p.quantity || 0), 0),
       cod_amount: shipmentData.codAmount || 0,
-      currency: 'USD',
+      currency: AYMAKAN_PRICE_CURRENCY,
       delivery_name: config.AYMAKAN_DELIVERY_NAME,
       delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
       delivery_city: config.AYMAKAN_DELIVERY_CITY,
@@ -354,15 +355,20 @@ export const createFullShipmentService = async (shipmentData) => {
         .lean();
       const originMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.countryOfOrigin || '']));
       const descriptionMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.name || '']));
-      productsData = validProducts.map((item) => ({
-        sku: item.merchantProductNo,
-        qty: Number(item.quantity || 0),
-        description: descriptionMap[item.merchantProductNo] || '',
-        price: Number(((item.originalLineTotalInclVat || 0) / 1.15 / 3.75).toFixed(2)),
-        hs_code: item.hsCode || '1111111',
-        origin_country: originMap[item.merchantProductNo] || '',
-        price_currency: 'USD',
-      }));
+      productsData = await Promise.all(
+        validProducts.map(async (item) => ({
+          sku: item.merchantProductNo,
+          qty: Number(item.quantity || 0),
+          description: descriptionMap[item.merchantProductNo] || '',
+          price: await convertFromSar(
+            AYMAKAN_PRICE_CURRENCY,
+            (item.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
+          ),
+          hs_code: item.hsCode || '1111111',
+          origin_country: originMap[item.merchantProductNo] || '',
+          price_currency: AYMAKAN_PRICE_CURRENCY,
+        }))
+      );
     }
 
     // STEP 5: Existing shipments
@@ -495,10 +501,15 @@ export const createFullShipmentService = async (shipmentData) => {
       merchantOrderNo,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
-      products: validProducts.map((p) => ({
-        ...p,
-        aymakanoriginalLineTotalExclVat: Number(((p.originalLineTotalInclVat || 0) / 1.15 / 3.75).toFixed(2)),
-      })),
+      products: await Promise.all(
+        validProducts.map(async (p) => ({
+          ...p,
+          aymakanoriginalLineTotalExclVat: await convertFromSar(
+            AYMAKAN_PRICE_CURRENCY,
+            (p.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
+          ),
+        }))
+      ),
       shipmentMethod: 'AYMAKAN',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
