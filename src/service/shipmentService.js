@@ -35,7 +35,7 @@ import Product from '#models/Product.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, collectionData, pieces = 0 } = shipmentData;
+    const { userId, collectionData, pieces = 0, orderCustomer } = shipmentData;
 
     // --- 1Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
@@ -66,7 +66,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       items_count: (shipmentData.products || []).reduce((sum, p) => sum + (p.quantity || 0), 0),
       cod_amount: shipmentData.codAmount || 0,
       currency: AYMAKAN_PRICE_CURRENCY,
-      delivery_name: config.AYMAKAN_DELIVERY_NAME,
+      delivery_name: [orderCustomer?.firstName, orderCustomer?.lastName].filter(Boolean).join(' '),
       delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
       delivery_city: config.AYMAKAN_DELIVERY_CITY,
       delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
@@ -447,6 +447,7 @@ export const createFullShipmentService = async (shipmentData) => {
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
+      orderCustomer: order.orderCustomer,
       collectionData,
       pieces,
       taxData,
