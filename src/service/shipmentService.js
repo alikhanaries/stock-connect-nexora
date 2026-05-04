@@ -61,10 +61,10 @@ export const createShipmentWithAymakan = async (shipmentData) => {
     // ---  Build final payload for Aymakan ---
     const payload = {
       requested_by: requestedBy,
-      declared_value: (shipmentData.products || []).reduce((sum, p) => sum + (p.originalLineTotalInclVat || 0), 0),
+      declared_value: Number((productsData || []).reduce((sum, p) => sum + (p.price || 0), 0).toFixed(2)),
       items_count: (shipmentData.products || []).reduce((sum, p) => sum + (p.quantity || 0), 0),
       cod_amount: shipmentData.codAmount || 0,
-      currency: shipmentData.currency || 'SAR',
+      currency: 'USD',
       delivery_name: config.AYMAKAN_DELIVERY_NAME,
       delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
       delivery_city: config.AYMAKAN_DELIVERY_CITY,
@@ -350,16 +350,18 @@ export const createFullShipmentService = async (shipmentData) => {
 
       const skus = validProducts.map((item) => item.merchantProductNo);
       const productDocs = await Product.find({ productSkuCode: { $in: skus } })
-        .select('productSkuCode countryOfOrigin')
+        .select('productSkuCode countryOfOrigin description name')
         .lean();
       const originMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.countryOfOrigin || '']));
-
+      const descriptionMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.name || '']));
       productsData = validProducts.map((item) => ({
         sku: item.merchantProductNo,
         qty: Number(item.quantity || 0),
-        price: Number(item.originalLineTotalInclVat || 0),
+        description: descriptionMap[item.merchantProductNo] || '',
+        price: Number(((item.originalLineTotalInclVat || 0) / 1.15 / 3.75).toFixed(2)),
         hs_code: item.hsCode || '1111111',
         origin_country: originMap[item.merchantProductNo] || '',
+        price_currency: 'USD',
       }));
     }
 
@@ -493,7 +495,10 @@ export const createFullShipmentService = async (shipmentData) => {
       merchantOrderNo,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
-      products: validProducts,
+      products: validProducts.map((p) => ({
+        ...p,
+        aymakanoriginalLineTotalExclVat: Number(((p.originalLineTotalInclVat || 0) / 1.15 / 3.75).toFixed(2)),
+      })),
       shipmentMethod: 'AYMAKAN',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
