@@ -1539,9 +1539,23 @@ export const fetchExpressWareHouseProducts = async (filters = [], query, sellerI
   // -----------------------------
   // FETCH SKUs
   // -----------------------------
-  const expressWarehouseSkus = await ExpressWarehouseInventory.distinct('sku', {
-    sellerId: sellerObjectId,
-  });
+  const inventoryData = await ExpressWarehouseInventory.aggregate([
+    {
+      $match: {
+        sellerId: sellerObjectId,
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        skus: { $addToSet: '$sku' },
+        latestSync: { $max: '$lastSyncedAt' },
+      },
+    },
+  ]);
+
+  const expressWarehouseSkus = inventoryData?.[0]?.skus || [];
+  const latestInventorySync = inventoryData?.[0]?.latestSync || null;
 
   if (!expressWarehouseSkus.length) {
     return {
@@ -1587,7 +1601,7 @@ export const fetchExpressWareHouseProducts = async (filters = [], query, sellerI
   // -----------------------------
   // FETCH
   // -----------------------------
-  const [total, products, sellerSync] = await Promise.all([
+  const [total, products] = await Promise.all([
     Product.countDocuments(finalFilter),
 
     Product.find(finalFilter)
@@ -1598,16 +1612,14 @@ export const fetchExpressWareHouseProducts = async (filters = [], query, sellerI
         '_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId productType'
       )
       .lean(),
-
-    Seller.findById(sellerId).select('-_id lastInventorySync lastProductSync lastPriceSync').lean(),
   ]);
 
   return {
     products,
     pagination: getPagination(total, currentPage, limit),
-    latestProductSyncDate: sellerSync?.lastProductSync || null,
-    latestInventorySync: sellerSync?.lastInventorySync || null,
-    latestPriceSync: sellerSync?.lastPriceSync || null,
+    latestProductSyncDate: latestInventorySync,
+    latestInventorySync: latestInventorySync,
+    latestPriceSync: null,
     channel,
   };
 };
