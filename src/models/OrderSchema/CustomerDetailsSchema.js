@@ -10,8 +10,7 @@ const CustomerDetailsSchema = new mongoose.Schema(
     },
     gender: {
       type: String,
-      enum: ['MALE', 'FEMALE', 'NOT_APPLICABLE'],
-      default: 'NOT_APPLICABLE',
+      trim: true,
     },
     firstName: {
       type: String,
