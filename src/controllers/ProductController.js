@@ -555,7 +555,7 @@ export const getExpressWareHouseProducts = async (req, res) => {
     const { products, pagination, channel, latestProductSyncDate, latestInventorySync, latestPriceSync } =
       await expressWarehouseService.fetchExpressWareHouseProducts(filters, req.query, sellerId, channelId);
     if (!products || products.length === 0) {
-      return failResponse(res, 'No products found', 200, {
+      return failResponse(res, 'No products found', 404, {
         content: [],
         latestProductSyncDate,
         latestInventorySync,

@@ -644,11 +644,16 @@ export const processExpressWarehouseImportStream = async (stream, { deleteAfter,
     productMap.set(p.productSkuCode, p._id);
   });
 
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // -----------------------------
   // 3. SELLERS
   // -----------------------------
+  const sellerRegexList = Array.from(incomingSellerSet).map((name) => ({
+    name: { $regex: `^${escapeRegex(name.trim())}$`, $options: 'i' },
+  }));
+
   const sellers = await Seller.find({
-    name: { $in: Array.from(incomingSellerSet) },
+    $or: sellerRegexList,
   }).select('_id name');
 
   const sellerMap = new Map();
