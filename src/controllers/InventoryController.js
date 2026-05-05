@@ -153,10 +153,10 @@ export const importProductsFromExpressWarehouseGoogleSheet = async (req, res) =>
         console.log('CSV processing completed:', result);
         // Send email notification after processing
         emailService.updateExpressWarehouseInventoryMailService({
-          to: req.user.email,
-          userName: req.user.firstName,
-          importStatus: result.success ? 'SUCCESS' : 'FAILED',
-          errorDetails: result.errorDetails || [],
+          to: req?.user?.email,
+          userName: req?.user?.firstName,
+          importStatus: result?.success ? 'SUCCESS' : 'FAILED',
+          errorDetails: result?.errorDetails || [],
         });
         // Optionally update DB with processing status
       })

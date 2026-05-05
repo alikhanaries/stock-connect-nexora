@@ -10,7 +10,6 @@ const expressWarehouseSchema = new mongoose.Schema(
     sku: {
       type: String,
       required: true,
-      index: true,
     },
 
     sellerId: {
