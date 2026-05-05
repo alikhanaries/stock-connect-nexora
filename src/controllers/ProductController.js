@@ -10,6 +10,7 @@ import UserChannelProducts from '#models/UserChannelProducts.js';
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
+import expressWarehouseService from '../service/expressWarehouseService.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -552,7 +553,7 @@ export const getExpressWareHouseProducts = async (req, res) => {
     const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
 
     const { products, pagination, channel, latestProductSyncDate, latestInventorySync, latestPriceSync } =
-      await productService.fetchExpressWareHouseProducts(filters, req.query, sellerId, channelId);
+      await expressWarehouseService.fetchExpressWareHouseProducts(filters, req.query, sellerId, channelId);
     if (!products || products.length === 0) {
       return failResponse(res, 'No products found', 200, {
         content: [],
