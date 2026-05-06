@@ -10,6 +10,7 @@ import {
   getSalesByChannel,
   getOrdersByChannel,
   getReturnsOverview,
+  getCancelOrdersOverview,
 } from '#controllers/DashboardController.js';
 import { authMiddleware, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
 import {
@@ -23,6 +24,7 @@ import {
   ordersByChannelValidator,
   channelStatusValidator,
   returnStatusValidator,
+  cancelStatusValidator,
 } from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
 
@@ -114,5 +116,14 @@ dashboardRoutes.get(
   authMiddleware,
   verifyMultipleSellerAccess,
   getReturnsOverview
+);
+
+dashboardRoutes.get(
+  '/cancels-overview',
+  cancelStatusValidator,
+  checkLanguage,
+  authMiddleware,
+  verifyMultipleSellerAccess,
+  getCancelOrdersOverview
 );
 export default dashboardRoutes;

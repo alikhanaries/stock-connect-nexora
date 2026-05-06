@@ -663,7 +663,103 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   return { total, reasons, statusSummary };
 };
+export const getCancelOrdersOverview = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
+  const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
+  const sellerObjectIds = ids
+    .map(String)
+    .filter(Boolean)
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  const range = getDateRange({ period, startDate, endDate, month });
+  if (!range?.start || !range?.end) {
+    throw new Error(`Invalid period "${period}"`);
+  }
+
+  const channelIds = pickChannelIdsFromChannel(channel);
+  const buildCancelOrdersPipeline = (sellerIds, range, channelIds) => {
+    const matchStage = {
+      sellerId: { $in: sellerIds },
+      orderDate: { $gte: range.start, $lte: range.end },
+    };
+
+    if (channelIds?.length) {
+      matchStage.channelId = { $in: channelIds };
+    }
+
+    return [
+      { $match: matchStage },
+
+      // Flatten SKU list
+      { $unwind: '$orderSkuList.skuList' },
+
+      // STRICT filter
+      {
+        $match: {
+          'orderSkuList.skuList.status': 'CANCELED',
+          'orderSkuList.skuList.cancelReason': { $nin: [null, ''] },
+        },
+      },
+
+      {
+        $facet: {
+          reasons: [
+            {
+              $group: {
+                _id: '$orderSkuList.skuList.cancelReason',
+                value: {
+                  $sum: '$orderSkuList.skuList.quantity',
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                key: '$_id',
+                value: 1,
+              },
+            },
+          ],
+
+          statusSummary: [
+            {
+              $group: {
+                _id: 'CANCELED',
+                value: {
+                  $sum: '$orderSkuList.skuList.quantity',
+                },
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                key: '$_id',
+                value: 1,
+              },
+            },
+          ],
+        },
+      },
+    ];
+  };
+  const pipeline = buildCancelOrdersPipeline(sellerObjectIds, range, channelIds);
+
+  const [result] = await Order.aggregate(pipeline);
+
+  const reasons = (result?.reasons ?? []).map((r) => ({
+    value: r.value,
+    key: formatLabel(r.key),
+  }));
+
+  const statusSummary = (result?.statusSummary ?? []).map((s) => ({
+    value: s.value,
+    key: formatLabel(s.key),
+  }));
+
+  const total = reasons.reduce((sum, r) => sum + r.value, 0);
+
+  return { total, reasons, statusSummary };
+};
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,
@@ -675,4 +771,5 @@ export default {
   getOrdersByChannel,
   getChannelStatus,
   getReturnsOverview,
+  getCancelOrdersOverview,
 };
