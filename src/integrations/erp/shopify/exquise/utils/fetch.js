@@ -1,4 +1,5 @@
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
+
 // ─── GraphQL Queries ────────────────────────────────────────────────
 
 const BULK_PRODUCTS_QUERY = `
