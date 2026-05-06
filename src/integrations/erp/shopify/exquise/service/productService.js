@@ -5,6 +5,7 @@ import { formatProducts } from '../helpers/formatter.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
 import { fetchExquiseProducts } from '../utils/fetch.js';
+import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const fetchAndStoreShopifyExquiseProducts = async (sellerId, sellerData) => {
@@ -12,7 +13,8 @@ export const fetchAndStoreShopifyExquiseProducts = async (sellerId, sellerData) 
     const rawResponse = await fetchExquiseProducts(sellerData);
 
     let upsertCount = 0;
-    const rawProducts = rawResponse;
+    // Product sync skips zero-stock products.
+    const rawProducts = skipZeroStockProducts(rawResponse);
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
       console.log('No products received from Shopify');

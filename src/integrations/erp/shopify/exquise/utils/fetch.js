@@ -1,6 +1,4 @@
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
-import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
-
 // ─── GraphQL Queries ────────────────────────────────────────────────
 
 const BULK_PRODUCTS_QUERY = `
@@ -323,7 +321,7 @@ export const fetchExquiseProducts = async (sellerData) => {
       });
     }
 
-    return skipZeroStockProducts(allProducts);
+    return allProducts;
   } catch (err) {
     console.error('Shopify GraphQL fetch error:', err);
     return [];
