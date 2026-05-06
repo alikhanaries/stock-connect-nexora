@@ -47,3 +47,11 @@ export const priceConverter = async (currencyCode = 'USD', value = 0) => {
 
   return Number((Number(value) * rate).toFixed(2));
 };
+
+export const convertFromSar = async (targetCurrency = 'USD', sarValue = 0) => {
+  if (!sarValue || sarValue <= 0) return 0;
+
+  const rate = await getRateToSar(targetCurrency);
+
+  return Number((sarValue / rate).toFixed(2));
+};

@@ -209,3 +209,6 @@ export const LOW_STOCK_THRESHOLD = 3;
 export const MAX_PRICE_SELLERS = ['kip', 'ramsey', 'exquise'];
 
 export const MAX_PRICE = 1145;
+
+export const AYMAKAN_VAT_DIVISOR = 1.15;
+export const AYMAKAN_PRICE_CURRENCY = 'USD';
