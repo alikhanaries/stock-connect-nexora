@@ -121,5 +121,8 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
 
     noonPrice: item.noonPrice || 0,
     namshiPrice: item.namshiPrice || 0,
+    amazonPrice: item.amazonPrice || 0,
+    sixthStreetPrice: item.sixthStreetPrice || 0,
+    styliPrice: item.styliPrice || 0,
   };
 };

@@ -27,6 +27,7 @@ export const createShipment = async (req, res) => {
     }
 
     const result = await createFullShipmentService(shipmentData);
+    console.log('createShipment result:', JSON.stringify(result, null, 2));
 
     if (!result.success) {
       // This can happen if service returns false for invalid inputs

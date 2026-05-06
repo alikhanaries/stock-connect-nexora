@@ -24,7 +24,8 @@ import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 import { validateFullShipmentProducts } from '#util/validateShipmentProductQuantity.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
-import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
+import { ORDER_STATUS_MAP, ORDER_PRIORITY, AYMAKAN_VAT_DIVISOR, AYMAKAN_PRICE_CURRENCY } from '#constants/common.js';
+import { convertFromSar } from '../integrations/common/helpers/currencyConverter.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
@@ -36,7 +37,7 @@ import Product from '#models/Product.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, collectionData, pieces = 0 } = shipmentData;
+    const { userId, collectionData, pieces = 0, orderCustomer } = shipmentData;
 
     // --- 1Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
@@ -63,17 +64,22 @@ export const createShipmentWithAymakan = async (shipmentData) => {
     // ---  Build final payload for Aymakan ---
     const payload = {
       requested_by: requestedBy,
-      declared_value: (shipmentData.products || []).reduce((sum, p) => sum + (p.originalLineTotalInclVat || 0), 0),
+      declared_value: Number((productsData || []).reduce((sum, p) => sum + (p.price || 0), 0).toFixed(2)),
       items_count: (shipmentData.products || []).reduce((sum, p) => sum + (p.quantity || 0), 0),
       cod_amount: shipmentData.codAmount || 0,
-      currency: shipmentData.currency || 'SAR',
-      delivery_name: config.AYMAKAN_DELIVERY_NAME,
+      currency: AYMAKAN_PRICE_CURRENCY,
+      delivery_name: [orderCustomer?.firstName, orderCustomer?.lastName].filter(Boolean).join(' '),
       delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
       delivery_city: config.AYMAKAN_DELIVERY_CITY,
       delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
       delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
       delivery_postcode: config.AYMAKAN_DELIVERY_POSTCODE,
       delivery_phone: config.AYMAKAN_DELIVERY_PHONE,
+      delivery_national_address: {
+        short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
+      },
+      lat: config.AYMAKAN_DELIVERY_LAT,
+      long: config.AYMAKAN_DELIVERY_LONG,
       delivery_duty_type: 'DDP',
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
@@ -87,9 +93,11 @@ export const createShipmentWithAymakan = async (shipmentData) => {
         },
       }),
     };
+    console.log('createShipmentWithAymakan payload:', JSON.stringify(payload, null, 2));
     // ---  Call Aymakan API ---
     const result = await createAymakanShipment(payload);
 
+    console.log('createShipmentWithAymakan result:', JSON.stringify(result, null, 2));
     // ---  Validate Aymakan response ---
     if (!result?.success || !result?.shipping?.tracking_number) {
       throw new Error('Aymakan shipment creation failed');
@@ -345,17 +353,24 @@ export const createFullShipmentService = async (shipmentData) => {
 
       const skus = validProducts.map((item) => item.merchantProductNo);
       const productDocs = await Product.find({ productSkuCode: { $in: skus } })
-        .select('productSkuCode countryOfOrigin')
+        .select('productSkuCode countryOfOrigin description name')
         .lean();
       const originMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.countryOfOrigin || '']));
-
-      productsData = validProducts.map((item) => ({
-        sku: item.merchantProductNo,
-        qty: Number(item.quantity || 0),
-        price: Number(item.originalLineTotalInclVat || 0),
-        hs_code: item.hsCode || '1111111',
-        origin_country: originMap[item.merchantProductNo] || '',
-      }));
+      const descriptionMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.name || '']));
+      productsData = await Promise.all(
+        validProducts.map(async (item) => ({
+          sku: item.merchantProductNo,
+          qty: Number(item.quantity || 0),
+          description: descriptionMap[item.merchantProductNo] || '',
+          price: await convertFromSar(
+            AYMAKAN_PRICE_CURRENCY,
+            (item.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
+          ),
+          hs_code: item.hsCode || '1111111',
+          origin_country: originMap[item.merchantProductNo] || '',
+          price_currency: AYMAKAN_PRICE_CURRENCY,
+        }))
+      );
     }
 
     // STEP 5: Existing shipments
@@ -421,6 +436,9 @@ export const createFullShipmentService = async (shipmentData) => {
       country: config.AYMAKAN_DELIVERY_COUNTRY,
       phone: config.AYMAKAN_DELIVERY_PHONE,
       postcode: config.AYMAKAN_DELIVERY_POSTCODE,
+      short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
+      lat: config.AYMAKAN_DELIVERY_LAT,
+      long: config.AYMAKAN_DELIVERY_LONG,
     };
     const deliveryDetails = await saveDeliveryAddress(aymakanDeliveryAddress);
 
@@ -431,6 +449,7 @@ export const createFullShipmentService = async (shipmentData) => {
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
+      orderCustomer: order.orderCustomer,
       collectionData,
       pieces,
       taxData,
@@ -485,7 +504,15 @@ export const createFullShipmentService = async (shipmentData) => {
       merchantOrderNo,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
-      products: validProducts,
+      products: await Promise.all(
+        validProducts.map(async (p) => ({
+          ...p,
+          aymakanoriginalLineTotalExclVat: await convertFromSar(
+            AYMAKAN_PRICE_CURRENCY,
+            (p.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
+          ),
+        }))
+      ),
       shipmentMethod: 'AYMAKAN',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {

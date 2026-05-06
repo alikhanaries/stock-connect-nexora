@@ -48,10 +48,6 @@ export const cleanNumber = (value) => {
 
   return parseFloat(String(value).replace(/,/g, '').trim());
 };
-export default {
-  formatDateTime,
-  formatCustomerName,
-};
 
 export const truncate = (num) => Math.trunc(num * 100) / 100;
 
@@ -201,7 +197,6 @@ export const resolveDateRange = (query) => {
     appliedPeriod: period,
   };
 };
-
 export const formatToInvoiceDate = (isoDate) => {
   const date = new Date(isoDate); //  important
 
@@ -216,4 +211,8 @@ export const formatToInvoiceDate = (isoDate) => {
   const ss = pad(date.getUTCSeconds());
 
   return `${MM}/${DD}/${YYYY} ${HH}:${mm}:${ss} 00:00`;
+};
+export default {
+  formatDateTime,
+  formatCustomerName,
 };

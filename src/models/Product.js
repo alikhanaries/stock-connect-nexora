@@ -23,6 +23,9 @@ const ProductSchema = new mongoose.Schema(
     price: { type: Number, required: true },
     noonPrice: { type: Number, required: true },
     namshiPrice: { type: Number, required: true },
+    amazonPrice: { type: Number, default: 0 },
+    sixthStreetPrice: { type: Number, default: 0 },
+    styliPrice: { type: Number, default: 0 },
     minPrice: { type: Number },
     maxPrice: { type: Number },
     msrp: { type: Number },
@@ -109,5 +112,7 @@ ProductSchema.index({ grandParentProductSkuCode: 1, status: 1 });
 ProductSchema.index({ parentProductSkuCode: 1, status: 1 });
 ProductSchema.index({ sellerId: 1, status: 1, name: 1 });
 ProductSchema.index({ sellerId: 1, name: 'text', brand: 'text', description: 'text' });
+ProductSchema.index({ productSkuCode: 1, sellerId: 1, name: 1, status: 1 });
+ProductSchema.index({ sellerId: 1, name: 1, imageUrl: 1, status: 1 });
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;
