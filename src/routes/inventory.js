@@ -4,6 +4,7 @@ import {
   importInventoryFromCsvFile,
   updateSingleInventory,
   syncStockToChannelEngine,
+  importProductsFromExpressWarehouseGoogleSheet,
 } from '#controllers/InventoryController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 
@@ -151,6 +152,72 @@ inventoryRouter.get(
   verifySellerAccess,
   syncStockToChannelEngineValidator,
   syncStockToChannelEngine
+);
+/**
+ * @swagger
+ * /inventory/importProductsFromExpressWarehouseGoogleSheet:
+ *   post:
+ *     summary: Import products from Express Warehouse via Google Sheet
+ *     description: |
+ *       This API triggers the import of products from a configured Google Sheet URL.
+ *       The response is returned immediately, and the processing happens asynchronously in the background.
+ *       A notification email is sent to the user after completion.
+ *
+ *     tags:
+ *       - Inventory
+ *
+ *     security:
+ *       - bearerAuth: []
+ *
+ *     responses:
+ *       200:
+ *         description: Import process started successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Product import is in progress
+ *
+ *       400:
+ *         description: Google Sheet URL not configured
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Google Sheet URL is required
+ *
+ *       500:
+ *         description: Invalid Google Sheet URL or server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: Invalid Google Sheet URL
+ */
+inventoryRouter.post(
+  '/importProductsFromExpressWarehouseGoogleSheet',
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  importProductsFromExpressWarehouseGoogleSheet
 );
 
 export default inventoryRouter;

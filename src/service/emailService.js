@@ -4,10 +4,14 @@ import {
   resetPasswordConstants,
   importInventoryConstant,
   importPriceConstant,
+  expressWarehouseConstants,
 } from '../constants/emailConstants.js';
 import { productImportTemplate } from '../emailTemplates/importProductTemplate.js';
 import { resetPasswordTemplate } from '../emailTemplates/resetPasswordTemplate.js';
-import { inventoryUpdateTemplate } from '../emailTemplates/updateInventoryTemplate.js';
+import {
+  inventoryUpdateTemplate,
+  expressWarehouseInventoryUpdateTemplate,
+} from '../emailTemplates/updateInventoryTemplate.js';
 import { priceUpdateTemplate } from '../emailTemplates/updatePriceTemplate.js';
 
 const sendEmailNotification = async ({ to, subject, html }) => {
@@ -153,4 +157,47 @@ const updatePriceMailService = async ({ to, updateStatus = 'SUCCESS', errorDetai
   }
 };
 
-export default { importProductMailService, resetPasswordService, updateInventoryMailService, updatePriceMailService };
+const updateExpressWarehouseInventoryMailService = async ({
+  to,
+  importStatus = 'SUCCESS',
+  errorDetails = [],
+  userName,
+}) => {
+  try {
+    const mailOptions = {
+      to,
+      subject: `${mailBranding.tenantName} - ${expressWarehouseConstants.EXPRESSWAREHOUSE_SUBJECT}`,
+
+      html: expressWarehouseInventoryUpdateTemplate({
+        importStatus,
+        errorDetails,
+
+        ...expressWarehouseConstants,
+        ...mailBranding,
+
+        INVENTORY_UPDATE_HELLO: `Hello ${userName}`,
+      }),
+    };
+
+    const { success, messageId } = await sendEmailNotification(mailOptions);
+
+    if (success) {
+      console.log(` Express Warehouse inventory email sent. Message ID: ${messageId}`);
+    } else {
+      console.warn(' Inventory update email failed to send.');
+    }
+
+    return { success, messageId };
+  } catch (error) {
+    console.error(' updateExpressWarehouseInventoryMailService error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export default {
+  importProductMailService,
+  resetPasswordService,
+  updateInventoryMailService,
+  updatePriceMailService,
+  updateExpressWarehouseInventoryMailService,
+};
