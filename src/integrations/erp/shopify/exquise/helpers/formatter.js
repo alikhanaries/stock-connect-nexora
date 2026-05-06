@@ -4,6 +4,19 @@ import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParse
 import { MAX_PRICE } from '../constants/common.js';
 import { extractImages, getColorImages } from './common.js';
 
+// Exquise variant SKUs follow the pattern <base>_<colorCode>_<size>
+// e.g. "E24Y04218085_591_34" → base "E24Y04218085", color "591", size "34"
+const parseExquiseSku = (sku) => {
+  if (!sku || typeof sku !== 'string') return null;
+  const parts = sku.split('_');
+  if (parts.length < 3) return null;
+  const size = parts[parts.length - 1];
+  const colorCode = parts[parts.length - 2];
+  const base = parts.slice(0, -2).join('_');
+  if (!base || !colorCode || !size) return null;
+  return { base, colorCode, size, parentSku: `${base}_${colorCode}`, childSku: sku };
+};
+
 export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500) => {
   if (!Array.isArray(rawProducts) || rawProducts.length === 0) return [];
 
@@ -16,7 +29,10 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
       if (!variants.length) continue;
 
       /* ---------------- GRAND PARENT ---------------- */
-      const grandParentSku = id;
+      // Derive grandparent SKU from the first variant whose SKU matches the Exquise pattern.
+      // Falls back to the Shopify product id when no variant has a parseable SKU.
+      const firstParsed = variants.map((v) => parseExquiseSku(v.sku)).find(Boolean);
+      const grandParentSku = firstParsed?.base || String(id);
       const productImages = extractImages(product); // all product images
       const grandParentStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
       const categoryTrail = category?.fullName || '';
@@ -86,8 +102,11 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
 
       /* ---------------- PARENT (COLOR) ---------------- */
       for (const [color, colorVariants] of Object.entries(groupedByColor)) {
+        // Prefer the parent SKU derived from variant.sku (e.g. "<base>_<colorCode>");
+        // fall back to "<grandParentSku>-<COLOR>" when no variant in the group is parseable.
         const safeColor = color.replace(/\s+/g, '_').toUpperCase();
-        const parentSku = `${grandParentSku}-${safeColor}`;
+        const parsedInGroup = colorVariants.map((v) => parseExquiseSku(v.sku)).find(Boolean);
+        const parentSku = parsedInGroup?.parentSku || `${grandParentSku}-${safeColor}`;
 
         const parentPrices = colorVariants.map((v) => Number(v.price) || 0);
 
@@ -143,9 +162,12 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
         /* ---------------- CHILD (VARIANT) ---------------- */
         for (const variant of colorVariants) {
           const size = variant.size || '';
-          const childSku = size
-            ? `${parentSku}-${size.replace(/\s+/g, '_').toUpperCase()}`
-            : `${parentSku}-${variant.id}`;
+          // Use variant.sku directly when it parses (e.g. "E24Y04218085_591_34");
+          // fall back to "<parentSku>-<SIZE>" or "<parentSku>-<variant.id>" otherwise.
+          const parsedVariant = parseExquiseSku(variant.sku);
+          const childSku =
+            parsedVariant?.childSku ||
+            (size ? `${parentSku}-${size.replace(/\s+/g, '_').toUpperCase()}` : `${parentSku}-${variant.id}`);
 
           // Child uses same color-specific images as parent
           const variantImages = extractImages(product, null, colorImages);
