@@ -8,13 +8,15 @@ import { extractImages, getColorImages } from './common.js';
 // e.g. "E24Y04218085_591_34" → base "E24Y04218085", color "591", size "34"
 const parseExquiseSku = (sku) => {
   if (!sku || typeof sku !== 'string') return null;
-  const parts = sku.split('_');
+  const trimmedSku = sku.trim();
+  if (!trimmedSku) return null;
+  const parts = trimmedSku.split('_').map((p) => p.trim());
   if (parts.length < 3) return null;
   const size = parts[parts.length - 1];
   const colorCode = parts[parts.length - 2];
   const base = parts.slice(0, -2).join('_');
   if (!base || !colorCode || !size) return null;
-  return { base, colorCode, size, parentSku: `${base}_${colorCode}`, childSku: sku };
+  return { base, colorCode, size, parentSku: `${base}_${colorCode}`, childSku: trimmedSku };
 };
 
 export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500) => {
