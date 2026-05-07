@@ -32,6 +32,8 @@ export const config = {
   OCP_API_KEY: process.env.OCP_API_KEY,
   BASE_URL: process.env.BASE_URL,
   AMAZON_ORDER_SHEET_URL: process.env.AMAZON_ORDER_SHEET_URL,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  GEMINI_MODEL: process.env.GEMINI_MODEL,
   IS_OCP_ORDER_SYNC_ENABLED: process.env.OCP_ORDER_SYNC_FEATURE === 'true',
   OMNIFUL_API_URL: process.env.OMNIFUL_API_URL,
   OMNIFUL_HUB_CODE: process.env.OMNIFUL_HUB_CODE,

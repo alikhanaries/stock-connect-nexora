@@ -861,3 +861,33 @@ export const getExpressWareHouseProductsValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+
+export const translateProductFieldValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z.object({
+    sellerId: z
+      .string({ required_error: 'sellerId query param is required' })
+      .length(24, 'sellerId must be exactly 24 characters')
+      .regex(/^[0-9a-fA-F]{24}$/, 'Invalid sellerId format'),
+  });
+  querySchema.parse(req.query);
+
+  const bodySchema = z
+    .array(
+      z
+        .object({
+          field: z.string({ required_error: 'field is required' }).min(1, 'field must not be empty'),
+          lang: z.string({ required_error: 'lang is required' }).min(2).max(20),
+        })
+        .strict(),
+      { required_error: 'request body must be an array of { field, lang } objects' }
+    )
+    .min(1, 'request body array must not be empty')
+    .refine(
+      (arr) => new Set(arr.map((i) => `${i.field}:${i.lang}`)).size === arr.length,
+      'duplicate field+lang combinations are not allowed'
+    );
+
+  bodySchema.parse(req.body);
+});

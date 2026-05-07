@@ -186,5 +186,7 @@
   "PRICE_UPDATE_PROCESSING": "Price import is processing",
   "PRICE_MISSING": "Price missing for",
   "INVALID_ROW_DATA": "Invalid row data",
-  "INVALID_PRICE": "Invalid price for"
+  "INVALID_PRICE": "Invalid price for",
+  "TRANSLATION_STARTED": "Translation started in background",
+  "NO_PRODUCTS_TO_TRANSLATE": "No products found for translation"
 }
