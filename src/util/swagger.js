@@ -89,6 +89,47 @@ export function loadUniCommerceSwagger() {
         version: '1.0.0',
       },
       servers: [{ url: `${config.BASE_URL}api` }, { url: 'http://localhost:8000/api' }],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+          },
+        },
+        schemas: {
+          SuccessResponse: {
+            type: 'object',
+            properties: {
+              error: { type: 'boolean', example: false },
+              success: { type: 'boolean', example: true },
+              message: { type: 'string', example: 'Success' },
+              statusCode: { type: 'integer', example: 200 },
+              data: { type: 'object', nullable: true },
+            },
+          },
+          FailResponse: {
+            type: 'object',
+            properties: {
+              error: { type: 'boolean', example: false },
+              success: { type: 'boolean', example: false },
+              message: { type: 'string', example: 'Request failed' },
+              statusCode: { type: 'integer', example: 400 },
+              data: { type: 'object', nullable: true },
+            },
+          },
+          ErrorResponse: {
+            type: 'object',
+            properties: {
+              error: { type: 'boolean', example: true },
+              success: { type: 'boolean', example: false },
+              message: { type: 'string', example: 'Internal error' },
+              statusCode: { type: 'integer', example: 500 },
+              data: { type: 'object', nullable: true },
+            },
+          },
+        },
+      },
     },
     apis: [path.join(process.cwd(), 'src/integrations/erp/unicommerce/**/*.js')],
   });

@@ -121,3 +121,141 @@ export const inventoryUpdateTemplate = ({
   </html>
   `;
 };
+
+export const expressWarehouseInventoryUpdateTemplate = ({
+  tenantName,
+  tenantLogo,
+  tenantColor,
+  tenantEmail,
+  importStatus,
+  errorDetails = [],
+
+  INVENTORY_UPDATE_STATUS,
+  INVENTORY_UPDATE_FAILED,
+  INVENTORY_UPDATE_SUCCESS,
+  INVENTORY_UPDATE_HELLO,
+  INVENTORY_UPDATE_FAILED_MSG,
+  INVENTORY_UPDATE_SUCCESS_MSG,
+  INVENTORY_UPDATE_FOOTER,
+  INVENTORY_UPDATE_PARTIAL_SUCCESS,
+}) => {
+  return `
+  <!DOCTYPE html>
+  <html>
+  <head>
+      <meta charset="utf-8">
+      <title>${tenantName} ${INVENTORY_UPDATE_STATUS}</title>
+  </head>
+
+  <body style="margin:0;padding:0;">
+  <table style="margin:0 auto;width:100%;">
+      <tr>
+          <td>
+              <table style="max-width:560px;font-family:sans-serif;color:#1B1B1B;">
+
+                  <!-- HEADER -->
+                  <tr>
+                      <td style="background:${tenantColor};height:60px;text-align:center;">
+                         <img src="${tenantLogo}" style="width:70%;height:50px;object-fit:contain;">
+                      </td>
+                  </tr>
+
+                  <!-- BODY -->
+                  <tr>
+                      <td style="padding:16px 24px;">
+
+                          <!-- STATUS -->
+                          <table style="width:100%;text-align:center;">
+                              <tr>
+                                  <td style="padding-bottom:24px;">
+                                      ${
+                                        importStatus === 'FAILED'
+                                          ? `<h2 style="color:#D32F2F;">${INVENTORY_UPDATE_FAILED}</h2>`
+                                          : `<h2 style="color:#388E3C;">${INVENTORY_UPDATE_SUCCESS}</h2>`
+                                      }
+                                  </td>
+                              </tr>
+                          </table>
+
+                          <!-- MESSAGE -->
+                          <table style="width:100%;border:1px solid #DDD9D6;border-radius:8px;margin-bottom:16px;">
+                              <tr>
+                                  <td style="padding:20px;">
+                                      <p>${INVENTORY_UPDATE_HELLO}</p>
+
+                                      ${
+                                        importStatus === 'FAILED'
+                                          ? `<p>${INVENTORY_UPDATE_FAILED_MSG}</p>`
+                                          : `<p>${INVENTORY_UPDATE_SUCCESS_MSG}</p>`
+                                      }
+
+                                      ${
+                                        errorDetails.length > 0
+                                          ? `<p style="color:#D32F2F;">${INVENTORY_UPDATE_PARTIAL_SUCCESS}</p>`
+                                          : ''
+                                      }
+                                  </td>
+                              </tr>
+                          </table>
+
+                          <!-- ERRORS -->
+                          ${
+                            errorDetails.length > 0
+                              ? `
+                              <table style="width:100%;border:1px solid #DDD9D6;border-collapse:collapse;margin-bottom:16px;">
+                                  <tr style="background:#F5F5F5;">
+                                      <th style="border:1px solid #DDD9D6;padding:8px;">Row</th>
+                                      <th style="border:1px solid #DDD9D6;padding:8px;">Errors</th>
+                                  </tr>
+
+                                  ${errorDetails
+                                    .map(
+                                      (err) => `
+                                      <tr>
+                                          <td style="border:1px solid #DDD9D6;padding:8px;">
+                                              ${err.rowNumber}
+                                          </td>
+                                          <td style="border:1px solid #DDD9D6;padding:8px;">
+                                              <ul style="margin:0;padding-left:20px;">
+                                                  ${err.errorData.map((e) => `<li>${e}</li>`).join('')}
+                                              </ul>
+                                          </td>
+                                      </tr>`
+                                    )
+                                    .join('')}
+                              </table>
+                              `
+                              : ''
+                          }
+
+                          <!-- SUPPORT -->
+                          <table style="width:100%;text-align:center;">
+                              <tr>
+                                  <td>
+                                      <a href="mailto:${tenantEmail}" style="color:#E5A855;">
+                                          ${tenantEmail}
+                                      </a>
+                                  </td>
+                              </tr>
+                          </table>
+
+                          <!-- FOOTER -->
+                          <table style="width:100%;text-align:center;margin-top:24px;">
+                              <tr>
+                                  <td style="font-size:12px;color:#585858;">
+                                      © 2025 ${tenantName}. ${INVENTORY_UPDATE_FOOTER}
+                                  </td>
+                              </tr>
+                          </table>
+
+                      </td>
+                  </tr>
+
+              </table>
+          </td>
+      </tr>
+  </table>
+  </body>
+  </html>
+  `;
+};
