@@ -95,7 +95,7 @@ const BATCH_SIZE = 500;
 
 const translateChunk = async (texts, targetLanguage) => {
   const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
-  const prompt = `You are a professional translator. Translate each of the following texts to ${targetLanguage}. Return ONLY a valid JSON array of translated strings in the same order as the input. No explanation, no markdown, no extra text — just the JSON array.\n\n${numbered}`;
+  const prompt = `You are a professional translator. Translate each of the following texts to ${targetLanguage}. For proper nouns and brand names that have no standard translation, transliterate them phonetically into the target script (e.g. "Manijero" → "مانيجيرو" in Arabic). Return ONLY a valid JSON array of translated strings in the same order as the input. No explanation, no markdown, no extra text — just the JSON array.\n\n${numbered}`;
 
   const raw = await callWithRetry(async () => {
     const response = await ai.models.generateContent({
