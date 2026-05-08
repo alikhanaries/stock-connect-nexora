@@ -188,5 +188,6 @@
   "INVALID_ROW_DATA": "Invalid row data",
   "INVALID_PRICE": "Invalid price for",
   "TRANSLATION_STARTED": "Translation started in background",
-  "NO_PRODUCTS_TO_TRANSLATE": "No products found for translation"
+  "NO_PRODUCTS_TO_TRANSLATE": "No products found for translation",
+  "NO_ACTIVE_TRANSLATION": "No active translation found for this seller"
 }

@@ -1,5 +1,5 @@
 import express from 'express';
-import { translateProductField } from '#controllers/GeminiController.js';
+import { translateProductField, getTranslateProgress } from '#controllers/GeminiController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
 import { translateProductFieldValidator } from '#validations/products.js';
 
@@ -54,5 +54,22 @@ geminiRouter.post(
   verifySellerAccess,
   translateProductField
 );
+
+/**
+ * @openapi
+ * /gemini/translate-progress:
+ *   get:
+ *     tags: [Gemini]
+ *     summary: Get translation progress for the current seller
+ *     parameters:
+ *       - in: query
+ *         name: sellerId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       404: { $ref: "#/components/schemas/FailResponse" }
+ */
+geminiRouter.get('/translate-progress', checkLanguage, authMiddleware, verifySellerAccess, getTranslateProgress);
 
 export default geminiRouter;

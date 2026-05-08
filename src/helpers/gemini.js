@@ -36,7 +36,10 @@ const callWithRetry = async (fn, retries = 6) => {
     } catch (error) {
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
-      if ((is429 || is503) && attempt < retries) {
+      // limit: 0 means quota is fully exhausted — retrying will never succeed
+      const isExhausted = error.message?.includes('limit: 0');
+
+      if ((is429 || is503) && !isExhausted && attempt < retries) {
         const delay = is429 ? parseRetryDelay(error.message) : 30000 * attempt; // 30s, 60s, 90s, 120s, 150s
         console.warn(
           `[Gemini] ${is429 ? 'Rate limited' : 'Service unavailable'}. Retrying in ${delay / 1000}s (attempt ${attempt}/${retries}) — ${formatGeminiError(error.message)}`
@@ -44,7 +47,10 @@ const callWithRetry = async (fn, retries = 6) => {
         await sleep(delay);
       } else {
         error.geminiError = parseGeminiError(error.message);
-        console.error(`[Gemini] Final error after ${attempt} attempt(s) — ${formatGeminiError(error.message)}`);
+        const reason = isExhausted
+          ? 'Quota exhausted (limit: 0), not retrying'
+          : `Final error after ${attempt} attempt(s)`;
+        console.error(`[Gemini] ${reason} — ${formatGeminiError(error.message)}`);
         throw error;
       }
     }
@@ -91,6 +97,73 @@ export const isAlreadyInLang = (text, langCode) => {
 
 export const getLangName = (langCode) => LANG_CODE_TO_NAME[langCode.toLowerCase()] ?? langCode;
 
+// In-memory progress store keyed by sellerId string
+// Each entry tracks per-operation (field+lang) progress
+const progressStore = new Map();
+const key = (sellerId) => String(sellerId);
+
+// Called immediately in the controller so polls never get 404 during an active job
+export const setPendingProgress = (sellerId) =>
+  progressStore.set(key(sellerId), { status: 'initializing', operations: [] });
+
+export const initProgress = (sellerId, operations) =>
+  progressStore.set(key(sellerId), {
+    status: 'running',
+    operations: operations.map(({ field, lang, total }) => ({
+      field,
+      lang,
+      total,
+      completed: 0,
+      status: 'pending',
+    })),
+  });
+
+const findOp = (p, field, lang) => p?.operations.find((o) => o.field === field && o.lang === lang);
+
+export const startOperation = (sellerId, field, lang) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (op) op.status = 'running';
+};
+
+export const addProgress = (sellerId, field, lang, count) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (op) op.completed += count;
+};
+
+export const finishOperation = (sellerId, field, lang) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (op) op.status = 'done';
+};
+
+export const failOperation = (sellerId, field, lang, error) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (!op) return;
+  op.status = 'error';
+  op.error = error?.geminiError
+    ? { code: error.geminiError.code, status: error.geminiError.status, message: error.geminiError.message }
+    : { message: error?.message ?? 'Unknown error' };
+};
+
+export const finishProgress = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (p) p.status = 'done';
+};
+
+export const getProgress = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return null;
+  const completedOperations = p.operations.filter((o) => o.status === 'done').length;
+  return {
+    status: p.status,
+    totalOperations: p.operations.length,
+    completedOperations,
+    operations: p.operations.map((o) => ({
+      ...o,
+      percentage: o.total > 0 ? Math.round((o.completed / o.total) * 100) : 0,
+    })),
+  };
+};
+
 const BATCH_SIZE = 500;
 
 const translateChunk = async (texts, targetLanguage) => {
@@ -113,7 +186,7 @@ const translateChunk = async (texts, targetLanguage) => {
   return JSON.parse(jsonStr);
 };
 
-export const translateBatch = async (texts, langCode) => {
+export const translateBatch = async (texts, langCode, onProgress) => {
   const targetLanguage = getLangName(langCode);
   const chunks = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -127,6 +200,7 @@ export const translateBatch = async (texts, langCode) => {
     console.log(`[Gemini] Sending chunk ${i + 1}/${chunks.length} (${chunks[i].length} texts)`);
     const translated = await translateChunk(chunks[i], targetLanguage);
     results.push(...translated);
+    onProgress?.(chunks[i].length);
   }
 
   return results;
