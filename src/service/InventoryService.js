@@ -99,8 +99,8 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   //2. Fetch products
   const products = await Product.find(
-    { productSkuCode: { $in: [...incomingSkuSet] } },
-    { _id: 1, productSkuCode: 1 }
+    { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
+    { _id: 1, productSkuCode: 1, price: 1 }
   ).lean();
 
   const productMap = new Map(products.map((p) => [p.productSkuCode, p]));
@@ -168,7 +168,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         },
       });
     }
-    const prodStatus = getProductStatus(sellerName, currentStockCount);
+    const prodStatus = getProductStatus(sellerName, currentStockCount, product.price || 0);
 
     // Always update product stock (if product exists)
     productBulkOps.push({
@@ -267,7 +267,10 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
     const sellerName = await getSellerNameById(sellerId);
 
     // 1. Ensure product exists (mandatory for inventory)
-    const product = await Product.findOne({ _id: new ObjectId(productId) }, { _id: 1, productSkuCode: 1 }).lean();
+    const product = await Product.findOne(
+      { _id: new ObjectId(productId) },
+      { _id: 1, productSkuCode: 1, price: 1 }
+    ).lean();
 
     if (!product) {
       const error = new Error(locale.NOT_FOUND);
@@ -296,7 +299,7 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
         lean: true,
       }
     );
-    const prodStatus = getProductStatus(sellerName, currentStockCount);
+    const prodStatus = getProductStatus(sellerName, currentStockCount, product.price || 0);
 
     // 3. Update product stock count
     await Product.updateOne(

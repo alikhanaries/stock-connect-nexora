@@ -1,6 +1,7 @@
 import Price from '#models/Price.js';
 import Product from '#models/Product.js';
 import { mapRowToPrice } from '#utils/mapRowToPrice.js';
+import { getProductStatus, getSellerNameById } from '#utils/mapRowToInventory.js';
 import { config } from '../config/config.js';
 import csv from 'csv-parser';
 import fs from 'fs';
@@ -33,6 +34,7 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
 
   const errorDetails = [];
   const now = new Date();
+  const sellerName = await getSellerNameById(sellerId);
 
   const pushError = (err) => {
     if (errorDetails.length < MAX_ERRORS) {
@@ -132,7 +134,10 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
     const skus = dedupedPrices.map((p) => p.productSkuCode);
 
     const [products, existingPrices] = await Promise.all([
-      Product.find({ sellerId, productSkuCode: { $in: skus } }, { _id: 1, productSkuCode: 1 }).lean(),
+      Product.find(
+        { sellerId, productSkuCode: { $in: skus } },
+        { _id: 1, productSkuCode: 1, currentStockCount: 1 }
+      ).lean(),
       Price.find({ sellerId, productSkuCode: { $in: skus } }, { productSkuCode: 1 }).lean(),
     ]);
 
@@ -190,10 +195,11 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
         });
       }
 
+      const newStatus = getProductStatus(sellerName, product.currentStockCount || 0, priceData.price || 0);
       productBulkOps.push({
         updateOne: {
           filter: { _id: product._id },
-          update: { $set: buildSet(priceData) },
+          update: { $set: { ...buildSet(priceData), status: newStatus } },
         },
       });
     }
@@ -259,7 +265,10 @@ export const updateSingleProductPrice = async (pricePayload, locale, sellerId) =
     const now = new Date();
 
     // 1. Ensure product exists
-    const product = await Product.findOne({ _id: new ObjectId(productId) }, { _id: 1, productSkuCode: 1 }).lean();
+    const product = await Product.findOne(
+      { _id: new ObjectId(productId) },
+      { _id: 1, productSkuCode: 1, currentStockCount: 1, price: 1 }
+    ).lean();
 
     if (!product) {
       const error = new Error(locale.NOT_FOUND || 'Product not found');
@@ -324,6 +333,11 @@ export const updateSingleProductPrice = async (pricePayload, locale, sellerId) =
     if (maxPrice !== undefined) productSet.maxPrice = maxPrice;
     if (msrp !== undefined) productSet.msrp = msrp;
     if (purchasePrice !== undefined) productSet.purchasePrice = purchasePrice;
+
+    // Re-evaluate status: use the incoming price if provided, otherwise fall back to the current DB price
+    const sellerName = await getSellerNameById(sellerId);
+    const effectivePrice = price !== undefined ? price : product.price || 0;
+    productSet.status = getProductStatus(sellerName, product.currentStockCount || 0, effectivePrice);
 
     // Update Product
     await Product.updateOne({ _id: productId }, { $set: productSet });
