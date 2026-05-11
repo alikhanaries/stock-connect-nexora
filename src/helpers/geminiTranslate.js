@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '#config/config.js';
+import { BATCH_SIZE, SCRIPT_PATTERNS, LANG_CODE_TO_SCRIPT, LANG_CODE_TO_NAME } from '#constants/translate.js';
 
 const apiKey = config.GEMINI_API_KEY;
 console.log('[Gemini] Loaded API key:', apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}` : 'MISSING');
@@ -37,7 +38,7 @@ const callWithRetry = async (fn, retries = 6) => {
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
       if ((is429 || is503) && attempt < retries) {
-        const delay = is429 ? parseRetryDelay(error.message) : 30000 * attempt; // 30s, 60s, 90s, 120s, 150s
+        const delay = is429 ? parseRetryDelay(error.message) : 30000 * attempt;
         console.warn(
           `[Gemini] ${is429 ? 'Rate limited' : 'Service unavailable'}. Retrying in ${delay / 1000}s (attempt ${attempt}/${retries}) — ${formatGeminiError(error.message)}`
         );
@@ -51,25 +52,6 @@ const callWithRetry = async (fn, retries = 6) => {
   }
 };
 
-// Script detection via Unicode ranges — no extra library needed
-const SCRIPT_PATTERNS = {
-  ar: /[؀-ۿݐ-ݿࢠ-ࣿ]/,
-  zh: /[一-鿿㐀-䶿]/,
-  ja: /[぀-ヿㇰ-ㇿ]/,
-  ko: /[가-힯ᄀ-ᇿ]/,
-};
-
-const LANG_CODE_TO_SCRIPT = {
-  ar: 'ar',
-  arabic: 'ar',
-};
-
-const LANG_CODE_TO_NAME = {
-  en: 'English',
-  ar: 'Arabic',
-  tr: 'Turkish',
-};
-
 const detectScript = (text) => {
   for (const [script, pattern] of Object.entries(SCRIPT_PATTERNS)) {
     if (pattern.test(text)) return script;
@@ -80,18 +62,11 @@ const detectScript = (text) => {
 export const isAlreadyInLang = (text, langCode) => {
   const code = langCode.toLowerCase();
   const targetScript = LANG_CODE_TO_SCRIPT[code];
-
-  // Latin-script languages (en, tr, fr, …) share the same Unicode range —
-  // we can't distinguish them without a full language model, so never skip.
   if (!targetScript) return false;
-
-  // For non-Latin targets (ar, zh, ja, ko): skip only if text is already in that script.
   return detectScript(text) === targetScript;
 };
 
 export const getLangName = (langCode) => LANG_CODE_TO_NAME[langCode.toLowerCase()] ?? langCode;
-
-const BATCH_SIZE = 500;
 
 const translateChunk = async (texts, targetLanguage) => {
   const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');

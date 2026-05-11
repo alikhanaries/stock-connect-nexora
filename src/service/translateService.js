@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import Product from '#models/Product.js';
-import { translateBatch, isAlreadyInLang } from '#helpers/gemini.js';
+import { translateBatch, isAlreadyInLang } from '#helpers/geminiTranslate.js';
 
 // Fields that read from a different source field but save to themselves.
 // e.g. nameAr is translated FROM name and saved TO nameAr.
