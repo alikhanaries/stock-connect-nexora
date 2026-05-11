@@ -54,7 +54,7 @@ export const getTransactionHistory = async (
     .lean();
 
   const content = records.map((r) => {
-    //Platform Commission + Marketplace commission + Marketing Fee + Logistic Cost.
+    //Marketplace commission + Olltek Fee + Marketing Fee + Logistic Cost + admin charges.
     const commissionRaw =
       (r.adminCharges || 0) +
       (r.ollTekFee || 0) +
@@ -117,8 +117,17 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
         marketplaceCommission: { $sum: { $ifNull: ['$marketplaceCommission', 0] } },
         marketingfee: { $sum: { $ifNull: ['$marketingFee', 0] } },
         logisticCost: { $sum: { $ifNull: ['$logisticPrice', 0] } },
-        totalEarnings: { $sum: { $ifNull: ['$totalDeliveredOrdersAmount', 0] } },
-        amountPaid: { $sum: { $ifNull: ['$whatCustomerReceivesFromOllTek', 0] } },
+        totalEarnings: { $sum: { $ifNull: ['$customersEarning', 0] } },
+        amountPaid: {
+          $sum: {
+            $cond: [{ $eq: ['$paymentStatus', 'Paid'] }, { $ifNull: ['$customersEarning', 0] }, 0],
+          },
+        },
+        amountPending: {
+          $sum: {
+            $cond: [{ $ne: ['$paymentStatus', 'Paid'] }, { $ifNull: ['$customersEarning', 0] }, 0],
+          },
+        },
       },
     },
     { $project: { _id: 0 } },
@@ -132,6 +141,7 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
     logisticCost: 0,
     totalEarnings: 0,
     amountPaid: 0,
+    amountPending: 0,
   };
 
   return [
@@ -141,8 +151,8 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
     { key: 'marketingfee', label: 'Marketing Fee', value: data.marketingfee },
     { key: 'logisticCost', label: 'Logistic Cost', value: data.logisticCost },
     { key: 'totalEarnings', label: 'Total Earning', value: data.totalEarnings },
-    { key: 'amountPaid', label: 'Amount Paid', value: null },
-    { key: 'amountPending', label: 'Amount Pending', value: null },
+    { key: 'amountPaid', label: 'Amount Paid', value: data.amountPaid },
+    { key: 'amountPending', label: 'Amount Pending', value: data.amountPending },
   ];
 };
 
