@@ -11,6 +11,7 @@ import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 import expressWarehouseService from '../service/expressWarehouseService.js';
+import { translateProductField as translateProductFieldService } from '#service/translateService.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -589,6 +590,33 @@ export const getExpressWareHouseProducts = async (req, res) => {
     return errorResponse(res, error, 500);
   }
 };
+export const translateProductField = async (req, res) => {
+  try {
+    const translate = req.body;
+    const sellerId = req.sellerId;
+
+    const fields = [...new Set(translate.map((t) => t.field))];
+
+    const exists = await Product.exists({
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      $or: fields.map((f) => ({ [f]: { $exists: true, $nin: [null, ''] } })),
+    });
+
+    if (!exists) {
+      return failResponse(res, req.locale.NO_PRODUCTS_TO_TRANSLATE, 404);
+    }
+
+    successResponse(res, req.locale.TRANSLATION_STARTED, 200);
+
+    translateProductFieldService({ translate, sellerId })
+      .then((result) => console.log(`Translation complete: ${JSON.stringify(result)}`))
+      .catch((error) => errorLog(error));
+  } catch (error) {
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getProducts,
   getTopSellingProduct,
@@ -609,4 +637,5 @@ export default {
   freezeOrUnfreezeProducts,
   syncProducts,
   getExpressWareHouseProducts,
+  translateProductField,
 };
