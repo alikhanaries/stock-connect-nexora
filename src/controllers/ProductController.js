@@ -619,15 +619,23 @@ export const translateProductField = async (req, res) => {
   }
 };
 
+const PROGRESS_TYPES = ['translate', 'sync'];
+
 export const getProgressStatus = (req, res) => {
   try {
+    const { type } = req.query;
+
+    if (!type || !PROGRESS_TYPES.includes(type)) {
+      return failResponse(res, `Invalid type. Allowed: ${PROGRESS_TYPES.join(', ')}`, 400);
+    }
+
     const progress = getProgress(req.sellerId);
 
     if (!progress) {
       return failResponse(res, req.locale.NO_ACTIVE_TRANSLATION, 404);
     }
 
-    return successResponse(res, 'Translation progress', 200, progress);
+    return successResponse(res, 'Progress status', 200, { type, ...progress });
   } catch (error) {
     errorLog(error);
     return errorResponse(res, error.message, 500);
