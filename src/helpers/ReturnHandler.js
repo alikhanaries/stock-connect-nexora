@@ -500,7 +500,7 @@ export const formatReturnDetails = (aggregatedResult) => {
 
     const quantity = returnProduct.quantity || 0;
 
-    const unitPriceExclVat = matchingSku?.unitPriceExclVat || 0;
+    const unitPriceExclVat = matchingSku?.unitPriceExclVat || matchingSku?.lineTotalInclVat || 0;
     const unitVat = matchingSku?.unitVat || 0;
     const unitPriceInclVat = unitPriceExclVat + unitVat;
 
