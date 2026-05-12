@@ -13,8 +13,6 @@ import dashboardRoutes from './dashboard.js';
 import inventoryRoutes from './inventory.js';
 import priceRoutes from './price.js';
 import financeRoutes from './finance.js';
-import geminiRoutes from './gemini.js';
-
 const router = express.Router();
 
 router.use('/auth', authRoutes);
@@ -31,5 +29,4 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/price', priceRoutes);
 router.use('/finance', financeRoutes);
-router.use('/gemini', geminiRoutes);
 export default router;

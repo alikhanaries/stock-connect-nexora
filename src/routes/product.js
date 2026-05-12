@@ -18,6 +18,8 @@ import {
   searchProducts,
   freezeOrUnfreezeProducts,
   getExpressWareHouseProducts,
+  translateProductField,
+  getProgressStatus,
 } from '#controllers/ProductController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 import {
@@ -27,6 +29,7 @@ import {
   unlinkProductFromChannelValidator,
   exportProductsValidator,
   freezeOrUnfreezeProductsValidator,
+  translateProductFieldValidator,
 } from '#validations/products.js';
 import express from 'express';
 import {
@@ -671,5 +674,16 @@ productsRouter.patch(
   verifySellerAccess,
   freezeOrUnfreezeProducts
 );
+
+productsRouter.post(
+  '/translate-field',
+  translateProductFieldValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  translateProductField
+);
+
+productsRouter.get('/progress-status', checkLanguage, authMiddleware, verifySellerAccess, getProgressStatus);
 
 export default productsRouter;
