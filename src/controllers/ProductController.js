@@ -12,6 +12,7 @@ import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 import expressWarehouseService from '../service/expressWarehouseService.js';
 import { translateProductField as translateProductFieldService } from '#service/translateService.js';
+import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -596,10 +597,11 @@ export const translateProductField = async (req, res) => {
     const sellerId = req.sellerId;
 
     const fields = [...new Set(translate.map((t) => t.field))];
+    const sourceFields = fields.map((f) => SOURCE_FIELD_MAP[f] ?? f);
 
     const exists = await Product.exists({
       sellerId: new mongoose.Types.ObjectId(sellerId),
-      $or: fields.map((f) => ({ [f]: { $exists: true, $nin: [null, ''] } })),
+      $or: sourceFields.map((f) => ({ [f]: { $exists: true, $nin: [null, ''] } })),
     });
 
     if (!exists) {

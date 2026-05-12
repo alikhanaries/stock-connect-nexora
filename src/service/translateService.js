@@ -1,13 +1,7 @@
 import mongoose from 'mongoose';
 import Product from '#models/Product.js';
 import { translateBatch, isAlreadyInLang } from '#helpers/geminiTranslate.js';
-
-// Fields that read from a different source field but save to themselves.
-// e.g. nameAr is translated FROM name and saved TO nameAr.
-const SOURCE_FIELD_MAP = {
-  nameAr: 'name',
-  descriptionAr: 'description',
-};
+import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 const getSourceField = (field) => SOURCE_FIELD_MAP[field] ?? field;
 

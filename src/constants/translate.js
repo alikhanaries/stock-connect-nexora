@@ -1,5 +1,10 @@
 export const BATCH_SIZE = 500;
 
+export const SOURCE_FIELD_MAP = {
+  nameAr: 'name',
+  descriptionAr: 'description',
+};
+
 export const SCRIPT_PATTERNS = {
   ar: /[؀-ۿݐ-ݿࢠ-ࣿ]/,
   zh: /[一-鿿㐀-䶿]/,

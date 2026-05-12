@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '#config/config.js';
 import { BATCH_SIZE, SCRIPT_PATTERNS, LANG_CODE_TO_SCRIPT, LANG_CODE_TO_NAME } from '#constants/translate.js';
+import { buildTranslatePrompt, TRANSLATE_SYSTEM_INSTRUCTION } from '#helpers/geminiPromptBuilders/translatePrompt.js';
 
 const apiKey = config.GEMINI_API_KEY;
 console.log('[Gemini] Loaded API key:', apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}` : 'MISSING');
@@ -69,14 +70,16 @@ export const isAlreadyInLang = (text, langCode) => {
 export const getLangName = (langCode) => LANG_CODE_TO_NAME[langCode.toLowerCase()] ?? langCode;
 
 const translateChunk = async (texts, targetLanguage) => {
-  const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
-  const prompt = `You are a professional translator. Translate each of the following texts to ${targetLanguage}. For proper nouns and brand names that have no standard translation, transliterate them phonetically into the target script (e.g. "Manijero" → "مانيجيرو" in Arabic). Return ONLY a valid JSON array of translated strings in the same order as the input. No explanation, no markdown, no extra text — just the JSON array.\n\n${numbered}`;
+  const prompt = buildTranslatePrompt(texts, targetLanguage);
 
   const raw = await callWithRetry(async () => {
     const response = await ai.models.generateContent({
       model: config.GEMINI_MODEL,
       contents: prompt,
-      config: { maxOutputTokens: 65536 },
+      config: {
+        maxOutputTokens: 65536,
+        systemInstruction: TRANSLATE_SYSTEM_INSTRUCTION,
+      },
     });
     return response.text.trim();
   });
