@@ -92,7 +92,7 @@ export const updateShopifyOrder = async (config, shopifyOrderId, payload, retryC
       throw new Error('updateShopifyOrder expects a payload object');
     }
 
-    const orderUrl = `${config.url}/admin/api/${config.apiVersion}/orders.json/${shopifyOrderId}.json`;
+    const orderUrl = `${config.url}/admin/api/${config.apiVersion}/orders/${shopifyOrderId}.json`;
 
     const response = await fetch(orderUrl, {
       method: 'PUT',
@@ -195,10 +195,8 @@ export const lookupVariantIdsBySkus = async (config, skus = []) => {
         }
       }
     } catch (err) {
-      return {
-        success: false,
-        error: err.message,
-      };
+      console.error(`[lookupVariants] Failed for productId ${productId}:`, err.message);
+      continue;
     }
   }
 

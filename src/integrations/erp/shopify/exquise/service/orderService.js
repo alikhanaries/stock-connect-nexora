@@ -54,7 +54,7 @@ export const pushOrdersService = async (sellerId) => {
           products: {
             $not: {
               $elemMatch: {
-                source: { $ne: 'SHOPIFY' },
+                $or: [{ source: { $ne: 'SHOPIFY' } }, { source: { $exists: false } }],
               },
             },
           },
@@ -146,12 +146,16 @@ export const pushOrdersService = async (sellerId) => {
 };
 
 const markShopifyFailed = async (orderId) => {
-  await Order.updateOne(
-    { _id: orderId },
-    {
-      $set: {
-        'shopifySync.shopifySyncStatus': 'FAILED',
-      },
-    }
-  );
+  try {
+    await Order.updateOne(
+      { _id: orderId },
+      {
+        $set: {
+          'shopifySync.shopifySyncStatus': 'FAILED',
+        },
+      }
+    );
+  } catch (err) {
+    console.error(`[ExquiseOrderSync] markShopifyFailed error for order ${orderId}:`, err.message);
+  }
 };

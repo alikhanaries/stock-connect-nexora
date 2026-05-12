@@ -25,7 +25,13 @@ const scheduledCronJobs = () => {
     // Exquise Shopify order sync - Runs every day at 12:00 AM
     cron.schedule('0 0 * * *', async () => {
       try {
-        const sellers = await Seller.find({ 'shopifyConfig.url': { $exists: true, $ne: null } }, { _id: 1 }).lean();
+        const sellers = await Seller.find(
+          {
+            'shopifyConfig.url': { $exists: true, $ne: null },
+            'integrations.exquise.enabled': true,
+          },
+          { _id: 1 }
+        ).lean();
 
         for (const seller of sellers) {
           try {
