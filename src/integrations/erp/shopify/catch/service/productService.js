@@ -6,6 +6,7 @@ import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calc
 import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
 import { fetchCatchProducts } from '../utils/fetch.js';
 import { formatProducts } from '../helpers/formatter.js';
+import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) => {
@@ -13,7 +14,8 @@ export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) =>
     const rawResponse = await fetchCatchProducts(sellerData);
 
     let upsertCount = 0;
-    const rawProducts = rawResponse;
+    // Product sync skips zero-stock products
+    const rawProducts = skipZeroStockProducts(rawResponse);
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
       console.log('No products received from Shopify');

@@ -150,7 +150,7 @@ export const forwardAymakanShipment = async (shipmentData) => {
           name:
             orderFromMerchantNo.orderSkuList?.skuList?.find((s) => s.merchantProductNo === item.merchantProductNo)
               ?.description || 'Unknown Product',
-          selling_price: item.lineTotalInclVat || 0,
+          selling_price: item.originalLineTotalInclVat || 0,
           quantity: item.quantity || item.Quantity || 0,
         })),
 
