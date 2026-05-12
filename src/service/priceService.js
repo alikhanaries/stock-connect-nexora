@@ -9,6 +9,7 @@ import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
 import { ALLOWEDMARKETPLACES } from '#constants/common.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
+import { resolveHierarchyStatus } from '../helpers/ProductHierarchy.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -213,6 +214,8 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
 
     try {
       await Product.bulkWrite(productBulkOps, { ordered: false });
+      const updatedSkus = dedupedPrices.filter((p) => productMap.has(p.productSkuCode)).map((p) => p.productSkuCode);
+      await resolveHierarchyStatus(sellerId, updatedSkus);
     } catch {
       pushError({
         rowNumber: null,
