@@ -48,10 +48,6 @@ export const cleanNumber = (value) => {
 
   return parseFloat(String(value).replace(/,/g, '').trim());
 };
-export default {
-  formatDateTime,
-  formatCustomerName,
-};
 
 export const truncate = (num) => Math.trunc(num * 100) / 100;
 
@@ -200,4 +196,9 @@ export const resolveDateRange = (query) => {
     end,
     appliedPeriod: period,
   };
+};
+
+export default {
+  formatDateTime,
+  formatCustomerName,
 };
