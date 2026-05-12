@@ -16,15 +16,13 @@ export const syncExquisePrice = async (req, res) => {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
-    const { sellerName } = shopifyConfig;
-
-    successResponse(res, `${sellerName} price sync started in background`, 202);
+    successResponse(res, 'Exquise price sync started in background', 202);
 
     setImmediate(async () => {
       try {
         await syncShopifyExquisePrice(sellerId, shopifyConfig);
       } catch (err) {
-        console.error(`[${sellerName} Price Sync] Background job failed:`, err);
+        console.error('[Exquise Price Sync] Background job failed:', err);
       }
     });
   } catch (error) {
