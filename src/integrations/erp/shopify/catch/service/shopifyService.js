@@ -1,4 +1,7 @@
 import Seller from '#root/src/models/Seller.js';
+import { shopifyCatchConfig } from '../config/config.js';
+
+const { SHOPIFY_CATCH_CLIENT_ID, SHOPIFY_CATCH_CLIENT_SECRET } = shopifyCatchConfig;
 
 export const getShopifyConfig = async (sellerId) => {
   try {
@@ -21,6 +24,47 @@ export const getShopifyConfig = async (sellerId) => {
     console.error('getShopifyConfig error:', error);
     throw error;
   }
+};
+
+export const refreshShopifyAccessToken = async (config) => {
+  if (!config?.url) {
+    throw new Error('Cannot refresh Shopify token: shop url missing on config');
+  }
+  if (!SHOPIFY_CATCH_CLIENT_ID || !SHOPIFY_CATCH_CLIENT_SECRET) {
+    throw new Error('Cannot refresh Shopify token: SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET env vars missing');
+  }
+
+  const body = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: SHOPIFY_CATCH_CLIENT_ID,
+    client_secret: SHOPIFY_CATCH_CLIENT_SECRET,
+  });
+
+  const response = await fetch(`${config.url}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    throw new Error(`Shopify token refresh failed (${response.status}): ${responseText}`);
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(responseText);
+  } catch {
+    throw new Error(`Shopify token refresh returned non-JSON: ${responseText}`);
+  }
+
+  const newToken = parsed?.access_token;
+  if (!newToken) {
+    throw new Error(`Shopify token refresh response missing access_token: ${responseText}`);
+  }
+
+  config.accessToken = newToken;
+  return newToken;
 };
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
