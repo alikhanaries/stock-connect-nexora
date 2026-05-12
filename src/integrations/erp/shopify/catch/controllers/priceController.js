@@ -16,7 +16,7 @@ export const SyncCatchPrice = async (req, res) => {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
-    successResponse(res, 'Shopify price sync started in background', 202);
+    successResponse(res, 'Catch price sync started in background', 202);
 
     process.nextTick(async () => {
       try {
