@@ -4,8 +4,7 @@ import { BATCH_SIZE, SCRIPT_PATTERNS, LANG_CODE_TO_SCRIPT, LANG_CODE_TO_NAME } f
 import { buildTranslatePrompt, TRANSLATE_SYSTEM_INSTRUCTION } from '#helpers/geminiPromptBuilders/translatePrompt.js';
 
 const apiKey = config.GEMINI_API_KEY;
-console.log('[Gemini] Loaded API key:', apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}` : 'MISSING');
-console.log('[Gemini] Model:', config.GEMINI_MODEL);
+if (!apiKey) throw new Error('[Gemini] GEMINI_API_KEY is not configured');
 
 const ai = new GoogleGenAI({ apiKey });
 
@@ -31,10 +30,16 @@ const formatGeminiError = (raw) => {
   return parts.length ? parts.join(' | ') : raw;
 };
 
+const withTimeout = (promise, ms = 30000) =>
+  Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`[Gemini] Request timed out after ${ms}ms`)), ms)),
+  ]);
+
 const callWithRetry = async (fn, retries = 6) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await fn();
+      return await withTimeout(fn());
     } catch (error) {
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');

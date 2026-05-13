@@ -186,5 +186,6 @@
   "INVALID_ROW_DATA": "Geçersiz satır verisi",
   "INVALID_PRICE": "Geçersiz fiyat",
   "TRANSLATION_STARTED": "Çeviri arka planda başlatıldı",
-  "NO_PRODUCTS_TO_TRANSLATE": "Çeviri için ürün bulunamadı"
+  "NO_PRODUCTS_TO_TRANSLATE": "Çeviri için ürün bulunamadı",
+  "TRANSLATION_ALREADY_RUNNING": "Bu satıcı için çeviri zaten devam ediyor"
 }

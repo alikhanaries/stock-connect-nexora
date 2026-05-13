@@ -24,6 +24,7 @@ export const translateProductField = async ({ translate, sellerId }) => {
 
   const tasksByLang = {};
   let skipped = 0;
+  let failedTasks = 0;
 
   for (const product of products) {
     for (const { field, lang } of translate) {
@@ -67,6 +68,7 @@ export const translateProductField = async ({ translate, sellerId }) => {
         ? `[${error.geminiError.code ?? '?'}] ${error.geminiError.status ?? ''}: ${error.geminiError.message ?? error.message}`
         : error.message;
       console.error(`[TranslateService] Batch failed for lang "${lang}": ${detail}`);
+      failedTasks += tasks.length;
       continue;
     }
 
@@ -88,13 +90,11 @@ export const translateProductField = async ({ translate, sellerId }) => {
 
   if (bulkOps.length) await Product.bulkWrite(bulkOps);
 
-  console.log(
-    `[TranslateService] Done — updated: ${bulkOps.length}, skipped: ${skipped}, failed: ${products.length - bulkOps.length - skipped}`
-  );
+  console.log(`[TranslateService] Done — updated: ${bulkOps.length}, skipped: ${skipped}, failed: ${failedTasks}`);
   return {
     total: products.length,
     translated: bulkOps.length,
     skipped,
-    failed: products.length - bulkOps.length - skipped,
+    failed: failedTasks,
   };
 };

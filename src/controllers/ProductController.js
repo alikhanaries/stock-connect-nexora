@@ -591,10 +591,16 @@ export const getExpressWareHouseProducts = async (req, res) => {
     return errorResponse(res, error, 500);
   }
 };
+const translationInProgress = new Set();
+
 export const translateProductField = async (req, res) => {
   try {
     const translate = req.body;
     const sellerId = req.sellerId;
+
+    if (translationInProgress.has(sellerId)) {
+      return failResponse(res, req.locale.TRANSLATION_ALREADY_RUNNING, 409);
+    }
 
     const fields = [...new Set(translate.map((t) => t.field))];
     const sourceFields = fields.map((f) => SOURCE_FIELD_MAP[f] ?? f);
@@ -608,11 +614,13 @@ export const translateProductField = async (req, res) => {
       return failResponse(res, req.locale.NO_PRODUCTS_TO_TRANSLATE, 404);
     }
 
+    translationInProgress.add(sellerId);
     successResponse(res, req.locale.TRANSLATION_STARTED, 200);
 
     translateProductFieldService({ translate, sellerId })
       .then((result) => console.log(`Translation complete: ${JSON.stringify(result)}`))
-      .catch((error) => errorLog(error));
+      .catch((error) => errorLog(error))
+      .finally(() => translationInProgress.delete(sellerId));
   } catch (error) {
     errorLog(error);
     return errorResponse(res, error.message, 500);
