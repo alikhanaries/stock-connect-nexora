@@ -11,10 +11,10 @@ import {
 import Order from '#root/src/models/Orders.js';
 import { Types } from 'mongoose';
 
-export const pushOrdersService = async (sellerId) => {
+export const pushOrdersService = async (sellerId, config = null) => {
   try {
-    const config = await getShopifyConfig(sellerId);
-    if (!config) {
+    const resolvedConfig = config ?? (await getShopifyConfig(sellerId));
+    if (!resolvedConfig) {
       return { message: 'Incomplete Shopify credentials' };
     }
 
@@ -70,7 +70,7 @@ export const pushOrdersService = async (sellerId) => {
     const allSkus = orders.flatMap((o) =>
       (o.orderSkuList?.skuList || []).map((s) => s.merchantProductNo).filter(Boolean)
     );
-    const skuToVariantId = await lookupVariantIdsBySkus(config, allSkus);
+    const skuToVariantId = await lookupVariantIdsBySkus(resolvedConfig, allSkus);
 
     const createPayloads = formatOrdersToShopifyPayloads(createOrders, skuToVariantId);
     const updatePayloads = formatOrdersToShopifyUpdatePayloads(updateOrders);
@@ -79,7 +79,7 @@ export const pushOrdersService = async (sellerId) => {
 
     for (const payload of createPayloads) {
       try {
-        const res = await createShopifyOrder(config, payload);
+        const res = await createShopifyOrder(resolvedConfig, payload);
 
         if (!res.success) {
           console.error(`[ExquiseOrderSync] CREATE failed - order ${payload.order._id}: ${res.error}`);
@@ -110,7 +110,7 @@ export const pushOrdersService = async (sellerId) => {
 
     for (const payload of updatePayloads) {
       try {
-        const updateRes = await updateShopifyOrder(config, payload.shopifyOrderId, payload);
+        const updateRes = await updateShopifyOrder(resolvedConfig, payload.shopifyOrderId, payload);
 
         if (!updateRes.success) {
           console.error(`[ExquiseOrderSync] UPDATE failed - order ${payload._id}: ${updateRes.error}`);
