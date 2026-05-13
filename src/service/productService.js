@@ -1131,7 +1131,7 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
         }
         return remapped;
       });
-    } else if (!['sellerId', 'channelId', 'status'].includes(key)) {
+    } else if (!['sellerId', 'channelId'].includes(key)) {
       productLevelFilter[`productDetails.${key}`] = castedBaseFilter[key];
     }
   }
@@ -1179,14 +1179,15 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
 
   pipeline.push({ $match: matchProductStage });
 
-  const countPipeline = [...pipeline, { $count: 'count' }];
-
   const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
   const safeSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'name';
 
+  pipeline.push({
+    $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 },
+  });
+
   const dataPipeline = [
     ...pipeline,
-    { $sort: { [`productDetails.${safeSortBy}`]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 } },
     { $skip: (currentPage - 1) * limit },
     { $limit: limit },
     {
@@ -1205,6 +1206,8 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
     },
     { $replaceRoot: { newRoot: '$productDetails' } },
   ];
+
+  const countPipeline = [...pipeline, { $count: 'count' }];
 
   const [products, result] = await Promise.all([
     UserChannelProducts.aggregate(dataPipeline, { allowDiskUse: true }),
