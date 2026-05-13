@@ -224,3 +224,94 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
 
   return formattedProducts.filter(Boolean);
 };
+
+export const formatOrdersToShopifyPayloads = (orders = [], skuToVariantId = new Map()) => {
+  if (!Array.isArray(orders)) {
+    throw new Error('Expected orders to be an array');
+  }
+
+  return orders
+    .filter(Boolean)
+    .map((orderDoc) => {
+      const {
+        orderSkuList,
+        orderCustomer,
+        orderBillingAddress,
+        orderShippingAddress,
+        orderPaymentDetails,
+        orderDate,
+        channelName,
+        merchantOrderNo,
+        orderId,
+      } = orderDoc;
+
+      const lineItems = (orderSkuList?.skuList || []).map((sku) => ({
+        quantity: sku.quantity || 1,
+        variant_id: skuToVariantId.get(sku?.merchantProductNo) || sku?.merchantProductNo,
+      }));
+
+      if (!lineItems.length) return null;
+
+      return {
+        order: {
+          _id: orderDoc?._id,
+          line_items: lineItems,
+          currency: (orderPaymentDetails?.currencyCode || 'USD').toUpperCase(),
+          financial_status: 'paid',
+          processed_at: orderDate,
+          customer: {
+            first_name: orderCustomer?.firstName || 'N/A',
+            last_name: orderCustomer?.lastName || 'N/A',
+            email:
+              orderCustomer?.email && orderCustomer.email !== 'no-email@channelengine.com'
+                ? orderCustomer.email
+                : 'N/A',
+          },
+
+          billing_address: {
+            first_name: orderBillingAddress?.firstName || 'N/A',
+            last_name: orderBillingAddress?.lastName || 'N/A',
+            address1: orderBillingAddress?.line1 || 'N/A',
+            city: orderBillingAddress?.city || 'N/A',
+            zip: orderBillingAddress?.zipCode || 'N/A',
+            country: orderBillingAddress?.countryIso || 'N/A',
+            company: orderBillingAddress?.companyName || 'N/A',
+          },
+
+          shipping_address: {
+            first_name: orderShippingAddress?.firstName || 'N/A',
+            last_name: orderShippingAddress?.lastName || 'N/A',
+            address1: orderShippingAddress?.line1 || 'N/A',
+            city: orderShippingAddress?.city || 'N/A',
+            zip: orderShippingAddress?.zipCode || 'N/A',
+            country: orderShippingAddress?.countryIso || 'N/A',
+            company: orderShippingAddress?.companyName || 'N/A',
+          },
+
+          note: `Imported from ${channelName || 'N/A'} | MerchantOrderNo: ${merchantOrderNo || 'N/A'}`,
+
+          tags: [channelName || 'N/A', `ChannelOrder:${orderId || 'N/A'}`].join(', '),
+        },
+      };
+    })
+    .filter(Boolean);
+};
+
+export const formatOrdersToShopifyUpdatePayloads = (orders = []) => {
+  if (!Array.isArray(orders)) {
+    throw new Error('Expected orders to be an array');
+  }
+
+  return orders
+    .filter(Boolean)
+    .filter((orderDoc) => orderDoc.shopifySync?.shopifyOrderId)
+    .map((orderDoc) => ({
+      _id: orderDoc._id,
+      shopifyOrderId: orderDoc.shopifySync.shopifyOrderId,
+      order: {
+        id: orderDoc.shopifySync.shopifyOrderId,
+        note: `Updated from ${orderDoc.channelName} | MerchantOrderNo: ${orderDoc.merchantOrderNo}`,
+        tags: `${orderDoc.channelName}, ChannelOrder:${orderDoc.orderId}`,
+      },
+    }));
+};
