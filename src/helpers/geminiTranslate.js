@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '#config/config.js';
 import { buildTranslatePrompt, TRANSLATE_SYSTEM_INSTRUCTION } from '#helpers/geminiPromptBuilders/translatePrompt.js';
-import { BATCH_SIZE } from '#constants/translate.js';
+import { BATCH_SIZE, SCRIPT_PATTERNS, LANG_CODE_TO_SCRIPT, LANG_CODE_TO_NAME } from '#constants/translate.js';
 
 const apiKey = config.GEMINI_API_KEY;
 if (!apiKey) throw new Error('[Gemini] GEMINI_API_KEY is not configured');
@@ -65,25 +65,6 @@ const callWithRetry = async (fn, retries = 6, onRetry) => {
       }
     }
   }
-};
-
-// Script detection via Unicode ranges — no extra library needed
-const SCRIPT_PATTERNS = {
-  ar: /[؀-ۿݐ-ݿࢠ-ࣿ]/,
-  zh: /[一-鿿㐀-䶿]/,
-  ja: /[぀-ヿㇰ-ㇿ]/,
-  ko: /[가-힯ᄀ-ᇿ]/,
-};
-
-const LANG_CODE_TO_SCRIPT = {
-  ar: 'ar',
-  arabic: 'ar',
-};
-
-const LANG_CODE_TO_NAME = {
-  en: 'English',
-  ar: 'Arabic',
-  tr: 'Turkish',
 };
 
 const detectScript = (text) => {

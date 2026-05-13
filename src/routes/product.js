@@ -675,6 +675,47 @@ productsRouter.patch(
   freezeOrUnfreezeProducts
 );
 
+/**
+ * @openapi
+ * /products/translate-field:
+ *   post:
+ *     tags: [Products]
+ *     summary: Translate product field(s) for all products of a seller using Gemini AI
+ *     description: Auto-detects source language per field and skips fields already in the target language. Runs in the background.
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: query
+ *         name: sellerId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 692ff269d38670a5807918ac
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [translate]
+ *             properties:
+ *               translate:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [field, lang]
+ *                   properties:
+ *                     field:
+ *                       type: string
+ *                       example: nameAr
+ *                     lang:
+ *                       type: string
+ *                       example: en
+ *     responses:
+ *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ *       403: { $ref: "#/components/schemas/FailResponse" }
+ */
 productsRouter.post(
   '/translate-field',
   translateProductFieldValidator,
@@ -684,6 +725,61 @@ productsRouter.post(
   translateProductField
 );
 
+/**
+ * @openapi
+ * /products/progress-status:
+ *   get:
+ *     tags: [Products]
+ *     summary: Get the progress of an active background job (translate or sync)
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: query
+ *         name: sellerId
+ *         required: true
+ *         schema: { type: string }
+ *         example: 692ff269d38670a5807918ac
+ *       - in: query
+ *         name: type
+ *         required: true
+ *         schema: { type: string, enum: [translate, sync] }
+ *         description: The type of background job to check progress for
+ *     responses:
+ *       200:
+ *         description: Progress status returned successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 type:
+ *                   type: string
+ *                   example: translate
+ *                 status:
+ *                   type: string
+ *                   enum: [initializing, running, done]
+ *                 totalOperations:
+ *                   type: integer
+ *                 completedOperations:
+ *                   type: integer
+ *                 operations:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       field: { type: string, example: nameAr }
+ *                       lang: { type: string, example: ar }
+ *                       total: { type: integer }
+ *                       completed: { type: integer }
+ *                       percentage: { type: integer }
+ *                       status: { type: string, enum: [pending, running, done, error] }
+ *                       error: { type: object, properties: { message: { type: string } } }
+ *                       retryInfo: { type: object, properties: { message: { type: string } } }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
+ *       403: { $ref: "#/components/schemas/FailResponse" }
+ *       404: { $ref: "#/components/schemas/FailResponse" }
+ */
 productsRouter.get('/progress-status', checkLanguage, authMiddleware, verifySellerAccess, getProgressStatus);
 
 export default productsRouter;
