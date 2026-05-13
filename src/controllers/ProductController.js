@@ -624,7 +624,8 @@ export const translateProductField = async (req, res) => {
       .catch((error) => errorLog(error))
       .finally(() => {
         translationInProgress.delete(sellerId);
-        clearProgress(sellerId);
+        // Delay cleanup so clients can poll the final status (done or error) before it disappears
+        setTimeout(() => clearProgress(sellerId), 60_000);
       });
   } catch (error) {
     errorLog(error);
@@ -632,7 +633,7 @@ export const translateProductField = async (req, res) => {
   }
 };
 
-const PROGRESS_TYPES = ['translate', 'sync'];
+const PROGRESS_TYPES = ['translate'];
 
 export const getProgressStatus = (req, res) => {
   try {

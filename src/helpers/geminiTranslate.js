@@ -95,11 +95,11 @@ export const getLangName = (langCode) => LANG_CODE_TO_NAME[langCode.toLowerCase(
 
 // In-memory progress store keyed by sellerId string
 const progressStore = new Map();
+const key = (sellerId) => String(sellerId);
 
 export const clearProgress = (sellerId) => {
   progressStore.delete(key(sellerId));
 };
-const key = (sellerId) => String(sellerId);
 
 export const setPendingProgress = (sellerId) =>
   progressStore.set(key(sellerId), { status: 'initializing', operations: [] });
@@ -130,7 +130,10 @@ export const addProgress = (sellerId, field, lang, count) => {
 
 export const finishOperation = (sellerId, field, lang) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
-  if (op) op.status = 'done';
+  if (op) {
+    op.status = 'done';
+    op.completed = op.total;
+  }
 };
 
 export const failOperation = (sellerId, field, lang, error) => {
@@ -139,7 +142,7 @@ export const failOperation = (sellerId, field, lang, error) => {
   op.status = 'error';
   const g = error?.geminiError;
   const raw = g?.message ?? error?.message ?? 'Unknown error';
-  op.error = { message: raw.split('\n')[0].trim() };
+  op.error = { message: raw.split('\n')[0].split('. ')[0].trim() };
 };
 
 export const setOperationRetry = (sellerId, field, lang, retryInfo) => {
