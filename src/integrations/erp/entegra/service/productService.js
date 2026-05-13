@@ -1,8 +1,11 @@
 import Product from '#models/Product.js';
+import Seller from '#models/Seller.js';
 import { entegraConfig } from '#root/src/integrations/erp/entegra/config/config.js';
+import { filterInStockProducts } from '../helpers/filterInStockProducts.js';
 import { mapProductToDB } from '../helpers/formatter.js';
 import { fetchCategories } from './categoryService.js';
 import { getAccessToken } from '../utils/accessTokenGenerator.js';
+import { getMappingBySellerSlug, isBrandForSeller } from '../helpers/brandMapping.js';
 const BASE_URL = `${entegraConfig?.ENTEGRA_BASE_URL}product/page=`;
 
 /**
@@ -72,6 +75,14 @@ export const fetchProductsPage = async (page = 1, AUTH_TOKEN) => {
  * Fetch all pages & save products
  */
 export const importAllProducts = async (sellerId, isImageUpdate = false) => {
+  // Resolve which Entegra brand belongs to this seller (slug-driven mapping)
+  const seller = await Seller.findById(sellerId, { slug: 1 }).lean();
+  if (!seller?.slug) throw new Error(`Seller ${sellerId} not found or missing slug`);
+
+  const mapping = getMappingBySellerSlug(seller.slug);
+  if (!mapping) throw new Error(`Seller slug "${seller.slug}" is not a supported Entegra brand`);
+  const { sellerSlug, displayBrand } = mapping;
+
   const AUTH_TOKEN = await getAccessToken();
 
   let page = 1;
@@ -88,11 +99,16 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
     }
 
     // Validate response format
-    const list = result?.productList;
-    if (!Array.isArray(list) || list.length === 0) {
+    const rawList = result?.productList;
+    if (!Array.isArray(rawList) || rawList.length === 0) {
       console.log(' No more products. Import completed.');
       break;
     }
+
+    // Keep only products whose brand maps to this seller's slug
+    const brandFiltered = rawList.filter((p) => isBrandForSeller(p?.brand, sellerSlug));
+
+    const list = filterInStockProducts(brandFiltered);
 
     let importedThisPage = 0;
 
@@ -105,13 +121,13 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
         console.error(`Error saving product ${product.productCode ?? 'unknown'}:`, err.message);
       }
     }
-    console.log(` Successfully imported ${importedThisPage} products from page ${page}`);
+    console.log(` [${displayBrand}] Imported ${importedThisPage} products from page ${page}`);
 
     // Go to next page
     page++;
   }
 
-  console.log(` Total products imported: ${totalImported}`);
+  console.log(` [${displayBrand}] Total products imported: ${totalImported}`);
   return totalImported;
 };
 

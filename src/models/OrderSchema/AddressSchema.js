@@ -7,8 +7,7 @@ const AddressSchema = new mongoose.Schema(
     line3: { type: String, trim: true },
     gender: {
       type: String,
-      enum: ['MALE', 'FEMALE', 'NOT_APPLICABLE'],
-      default: 'NOT_APPLICABLE',
+      trim: true,
     },
     companyName: { type: String, trim: true },
     firstName: {
