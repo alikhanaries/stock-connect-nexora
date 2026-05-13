@@ -54,6 +54,19 @@ export const getShipmentValidator = validate(async (req) => {
   await querySchema.parseAsync(req.query);
 });
 
+export const downloadLabelValidator = validate(async (req) => {
+  const paramsSchema = z.object({
+    shipmentId: mongoIdField('shipmentId', { required: true }),
+  });
+
+  const querySchema = z.object({
+    sellerId: mongoIdField('sellerId', { required: true }),
+  });
+
+  paramsSchema.parse(req.params);
+  querySchema.parse(req.query);
+});
+
 export const ayMakanWebHookValidator = validate(async (req) => {
   const headerSchema = z.object({
     'x-custom-auth': z

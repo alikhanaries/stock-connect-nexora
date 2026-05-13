@@ -1,7 +1,8 @@
 export const ORDER_FLOW_STATUS_CONFIG = [
   { key: 'placed', label: 'New Orders', statuses: ['NEW'] },
   { key: 'inProgress', label: 'In Progress', statuses: ['IN_PROGRESS'] },
-  { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'] },
+  // commented for now as per current order status behaviour , might need to change after order status development
+  // { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'] },
   { key: 'shipped', label: 'Shipped', statuses: ['SHIPPED'] },
   { key: 'closed', label: 'Closed', statuses: ['CLOSED'] },
   { key: 'returned', label: 'Returned', statuses: ['RETURNED'] },

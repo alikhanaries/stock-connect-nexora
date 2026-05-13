@@ -43,6 +43,21 @@ const deliveryAddressSchema = new mongoose.Schema(
       default: '',
       trim: true,
     },
+    short_code: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    lat: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    long: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   {
     timestamps: true,

@@ -62,6 +62,11 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   // ================= GRAND PARENT =================
   const gpPrice = await priceConverter(currency, parseFloat(p.namshi_fiyat) || 0);
   const gpSpecial = await priceConverter(currency, parseFloat(p.site_indirimli_fiyat) || 0);
+  const gpNoonPrice = await priceConverter(currency, parseFloat(p.noon_ot) || 0);
+  const gpNamshiPrice = gpPrice;
+  const gpAmazonPrice = await priceConverter(currency, parseFloat(p.amazon_ot) || 0);
+  const gpSixthStreetPrice = await priceConverter(currency, parseFloat(p.thstreet6_ot) || 0);
+  const gpStyliPrice = await priceConverter(currency, parseFloat(p.styli_ot) || 0);
 
   let grandParentImages = [];
 
@@ -100,7 +105,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       name: `${p.name}`,
       description: htmlToPlainText(p.description),
       descriptionAr: p.descriptionAr || '',
-      brand: 'manijero',
+      brand: p.brand,
 
       price: gpPrice,
       minPrice: gpSpecial,
@@ -119,8 +124,11 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       modelName: p.mpn || '',
 
       currentStockCount: safeNumber(p.quantity),
-      noonPrice: gpPrice || 0,
-      namshiPrice: gpPrice || 0,
+      noonPrice: gpNoonPrice || 0,
+      namshiPrice: gpNamshiPrice || 0,
+      amazonPrice: gpAmazonPrice || 0,
+      sixthStreetPrice: gpSixthStreetPrice || 0,
+      styliPrice: gpStyliPrice || 0,
     };
 
     // ---------- PARENT IMAGES ----------
@@ -149,6 +157,11 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
       const childPrice = await priceConverter(currency, parseFloat(v.namshi_fiyat) || 0);
       const childSpecial = await priceConverter(currency, parseFloat(v.site_indirimli_fiyat) || 0);
+      const childNoonPrice = await priceConverter(currency, parseFloat(v.noon_ot) || 0);
+      const childNamshiPrice = childPrice;
+      const childAmazonPrice = await priceConverter(currency, parseFloat(v.amazon_ot) || 0);
+      const childSixthStreetPrice = await priceConverter(currency, parseFloat(v.thstreet6_ot) || 0);
+      const childStyliPrice = await priceConverter(currency, parseFloat(v.styli_ot) || 0);
 
       const childObject = {
         sellerId,
@@ -159,7 +172,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         name: `${p.name}`,
         description: htmlToPlainText(p.description),
         descriptionAr: p.descriptionAr || '',
-        brand: 'manijero',
+        brand: p.brand,
         ean: v.barcode || v.gtin || '',
 
         price: childPrice,
@@ -179,8 +192,11 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         categoryTrail: categoryName,
         gender,
         modelName: p.mpn || '',
-        noonPrice: childPrice || 0,
-        namshiPrice: childPrice || 0,
+        noonPrice: childNoonPrice || 0,
+        namshiPrice: childNamshiPrice || 0,
+        amazonPrice: childAmazonPrice || 0,
+        sixthStreetPrice: childSixthStreetPrice || 0,
+        styliPrice: childStyliPrice || 0,
       };
 
       if (isImageUpdate && parentImages.length) {

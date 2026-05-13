@@ -48,3 +48,25 @@ export const importPriceConstant = {
   PRC_UPDATE_PARTIAL_SUCCESS:
     'Important: Some entries in your file were not updated successfully. Refer to the table below for the row numbers and corresponding error details.',
 };
+
+export const expressWarehouseConstants = {
+  EXPRESSWAREHOUSE_SUBJECT: 'Express Warehouse Inventory Update Notification',
+
+  INVENTORY_UPDATE_STATUS: 'Inventory Update Status',
+
+  INVENTORY_UPDATE_SUCCESS: 'Express Warehouse Product Sync Successful!',
+  INVENTORY_UPDATE_FAILED: 'Express Warehouse Product Sync Failed',
+
+  INVENTORY_UPDATE_HELLO: 'Hello,',
+
+  INVENTORY_UPDATE_SUCCESS_MSG: 'Warehouse product sync has been completed successfully.',
+
+  INVENTORY_UPDATE_FAILED_MSG: 'There was an issue while updating your inventory. Please review the errors below.',
+
+  INVENTORY_UPDATE_PARTIAL_SUCCESS:
+    'Important: Some rows were not processed successfully. Please review the details below.',
+
+  INVENTORY_UPDATE_SKIPPED: 'Skipped Rows:',
+
+  INVENTORY_UPDATE_FOOTER: 'All rights reserved.',
+};

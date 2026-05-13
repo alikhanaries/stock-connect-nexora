@@ -1,5 +1,5 @@
 import Product from '#models/Product.js';
-import { LOW_STOCK_THRESHOLD, LOW_STOCK_THRESHOLD_SELLERS } from '#constants/common.js';
+import { LOW_STOCK_THRESHOLD, LOW_STOCK_THRESHOLD_SELLERS, MAX_PRICE, MAX_PRICE_SELLERS } from '#constants/common.js';
 import Seller from '#models/Seller.js';
 
 /**
@@ -150,6 +150,7 @@ export async function resolveHierarchyStatus(sellerId, affectedSkus = []) {
   if (!sellerName) throw new Error('Seller not found');
   // special rule sellers
   const isLowStockThresholdSeller = LOW_STOCK_THRESHOLD_SELLERS.includes(sellerName);
+  const isMaxPriceSeller = MAX_PRICE_SELLERS.includes(sellerName);
   const baseProducts = await Product.find(
     { sellerId, productSkuCode: { $in: affectedSkus } },
     {
@@ -174,6 +175,7 @@ export async function resolveHierarchyStatus(sellerId, affectedSkus = []) {
       parentProductSkuCode: 1,
       grandParentProductSkuCode: 1,
       currentStockCount: 1,
+      price: 1,
       productType: 1,
       status: 1,
     }
@@ -183,16 +185,20 @@ export async function resolveHierarchyStatus(sellerId, affectedSkus = []) {
 
   const mustBeActive = new Set();
 
-  // STEP 1: simple products → stock based rule
+  // STEP 1: simple products → stock + price based rule
   for (const p of products) {
     if (p.productType === 'simple') {
       const stock = p.currentStockCount || 0;
+      const price = p.price || 0;
 
-      const isActive = isLowStockThresholdSeller
+      const isActiveByStock = isLowStockThresholdSeller
         ? stock >= LOW_STOCK_THRESHOLD // KIP / REMSY rule
         : stock > 0; // default rule
 
-      if (isActive) {
+      // KIP / REMSY / EXQUISE rule: price must be below MAX_PRICE
+      const isActiveByPrice = isMaxPriceSeller ? price < MAX_PRICE : true;
+
+      if (isActiveByStock && isActiveByPrice) {
         mustBeActive.add(p.productSkuCode);
       }
     }

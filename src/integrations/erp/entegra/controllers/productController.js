@@ -1,7 +1,9 @@
 import { errorResponse, successResponse } from '#root/src/helpers/response.js';
+import Seller from '#root/src/models/Seller.js';
+import { getMappingBySellerSlug } from '../helpers/brandMapping.js';
 import { importAllProducts } from '../service/productService.js';
 
-export const syncEntegraProducts = (req, res) => {
+export const syncEntegraProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
 
@@ -9,18 +11,24 @@ export const syncEntegraProducts = (req, res) => {
       ? req.query.isImageUpdate === 'true' || req.query.isImageUpdate === true
       : false;
 
-    setImmediate(async () => {
-      try {
-        await importAllProducts(sellerId, isImageUpdate);
-        console.info(`Entegra sync completed | sellerId=${sellerId} | imageUpdate=${isImageUpdate}`);
-      } catch (err) {
-        console.error(`Entegra sync failed | sellerId=${sellerId}`, err);
-      }
+    const seller = await Seller.findById(sellerId, { slug: 1 }).lean();
+    if (!seller?.slug) return errorResponse(res, `Seller ${sellerId} not found or missing slug`);
+
+    const mapping = getMappingBySellerSlug(seller.slug);
+    if (!mapping) return errorResponse(res, `Seller slug "${seller.slug}" is not a supported brand`);
+
+    const { displayBrand } = mapping;
+    if (!displayBrand) return errorResponse(res, `Display brand is missing for seller slug "${seller.slug}"`);
+
+    setImmediate(() => {
+      importAllProducts(sellerId, isImageUpdate).catch((err) =>
+        console.error(`${displayBrand} background sync failed:`, err)
+      );
     });
 
-    return successResponse(res, `Entegra product sync started in background`, 202);
+    return successResponse(res, `${displayBrand} product sync started in background`, 202);
   } catch (error) {
-    console.error('Failed to start Entrega sync:', error);
+    console.error('Failed to start Entegra sync:', error);
     return errorResponse(res, error.message);
   }
 };

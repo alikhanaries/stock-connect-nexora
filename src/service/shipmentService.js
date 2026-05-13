@@ -22,7 +22,8 @@ import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 import { validateFullShipmentProducts } from '#util/validateShipmentProductQuantity.js';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import { parseInvoiceData } from '#helpers/ParseInvoice.js';
-import { ORDER_STATUS_MAP, ORDER_PRIORITY } from '#constants/common.js';
+import { ORDER_STATUS_MAP, ORDER_PRIORITY, AYMAKAN_VAT_DIVISOR, AYMAKAN_PRICE_CURRENCY } from '#constants/common.js';
+import { convertFromSar } from '../integrations/common/helpers/currencyConverter.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
@@ -30,10 +31,11 @@ import { decreaseStock, increaseStock, validateStockAvailability } from '../help
 import { sendStockBatch } from '../service/InventoryService.js';
 import Seller from '#models/Seller.js';
 import forwardShipmentService from './forwardShipmentService.js';
+import Product from '#models/Product.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, declaredValue, deliveryData, collectionData, pieces = 0 } = shipmentData;
+    const { userId, collectionData, pieces = 0, orderCustomer } = shipmentData;
 
     // --- 1Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
@@ -49,22 +51,37 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       [`${prefix}_email`]: data?.email || '',
       [`${prefix}_city`]: data?.city || '',
       [`${prefix}_address`]: data?.address || '',
+      [`${prefix}_postcode`]: data?.postcode ?? null,
       [`${prefix}_country`]: data?.country || '',
       [`${prefix}_phone`]: data?.phone || '',
     });
-    const { documentId, taxData = {} } = shipmentData;
+    const { documentId, taxData = {}, productsData } = shipmentData;
     const hasInternationalMetadata =
       documentId && taxData.tax_identification_number && taxData.invoice_number && taxData.invoice_date;
 
     // ---  Build final payload for Aymakan ---
     const payload = {
       requested_by: requestedBy,
-      declared_value: declaredValue || 0,
+      declared_value: Number((productsData || []).reduce((sum, p) => sum + (p.price || 0), 0).toFixed(2)),
+      items_count: (shipmentData.products || []).reduce((sum, p) => sum + (p.quantity || 0), 0),
       cod_amount: shipmentData.codAmount || 0,
-      currency: shipmentData.currency || 'SAR',
-      ...buildPartyPayload(deliveryData, 'delivery'),
+      currency: AYMAKAN_PRICE_CURRENCY,
+      delivery_name: [orderCustomer?.firstName, orderCustomer?.lastName].filter(Boolean).join(' '),
+      delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
+      delivery_city: config.AYMAKAN_DELIVERY_CITY,
+      delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
+      delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
+      delivery_postcode: config.AYMAKAN_DELIVERY_POSTCODE,
+      delivery_phone: config.AYMAKAN_DELIVERY_PHONE,
+      delivery_national_address: {
+        short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
+      },
+      lat: config.AYMAKAN_DELIVERY_LAT,
+      long: config.AYMAKAN_DELIVERY_LONG,
+      delivery_duty_type: 'DDP',
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
+      ...(productsData?.length && { products: productsData }),
       ...(hasInternationalMetadata && {
         international_metadata: {
           document_id: documentId,
@@ -74,10 +91,11 @@ export const createShipmentWithAymakan = async (shipmentData) => {
         },
       }),
     };
-
+    console.log('createShipmentWithAymakan payload:', JSON.stringify(payload, null, 2));
     // ---  Call Aymakan API ---
     const result = await createAymakanShipment(payload);
 
+    console.log('createShipmentWithAymakan result:', JSON.stringify(result, null, 2));
     // ---  Validate Aymakan response ---
     if (!result?.success || !result?.shipping?.tracking_number) {
       throw new Error('Aymakan shipment creation failed');
@@ -331,12 +349,26 @@ export const createFullShipmentService = async (shipmentData) => {
         invoice_date: invoiceData.invoiceData?.invoiceDate || '',
       };
 
-      productsData = validProducts.map((item) => ({
-        sku: item.merchantProductNo,
-        qty: Number(item.quantity || 0),
-        price: Number(item.lineTotalInclVat || 0),
-        hs_code: item.hsCode || '1111111',
-      }));
+      const skus = validProducts.map((item) => item.merchantProductNo);
+      const productDocs = await Product.find({ productSkuCode: { $in: skus } })
+        .select('productSkuCode countryOfOrigin description name')
+        .lean();
+      const originMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.countryOfOrigin || '']));
+      const descriptionMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.name || '']));
+      productsData = await Promise.all(
+        validProducts.map(async (item) => ({
+          sku: item.merchantProductNo,
+          qty: Number(item.quantity || 0),
+          description: descriptionMap[item.merchantProductNo] || '',
+          price: await convertFromSar(
+            AYMAKAN_PRICE_CURRENCY,
+            (item.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
+          ),
+          hs_code: item.hsCode || '1111111',
+          origin_country: originMap[item.merchantProductNo] || '',
+          price_currency: AYMAKAN_PRICE_CURRENCY,
+        }))
+      );
     }
 
     // STEP 5: Existing shipments
@@ -394,7 +426,19 @@ export const createFullShipmentService = async (shipmentData) => {
     // Step 9: Delivery & Pickup
     const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!deliveryData) throw new Error('Invalid delivery information');
-    const deliveryDetails = await saveDeliveryAddress(deliveryData);
+    const aymakanDeliveryAddress = {
+      name: config.AYMAKAN_DELIVERY_NAME,
+      email: config.AYMAKAN_DELIVERY_EMAIL,
+      city: config.AYMAKAN_DELIVERY_CITY,
+      address: config.AYMAKAN_DELIVERY_ADDRESS,
+      country: config.AYMAKAN_DELIVERY_COUNTRY,
+      phone: config.AYMAKAN_DELIVERY_PHONE,
+      postcode: config.AYMAKAN_DELIVERY_POSTCODE,
+      short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
+      lat: config.AYMAKAN_DELIVERY_LAT,
+      long: config.AYMAKAN_DELIVERY_LONG,
+    };
+    const deliveryDetails = await saveDeliveryAddress(aymakanDeliveryAddress);
 
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
@@ -403,6 +447,7 @@ export const createFullShipmentService = async (shipmentData) => {
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
+      orderCustomer: order.orderCustomer,
       collectionData,
       pieces,
       taxData,
@@ -457,7 +502,15 @@ export const createFullShipmentService = async (shipmentData) => {
       merchantOrderNo,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
-      products: validProducts,
+      products: await Promise.all(
+        validProducts.map(async (p) => ({
+          ...p,
+          aymakanoriginalLineTotalExclVat: await convertFromSar(
+            AYMAKAN_PRICE_CURRENCY,
+            (p.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
+          ),
+        }))
+      ),
       shipmentMethod: 'AYMAKAN',
       extraData: { aymakan: aymakanResult },
       shipmentMerchantDetails: {
@@ -1257,7 +1310,15 @@ const transformShipmentResponse = (response) => {
     customerInfo,
     status: data.status,
     shipmentDate: data?.submissionDate,
-    products: data.products,
+    products: data.products?.map((p) => ({
+      merchantProductNo: p.merchantProductNo,
+      channelProductNo: p.channelProductNo,
+      name: p.productInfo?.name ?? p.description ?? null,
+      imageUrl: p.productInfo?.images?.[0] ?? null,
+      quantity: p.quantity,
+      status: p.status,
+      hsCode: p.hsCode ?? p.merchantProductNo,
+    })),
     airWaybillNo: data.airWaybillNo,
     merchantShipmentNo: data.merchantShipmentNo,
     createdAt: data?.createdAt,
@@ -2763,6 +2824,18 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
   // 4️ Anything partially done
   return 'IN_PROGRESS';
 };
+
+export const downloadShipmentLabelService = async (shipmentId, sellerId) => {
+  const shipment = await Shipment.findOne({ _id: shipmentId, sellerId }).select('extraData').lean();
+
+  if (!shipment) return { success: false, message: 'Shipment not found', status: 404 };
+
+  const pdfLabelUrl = shipment.extraData?.aymakan?.shipping?.pdf_label;
+  if (!pdfLabelUrl) return { success: false, message: 'PDF label not available for this shipment', status: 404 };
+
+  return { success: true, data: { url: pdfLabelUrl } };
+};
+
 export default {
   ayMakanWebHookService,
   getAllShipmentsService,
@@ -2782,4 +2855,5 @@ export default {
   syncReturnShipmentStatus,
   createManualShipmentService,
   getChannelEngineShipmentDetailsService,
+  downloadShipmentLabelService,
 };
