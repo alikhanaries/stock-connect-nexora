@@ -43,16 +43,25 @@ const callWithRetry = async (fn, retries = 6, onRetry) => {
     } catch (error) {
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
-      // limit: 0 means quota is fully exhausted — retrying will never succeed
-      const isExhausted = error.message?.includes('limit: 0');
+      const isExhausted =
+        error.message?.includes('limit: 0') ||
+        error.message?.includes('RESOURCE_EXHAUSTED') ||
+        error.message?.toLowerCase().includes('quota');
 
       if ((is429 || is503) && !isExhausted && attempt < retries) {
         const delay = is429 ? parseRetryDelay(error.message) : 30000 * attempt;
+        const retryAfterSeconds = Math.ceil(delay / 1000);
         const label = is429 ? 'Rate limited' : 'Service unavailable';
         console.warn(
-          `[Gemini] ${label}. Retrying in ${delay / 1000}s (attempt ${attempt}/${retries}) — ${formatGeminiError(error.message)}`
+          `[Gemini] ${label}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries}) — ${formatGeminiError(error.message)}`
         );
-        onRetry?.({ message: `${label}. Retrying in ${Math.ceil(delay / 1000)}s` });
+        onRetry?.({
+          message: `${label}. Retrying in ${retryAfterSeconds}s`,
+          type: is429 ? 'RATE_LIMIT' : 'SERVICE_UNAVAILABLE',
+          retryAfterSeconds,
+          attempt,
+          totalRetries: retries,
+        });
         await sleep(delay);
         onRetry?.(null);
       } else {
@@ -77,12 +86,8 @@ const detectScript = (text) => {
 export const isAlreadyInLang = (text, langCode) => {
   const code = langCode.toLowerCase();
   const targetScript = LANG_CODE_TO_SCRIPT[code];
-
-  // Latin-script languages (en, tr, fr, …) share the same Unicode range —
-  // we can't distinguish them without a full language model, so never skip.
   if (!targetScript) return false;
 
-  // For non-Latin targets (ar, zh, ja, ko): skip only if text is already in that script.
   return detectScript(text) === targetScript;
 };
 
@@ -90,9 +95,12 @@ export const getLangName = (langCode) => LANG_CODE_TO_NAME[langCode.toLowerCase(
 
 // In-memory progress store keyed by sellerId string
 const progressStore = new Map();
+
+export const clearProgress = (sellerId) => {
+  progressStore.delete(key(sellerId));
+};
 const key = (sellerId) => String(sellerId);
 
-// Called immediately in the controller so polls never get 404 during an active job
 export const setPendingProgress = (sellerId) =>
   progressStore.set(key(sellerId), { status: 'initializing', operations: [] });
 
@@ -187,7 +195,19 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
     .replace(/^```json?\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
-  return JSON.parse(jsonStr);
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    throw new Error(`Gemini returned non-JSON response: ${jsonStr.slice(0, 200)}`);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Gemini response was not an array (got ${typeof parsed})`);
+  }
+
+  return parsed;
 };
 
 export const translateBatch = async (texts, langCode, onProgress, onRetry) => {

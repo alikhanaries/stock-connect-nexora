@@ -12,7 +12,7 @@ import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 import expressWarehouseService from '../service/expressWarehouseService.js';
 import { translateProductField as translateProductFieldService } from '#service/translateService.js';
-import { getProgress, setPendingProgress } from '#helpers/geminiTranslate.js';
+import { getProgress, setPendingProgress, clearProgress } from '#helpers/geminiTranslate.js';
 import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 export const getProducts = async (req, res) => {
@@ -622,7 +622,10 @@ export const translateProductField = async (req, res) => {
     translateProductFieldService({ translate, sellerId })
       .then((result) => console.log(`Translation complete: ${JSON.stringify(result)}`))
       .catch((error) => errorLog(error))
-      .finally(() => translationInProgress.delete(sellerId));
+      .finally(() => {
+        translationInProgress.delete(sellerId);
+        clearProgress(sellerId);
+      });
   } catch (error) {
     errorLog(error);
     return errorResponse(res, error.message, 500);
@@ -645,7 +648,7 @@ export const getProgressStatus = (req, res) => {
       return failResponse(res, req.locale.NO_ACTIVE_TRANSLATION, 404);
     }
 
-    return successResponse(res, 'Progress status', 200, { type, ...progress });
+    return successResponse(res, 'Translation progress status', 200, { type, ...progress });
   } catch (error) {
     errorLog(error);
     return errorResponse(res, error.message, 500);
