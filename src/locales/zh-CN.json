@@ -190,5 +190,8 @@
   "PRICE_UPDATE_PROCESSING": "价格导入正在处理",
   "PRICE_MISSING": "缺少价格",
   "INVALID_ROW_DATA": "行数据无效",
-  "INVALID_PRICE": "无效价格"
+  "INVALID_PRICE": "无效价格",
+  "TRANSLATION_STARTED": "翻译已在后台启动",
+  "NO_PRODUCTS_TO_TRANSLATE": "未找到需要翻译的产品",
+  "TRANSLATION_ALREADY_RUNNING": "该卖家的翻译任务已在运行中"
 }

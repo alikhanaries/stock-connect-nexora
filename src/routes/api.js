@@ -13,7 +13,6 @@ import dashboardRoutes from './dashboard.js';
 import inventoryRoutes from './inventory.js';
 import priceRoutes from './price.js';
 import financeRoutes from './finance.js';
-
 const router = express.Router();
 
 router.use('/auth', authRoutes);

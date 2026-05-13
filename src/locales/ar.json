@@ -185,5 +185,8 @@
   "PRICE_UPDATE_PROCESSING": "جارٍ معالجة استيراد الأسعار",
   "PRICE_MISSING": "السعر مفقود ل",
   "INVALID_ROW_DATA": "بيانات صف غير صالحة",
-  "INVALID_PRICE": "سعر غير صالح لـ"
+  "INVALID_PRICE": "سعر غير صالح لـ",
+  "TRANSLATION_STARTED": "بدأت الترجمة في الخلفية",
+  "NO_PRODUCTS_TO_TRANSLATE": "لم يتم العثور على منتجات للترجمة",
+  "TRANSLATION_ALREADY_RUNNING": "الترجمة قيد التشغيل بالفعل لهذا البائع"
 }
