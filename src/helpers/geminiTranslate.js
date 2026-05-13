@@ -108,7 +108,6 @@ export const isAlreadyInLang = (text, langCode) => {
 export const getLangName = (langCode) => LANG_CODE_TO_NAME[langCode.toLowerCase()] ?? langCode;
 
 // In-memory progress store keyed by sellerId string
-// Each entry tracks per-operation (field+lang) progress
 const progressStore = new Map();
 const key = (sellerId) => String(sellerId);
 

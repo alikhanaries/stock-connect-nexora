@@ -10,7 +10,7 @@ import {
   failOperation,
   finishProgress,
   setOperationRetry,
-} from '#helpers/gemini.js';
+} from '#helpers/geminiTranslate.js';
 import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 const getSourceField = (field) => SOURCE_FIELD_MAP[field] ?? field;

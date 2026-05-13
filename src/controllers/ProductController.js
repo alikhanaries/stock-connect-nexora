@@ -12,7 +12,7 @@ import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 import expressWarehouseService from '../service/expressWarehouseService.js';
 import { translateProductField as translateProductFieldService } from '#service/translateService.js';
-import { getProgress, setPendingProgress } from '#helpers/gemini.js';
+import { getProgress, setPendingProgress } from '#helpers/geminiTranslate.js';
 import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 export const getProducts = async (req, res) => {
