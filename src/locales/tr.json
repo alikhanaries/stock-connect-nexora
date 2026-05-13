@@ -187,5 +187,6 @@
   "INVALID_PRICE": "Geçersiz fiyat",
   "TRANSLATION_STARTED": "Çeviri arka planda başlatıldı",
   "NO_PRODUCTS_TO_TRANSLATE": "Çeviri için ürün bulunamadı",
-  "NO_ACTIVE_TRANSLATION": "Bu satıcı için aktif çeviri bulunamadı"
+  "NO_ACTIVE_TRANSLATION": "Bu satıcı için aktif çeviri bulunamadı",
+  "TRANSLATION_ALREADY_RUNNING": "Bu satıcı için çeviri zaten devam ediyor"
 }

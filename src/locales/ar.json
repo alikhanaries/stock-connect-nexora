@@ -188,5 +188,6 @@
   "INVALID_PRICE": "سعر غير صالح لـ",
   "TRANSLATION_STARTED": "بدأت الترجمة في الخلفية",
   "NO_PRODUCTS_TO_TRANSLATE": "لم يتم العثور على منتجات للترجمة",
-  "NO_ACTIVE_TRANSLATION": "لم يتم العثور على ترجمة نشطة لهذا البائع"
+  "NO_ACTIVE_TRANSLATION": "لم يتم العثور على ترجمة نشطة لهذا البائع",
+  "TRANSLATION_ALREADY_RUNNING": "الترجمة قيد التشغيل بالفعل لهذا البائع"
 }

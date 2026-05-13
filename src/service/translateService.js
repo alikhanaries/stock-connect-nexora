@@ -9,14 +9,9 @@ import {
   finishOperation,
   failOperation,
   finishProgress,
+  setOperationRetry,
 } from '#helpers/gemini.js';
-
-// Fields that read from a different source field but save to themselves.
-// e.g. nameAr is translated FROM name and saved TO nameAr.
-const SOURCE_FIELD_MAP = {
-  nameAr: 'name',
-  descriptionAr: 'description',
-};
+import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 const getSourceField = (field) => SOURCE_FIELD_MAP[field] ?? field;
 
@@ -40,6 +35,7 @@ export const translateProductField = async ({ translate, sellerId }) => {
   // Group tasks per {field, lang} operation so progress can be tracked individually
   const tasksByOperation = {};
   let skipped = 0;
+  let failedTasks = 0;
 
   for (const product of products) {
     for (const { field, lang } of translate) {
@@ -89,15 +85,15 @@ export const translateProductField = async ({ translate, sellerId }) => {
       translatedTexts = await translateBatch(
         tasks.map((t) => t.text),
         lang,
-        (count) => addProgress(sellerId, field, lang, count)
+        (count) => addProgress(sellerId, field, lang, count),
+        (retryInfo) => setOperationRetry(sellerId, field, lang, retryInfo)
       );
       finishOperation(sellerId, field, lang);
     } catch (error) {
-      const detail = error.geminiError
-        ? `[${error.geminiError.code ?? '?'}] ${error.geminiError.status ?? ''}: ${error.geminiError.message ?? error.message}`
-        : error.message;
+      const detail = (error.geminiError?.message ?? error.message ?? 'Unknown error').split('\n')[0].trim();
       console.error(`[TranslateService] Batch failed — field: "${field}", lang: "${lang}": ${detail}`);
       failOperation(sellerId, field, lang, error);
+      failedTasks += tasks.length;
       continue;
     }
 
@@ -119,14 +115,13 @@ export const translateProductField = async ({ translate, sellerId }) => {
 
   if (bulkOps.length) await Product.bulkWrite(bulkOps);
 
+  console.log(`[TranslateService] Done — updated: ${bulkOps.length}, skipped: ${skipped}, failed: ${failedTasks}`);
   const result = {
     total: products.length,
     translated: bulkOps.length,
     skipped,
-    failed: products.length - bulkOps.length - skipped,
+    failed: failedTasks,
   };
-
-  console.log(`[TranslateService] Done — updated: ${bulkOps.length}, skipped: ${skipped}, failed: ${result.failed}`);
 
   finishProgress(sellerId);
   return result;

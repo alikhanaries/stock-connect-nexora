@@ -1,9 +1,10 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '#config/config.js';
+import { buildTranslatePrompt, TRANSLATE_SYSTEM_INSTRUCTION } from '#helpers/geminiPromptBuilders/translatePrompt.js';
+import { BATCH_SIZE } from '#constants/translate.js';
 
 const apiKey = config.GEMINI_API_KEY;
-console.log('[Gemini] Loaded API key:', apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}` : 'MISSING');
-console.log('[Gemini] Model:', config.GEMINI_MODEL);
+if (!apiKey) throw new Error('[Gemini] GEMINI_API_KEY is not configured');
 
 const ai = new GoogleGenAI({ apiKey });
 
@@ -29,10 +30,16 @@ const formatGeminiError = (raw) => {
   return parts.length ? parts.join(' | ') : raw;
 };
 
-const callWithRetry = async (fn, retries = 6) => {
+const withTimeout = (promise, ms = 30000) =>
+  Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`[Gemini] Request timed out after ${ms}ms`)), ms)),
+  ]);
+
+const callWithRetry = async (fn, retries = 6, onRetry) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      return await fn();
+      return await withTimeout(fn());
     } catch (error) {
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
@@ -40,11 +47,14 @@ const callWithRetry = async (fn, retries = 6) => {
       const isExhausted = error.message?.includes('limit: 0');
 
       if ((is429 || is503) && !isExhausted && attempt < retries) {
-        const delay = is429 ? parseRetryDelay(error.message) : 30000 * attempt; // 30s, 60s, 90s, 120s, 150s
+        const delay = is429 ? parseRetryDelay(error.message) : 30000 * attempt;
+        const label = is429 ? 'Rate limited' : 'Service unavailable';
         console.warn(
-          `[Gemini] ${is429 ? 'Rate limited' : 'Service unavailable'}. Retrying in ${delay / 1000}s (attempt ${attempt}/${retries}) — ${formatGeminiError(error.message)}`
+          `[Gemini] ${label}. Retrying in ${delay / 1000}s (attempt ${attempt}/${retries}) — ${formatGeminiError(error.message)}`
         );
+        onRetry?.({ message: `${label}. Retrying in ${Math.ceil(delay / 1000)}s` });
         await sleep(delay);
+        onRetry?.(null);
       } else {
         error.geminiError = parseGeminiError(error.message);
         const reason = isExhausted
@@ -139,9 +149,19 @@ export const failOperation = (sellerId, field, lang, error) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   if (!op) return;
   op.status = 'error';
-  op.error = error?.geminiError
-    ? { code: error.geminiError.code, status: error.geminiError.status, message: error.geminiError.message }
-    : { message: error?.message ?? 'Unknown error' };
+  const g = error?.geminiError;
+  const raw = g?.message ?? error?.message ?? 'Unknown error';
+  op.error = { message: raw.split('\n')[0].trim() };
+};
+
+export const setOperationRetry = (sellerId, field, lang, retryInfo) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (!op) return;
+  if (retryInfo) {
+    op.retryInfo = retryInfo;
+  } else {
+    delete op.retryInfo;
+  }
 };
 
 export const finishProgress = (sellerId) => {
@@ -164,20 +184,24 @@ export const getProgress = (sellerId) => {
   };
 };
 
-const BATCH_SIZE = 500;
+const translateChunk = async (texts, targetLanguage, onRetry) => {
+  const prompt = buildTranslatePrompt(texts, targetLanguage);
 
-const translateChunk = async (texts, targetLanguage) => {
-  const numbered = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
-  const prompt = `You are a professional translator. Translate each of the following texts to ${targetLanguage}. For proper nouns and brand names that have no standard translation, transliterate them phonetically into the target script (e.g. "Manijero" → "مانيجيرو" in Arabic). Return ONLY a valid JSON array of translated strings in the same order as the input. No explanation, no markdown, no extra text — just the JSON array.\n\n${numbered}`;
-
-  const raw = await callWithRetry(async () => {
-    const response = await ai.models.generateContent({
-      model: config.GEMINI_MODEL,
-      contents: prompt,
-      config: { maxOutputTokens: 65536 },
-    });
-    return response.text.trim();
-  });
+  const raw = await callWithRetry(
+    async () => {
+      const response = await ai.models.generateContent({
+        model: config.GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          maxOutputTokens: 65536,
+          systemInstruction: TRANSLATE_SYSTEM_INSTRUCTION,
+        },
+      });
+      return response.text.trim();
+    },
+    6,
+    onRetry
+  );
 
   const jsonStr = raw
     .replace(/^```json?\s*/i, '')
@@ -186,19 +210,19 @@ const translateChunk = async (texts, targetLanguage) => {
   return JSON.parse(jsonStr);
 };
 
-export const translateBatch = async (texts, langCode, onProgress) => {
+export const translateBatch = async (texts, langCode, onProgress, onRetry) => {
   const targetLanguage = getLangName(langCode);
   const chunks = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     chunks.push(texts.slice(i, i + BATCH_SIZE));
   }
 
-  console.log(`[Gemini] Translating ${texts.length} texts → ${targetLanguage} in ${chunks.length} request(s)`);
+  console.log(`[Gemini] Translating ${texts.length} texts → ${targetLanguage} in ${chunks.length} chunk(s)`);
 
   const results = [];
   for (let i = 0; i < chunks.length; i++) {
     console.log(`[Gemini] Sending chunk ${i + 1}/${chunks.length} (${chunks[i].length} texts)`);
-    const translated = await translateChunk(chunks[i], targetLanguage);
+    const translated = await translateChunk(chunks[i], targetLanguage, onRetry);
     results.push(...translated);
     onProgress?.(chunks[i].length);
   }
