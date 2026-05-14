@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Return from '../models/Return.js';
 import Channel from '#root/src/models/Channel.js';
+import Product from '#root/src/models/Product.js';
 import { RETURN_STATUS } from '#root/src/constants/common.js';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
@@ -42,72 +43,101 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
 
     const returnId = returnData.Id?.toString();
 
-    //  Run DB calls in parallel
-    const [existingReturn, orderData] = await Promise.all([
-      Return.findOne({ returnId }, { sellerStatuses: 1 }).lean(), //  only needed field
+    // Collect all SKU codes
+    const skuCodes = Array.isArray(returnData.Lines)
+      ? returnData.Lines.map((line) => line?.MerchantProductNo).filter(Boolean)
+      : [];
+
+    // Run DB calls in parallel
+    const [existingReturn, orderData, productDocs] = await Promise.all([
+      Return.findOne({ returnId }, { sellerStatuses: 1 }).lean(),
+
       OrderModel && returnData.MerchantOrderNo
         ? OrderModel.findOne({
             merchantOrderNo: returnData.MerchantOrderNo,
           }).lean()
         : null,
+
+      Product.find(
+        {
+          productSkuCode: { $in: skuCodes },
+        },
+        {
+          productSkuCode: 1,
+          sellerId: 1,
+          brand: 1,
+        }
+      ).lean(),
     ]);
 
-    // Step 1: Build product array
-    let products = Array.isArray(returnData.Lines)
-      ? returnData.Lines.map((line) => ({
-          productSkuCode: line.MerchantProductNo,
-          orderLineId: line.OrderLine?.Id || null,
-          quantity: line.Quantity || 0,
-          acceptedQuantity: line.AcceptedQuantity || 0,
-          rejectedQuantity: line.RejectedQuantity || 0,
-          price: line.OrderLine?.UnitPriceInclVat || 0,
-          sellerId: null,
-        }))
-      : [];
+    // Build SKU -> sellerId map
+    const skuSellerMap = new Map();
 
-    const sellerIdSet = new Set();
-
-    //  Build SKU → Seller map (O(n))
-    let skuSellerMap = null;
-
-    if (orderData?.orderSkuList?.skuList?.length) {
-      skuSellerMap = new Map(
-        orderData.orderSkuList.skuList
-          .filter((sku) => sku.merchantProductNo && sku.sellerId)
-          .map((sku) => [String(sku.merchantProductNo), String(sku.sellerId)])
-      );
-    }
-
-    //  Assign sellerId (single pass)
-    if (skuSellerMap) {
-      for (const product of products) {
-        const sellerId = skuSellerMap.get(String(product.productSkuCode));
-        if (sellerId) {
-          product.sellerId = sellerId;
-          sellerIdSet.add(sellerId);
-        }
+    for (const product of productDocs) {
+      if (product?.productSkuCode && product?.sellerId) {
+        skuSellerMap.set(String(product.productSkuCode), String(product.sellerId));
       }
     }
 
-    // Remove invalid products
-    products = products.filter((p) => p.sellerId);
+    const sellerIdSet = new Set();
 
-    //  Convert existing statuses to Map → O(1)
+    // Build products array
+    let products = Array.isArray(returnData.Lines)
+      ? returnData.Lines.reduce((acc, line) => {
+          const skuCode = String(line?.MerchantProductNo || '');
+
+          const sellerId = skuSellerMap.get(skuCode);
+
+          // Ignore invalid SKU
+          if (!sellerId) {
+            return acc;
+          }
+
+          sellerIdSet.add(sellerId);
+
+          const productObj = {
+            productSkuCode: skuCode,
+            orderLineId: line.OrderLine?.Id || null,
+            quantity: line.Quantity || 0,
+            acceptedQuantity: line.AcceptedQuantity || 0,
+            rejectedQuantity: line.RejectedQuantity || 0,
+            price: line.OrderLine?.UnitPriceInclVat || 0,
+            sellerId,
+          };
+
+          acc.push(productObj);
+
+          return acc;
+        }, [])
+      : [];
+
+    // Ignore complete return if no products found
+    if (!products.length) {
+      return {
+        success: false,
+        ignored: true,
+        message: 'No matching products found in products collection',
+      };
+    }
+
+    // Existing seller status map
     const existingStatusMap = new Map((existingReturn?.sellerStatuses || []).map((s) => [String(s.sellerId), s]));
 
-    //  Build sellerStatuses in O(n)
+    // Build sellerStatuses
     const sellerStatuses = [];
 
     for (const sellerId of sellerIdSet) {
       const existing = existingStatusMap.get(String(sellerId));
 
       if (existing && existing.status !== 'IN_PROGRESS') {
-        sellerStatuses.push(existing); // keep old
+        sellerStatuses.push(existing);
       } else {
-        sellerStatuses.push({
+        const newStatus = {
           sellerId,
           status: returnData.Status,
-        });
+        };
+
+        sellerStatuses.push(newStatus);
       }
     }
 
@@ -127,20 +157,28 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
 
       status: returnData.Status,
 
-      // NEW FIELD
       sellerStatuses,
 
       totalPrice: returnData.RefundInclVat || 0,
+
       placedOn: returnData.CreatedAt ? new Date(returnData.CreatedAt) : null,
+
       acknowledgeDate: returnData.AcknowledgedDate ? new Date(returnData.AcknowledgedDate) : null,
+
       platform: returnData.ChannelName,
+
       products,
+
       returnDate: returnData?.ReturnDate || null,
     };
 
-    return { success: true, data: sanitizedData };
+    return {
+      success: true,
+      data: sanitizedData,
+    };
   } catch (error) {
-    console.error('Error sanitizing return data:', error.message);
+    console.error('Error sanitizing return data:', error);
+
     return {
       success: false,
       message: `Error sanitizing return data: ${error.message}`,
@@ -500,7 +538,7 @@ export const formatReturnDetails = (aggregatedResult) => {
 
     const quantity = returnProduct.quantity || 0;
 
-    const unitPriceExclVat = matchingSku?.unitPriceExclVat || 0;
+    const unitPriceExclVat = matchingSku?.unitPriceExclVat || matchingSku?.lineTotalInclVat || 0;
     const unitVat = matchingSku?.unitVat || 0;
     const unitPriceInclVat = unitPriceExclVat + unitVat;
 

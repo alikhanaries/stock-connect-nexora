@@ -538,7 +538,10 @@ export const sanitizeOrdersData = async (orders) => {
           };
         }).filter(Boolean)
       : [];
-
+    // IGNORE ORDER IF SKU LIST IS EMPTY
+    if (!skuList.length) {
+      continue;
+    }
     const orderSellerIds = Array.from(sellerIdSet);
     const updatePayload = {
       orderId: data.Id?.toString(),

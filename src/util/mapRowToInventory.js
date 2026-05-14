@@ -1,4 +1,10 @@
-import { LOW_STOCK_THRESHOLD, LOW_STOCK_THRESHOLD_SELLERS, PRODUCT_STATUSES } from '#constants/common.js';
+import {
+  LOW_STOCK_THRESHOLD,
+  LOW_STOCK_THRESHOLD_SELLERS,
+  MAX_PRICE,
+  MAX_PRICE_SELLERS,
+  PRODUCT_STATUSES,
+} from '#constants/common.js';
 const [ACTIVE, INACTIVE] = PRODUCT_STATUSES;
 import Seller from '#models/Seller.js';
 
@@ -49,11 +55,14 @@ export const getSellerNameById = async (sellerId) => {
   return seller.name.toLowerCase();
 };
 
-export const getProductStatus = (sellerName, currentStockCount) => {
+export const getProductStatus = (sellerName, currentStockCount, price = 0) => {
   const trimedSellerName = sellerName ? sellerName.toLowerCase().trim() : '';
   const isLowStockThresholdSeller = LOW_STOCK_THRESHOLD_SELLERS.includes(trimedSellerName);
+  const isMaxPriceSeller = MAX_PRICE_SELLERS.includes(trimedSellerName);
 
-  return (isLowStockThresholdSeller ? currentStockCount >= LOW_STOCK_THRESHOLD : currentStockCount > 0)
-    ? ACTIVE
-    : INACTIVE;
+  const isActiveByStock = isLowStockThresholdSeller ? currentStockCount >= LOW_STOCK_THRESHOLD : currentStockCount > 0;
+  // KIP/RAMSEY/EXQUISE price must be below 1145
+  const isActiveByPrice = isMaxPriceSeller ? price < MAX_PRICE : true;
+
+  return isActiveByStock && isActiveByPrice ? ACTIVE : INACTIVE;
 };

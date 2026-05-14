@@ -66,25 +66,27 @@ export const generateSellerInvoicePDF = async (res, data) => {
     doc.font('Helvetica-Bold').text(billingAddress.companyName);
 
     // Show customer name in normal
-    doc.font('Helvetica').text(name || 'Customer');
+    doc.font('Helvetica').text(name || 'N/A');
   } else {
     // No company → show name in bold only
-    doc.font('Helvetica-Bold').text(name || 'Customer');
+    doc.font('Helvetica-Bold').text(name || 'N/A');
   }
 
-  if (billingAddress.line1) doc.text(billingAddress.line1);
+  if (billingAddress.line1) doc.font('Helvetica').text(billingAddress.line1);
 
   const cityLine = [billingAddress.city, billingAddress.state || billingAddress.region].filter(Boolean).join(', ');
 
-  if (cityLine) doc.text(cityLine);
-  if (billingAddress.city) doc.text(billingAddress.city);
-  if (billingAddress.countryIso) doc.text(billingAddress.countryIso);
+  if (cityLine) doc.font('Helvetica').text(cityLine);
+
+  if (billingAddress.city) doc.font('Helvetica').text(billingAddress.city);
+
+  if (billingAddress.countryIso) doc.font('Helvetica').text(billingAddress.countryIso);
 
   doc.moveDown(1.5);
 
   // ================= INVOICE DETAILS =================
   const formattedOrderDate = formatToInvoiceDate(orderInfo.orderDate);
-
+  const formattedInvoiceDate = formatToInvoiceDate(invoiceData.invoiceDate);
   const drawDetailRow = (label, value, isLast = false) => {
     const paddingTop = 4; // space from top
     const rowHeight = 22; // total row height
@@ -93,11 +95,13 @@ export const generateSellerInvoicePDF = async (res, data) => {
     const baseY = doc.y;
     const textY = baseY + paddingTop;
 
-    // Label (bold)
-    doc.font('Helvetica-Bold').text(label, 40, textY);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
 
-    // Value (normal)
-    doc.font('Helvetica').text(value, 200, textY);
+    doc.text(label, 40, textY);
+
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
+
+    doc.text(value, 200, textY);
 
     // Skip divider for last row
     if (!isLast) {
@@ -117,12 +121,10 @@ export const generateSellerInvoicePDF = async (res, data) => {
   drawDetailRow('Brand Invoice number', sellerInvoiceId);
   drawDetailRow('Order number', orderInfo.channelOrderNumber);
   drawDetailRow('Order date', formattedOrderDate);
-  drawDetailRow('Invoice date', invoiceData.invoiceDate, true); // last row
+  drawDetailRow('Invoice date', formattedInvoiceDate, true); // last row
   doc.moveDown(2);
 
   // ================= TABLE HEADER =================
-  let tableY = doc.y;
-
   const cols = {
     desc: 45,
     qty: 245,
@@ -133,28 +135,59 @@ export const generateSellerInvoicePDF = async (res, data) => {
     total: 510,
   };
 
-  const headerHeight = 22;
+  let yPos = doc.y;
 
-  // Background
-  doc.rect(40, tableY - 5, 530, headerHeight).fill('#f2f2f2');
+  const drawTableHeader = () => {
+    const headerHeight = 22;
 
-  doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
+    doc.save();
 
-  //  center text vertically
-  const textY = tableY - 5 + (headerHeight - 10) / 2;
+    doc.rect(40, yPos - 5, 530, headerHeight).fill('#f2f2f2');
 
-  doc.text('Description', cols.desc, textY);
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(10);
 
-  doc.text('Quantity', cols.qty, textY, { width: 50, align: 'right' });
-  doc.text('Price', cols.price, textY, { width: 50, align: 'right' });
-  doc.text('VAT %', cols.vatP, textY, { width: 40, align: 'right' });
-  doc.text('VAT', cols.vat, textY, { width: 50, align: 'right' });
-  doc.text('Ex. VAT', cols.exVat, textY, { width: 50, align: 'right' });
-  doc.text('Line total', cols.total, textY, { width: 50, align: 'right' });
+    const textY = yPos - 5 + (headerHeight - 10) / 2;
+
+    doc.text('Description', cols.desc, textY);
+
+    doc.text('Quantity', cols.qty, textY, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.text('Price', cols.price, textY, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.text('VAT %', cols.vatP, textY, {
+      width: 40,
+      align: 'right',
+    });
+
+    doc.text('VAT', cols.vat, textY, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.text('Ex. VAT', cols.exVat, textY, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.text('Line total', cols.total, textY, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.restore();
+
+    yPos += 25;
+  };
+
+  drawTableHeader();
 
   // ================= TABLE ROWS =================
-  let yPos = tableY + 25;
-
   const skuCodes = sellerData.skus.map((s) => s.merchantProductNo);
 
   const products = await Product.find({
@@ -168,7 +201,8 @@ export const generateSellerInvoicePDF = async (res, data) => {
   });
 
   sellerData.skus.forEach((sku, index) => {
-    doc.font('Helvetica'); // FORCE NORMAL FONT
+    // FORCE NORMAL TEXT EVERY ROW
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
 
     const product = productMap[sku.merchantProductNo] || {};
 
@@ -182,41 +216,83 @@ MPN: ${sku.merchantProductNo || '-'}`;
 
     const descHeight = doc.heightOfString(desc, { width: 220 });
 
-    doc.text(desc, cols.desc, yPos, { width: 220 });
+    const rowHeight = Math.max(descHeight, 40);
 
-    doc.text(sku.quantity?.toString() || '0', cols.qty, yPos, { width: 50, align: 'right' });
+    // ================= PAGE BREAK =================
+    if (yPos + rowHeight > doc.page.height - 120) {
+      doc.addPage();
 
-    doc.text((sku.unitPriceInclVat || 0).toFixed(2), cols.price, yPos, { width: 50, align: 'right' });
+      yPos = 60;
 
-    doc.text((sku.vatRate || 0).toFixed(2), cols.vatP, yPos, { width: 40, align: 'right' });
+      drawTableHeader();
 
-    doc.text((sku.lineVat || 0).toFixed(2), cols.vat, yPos, { width: 50, align: 'right' });
+      // IMPORTANT RESET AFTER HEADER
+      doc.font('Helvetica');
+      doc.fontSize(10);
+      doc.fillColor('#000');
+    }
 
-    doc.text((sku.lineTotalExclVat || 0).toFixed(2), cols.exVat, yPos, { width: 50, align: 'right' });
+    // FORCE NORMAL AGAIN
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
 
-    doc.text((sku.lineTotalInclVat || 0).toFixed(2), cols.total, yPos, { width: 50, align: 'right' });
+    // ================= ROW =================
+    doc.text(desc, cols.desc, yPos, {
+      width: 220,
+    });
 
-    const nextY = yPos + descHeight + 10;
+    doc.text(sku.quantity?.toString() || '0', cols.qty, yPos, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.text((sku.unitPriceInclVat || 0).toFixed(2), cols.price, yPos, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.text((sku.vatRate || 0).toFixed(2), cols.vatP, yPos, {
+      width: 40,
+      align: 'right',
+    });
+
+    doc.text((sku.lineVat || 0).toFixed(2), cols.vat, yPos, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.text((sku.lineTotalExclVat || 0).toFixed(2), cols.exVat, yPos, {
+      width: 50,
+      align: 'right',
+    });
+
+    doc.text((sku.lineTotalInclVat || 0).toFixed(2), cols.total, yPos, {
+      width: 50,
+      align: 'right',
+    });
+
+    yPos += rowHeight + 10;
 
     if (index !== sellerData.skus.length - 1) {
       doc
-        .moveTo(40, nextY - 5)
-        .lineTo(570, nextY - 5)
+        .moveTo(40, yPos - 5)
+        .lineTo(570, yPos - 5)
         .strokeColor('#eeeeee')
         .lineWidth(0.5)
         .stroke();
     }
-
-    yPos = nextY;
   });
 
   // ================= TOTALS =================
   const t = sellerData.totals;
 
-  //  Add top margin before totals
   yPos += 10;
 
-  // Top divider (optional)
+  // page break before totals
+  if (yPos + 140 > doc.page.height - 120) {
+    doc.addPage();
+    yPos = 60;
+  }
+
   doc.moveTo(40, yPos).lineTo(570, yPos).strokeColor('#cccccc').lineWidth(1).stroke();
 
   // spacing after divider
@@ -229,12 +305,12 @@ MPN: ${sku.merchantProductNo || '-'}`;
 
     const currentY = yPos + paddingTop;
 
-    //  Label in Bold
-    doc.font('Helvetica-Bold');
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
+
     doc.text(label, 420, currentY);
 
-    //  Value in Regular (NOT bold)
-    doc.font('Helvetica');
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
+
     doc.text(value, 510, currentY, {
       width: 50,
       align: 'right',
@@ -256,7 +332,8 @@ MPN: ${sku.merchantProductNo || '-'}`;
   drawTotal('VAT', (t.vat || 0).toFixed(2));
   drawTotal('Total', (t.subTotalInclVat || 0).toFixed(2));
   drawTotal('Shipping', (t.shippingInclVat || 0).toFixed(2));
-  drawTotal('Order Total', (t.grandTotal || 0).toFixed(2), true);
+
+  drawTotal('Order Total', (t.grandTotal || 0).toFixed(2));
 
   // ================= FOOTER =================
   const range = doc.bufferedPageRange();
@@ -281,6 +358,7 @@ MPN: ${sku.merchantProductNo || '-'}`;
     doc
       .fontSize(9)
       .fillColor('#555')
+      .font('Helvetica')
       .text(`${i + 1} / ${range.count}`, 0, footerY + 8, {
         width: pageWidth,
         align: 'center',
