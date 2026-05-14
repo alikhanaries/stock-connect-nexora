@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import AmazonMarketplaceSchema from './ProductSchema/AmazonMarketplace.js';
 
 const ProductSchema = new mongoose.Schema(
   {
@@ -88,6 +89,9 @@ const ProductSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+
+    // Marketplace-specific listing attributes
+    amazon: { type: AmazonMarketplaceSchema, default: undefined },
     updatedAt: {
       type: Date,
     },

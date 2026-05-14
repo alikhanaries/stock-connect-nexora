@@ -7,7 +7,7 @@ import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
-import { ALLOWEDMARKETPLACES } from '#constants/common.js';
+import { ALLOWEDMARKETPLACES, MAX_PRICE, MAX_PRICE_SELLERS } from '#constants/common.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { pushBatch, pushInActiveProductsToChannel } from './productService.js';
 import { mapProductToChannelEngine } from '../helpers/ProductMapper.js';
@@ -99,8 +99,8 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   //2. Fetch products
   const products = await Product.find(
-    { productSkuCode: { $in: [...incomingSkuSet] } },
-    { _id: 1, productSkuCode: 1 }
+    { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
+    { _id: 1, productSkuCode: 1, price: 1 }
   ).lean();
 
   const productMap = new Map(products.map((p) => [p.productSkuCode, p]));
@@ -168,7 +168,10 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         },
       });
     }
-    const prodStatus = getProductStatus(sellerName, currentStockCount);
+    let prodStatus = getProductStatus(sellerName, currentStockCount);
+    if (MAX_PRICE_SELLERS.includes(sellerName) && (product.price ?? 0) >= MAX_PRICE) {
+      prodStatus = 'inactive';
+    }
 
     // Always update product stock (if product exists)
     productBulkOps.push({
@@ -267,7 +270,10 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
     const sellerName = await getSellerNameById(sellerId);
 
     // 1. Ensure product exists (mandatory for inventory)
-    const product = await Product.findOne({ _id: new ObjectId(productId) }, { _id: 1, productSkuCode: 1 }).lean();
+    const product = await Product.findOne(
+      { _id: new ObjectId(productId) },
+      { _id: 1, productSkuCode: 1, price: 1 }
+    ).lean();
 
     if (!product) {
       const error = new Error(locale.NOT_FOUND);
@@ -296,7 +302,10 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
         lean: true,
       }
     );
-    const prodStatus = getProductStatus(sellerName, currentStockCount);
+    let prodStatus = getProductStatus(sellerName, currentStockCount);
+    if (MAX_PRICE_SELLERS.includes(sellerName) && (product.price ?? 0) >= MAX_PRICE) {
+      prodStatus = 'inactive';
+    }
 
     // 3. Update product stock count
     await Product.updateOne(
