@@ -10,7 +10,19 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
 
   await processInBatches(rawProducts, batchSize, async (batch) => {
     for (const product of batch) {
-      const { id, title, description, variants = [], category, status, sarPriceNamshi, sarPriceNoon } = product;
+      const {
+        id,
+        title,
+        description,
+        variants = [],
+        category,
+        status,
+        sarPriceNamshi,
+        sarPriceNoon,
+        sarPriceAmazon,
+        sarPriceStyli,
+        sarPrice6thstreet,
+      } = product;
 
       if (!variants.length) continue;
 
@@ -58,6 +70,9 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           status,
           noonPrice: sarPriceNoon,
           namshiPrice: sarPriceNamshi,
+          amazonPrice: sarPriceAmazon,
+          styliPrice: sarPriceStyli,
+          sixthStreetPrice: sarPrice6thstreet,
         },
         sellerId
       );
@@ -128,6 +143,9 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
             status,
             noonPrice: sarPriceNoon,
             namshiPrice: sarPriceNamshi,
+            amazonPrice: sarPriceAmazon,
+            styliPrice: sarPriceStyli,
+            sixthStreetPrice: sarPrice6thstreet,
           },
           sellerId
         );
@@ -182,6 +200,9 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
               status,
               noonPrice: sarPriceNoon,
               namshiPrice: sarPriceNamshi,
+              amazonPrice: sarPriceAmazon,
+              styliPrice: sarPriceStyli,
+              sixthStreetPrice: sarPrice6thstreet,
             },
             sellerId
           );
