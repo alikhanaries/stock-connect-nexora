@@ -1,15 +1,11 @@
 import { errorResponse, successResponse } from '#root/src/helpers/response.js';
 import Seller from '#root/src/models/Seller.js';
 import { getMappingBySellerSlug } from '../helpers/brandMapping.js';
-import { importAllProducts } from '../service/productService.js';
+import { entegraPriceSync } from '../service/priceService.js';
 
-export const syncEntegraProducts = async (req, res) => {
+export const syncEntegraPrice = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-
-    const isImageUpdate = Object.prototype.hasOwnProperty.call(req.query, 'isImageUpdate')
-      ? req.query.isImageUpdate === 'true' || req.query.isImageUpdate === true
-      : false;
 
     const seller = await Seller.findById(sellerId, { slug: 1 }).lean();
     if (!seller?.slug) return errorResponse(res, `Seller ${sellerId} not found or missing slug`);
@@ -20,15 +16,15 @@ export const syncEntegraProducts = async (req, res) => {
     const { displayBrand } = mapping;
     if (!displayBrand) return errorResponse(res, `Display brand is missing for seller slug "${seller.slug}"`);
 
-    setImmediate(() => {
-      importAllProducts(sellerId, isImageUpdate).catch((err) =>
-        console.error(`${displayBrand} background sync failed:`, err)
+    process.nextTick(() => {
+      entegraPriceSync(sellerId).catch((err) =>
+        console.error(`[${displayBrand} Price Sync] Background job failed:`, err)
       );
     });
 
-    return successResponse(res, `${displayBrand} product sync started in background`, 202);
+    return successResponse(res, `${displayBrand} price sync started in background`, 202);
   } catch (error) {
-    console.error('Failed to start Entegra sync:', error);
+    console.error('[Entegra Price Sync] Start failed:', error);
     return errorResponse(res, error.message);
   }
 };

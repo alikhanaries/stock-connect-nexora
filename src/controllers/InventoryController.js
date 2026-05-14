@@ -3,7 +3,7 @@ import inventoryService from '#service/InventoryService.js';
 import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
-
+import { config } from '../config/config.js';
 /* UPLOAD INVENTORY FROM GOOGLE SHEET */
 export const importInventoryFromGoogleSheet = async (req, res) => {
   try {
@@ -132,9 +132,49 @@ export const syncStockToChannelEngine = async (req, res) => {
   }
 };
 
+/* UPLOAD PRODUCTS FROM EXPRESSWAREHOUSE GOOGLE SHEET */
+export const importProductsFromExpressWarehouseGoogleSheet = async (req, res) => {
+  try {
+    const url = config?.EXPRESS_WAREHOUSE_PRODUCTS_SHEET;
+
+    if (!url) {
+      return failResponse(res, req?.locale?.GOOGLE_SHEET_URL_REQUIRED, 400);
+    }
+    const exportUrl = await convertGoogleSheetUrlToExport(url);
+    if (!exportUrl) {
+      return failResponse(res, req?.locale?.INVALID_URL, 500);
+    }
+    // Send immediate response to client
+    successResponse(res, req?.locale?.PRODUCT_IMPORTED_PROCESSING, 200);
+    // Process file in background (async, no await here)
+    inventoryService
+      .importExpressWarehouseProductsFromGoogleSheet(exportUrl, req.locale)
+      .then((result) => {
+        console.log('CSV processing completed:', result);
+        // Send email notification after processing
+        emailService.updateExpressWarehouseInventoryMailService({
+          to: req?.user?.email,
+          userName: req?.user?.firstName,
+          importStatus: result?.success ? 'SUCCESS' : 'FAILED',
+          errorDetails: result?.errorDetails || [],
+        });
+        // Optionally update DB with processing status
+      })
+      .catch((error) => {
+        console.error('Error in background CSV processing:', error.message);
+        // Optionally store error in DB for tracking
+      });
+  } catch (error) {
+    console.error('Controller error:', error.message, error.stack);
+    errorLog(error);
+    return errorResponse(res, error.message);
+  }
+};
+
 export default {
   importInventoryFromGoogleSheet,
   importInventoryFromCsvFile,
   updateSingleInventory,
   syncStockToChannelEngine,
+  importProductsFromExpressWarehouseGoogleSheet,
 };

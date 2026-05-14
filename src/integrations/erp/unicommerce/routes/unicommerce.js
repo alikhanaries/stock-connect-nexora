@@ -15,6 +15,8 @@ import { updateInventoryValidator } from '../validations/inventory.js';
 import { updateInventory } from '../controllers/inventoryController.js';
 import { getCourierDetailsValidator, getLabelsValidator } from '../validations/shipment.js';
 import { getCourierDetails, getLabels } from '../controllers/shipmentController.js';
+import { createShipment } from '#root/src/controllers/ShipmentController.js';
+import { createShipmentValidator } from '#validations/shipment.js';
 
 const UniCommerceRouter = express.Router();
 
@@ -843,6 +845,136 @@ UniCommerceRouter.get(
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
   getCourierDetails
+);
+
+/**
+ * @openapi
+ * /erp/unicommerce/createShipment:
+ *   post:
+ *     tags: [UniCommerce]
+ *     summary: Create a shipment
+ *     description: |
+ *       Creates a shipment for the authenticated seller using the internal shipment-creation flow.
+ *       Mirrors the body of `POST /shipment/createShipment`.
+ *
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *         description: Preferred response language
+ *
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer access token obtained from Get Authentication API
+ *
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - id
+ *               - sellerId
+ *               - pickUpId
+ *               - products
+ *             properties:
+ *               id:
+ *                 type: string
+ *                 description: Order ID for which the shipment is created
+ *                 example: ORD12345
+ *               sellerId:
+ *                 type: string
+ *                 description: Seller ID
+ *                 example: 65f2c9a1b12c3d0012ab45cd
+ *               pickUpId:
+ *                 type: string
+ *                 description: Pickup location ID
+ *                 example: PU98765
+ *               products:
+ *                 type: array
+ *                 description: Line items to ship
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - orderLineId
+ *                     - merchantProductNo
+ *                     - quantity
+ *                   properties:
+ *                     orderLineId:
+ *                       type: string
+ *                       example: "47123"
+ *                     merchantProductNo:
+ *                       type: string
+ *                       example: KSY001_XS
+ *                     quantity:
+ *                       type: number
+ *                       example: 1
+ *                     lineTotalInclVat:
+ *                       type: number
+ *                       example: 199.99
+ *                     hsCode:
+ *                       type: string
+ *                       example: "610910"
+ *               pieces:
+ *                 type: number
+ *                 description: Total number of pieces in the shipment
+ *                 example: 1
+ *               codAmount:
+ *                 type: number
+ *                 description: Cash-on-delivery amount, if applicable
+ *                 example: 0
+ *               currency:
+ *                 type: string
+ *                 description: Currency code
+ *                 example: SAR
+ *
+ *     responses:
+ *       201:
+ *         description: Shipment created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: SUCCESS
+ *                 message:
+ *                   type: string
+ *                   example: Shipment created successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     shipmentId:
+ *                       type: string
+ *                       example: SHIP-9001
+ *
+ *       400:
+ *         description: Validation failed or shipment could not be created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/FailResponse"
+ *
+ *       401:
+ *         description: Unauthorized
+ *
+ *       500:
+ *         description: Internal server error
+ */
+UniCommerceRouter.post(
+  '/createShipment',
+  createShipmentValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  createShipment
 );
 
 export default UniCommerceRouter;
