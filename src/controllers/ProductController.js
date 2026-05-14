@@ -649,7 +649,14 @@ export const getProgressStatus = (req, res) => {
       return failResponse(res, req.locale.NO_ACTIVE_TRANSLATION, 404);
     }
 
-    return successResponse(res, 'Translation progress status', 200, { type, ...progress });
+    const hasError = progress.operations.some((o) => o.status === 'error');
+    const message = hasError
+      ? 'Translation failed'
+      : progress.status === 'done'
+        ? 'Translation completed'
+        : 'Translation in progress';
+
+    return successResponse(res, message, 200, { type, ...progress });
   } catch (error) {
     errorLog(error);
     return errorResponse(res, error.message, 500);
