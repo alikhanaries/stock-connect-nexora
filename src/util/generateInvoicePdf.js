@@ -72,19 +72,21 @@ export const generateSellerInvoicePDF = async (res, data) => {
     doc.font('Helvetica-Bold').text(name || 'Customer');
   }
 
-  if (billingAddress.line1) doc.text(billingAddress.line1);
+  if (billingAddress.line1) doc.font('Helvetica').text(billingAddress.line1);
 
   const cityLine = [billingAddress.city, billingAddress.state || billingAddress.region].filter(Boolean).join(', ');
 
-  if (cityLine) doc.text(cityLine);
-  if (billingAddress.city) doc.text(billingAddress.city);
-  if (billingAddress.countryIso) doc.text(billingAddress.countryIso);
+  if (cityLine) doc.font('Helvetica').text(cityLine);
+
+  if (billingAddress.city) doc.font('Helvetica').text(billingAddress.city);
+
+  if (billingAddress.countryIso) doc.font('Helvetica').text(billingAddress.countryIso);
 
   doc.moveDown(1.5);
 
   // ================= INVOICE DETAILS =================
   const formattedOrderDate = formatToInvoiceDate(orderInfo.orderDate);
-
+  const formattedInvoiceDate = formatToInvoiceDate(invoiceData.invoiceDate);
   const drawDetailRow = (label, value, isLast = false) => {
     const paddingTop = 4; // space from top
     const rowHeight = 22; // total row height
@@ -93,11 +95,13 @@ export const generateSellerInvoicePDF = async (res, data) => {
     const baseY = doc.y;
     const textY = baseY + paddingTop;
 
-    // Label (bold)
-    doc.font('Helvetica-Bold').text(label, 40, textY);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
 
-    // Value (normal)
-    doc.font('Helvetica').text(value, 200, textY);
+    doc.text(label, 40, textY);
+
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
+
+    doc.text(value, 200, textY);
 
     // Skip divider for last row
     if (!isLast) {
@@ -117,7 +121,7 @@ export const generateSellerInvoicePDF = async (res, data) => {
   drawDetailRow('Brand Invoice number', sellerInvoiceId);
   drawDetailRow('Order number', orderInfo.channelOrderNumber);
   drawDetailRow('Order date', formattedOrderDate);
-  drawDetailRow('Invoice date', invoiceData.invoiceDate, true); // last row
+  drawDetailRow('Invoice date', formattedInvoiceDate, true); // last row
   doc.moveDown(2);
 
   // ================= TABLE HEADER =================
@@ -135,6 +139,8 @@ export const generateSellerInvoicePDF = async (res, data) => {
 
   const drawTableHeader = () => {
     const headerHeight = 22;
+
+    doc.save();
 
     doc.rect(40, yPos - 5, 530, headerHeight).fill('#f2f2f2');
 
@@ -174,6 +180,8 @@ export const generateSellerInvoicePDF = async (res, data) => {
       align: 'right',
     });
 
+    doc.restore();
+
     yPos += 25;
   };
 
@@ -193,7 +201,8 @@ export const generateSellerInvoicePDF = async (res, data) => {
   });
 
   sellerData.skus.forEach((sku, index) => {
-    doc.font('Helvetica'); // FORCE NORMAL FONT
+    // FORCE NORMAL TEXT EVERY ROW
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
 
     const product = productMap[sku.merchantProductNo] || {};
 
@@ -216,7 +225,15 @@ MPN: ${sku.merchantProductNo || '-'}`;
       yPos = 60;
 
       drawTableHeader();
+
+      // IMPORTANT RESET AFTER HEADER
+      doc.font('Helvetica');
+      doc.fontSize(10);
+      doc.fillColor('#000');
     }
+
+    // FORCE NORMAL AGAIN
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
 
     // ================= ROW =================
     doc.text(desc, cols.desc, yPos, {
@@ -288,9 +305,13 @@ MPN: ${sku.merchantProductNo || '-'}`;
 
     const currentY = yPos + paddingTop;
 
-    doc.font('Helvetica-Bold').text(label, 420, currentY);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor('#000');
 
-    doc.font('Helvetica').text(value, 510, currentY, {
+    doc.text(label, 420, currentY);
+
+    doc.font('Helvetica').fontSize(10).fillColor('#000');
+
+    doc.text(value, 510, currentY, {
       width: 50,
       align: 'right',
     });
@@ -337,6 +358,7 @@ MPN: ${sku.merchantProductNo || '-'}`;
     doc
       .fontSize(9)
       .fillColor('#555')
+      .font('Helvetica')
       .text(`${i + 1} / ${range.count}`, 0, footerY + 8, {
         width: pageWidth,
         align: 'center',
