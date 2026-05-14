@@ -90,6 +90,8 @@ export const createShipmentWithAymakan = async (shipmentData) => {
           tax_identification_number: taxData.tax_identification_number,
           invoice_number: taxData.invoice_number,
           invoice_date: taxData.invoice_date,
+          is_commercial_shipment: '0',
+          shipment_type: shipmentData?.shipment_type,
         },
       }),
     };
