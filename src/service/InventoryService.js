@@ -7,7 +7,7 @@ import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
-import { ALLOWEDMARKETPLACES } from '#constants/common.js';
+import { ALLOWEDMARKETPLACES, MAX_PRICE, MAX_PRICE_SELLERS } from '#constants/common.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { pushBatch, pushInActiveProductsToChannel } from './productService.js';
 import { mapProductToChannelEngine } from '../helpers/ProductMapper.js';
@@ -168,7 +168,10 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         },
       });
     }
-    const prodStatus = getProductStatus(sellerName, currentStockCount, product.price || 0);
+    let prodStatus = getProductStatus(sellerName, currentStockCount);
+    if (MAX_PRICE_SELLERS.includes(sellerName) && (product.price ?? 0) >= MAX_PRICE) {
+      prodStatus = 'inactive';
+    }
 
     // Always update product stock (if product exists)
     productBulkOps.push({
@@ -299,7 +302,10 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
         lean: true,
       }
     );
-    const prodStatus = getProductStatus(sellerName, currentStockCount, product.price || 0);
+    let prodStatus = getProductStatus(sellerName, currentStockCount);
+    if (MAX_PRICE_SELLERS.includes(sellerName) && (product.price ?? 0) >= MAX_PRICE) {
+      prodStatus = 'inactive';
+    }
 
     // 3. Update product stock count
     await Product.updateOne(

@@ -6,6 +6,7 @@ import Inventory from '#root/src/models/Inventory.js';
 import { createGurmanKipAdapter } from '../gurmanAdapter.js';
 import { formatKipInventory } from '../helpers/formatInventory.js';
 import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
+import { MIN_STOCK, MAX_PRICE } from '../constants/common.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
@@ -63,7 +64,7 @@ export const kipInventorySync = async (sellerId) => {
 
           const existingProducts = await Product.find(
             { sellerId, productSkuCode: { $in: skuList } },
-            { _id: 1, productSkuCode: 1 }
+            { _id: 1, productSkuCode: 1, price: 1 }
           ).lean();
 
           const productMap = new Map(existingProducts.map((p) => [normalize(p.productSkuCode), p]));
@@ -78,22 +79,28 @@ export const kipInventorySync = async (sellerId) => {
 
           const now = new Date();
 
-          const productOps = validProducts.map((p) => ({
-            updateOne: {
-              filter: {
-                sellerId: p.sellerId,
-                productSkuCode: p.productSkuCode,
-              },
-              update: {
-                $set: {
-                  currentStockCount: p.currentStockCount,
-                  status: p.status,
-                  productType: p.productType,
-                  updatedAt: now,
+          const productOps = validProducts.map((p) => {
+            const existing = productMap.get(normalize(p.productSkuCode));
+            const price = existing?.price ?? 0;
+            const status = p.currentStockCount < MIN_STOCK || price >= MAX_PRICE ? 'inactive' : 'active';
+
+            return {
+              updateOne: {
+                filter: {
+                  sellerId: p.sellerId,
+                  productSkuCode: p.productSkuCode,
+                },
+                update: {
+                  $set: {
+                    currentStockCount: p.currentStockCount,
+                    status,
+                    productType: p.productType,
+                    updatedAt: now,
+                  },
                 },
               },
-            },
-          }));
+            };
+          });
 
           const inventoryOps = validProducts.map((p) => {
             const prod = productMap.get(normalize(p.productSkuCode));
@@ -135,6 +142,10 @@ export const kipInventorySync = async (sellerId) => {
           await resolveHierarchyStatus(
             sellerId,
             validProducts.map((p) => p.productSkuCode)
+          );
+          await Product.updateMany(
+            { sellerId, productSkuCode: { $in: skuList }, price: { $gte: MAX_PRICE } },
+            { $set: { status: 'inactive', updatedAt: now } }
           );
         } catch (err) {
           console.error(`[Batch ${batchId}] Error`, err);
