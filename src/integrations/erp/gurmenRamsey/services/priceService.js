@@ -5,6 +5,7 @@ import Product from '#root/src/models/Product.js';
 import Price from '#root/src/models/Price.js';
 import { createGurmanRamseyAdapter } from '../ramseyAdapter.js';
 import { formatRamseyPrice } from '../helpers/formatPrice.js';
+import { MIN_STOCK, MAX_PRICE } from '../constants/common.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
@@ -62,7 +63,7 @@ export const ramseyPriceSync = async (sellerId) => {
 
           const existingProducts = await Product.find(
             { sellerId, productSkuCode: { $in: skuList } },
-            { _id: 1, productSkuCode: 1 }
+            { _id: 1, productSkuCode: 1, currentStockCount: 1 }
           ).lean();
 
           const productMap = new Map(existingProducts.map((p) => [normalize(p.productSkuCode), p]));
@@ -76,23 +77,30 @@ export const ramseyPriceSync = async (sellerId) => {
 
           const now = new Date();
 
-          const productOps = validProducts.map((p) => ({
-            updateOne: {
-              filter: { sellerId: p.sellerId, productSkuCode: p.productSkuCode },
-              update: {
-                $set: {
-                  price: p.price,
-                  noonPrice: p.noonPrice,
-                  namshiPrice: p.namshiPrice,
-                  purchasePrice: p.purchasePrice,
-                  msrp: p.msrp,
-                  ...(p.minPrice !== null && { minPrice: p.minPrice }),
-                  ...(p.maxPrice !== null && { maxPrice: p.maxPrice }),
-                  updatedAt: now,
+          const productOps = validProducts.map((p) => {
+            const prod = productMap.get(normalize(p.productSkuCode));
+            const stockCount = prod?.currentStockCount ?? 0;
+            const status = p.price >= MAX_PRICE || stockCount < MIN_STOCK ? 'inactive' : 'active';
+
+            return {
+              updateOne: {
+                filter: { sellerId: p.sellerId, productSkuCode: p.productSkuCode },
+                update: {
+                  $set: {
+                    price: p.price,
+                    noonPrice: p.noonPrice,
+                    namshiPrice: p.namshiPrice,
+                    purchasePrice: p.purchasePrice,
+                    msrp: p.msrp,
+                    ...(p.minPrice !== null && { minPrice: p.minPrice }),
+                    ...(p.maxPrice !== null && { maxPrice: p.maxPrice }),
+                    status,
+                    updatedAt: now,
+                  },
                 },
               },
-            },
-          }));
+            };
+          });
 
           const priceOps = validProducts.map((p) => {
             const prod = productMap.get(normalize(p.productSkuCode));
