@@ -66,10 +66,10 @@ export const generateSellerInvoicePDF = async (res, data) => {
     doc.font('Helvetica-Bold').text(billingAddress.companyName);
 
     // Show customer name in normal
-    doc.font('Helvetica').text(name || 'Customer');
+    doc.font('Helvetica').text(name || 'N/A');
   } else {
     // No company → show name in bold only
-    doc.font('Helvetica-Bold').text(name || 'Customer');
+    doc.font('Helvetica-Bold').text(name || 'N/A');
   }
 
   if (billingAddress.line1) doc.font('Helvetica').text(billingAddress.line1);
