@@ -2,26 +2,25 @@ import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { erpCommonConfig } from '#root/src/integrations/common/config/config.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import Product from '#root/src/models/Product.js';
-import Inventory from '#root/src/models/Inventory.js';
-import { createGurmanKipAdapter } from '../gurmanAdapter.js';
-import { formatKipInventory } from '../helpers/formatInventory.js';
-import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
+import Price from '#root/src/models/Price.js';
+import { createGurmanRamseyAdapter } from '../ramseyAdapter.js';
+import { formatRamseyPrice } from '../helpers/formatPrice.js';
 import { MIN_STOCK, MAX_PRICE } from '../constants/common.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
 const normalize = (sku) => sku?.trim().toUpperCase();
 
-export const kipInventorySync = async (sellerId) => {
+export const ramseyPriceSync = async (sellerId) => {
   try {
-    const adapter = createGurmanKipAdapter();
+    const adapter = createGurmanRamseyAdapter();
     const productsFromApi = await adapter.fetchProducts();
 
     if (!productsFromApi.length) {
-      return { message: 'No KIP products found for inventory sync.' };
+      return { message: 'No Ramsey products found for price sync.' };
     }
 
-    console.log(`[KIP Inventory Sync] Started`);
+    console.log(`[Ramsey Price Sync] Started`);
 
     let updatedCount = 0;
 
@@ -30,7 +29,7 @@ export const kipInventorySync = async (sellerId) => {
       MAX_BATCH_SIZE,
       async (batch, index) => {
         const batchId = index + 1;
-        console.log(`\n[Batch ${batchId}] Processing ${batch.length} items`);
+        console.log(`\n[Ramsey Price Sync Batch ${batchId}] Processing ${batch.length} items`);
 
         try {
           const skuSet = new Set();
@@ -64,14 +63,13 @@ export const kipInventorySync = async (sellerId) => {
 
           const existingProducts = await Product.find(
             { sellerId, productSkuCode: { $in: skuList } },
-            { _id: 1, productSkuCode: 1, price: 1 }
+            { _id: 1, productSkuCode: 1, currentStockCount: 1 }
           ).lean();
 
           const productMap = new Map(existingProducts.map((p) => [normalize(p.productSkuCode), p]));
-
           const existingSkus = new Set(productMap.keys());
 
-          const { products } = formatKipInventory(batch, sellerId);
+          const { products } = formatRamseyPrice(batch, sellerId);
 
           const validProducts = products.filter((p) => existingSkus.has(normalize(p.productSkuCode)));
 
@@ -80,21 +78,23 @@ export const kipInventorySync = async (sellerId) => {
           const now = new Date();
 
           const productOps = validProducts.map((p) => {
-            const existing = productMap.get(normalize(p.productSkuCode));
-            const price = existing?.price ?? 0;
-            const status = p.currentStockCount < MIN_STOCK || price >= MAX_PRICE ? 'inactive' : 'active';
+            const prod = productMap.get(normalize(p.productSkuCode));
+            const stockCount = prod?.currentStockCount ?? 0;
+            const status = p.price >= MAX_PRICE || stockCount < MIN_STOCK ? 'inactive' : 'active';
 
             return {
               updateOne: {
-                filter: {
-                  sellerId: p.sellerId,
-                  productSkuCode: p.productSkuCode,
-                },
+                filter: { sellerId: p.sellerId, productSkuCode: p.productSkuCode },
                 update: {
                   $set: {
-                    currentStockCount: p.currentStockCount,
+                    price: p.price,
+                    noonPrice: p.noonPrice,
+                    namshiPrice: p.namshiPrice,
+                    purchasePrice: p.purchasePrice,
+                    msrp: p.msrp,
+                    ...(p.minPrice !== null && { minPrice: p.minPrice }),
+                    ...(p.maxPrice !== null && { maxPrice: p.maxPrice }),
                     status,
-                    productType: p.productType,
                     updatedAt: now,
                   },
                 },
@@ -102,18 +102,21 @@ export const kipInventorySync = async (sellerId) => {
             };
           });
 
-          const inventoryOps = validProducts.map((p) => {
+          const priceOps = validProducts.map((p) => {
             const prod = productMap.get(normalize(p.productSkuCode));
 
             return {
               updateOne: {
-                filter: {
-                  sellerId: p.sellerId,
-                  productSkuCode: p.productSkuCode,
-                },
+                filter: { sellerId: p.sellerId, productSkuCode: p.productSkuCode },
                 update: {
                   $set: {
-                    currentStockCount: p.currentStockCount,
+                    price: p.price,
+                    noonPrice: p.noonPrice,
+                    namshiPrice: p.namshiPrice,
+                    purchasePrice: p.purchasePrice,
+                    msrp: p.msrp,
+                    ...(p.minPrice !== null && { minPrice: p.minPrice }),
+                    ...(p.maxPrice !== null && { maxPrice: p.maxPrice }),
                     updatedAt: now,
                     lastSyncedAt: now,
                   },
@@ -130,38 +133,28 @@ export const kipInventorySync = async (sellerId) => {
           });
 
           const productResult = await Product.bulkWrite(productOps, { ordered: false });
-          await Inventory.bulkWrite(inventoryOps, { ordered: false });
+          await Price.bulkWrite(priceOps, { ordered: false });
 
           updatedCount += productResult.matchedCount;
 
           console.log(
-            `[Batch ${batchId}] Matched: ${productResult.matchedCount}, Modified: ${productResult.modifiedCount}`
-          );
-
-          // Recalculate hierarchy status for updated SKUs
-          await resolveHierarchyStatus(
-            sellerId,
-            validProducts.map((p) => p.productSkuCode)
-          );
-          await Product.updateMany(
-            { sellerId, productSkuCode: { $in: skuList }, price: { $gte: MAX_PRICE } },
-            { $set: { status: 'inactive', updatedAt: now } }
+            `[Ramsey Price Sync Batch ${batchId}] Matched: ${productResult.matchedCount}, Modified: ${productResult.modifiedCount}`
           );
         } catch (err) {
-          console.error(`[Batch ${batchId}] Error`, err);
+          console.error(`[Ramsey Price Sync Batch ${batchId}] Error`, err);
           throw err;
         }
       },
       BATCH_CONCURRENCY
     );
 
-    await updateSyncDate(sellerId, 'INVENTORY', updatedCount);
+    await updateSyncDate(sellerId, 'PRICE', updatedCount);
 
-    console.log(`[KIP Inventory Sync] Completed — Updated: ${updatedCount}`);
+    console.log(`[Ramsey Price Sync] Completed — Updated: ${updatedCount}`);
 
     return { success: true, updatedCount };
   } catch (error) {
-    console.error('[KIP Inventory Sync] Failed:', error);
+    console.error('[Ramsey Price Sync] Failed:', error);
     throw error;
   }
 };
