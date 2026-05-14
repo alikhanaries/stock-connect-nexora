@@ -157,7 +157,9 @@ export const setOperationRetry = (sellerId, field, lang, retryInfo) => {
 
 export const finishProgress = (sellerId) => {
   const p = progressStore.get(key(sellerId));
-  if (p) p.status = 'done';
+  if (!p) return;
+  const hasError = p.operations.some((o) => o.status === 'error');
+  p.status = hasError ? 'error' : 'done';
 };
 
 export const getProgress = (sellerId) => {
