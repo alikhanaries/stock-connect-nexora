@@ -653,7 +653,7 @@ export const getProgressStatus = (req, res) => {
     const message = hasError
       ? 'Translation failed'
       : progress.status === 'done'
-        ? 'Translation completed'
+        ? 'Translation completed. Review changes in the catalog.'
         : 'Translation in progress';
 
     return successResponse(res, message, 200, { type, ...progress });
