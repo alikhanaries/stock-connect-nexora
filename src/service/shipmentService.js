@@ -67,7 +67,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       cod_amount: shipmentData.codAmount || 0,
       currency: AYMAKAN_PRICE_CURRENCY,
       delivery_name: [orderCustomer?.firstName, orderCustomer?.lastName].filter(Boolean).join(' '),
-      delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
+      delivery_email: orderCustomer?.email,
       delivery_city: config.AYMAKAN_DELIVERY_CITY,
       delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
       delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
@@ -79,6 +79,10 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       lat: config.AYMAKAN_DELIVERY_LAT,
       long: config.AYMAKAN_DELIVERY_LONG,
       delivery_duty_type: 'DDP',
+      delivery_description: (productsData || [])
+        .map((p) => p.description)
+        .filter(Boolean)
+        .join(', '),
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
       ...(productsData?.length && { products: productsData }),
