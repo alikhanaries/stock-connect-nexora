@@ -1,6 +1,7 @@
 import { config } from '#config/config.js';
 import Order from '../models/Orders.js';
 import Return from '../models/Return.js';
+import Product from '../models/Product.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
@@ -549,6 +550,13 @@ export const getReturnById = async (id) => {
         _id: 1,
       });
     }
+    const skuCodes = returnData.products?.map((p) => p.productSkuCode).filter(Boolean) || [];
+    const productImages = skuCodes.length
+      ? await Product.find({ productSkuCode: { $in: skuCodes } })
+          .select('productSkuCode imageUrl')
+          .lean()
+      : [];
+    const imageMap = Object.fromEntries(productImages.map((p) => [p.productSkuCode, p.imageUrl ?? null]));
 
     // Format the log details safely
     const returnLogsData = returnData?.logs?.length ? formatReturnTrackingInf(returnData.logs) : [];
@@ -560,7 +568,7 @@ export const getReturnById = async (id) => {
       omniful: returnData.omniful || null,
     };
 
-    return formatReturnDetails(aggregatedResult);
+    return formatReturnDetails(aggregatedResult, imageMap);
   } catch (error) {
     console.error('Error fetching return by ID:', error.message);
     throw error;
