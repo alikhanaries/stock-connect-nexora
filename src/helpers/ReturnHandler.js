@@ -358,7 +358,7 @@ export const addStatusManipulationStages = () => {
   ];
 };
 
-export const formatReturnDetails = (aggregatedResult) => {
+export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
   if (!aggregatedResult) {
     return null;
   }
@@ -394,7 +394,7 @@ export const formatReturnDetails = (aggregatedResult) => {
           merchantProductNo: product.productSkuCode,
           channelProductNo: null,
           name: 'Product',
-          imageUrl: null,
+          imageUrl: imageMap[product.productSkuCode] ?? null,
           unitPriceInclVat: 0,
           unitPriceExclVat: 0,
           unitVat: 0,
@@ -450,7 +450,7 @@ export const formatReturnDetails = (aggregatedResult) => {
       merchantProductNo: returnProduct.productSkuCode,
       channelProductNo: matchingSku?.channelProductNo || null,
       name: matchingSku?.description || 'Product',
-      imageUrl: null,
+      imageUrl: imageMap[returnProduct.productSkuCode] ?? null,
       unitPriceInclVat: unitPriceInclVat,
       unitPriceExclVat: unitPriceExclVat,
       unitVat: unitVat,
