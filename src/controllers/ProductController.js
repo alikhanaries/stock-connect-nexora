@@ -12,6 +12,7 @@ import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 import expressWarehouseService from '../service/expressWarehouseService.js';
 import { translateProductField as translateProductFieldService } from '#service/translateService.js';
+import { getProgress, setPendingProgress, clearProgress } from '#helpers/geminiTranslate.js';
 import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 export const getProducts = async (req, res) => {
@@ -614,13 +615,48 @@ export const translateProductField = async (req, res) => {
       return failResponse(res, req.locale.NO_PRODUCTS_TO_TRANSLATE, 404);
     }
 
+    setPendingProgress(sellerId);
     translationInProgress.add(sellerId);
     successResponse(res, req.locale.TRANSLATION_STARTED, 200);
 
     translateProductFieldService({ translate, sellerId })
       .then((result) => console.log(`Translation complete: ${JSON.stringify(result)}`))
       .catch((error) => errorLog(error))
-      .finally(() => translationInProgress.delete(sellerId));
+      .finally(() => {
+        translationInProgress.delete(sellerId);
+        // Delay cleanup so clients can poll the final status (done or error) before it disappears
+        setTimeout(() => clearProgress(sellerId), 60_000);
+      });
+  } catch (error) {
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+const PROGRESS_TYPES = ['translate'];
+
+export const getProgressStatus = (req, res) => {
+  try {
+    const { type } = req.query;
+
+    if (!type || !PROGRESS_TYPES.includes(type)) {
+      return failResponse(res, `Invalid type. Allowed: ${PROGRESS_TYPES.join(', ')}`, 400);
+    }
+
+    const progress = getProgress(req.sellerId);
+
+    if (!progress) {
+      return failResponse(res, req.locale.NO_ACTIVE_TRANSLATION, 404);
+    }
+
+    const hasError = progress.operations.some((o) => o.status === 'error');
+    const message = hasError
+      ? 'Translation failed'
+      : progress.status === 'done'
+        ? 'Translation completed. Review changes in the catalog.'
+        : 'Translation in progress';
+
+    return successResponse(res, message, 200, { type, ...progress });
   } catch (error) {
     errorLog(error);
     return errorResponse(res, error.message, 500);
@@ -648,4 +684,5 @@ export default {
   syncProducts,
   getExpressWareHouseProducts,
   translateProductField,
+  getProgressStatus,
 };

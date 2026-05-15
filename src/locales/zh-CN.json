@@ -193,5 +193,6 @@
   "INVALID_PRICE": "无效价格",
   "TRANSLATION_STARTED": "翻译已在后台启动",
   "NO_PRODUCTS_TO_TRANSLATE": "未找到需要翻译的产品",
+  "NO_ACTIVE_TRANSLATION": "未找到该卖家的活动翻译",
   "TRANSLATION_ALREADY_RUNNING": "该卖家的翻译任务已在运行中"
 }
