@@ -17,7 +17,7 @@ import { buildCondition } from '#helpers/productFilters.js';
 
 const getSourceField = (field) => SOURCE_FIELD_MAP[field] ?? field;
 
-export const translateProductField = async ({ translate, sellerId, filters = [], search }) => {
+export const translateProductField = async ({ translate, sellerId, filters = [], search, productId }) => {
   const fields = [...new Set(translate.map((t) => t.field))];
   const sourceFields = [...new Set(fields.map(getSourceField))];
 
@@ -26,6 +26,7 @@ export const translateProductField = async ({ translate, sellerId, filters = [],
   const scopeFilter = buildFilter({ rawFilters: filters, sellerId, search, buildCondition });
   const sourceOr = { $or: fields.map((f) => ({ [getSourceField(f)]: { $exists: true, $nin: [null, ''] } })) };
   const finalFilter = scopeFilter.$or ? { $and: [scopeFilter, sourceOr] } : { ...scopeFilter, ...sourceOr };
+  if (productId) finalFilter._id = new mongoose.Types.ObjectId(productId);
 
   // Query using source fields so nameAr queries on name, descriptionAr queries on description
   const products = await Product.find(finalFilter)

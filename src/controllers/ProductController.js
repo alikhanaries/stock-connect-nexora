@@ -598,7 +598,7 @@ export const translateProductField = async (req, res) => {
   try {
     const translate = req.body;
     const sellerId = req.sellerId;
-    const { search } = req.query;
+    const { search, productId } = req.query;
     const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
 
     if (translationInProgress.has(sellerId)) {
@@ -621,7 +621,7 @@ export const translateProductField = async (req, res) => {
     translationInProgress.add(sellerId);
     successResponse(res, req.locale.TRANSLATION_STARTED, 200);
 
-    translateProductFieldService({ translate, sellerId, filters, search })
+    translateProductFieldService({ translate, sellerId, filters, search, productId })
       .then((result) => console.log(`Translation complete: ${JSON.stringify(result)}`))
       .catch((error) => errorLog(error))
       .finally(() => {
