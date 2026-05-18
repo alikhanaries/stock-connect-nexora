@@ -3,10 +3,32 @@ import { config } from '#config/config.js';
 import { buildTranslatePrompt, TRANSLATE_SYSTEM_INSTRUCTION } from '#helpers/geminiPromptBuilders/translatePrompt.js';
 import { BATCH_SIZE, SCRIPT_PATTERNS, LANG_CODE_TO_SCRIPT, LANG_CODE_TO_NAME } from '#constants/translate.js';
 
-const apiKey = config.GEMINI_API_KEY;
-if (!apiKey) throw new Error('[Gemini] GEMINI_API_KEY is not configured');
+const PROVIDER = (config.GEMINI_PROVIDER || 'gemini').toLowerCase();
+const isVertex = PROVIDER === 'vertex';
+const PROVIDER_LABEL = isVertex ? 'Vertex' : 'Gemini';
 
-const ai = new GoogleGenAI({ apiKey });
+let _client = null;
+
+const getAIClient = () => {
+  if (_client) return _client;
+
+  if (isVertex) {
+    if (!config.GOOGLE_CLOUD_PROJECT) {
+      throw new Error('[AI] GOOGLE_CLOUD_PROJECT is required when GEMINI_PROVIDER=vertex');
+    }
+    _client = new GoogleGenAI({
+      vertexai: true,
+      project: config.GOOGLE_CLOUD_PROJECT,
+      location: config.GOOGLE_CLOUD_LOCATION || 'us-central1',
+    });
+  } else {
+    if (!config.GEMINI_API_KEY) {
+      throw new Error('[AI] GEMINI_API_KEY is required when GEMINI_PROVIDER=gemini');
+    }
+    _client = new GoogleGenAI({ apiKey: config.GEMINI_API_KEY });
+  }
+  return _client;
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -30,34 +52,35 @@ const formatGeminiError = (raw) => {
   return parts.length ? parts.join(' | ') : raw;
 };
 
-const withTimeout = (promise, ms = 30000) =>
+const withTimeout = (promise, ms = 90000) =>
   Promise.race([
     promise,
-    new Promise((_, rej) => setTimeout(() => rej(new Error(`[Gemini] Request timed out after ${ms}ms`)), ms)),
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`[AI] Request timed out after ${ms}ms`)), ms)),
   ]);
 
-const callWithRetry = async (fn, retries = 6, onRetry) => {
+const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await withTimeout(fn());
     } catch (error) {
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
+      const isTimeout = error.message?.includes('timed out');
       const isExhausted =
         error.message?.includes('limit: 0') ||
         error.message?.includes('RESOURCE_EXHAUSTED') ||
         error.message?.toLowerCase().includes('quota');
 
-      if ((is429 || is503) && !isExhausted && attempt < retries) {
-        const delay = is429 ? parseRetryDelay(error.message) : 30000 * attempt;
+      if ((is429 || is503 || isTimeout) && !isExhausted && attempt < retries) {
+        const delay = is429 ? parseRetryDelay(error.message) : isTimeout ? 10000 : 30000 * attempt;
         const retryAfterSeconds = Math.ceil(delay / 1000);
-        const label = is429 ? 'Rate limited' : 'Service unavailable';
+        const retryLabel = is429 ? 'Rate limited' : isTimeout ? 'Request timed out' : 'Service unavailable';
         console.warn(
-          `[Gemini] ${label}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries}) — ${formatGeminiError(error.message)}`
+          `[${label}] ${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries}) — ${isTimeout ? error.message : formatGeminiError(error.message)}`
         );
         onRetry?.({
-          message: `${label}. Retrying in ${retryAfterSeconds}s`,
-          type: is429 ? 'RATE_LIMIT' : 'SERVICE_UNAVAILABLE',
+          message: `${retryLabel}. Retrying in ${retryAfterSeconds}s`,
+          type: is429 ? 'RATE_LIMIT' : isTimeout ? 'TIMEOUT' : 'SERVICE_UNAVAILABLE',
           retryAfterSeconds,
           attempt,
           totalRetries: retries,
@@ -69,7 +92,7 @@ const callWithRetry = async (fn, retries = 6, onRetry) => {
         const reason = isExhausted
           ? 'Quota exhausted (limit: 0), not retrying'
           : `Final error after ${attempt} attempt(s)`;
-        console.error(`[Gemini] ${reason} — ${formatGeminiError(error.message)}`);
+        console.error(`[${label}] ${reason} — ${isTimeout ? error.message : formatGeminiError(error.message)}`);
         throw error;
       }
     }
@@ -179,10 +202,11 @@ export const getProgress = (sellerId) => {
 
 const translateChunk = async (texts, targetLanguage, onRetry) => {
   const prompt = buildTranslatePrompt(texts, targetLanguage);
+  const client = getAIClient();
 
   const raw = await callWithRetry(
     async () => {
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
         model: config.GEMINI_MODEL,
         contents: prompt,
         config: {
@@ -193,7 +217,8 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
       return response.text.trim();
     },
     6,
-    onRetry
+    onRetry,
+    PROVIDER_LABEL
   );
 
   const jsonStr = raw
@@ -205,11 +230,11 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
   try {
     parsed = JSON.parse(jsonStr);
   } catch {
-    throw new Error(`Gemini returned non-JSON response: ${jsonStr.slice(0, 200)}`);
+    throw new Error(`AI returned non-JSON response: ${jsonStr.slice(0, 200)}`);
   }
 
   if (!Array.isArray(parsed)) {
-    throw new Error(`Gemini response was not an array (got ${typeof parsed})`);
+    throw new Error(`AI response was not an array (got ${typeof parsed})`);
   }
 
   return parsed;
@@ -222,11 +247,13 @@ export const translateBatch = async (texts, langCode, onProgress, onRetry) => {
     chunks.push(texts.slice(i, i + BATCH_SIZE));
   }
 
-  console.log(`[Gemini] Translating ${texts.length} texts → ${targetLanguage} in ${chunks.length} chunk(s)`);
+  console.log(
+    `[AI] Provider: ${PROVIDER_LABEL} | Translating ${texts.length} texts → ${targetLanguage} in ${chunks.length} chunk(s)`
+  );
 
   const results = [];
   for (let i = 0; i < chunks.length; i++) {
-    console.log(`[Gemini] Sending chunk ${i + 1}/${chunks.length} (${chunks[i].length} texts)`);
+    console.log(`[AI] Sending chunk ${i + 1}/${chunks.length} (${chunks[i].length} texts)`);
     const translated = await translateChunk(chunks[i], targetLanguage, onRetry);
     results.push(...translated);
     onProgress?.(chunks[i].length);
