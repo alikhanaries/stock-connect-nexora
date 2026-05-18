@@ -213,3 +213,7 @@ export const deletePickupAddressValidator = validate(async (req) => {
 
   await paramsSchema.parseAsync(req.params);
 });
+
+export const getSellerPickupAddressesValidator = validate(async (req) => {
+  await headerSchema.parseAsync(req.headers);
+});

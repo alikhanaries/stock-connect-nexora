@@ -101,10 +101,27 @@ const OrderSchema = new mongoose.Schema(
     orderBillingAddress: AddressSchema,
     orderCustomer: CustomerDetailsSchema,
     orderPaymentDetails: PaymentDetailsSchema,
+    shopifySync: {
+      shopifySyncStatus: {
+        type: String,
+        enum: ['PENDING', 'SYNCED', 'FAILED'],
+        default: 'PENDING',
+        index: true,
+      },
+      shopifyOrderId: {
+        type: String,
+        index: true,
+      },
+      pushedToShopifyAt: {
+        type: Date,
+      },
+    },
   },
   { timestamps: true }
 );
 
+OrderSchema.index({ sellerId: 1, status: 1, orderDate: -1 });
+OrderSchema.index({ sellerId: 1, orderDate: -1 });
 OrderSchema.index({ status: 1, createdAt: -1, sellerId: 1, orderDate: 1 });
 const Order = mongoose.model('ChannelEngineOrder', OrderSchema);
 

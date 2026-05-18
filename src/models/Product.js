@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import AmazonMarketplaceSchema from './ProductSchema/AmazonMarketplace.js';
 
 const ProductSchema = new mongoose.Schema(
   {
@@ -23,6 +24,9 @@ const ProductSchema = new mongoose.Schema(
     price: { type: Number, required: true },
     noonPrice: { type: Number, required: true },
     namshiPrice: { type: Number, required: true },
+    amazonPrice: { type: Number, default: 0 },
+    sixthStreetPrice: { type: Number, default: 0 },
+    styliPrice: { type: Number, default: 0 },
     minPrice: { type: Number },
     maxPrice: { type: Number },
     msrp: { type: Number },
@@ -85,6 +89,9 @@ const ProductSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
+
+    // Marketplace-specific listing attributes
+    amazon: { type: AmazonMarketplaceSchema, default: undefined },
     updatedAt: {
       type: Date,
     },
@@ -99,16 +106,17 @@ const ProductSchema = new mongoose.Schema(
 // Indexes for performance
 ProductSchema.index({ productSkuCode: 1 }, { unique: true });
 ProductSchema.index({ sellerId: 1, productSkuCode: 1 });
+ProductSchema.index({ sellerId: 1, name: 1, status: 1 });
+ProductSchema.index({ sellerId: 1, status: 1, createdAt: 1 });
 ProductSchema.index({ sellerId: 1, ean: 1 });
 ProductSchema.index({ sellerId: 1, brand: 1 });
 ProductSchema.index({ sellerId: 1, marketPlace: 1 });
-ProductSchema.index({
-  sellerId: 1,
-  name: 'text',
-  brand: 'text',
-  description: 'text',
-});
-ProductSchema.index({ sellerId: 1, status: 1, createdAt: 1 });
 ProductSchema.index({ sellerId: 1, syncedAt: 1, updatedAt: 1 });
+ProductSchema.index({ grandParentProductSkuCode: 1, status: 1 });
+ProductSchema.index({ parentProductSkuCode: 1, status: 1 });
+ProductSchema.index({ sellerId: 1, status: 1, name: 1 });
+ProductSchema.index({ sellerId: 1, name: 'text', brand: 'text', description: 'text' });
+ProductSchema.index({ productSkuCode: 1, sellerId: 1, name: 1, status: 1 });
+ProductSchema.index({ sellerId: 1, name: 1, imageUrl: 1, status: 1 });
 const Product = mongoose.model('Product', ProductSchema);
 export default Product;

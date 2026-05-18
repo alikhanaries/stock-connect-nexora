@@ -5,10 +5,9 @@ const ObjectId = Schema.Types.ObjectId;
 
 const FinanceRecordSchema = new Schema(
   {
-    sellerId: { type: ObjectId, ref: 'Seller', required: true, index: true },
+    sellerId: { type: ObjectId, ref: 'Seller', required: true },
     marketplace: { type: String, trim: true },
     orderId: { type: String, trim: true, index: true },
-    itemRef: { type: String, trim: true },
     brand: { type: String, trim: true },
     sku: { type: String, trim: true },
     skuStatus: { type: String, trim: true },

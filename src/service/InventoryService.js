@@ -7,11 +7,13 @@ import fs from 'fs';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
-import { ALLOWEDMARKETPLACES } from '#constants/common.js';
+import { ALLOWEDMARKETPLACES, MAX_PRICE, MAX_PRICE_SELLERS } from '#constants/common.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { pushBatch, pushInActiveProductsToChannel } from './productService.js';
 import { mapProductToChannelEngine } from '../helpers/ProductMapper.js';
 import { chunkArray, getExistingProductsBySkuFromCE } from './channel/ceService.js';
+import Seller from '#models/Seller.js';
+import ExpressWarehouseInventory from '#models/ExpressWarehouseInventory.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
@@ -97,8 +99,8 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 
   //2. Fetch products
   const products = await Product.find(
-    { productSkuCode: { $in: [...incomingSkuSet] } },
-    { _id: 1, productSkuCode: 1 }
+    { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
+    { _id: 1, productSkuCode: 1, price: 1 }
   ).lean();
 
   const productMap = new Map(products.map((p) => [p.productSkuCode, p]));
@@ -166,7 +168,10 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         },
       });
     }
-    const prodStatus = getProductStatus(sellerName, currentStockCount);
+    let prodStatus = getProductStatus(sellerName, currentStockCount);
+    if (MAX_PRICE_SELLERS.includes(sellerName) && (product.price ?? 0) >= MAX_PRICE) {
+      prodStatus = 'inactive';
+    }
 
     // Always update product stock (if product exists)
     productBulkOps.push({
@@ -238,7 +243,6 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
 /* Google Sheet Import */
 export const importInventoryFromGoogleSheet = async (url, locale, sellerId) => {
   try {
-    console.log('Fetching Google Sheet from URL:', url);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
@@ -266,7 +270,10 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
     const sellerName = await getSellerNameById(sellerId);
 
     // 1. Ensure product exists (mandatory for inventory)
-    const product = await Product.findOne({ _id: new ObjectId(productId) }, { _id: 1, productSkuCode: 1 }).lean();
+    const product = await Product.findOne(
+      { _id: new ObjectId(productId) },
+      { _id: 1, productSkuCode: 1, price: 1 }
+    ).lean();
 
     if (!product) {
       const error = new Error(locale.NOT_FOUND);
@@ -295,7 +302,10 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
         lean: true,
       }
     );
-    const prodStatus = getProductStatus(sellerName, currentStockCount);
+    let prodStatus = getProductStatus(sellerName, currentStockCount);
+    if (MAX_PRICE_SELLERS.includes(sellerName) && (product.price ?? 0) >= MAX_PRICE) {
+      prodStatus = 'inactive';
+    }
 
     // 3. Update product stock count
     await Product.updateOne(
@@ -525,9 +535,247 @@ const syncSkuAvailability = async (products, sellerId) => {
   }
 };
 
+export const importExpressWarehouseProductsFromGoogleSheet = async (url, locale) => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
+    const stream = Readable.fromWeb(res.body);
+    return await processExpressWarehouseImportStream(stream, { locale });
+  } catch (err) {
+    console.error('Error in importProductsFromGoogleSheet:', err);
+    throw new Error(err.message); // force the catch block
+  }
+};
+
+const getStatus = (qty) => {
+  if (qty <= 0) return 'out_of_stock';
+  if (qty < 5) return 'low_stock';
+  return 'in_stock';
+};
+
+const getValue = (row, keys = []) => {
+  const rowKeys = Object.keys(row);
+  for (const key of keys) {
+    const foundKey = rowKeys.find((k) => k.trim().toLowerCase() === key.toLowerCase());
+    if (foundKey) return row[foundKey];
+  }
+  return undefined;
+};
+
+const pushError = (errorDetails, rowNumber, message) => {
+  const existing = errorDetails.find((e) => e.rowNumber === rowNumber);
+  if (existing) {
+    existing.errorData.push(message);
+  } else {
+    errorDetails.push({
+      rowNumber,
+      errorData: [message],
+    });
+  }
+};
+
+export const processExpressWarehouseImportStream = async (stream, { deleteAfter, filePath } = {}) => {
+  const batchSize = Number(process.env.BATCH_SIZE) || 500;
+
+  const errorDetails = [];
+  const parsedRows = [];
+
+  let invalidRowsCount = 0;
+  let rowIndex = 1;
+  let totalRows = 0;
+
+  const incomingSkuSet = new Set();
+  const incomingSellerSet = new Set();
+
+  let insertedCount = 0;
+  let updatedCount = 0;
+
+  // -----------------------------
+  // 1. READ CSV
+  // -----------------------------
+  await new Promise((resolve, reject) => {
+    stream
+      .pipe(csv())
+      .on('data', (row) => {
+        rowIndex++;
+        totalRows++;
+        const currentRow = rowIndex;
+
+        try {
+          const normalizedRow = {};
+          Object.keys(row).forEach((k) => {
+            normalizedRow[k.trim()] = row[k];
+          });
+
+          const sku = getValue(normalizedRow, ['SKU'])?.trim();
+          const sellerName = getValue(normalizedRow, ['Brand'])?.trim();
+          const notes = getValue(normalizedRow, ['Notes'])?.trim() || '';
+
+          const orderId =
+            getValue(normalizedRow, ['Order Number', 'Ordernumber', 'Order No', 'Order No.'])?.trim() || '';
+          const quantity = Number(getValue(normalizedRow, ['Available qty', 'Available Qty', 'available qty']) || 0);
+
+          if (!sku || !sellerName) {
+            invalidRowsCount++;
+            pushError(errorDetails, currentRow, 'Missing SKU or Brand');
+            return;
+          }
+
+          incomingSkuSet.add(sku);
+          incomingSellerSet.add(sellerName.toLowerCase());
+
+          parsedRows.push({
+            sku,
+            quantity,
+            sellerName,
+            notes,
+            orderId,
+            row: currentRow,
+          });
+        } catch (err) {
+          invalidRowsCount++;
+          pushError(errorDetails, currentRow, err.message);
+        }
+      })
+      .on('end', resolve)
+      .on('error', reject);
+  });
+
+  // -----------------------------
+  // 2. PRODUCTS
+  // -----------------------------
+  const products = await Product.find({
+    productSkuCode: { $in: Array.from(incomingSkuSet) },
+  }).select('_id productSkuCode');
+
+  const productMap = new Map();
+  products.forEach((p) => {
+    productMap.set(p.productSkuCode, p._id);
+  });
+
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // -----------------------------
+  // 3. SELLERS
+  // -----------------------------
+  const sellerRegexList = Array.from(incomingSellerSet).map((name) => ({
+    name: { $regex: `^${escapeRegex(name.trim())}$`, $options: 'i' },
+  }));
+
+  const sellers = await Seller.find({
+    $or: sellerRegexList,
+  }).select('_id name');
+
+  const sellerMap = new Map();
+  sellers.forEach((s) => {
+    sellerMap.set(s.name.toLowerCase(), {
+      sellerId: s._id,
+      sellerName: s.name,
+    });
+  });
+
+  // -----------------------------
+  // 4. EXISTING RECORDS
+  // -----------------------------
+  const existingRecords = await ExpressWarehouseInventory.find({
+    sku: { $in: Array.from(incomingSkuSet) },
+  }).select('sku sellerId orderId');
+
+  const existingSet = new Set(existingRecords.map((rec) => `${rec.sku}_${rec.sellerId}_${rec.orderId || ''}`));
+
+  // -----------------------------
+  // 5. BULK OPS
+  // -----------------------------
+  const bulkOps = [];
+  const inventoryBulkOps = [];
+
+  for (const row of parsedRows) {
+    const { sku, quantity, sellerName, notes, orderId, row: currentRow } = row;
+
+    const sellerData = sellerMap.get(sellerName.toLowerCase());
+
+    if (!sellerData) {
+      invalidRowsCount++;
+      pushError(errorDetails, currentRow, `${sellerName} seller is not available`);
+      continue;
+    }
+
+    const { sellerId, sellerName: validSellerName } = sellerData;
+
+    const productId = productMap.get(sku);
+
+    if (!productId) {
+      invalidRowsCount++;
+      pushError(errorDetails, currentRow, `SKU not found: ${sku}`);
+      continue;
+    }
+
+    const qty = Number(quantity) || 0;
+
+    const key = `${sku}_${sellerId}_${orderId}`;
+
+    if (existingSet.has(key)) updatedCount++;
+    else insertedCount++;
+
+    // ------------------ EXPRESS WAREHOUSE ------------------
+    bulkOps.push({
+      updateOne: {
+        filter: {
+          sku,
+          sellerId,
+          orderId,
+        },
+        update: {
+          $set: {
+            sku,
+            sellerName: validSellerName,
+            quantity: qty,
+            notes,
+            orderId,
+            status: getStatus(qty),
+            lastSyncedAt: new Date(),
+          },
+        },
+        upsert: true,
+      },
+    });
+
+    // ------------------ BATCH EXEC ------------------
+    if (bulkOps.length === batchSize) {
+      await ExpressWarehouseInventory.bulkWrite(bulkOps);
+
+      bulkOps.length = 0;
+      inventoryBulkOps.length = 0;
+    }
+  }
+
+  // FINAL FLUSH
+  if (bulkOps.length) {
+    await ExpressWarehouseInventory.bulkWrite(bulkOps);
+  }
+
+  if (deleteAfter && filePath) {
+    const fs = await import('fs');
+    fs.unlink(filePath, () => {});
+  }
+
+  errorDetails.sort((a, b) => a.rowNumber - b.rowNumber);
+
+  return {
+    success: true,
+    message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows out of ${totalRows} total rows`,
+    totalRows,
+    processedRows: insertedCount + updatedCount,
+    insertedCount,
+    updatedCount,
+    invalidRowsCount,
+    errorDetails,
+  };
+};
+
 export default {
   importInventoryFromGoogleSheet,
   importInventoryFromCsvFile,
   updateSingleInventory,
   syncStockToChannelEngine,
+  importExpressWarehouseProductsFromGoogleSheet,
 };

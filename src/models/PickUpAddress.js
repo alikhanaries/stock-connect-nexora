@@ -2,11 +2,23 @@ import mongoose from 'mongoose';
 
 const PickupAddressSchema = new mongoose.Schema(
   {
+    sellerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Seller',
+      required: true,
+      index: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     email: {
       type: String,
       required: true,
       trim: true,
       lowercase: true,
+      index: true,
       validate: {
         validator: function (v) {
           // Simple email regex validation

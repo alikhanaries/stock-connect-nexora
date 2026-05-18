@@ -18,6 +18,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
   // Required validations
   const errorData = [];
   if (!r.productskucode) errorData.push(locale.PRODUCT_SKUCODE_MISSING);
+  if ((parseInt(r.stock, 10) || 0) <= 0) errorData.push('Product skipped due to zero stock');
   if (isNewSku) {
     if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
     if (!r.primaryimageurl) errorData.push('Primary image url is missing');
@@ -92,11 +93,35 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     ageRangeDescription: r.agerangedescription || '',
     countryOfOrigin: r.countryoforigin || '',
   };
+  // Amazon-specific listing attributes only set keys that have a value
+  const amazonFieldMap = {
+    variationThemeName: r.variationthemename,
+    modelNumber: r.modelnumber,
+    modelName: r.modelname,
+    style: r.style,
+    bulletPoint: r.bulletpoint,
+    footwearSizeSystem: r.footwearsizesystem,
+    footwearAgeGroup: r.footwearagegroup,
+    footwearSizeClass: r.footwearsizeclass,
+    footwearWidth: r.footwearwidth,
+    footwearSize: r.footwearsize,
+    soleMaterial: r.solematerial,
+    toeStyle: r.toestyle,
+    heightMap: r.heightmap,
+    heelType: r.heeltype,
+    waterResistanceLevel: r.waterresistancelevel,
+    closure: r.closure,
+    shaftCircumference: r.shaftcircumference,
+    shaftHeight: r.shaftheight,
+    skipOffer: r.skipoffer,
+    itemCondition: r.itemcondition,
+    listPriceCurrency: r.listpricecurrency,
+    amazonPrice: cleanNumber(r.amazonprice),
+    dangerousGoodsRegulations: r.dangerousgoodsregulations,
+    outerMaterial: r.outermaterial,
+  };
+  const amazon = Object.fromEntries(Object.entries(amazonFieldMap).filter(([, v]) => v));
+  if (Object.keys(amazon).length) product.amazon = amazon;
 
-  // Remove empty / null values (1 fast loop)
-  for (const key in product) {
-    const v = product[key];
-    if (v === '' || v === null || v === undefined) delete product[key];
-  }
-  return product;
+  return Object.fromEntries(Object.entries(product).filter(([, v]) => v !== '' && v !== null && v !== undefined));
 };

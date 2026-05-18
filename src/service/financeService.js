@@ -49,23 +49,24 @@ export const getTransactionHistory = async (
     .skip(skip)
     .limit(parsedLimit)
     .select(
-      'orderId orderAmountWithoutVAT adminCharges customersEarning logisticPrice marketplaceCommission ollTekFee paymentStatus'
+      'orderId orderAmountWithoutVAT adminCharges customersEarning logisticPrice marketplaceCommission ollTekFee marketingFee paymentStatus'
     )
     .lean();
 
   const content = records.map((r) => {
-    //Platform Commission + Marketplace commission + Marketing Fee + Logistic Cost.
-    const commission =
+    //Marketplace commission + Olltek Fee + Marketing Fee + Logistic Cost + admin charges.
+    const commissionRaw =
       (r.adminCharges || 0) +
       (r.ollTekFee || 0) +
       (r.marketplaceCommission || 0) +
       (r.logisticPrice || 0) +
       (r.marketingFee || 0);
+    const commission = Math.ceil(commissionRaw * 100) / 100;
     return {
       orderId: r.orderId ?? null,
       orderValue: r.orderAmountWithoutVAT ?? null,
       commission,
-      netAmount: null,
+      netAmount: r.customersEarning ?? null,
       status: r.paymentStatus,
       dateTime: null,
     };
@@ -116,8 +117,17 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
         marketplaceCommission: { $sum: { $ifNull: ['$marketplaceCommission', 0] } },
         marketingfee: { $sum: { $ifNull: ['$marketingFee', 0] } },
         logisticCost: { $sum: { $ifNull: ['$logisticPrice', 0] } },
-        totalEarnings: { $sum: { $ifNull: ['$totalDeliveredOrdersAmount', 0] } },
-        amountPaid: { $sum: { $ifNull: ['$whatCustomerReceivesFromOllTek', 0] } },
+        totalEarnings: { $sum: { $ifNull: ['$customersEarning', 0] } },
+        amountPaid: {
+          $sum: {
+            $cond: [{ $eq: ['$paymentStatus', 'Paid'] }, { $ifNull: ['$customersEarning', 0] }, 0],
+          },
+        },
+        amountPending: {
+          $sum: {
+            $cond: [{ $ne: ['$paymentStatus', 'Paid'] }, { $ifNull: ['$customersEarning', 0] }, 0],
+          },
+        },
       },
     },
     { $project: { _id: 0 } },
@@ -131,6 +141,7 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
     logisticCost: 0,
     totalEarnings: 0,
     amountPaid: 0,
+    amountPending: 0,
   };
 
   return [
@@ -140,8 +151,8 @@ export const getFinanceDashboard = async (sellerIds, { period, month, startDate,
     { key: 'marketingfee', label: 'Marketing Fee', value: data.marketingfee },
     { key: 'logisticCost', label: 'Logistic Cost', value: data.logisticCost },
     { key: 'totalEarnings', label: 'Total Earning', value: data.totalEarnings },
-    { key: 'amountPaid', label: 'Amount Paid', value: null },
-    { key: 'amountPending', label: 'Amount Pending', value: null },
+    { key: 'amountPaid', label: 'Amount Paid', value: data.amountPaid },
+    { key: 'amountPending', label: 'Amount Pending', value: data.amountPending },
   ];
 };
 
@@ -167,12 +178,25 @@ export const syncFinance = async () => {
     throw new Error('Google Sheet is empty or has no data rows');
   }
 
-  const docs = rawRows.map((row) => mapRowToRecord(row));
+  const allDocs = rawRows.map((row) => mapRowToRecord(row));
+
+  const filteredDocs = new Map();
+  for (const doc of allDocs) {
+    const key = `${doc.sellerId}|${doc.orderId}`;
+    const existing = filteredDocs.get(key);
+    if (!existing) {
+      filteredDocs.set(key, doc);
+    } else if (doc.orderAmountWithoutVAT != null && existing.orderAmountWithoutVAT == null) {
+      filteredDocs.set(key, doc);
+    }
+  }
+  const docs = [...filteredDocs.values()];
 
   const bulkOps = docs.map((doc) => ({
     updateOne: {
       filter: {
-        itemRef: doc.itemRef,
+        sellerId: doc.sellerId,
+        orderId: doc.orderId,
       },
       update: { $set: doc },
       upsert: true,
