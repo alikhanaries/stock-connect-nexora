@@ -12,20 +12,23 @@ import {
   setOperationRetry,
 } from '#helpers/geminiTranslate.js';
 import { SOURCE_FIELD_MAP } from '#constants/translate.js';
+import { buildFilter } from '#util/buildFilter.js';
+import { buildCondition } from '#helpers/productFilters.js';
 
 const getSourceField = (field) => SOURCE_FIELD_MAP[field] ?? field;
 
-export const translateProductField = async ({ translate, sellerId }) => {
+export const translateProductField = async ({ translate, sellerId, filters = [], search }) => {
   const fields = [...new Set(translate.map((t) => t.field))];
   const sourceFields = [...new Set(fields.map(getSourceField))];
 
   console.log(`[TranslateService] Starting — sellerId: ${sellerId}, fields: ${fields.join(', ')}`);
 
+  const scopeFilter = buildFilter({ rawFilters: filters, sellerId, search, buildCondition });
+  const sourceOr = { $or: fields.map((f) => ({ [getSourceField(f)]: { $exists: true, $nin: [null, ''] } })) };
+  const finalFilter = scopeFilter.$or ? { $and: [scopeFilter, sourceOr] } : { ...scopeFilter, ...sourceOr };
+
   // Query using source fields so nameAr queries on name, descriptionAr queries on description
-  const products = await Product.find({
-    sellerId: new mongoose.Types.ObjectId(sellerId),
-    $or: fields.map((f) => ({ [getSourceField(f)]: { $exists: true, $nin: [null, ''] } })),
-  })
+  const products = await Product.find(finalFilter)
     .select(['_id', ...sourceFields].join(' '))
     .lean();
 
