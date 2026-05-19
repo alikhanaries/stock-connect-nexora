@@ -57,9 +57,17 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       [`${prefix}_country`]: data?.country || '',
       [`${prefix}_phone`]: data?.phone || '',
     });
-    const { documentId, taxData = {}, productsData } = shipmentData;
-    const hasInternationalMetadata =
-      documentId && taxData.tax_identification_number && taxData.invoice_number && taxData.invoice_date;
+    const {
+      documentId,
+      productsData,
+      length,
+      width,
+      height,
+      weight,
+      tax_identification_number,
+      invoice_number,
+      invoice_date,
+    } = shipmentData;
 
     // ---  Build final payload for Aymakan ---
     const payload = {
@@ -69,7 +77,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       cod_amount: shipmentData.codAmount || 0,
       currency: AYMAKAN_PRICE_CURRENCY,
       delivery_name: [orderCustomer?.firstName, orderCustomer?.lastName].filter(Boolean).join(' '),
-      delivery_email: config.AYMAKAN_DELIVERY_EMAIL,
+      delivery_email: orderCustomer?.email,
       delivery_city: config.AYMAKAN_DELIVERY_CITY,
       delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
       delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
@@ -81,19 +89,25 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       lat: config.AYMAKAN_DELIVERY_LAT,
       long: config.AYMAKAN_DELIVERY_LONG,
       delivery_duty_type: 'DDP',
+      delivery_description: (productsData || [])
+        .map((p) => p.description)
+        .filter(Boolean)
+        .join(', '),
       ...buildPartyPayload(collectionData, 'collection'),
       pieces,
+      ...(length != null && { length }),
+      ...(width != null && { width }),
+      ...(height != null && { height }),
+      ...(weight != null && { weight }),
       ...(productsData?.length && { products: productsData }),
-      ...(hasInternationalMetadata && {
-        international_metadata: {
-          document_id: documentId,
-          tax_identification_number: taxData.tax_identification_number,
-          invoice_number: taxData.invoice_number,
-          invoice_date: taxData.invoice_date,
-          is_commercial_shipment: '0',
-          shipment_type: shipmentData?.shipment_type,
-        },
-      }),
+      international_metadata: {
+        document_id: documentId,
+        tax_identification_number: tax_identification_number,
+        invoice_number: invoice_number,
+        invoice_date: invoice_date,
+        is_commercial_shipment: '0',
+        shipment_type: shipmentData?.shipment_type,
+      },
     };
     console.log('createShipmentWithAymakan payload:', JSON.stringify(payload, null, 2));
     // ---  Call Aymakan API ---
@@ -516,7 +530,21 @@ export const createFullShipmentService = async (shipmentData) => {
         }))
       ),
       shipmentMethod: 'AYMAKAN',
-      extraData: { aymakan: aymakanResult },
+      extraData: {
+        aymakan: aymakanResult,
+        shipmentDetails: {
+          length: shipmentData.length ?? null,
+          width: shipmentData.width ?? null,
+          height: shipmentData.height ?? null,
+          weight: shipmentData.weight ?? null,
+          tax_identification_number: shipmentData.tax_identification_number ?? null,
+          invoice_number: shipmentData.invoice_number ?? null,
+          invoice_date: shipmentData.invoice_date ?? null,
+          shipment_type: shipmentData.shipment_type ?? null,
+          pieces: pieces ?? 0,
+          pickupAddress: collectionData ?? null,
+        },
+      },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
         email: AYMAKAN_INFO.EMAIL,
@@ -3197,7 +3225,7 @@ export const downloadShipmentLabelService = async (shipmentId, sellerId) => {
 
   if (!shipment) return { success: false, message: 'Shipment not found', status: 404 };
 
-  const pdfLabelUrl = shipment.extraData?.aymakan?.shipping?.pdf_label;
+  const pdfLabelUrl = shipment.extraData?.aymakan?.shipping?.pdf_label_base64;
   if (!pdfLabelUrl) return { success: false, message: 'PDF label not available for this shipment', status: 404 };
 
   return { success: true, data: { url: pdfLabelUrl } };

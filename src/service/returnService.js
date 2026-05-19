@@ -2,6 +2,7 @@ import { config } from '#config/config.js';
 import Order from '../models/Orders.js';
 import Return from '../models/Return.js';
 import Seller from '#root/src/models/Seller.js';
+import Product from '../models/Product.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
 import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
@@ -746,6 +747,13 @@ export const getReturnById = async (id, sellerId) => {
         orderPaymentDetails: 1,
       });
     }
+    const skuCodes = returnData.products?.map((p) => p.productSkuCode).filter(Boolean) || [];
+    const productImages = skuCodes.length
+      ? await Product.find({ productSkuCode: { $in: skuCodes } })
+          .select('productSkuCode imageUrl')
+          .lean()
+      : [];
+    const imageMap = Object.fromEntries(productImages.map((p) => [p.productSkuCode, p.imageUrl ?? null]));
 
     const returnLogsData = returnData?.logs?.length ? formatReturnTrackingInf(returnData.logs) : [];
 
@@ -757,7 +765,7 @@ export const getReturnById = async (id, sellerId) => {
       omniful: returnData.omniful || null,
     };
 
-    return formatReturnDetails(aggregatedResult);
+    return formatReturnDetails(aggregatedResult, imageMap);
   } catch (error) {
     console.error('Error fetching return by ID:', error.message);
     throw error;

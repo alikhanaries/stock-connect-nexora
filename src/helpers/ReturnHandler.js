@@ -479,8 +479,10 @@ export const addStatusManipulationStages = () => {
   ];
 };
 
-export const formatReturnDetails = (aggregatedResult) => {
-  if (!aggregatedResult) return null;
+export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
+  if (!aggregatedResult) {
+    return null;
+  }
 
   const returnData = aggregatedResult;
   const orderInfo = aggregatedResult.orderInfo;
@@ -513,7 +515,24 @@ export const formatReturnDetails = (aggregatedResult) => {
         region: 'NA',
         zipCode: 'NA',
       },
-      products: [],
+      products:
+        returnData.products?.map((product, index) => ({
+          id: index + 1,
+          orderLineId: product.orderLineId,
+          merchantProductNo: product.productSkuCode,
+          channelProductNo: null,
+          name: 'Product',
+          imageUrl: imageMap[product.productSkuCode] ?? null,
+          unitPriceInclVat: 0,
+          unitPriceExclVat: 0,
+          unitVat: 0,
+          lineTotalInclVat: 0,
+          lineTotalExclVat: 0,
+          lineVat: 0,
+          quantity: product.quantity || 0,
+          acceptedQuantity: product.acceptedQuantity || 0,
+          rejectedQuantity: product.rejectedQuantity || 0,
+        })) || [],
       omniful: returnData.omniful || null,
       status: returnData.status || 'UNKNOWN',
       subtotal: 0,

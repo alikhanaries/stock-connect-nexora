@@ -1,6 +1,7 @@
 import { config } from '#config/config.js';
 import { ORDER_STATUS_MATCH, PRODUCT_STATUSES } from '#constants/common.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
+import ExpressWarehouseInventory from '#models/ExpressWarehouseInventory.js';
 import {
   resolveHierarchyStatus,
   resolveProductTypes,
@@ -894,10 +895,32 @@ const getProductById = async (id, locale) => {
       return { success: false, message: locale?.PRODUCT_NOT_FOUND };
     }
 
+    // ---------------- FETCH EXPRESS WAREHOUSE QUANTITIES ----------------
+    const allSkus = relatedProducts.map((p) => p.productSkuCode);
+
+    const expressWarehouseData = await ExpressWarehouseInventory.find({
+      sku: { $in: allSkus },
+    }).lean();
+
+    // ---------------- CREATE SKU => QUANTITY MAP ----------------
+    const expressWarehouseMap = {};
+
+    expressWarehouseData.forEach((item) => {
+      if (!expressWarehouseMap[item.sku]) {
+        expressWarehouseMap[item.sku] = 0;
+      }
+
+      expressWarehouseMap[item.sku] += item.quantity || 0;
+    });
+
     // ---------------- CREATE MAP ----------------
     const map = {};
     relatedProducts.forEach((p) => {
-      map[p.productSkuCode] = { ...p, children: [] };
+      map[p.productSkuCode] = {
+        ...p,
+        expressWarehouseQuantity: expressWarehouseMap[p.productSkuCode] || 0,
+        children: [],
+      };
     });
 
     // ---------------- BUILD TREE (SAFE) ----------------
@@ -946,6 +969,7 @@ const getProductById = async (id, locale) => {
         price: node.price,
         type: node.parentProductSkuCode ? 'child' : node.grandParentProductSkuCode ? 'parent' : 'grandparent',
         barcode: node.ean,
+        expressWarehouseQuantity: node.expressWarehouseQuantity || 0,
         children: node.children.map((child) => formatNode(child, new Set(visited))).filter(Boolean),
       };
     };
@@ -956,6 +980,7 @@ const getProductById = async (id, locale) => {
       message: locale?.PRODUCT_FETCH_SUCCESS,
       data: {
         ...product,
+        expressWarehouseQuantity: expressWarehouseMap[product.productSkuCode] || 0,
         variations: root ? [formatNode(root)] : [],
       },
     };
