@@ -56,6 +56,18 @@ const shipmentSchema = new mongoose.Schema(
     extraData: {
       aymakan: { type: mongoose.Schema.Types.Mixed },
       channelEngine: { type: mongoose.Schema.Types.Mixed },
+      shipmentDetails: {
+        length: { type: Number },
+        width: { type: Number },
+        height: { type: Number },
+        weight: { type: Number },
+        tax_identification_number: { type: String },
+        invoice_number: { type: String },
+        invoice_date: { type: String },
+        shipment_type: { type: String },
+        pieces: { type: Number },
+        pickupAddress: { type: mongoose.Schema.Types.Mixed },
+      },
     },
     shipmentMerchantDetails: {
       name: { type: String, index: true },
