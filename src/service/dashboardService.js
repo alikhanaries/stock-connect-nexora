@@ -120,6 +120,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalOrderValue: { $sum: '$totalAmount' },
           netAmount: { $sum: '$netAmount' },
           totalProducts: { $sum: '$totalQuantity' },
+          totalCanceledAmount: { $sum: '$canceledAmount' },
+          totalReturnedAmount: { $sum: '$returnedAmount' },
         },
       },
       {
@@ -129,6 +131,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
           totalDeliveredSales: 1,
           totalOrderValue: 1,
           netAmount: 1,
+          totalCanceledAmount: 1,
+          totalReturnedAmount: 1,
           avgProductsPerOrder: {
             $cond: [{ $eq: ['$totalOrders', 0] }, 0, { $divide: ['$totalProducts', '$totalOrders'] }],
           },
@@ -143,6 +147,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
         totalOrderValue: 0,
         netAmount: 0,
         avgProductsPerOrder: 0,
+        totalCanceledAmount: 0,
+        totalReturnedAmount: 0,
       }
     );
   };
@@ -190,6 +196,19 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
       previous.totalOrderValue
     ),
     buildMetric('netGmv', 'Net GMV', current.netAmount, previous.netAmount),
+
+    buildMetric(
+      'totalCanceledAmount',
+      'Total Cancel Amount',
+      current.totalCanceledAmount,
+      previous.totalCanceledAmount
+    ),
+    buildMetric(
+      'totalReturnedAmount',
+      'Total Return Amount',
+      current.totalReturnedAmount,
+      previous.totalReturnedAmount
+    ),
     buildMetric('orders', 'Orders', current.totalOrders, previous.totalOrders),
     buildMetric('avgOrderValue', 'Avg Order Value', currAvgOrderValue, prevAvgOrderValue),
     buildMetric(
