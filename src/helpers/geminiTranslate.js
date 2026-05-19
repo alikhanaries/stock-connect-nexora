@@ -127,9 +127,11 @@ export const clearProgress = (sellerId) => {
 export const setPendingProgress = (sellerId) =>
   progressStore.set(key(sellerId), { status: 'initializing', operations: [] });
 
-export const initProgress = (sellerId, operations) =>
+export const initProgress = (sellerId, operations, { totalProducts = 0 } = {}) =>
   progressStore.set(key(sellerId), {
     status: 'running',
+    totalProducts,
+    updatedProducts: 0,
     operations: operations.map(({ field, lang, total }) => ({
       field,
       lang,
@@ -138,6 +140,11 @@ export const initProgress = (sellerId, operations) =>
       status: 'pending',
     })),
   });
+
+export const setUpdatedProducts = (sellerId, count) => {
+  const p = progressStore.get(key(sellerId));
+  if (p) p.updatedProducts = count;
+};
 
 const findOp = (p, field, lang) => p?.operations.find((o) => o.field === field && o.lang === lang);
 
@@ -191,6 +198,8 @@ export const getProgress = (sellerId) => {
   const completedOperations = p.operations.filter((o) => o.status === 'done').length;
   return {
     status: p.status,
+    totalProducts: p.totalProducts ?? 0,
+    updatedProducts: p.updatedProducts ?? 0,
     totalOperations: p.operations.length,
     completedOperations,
     operations: p.operations.map((o) => ({

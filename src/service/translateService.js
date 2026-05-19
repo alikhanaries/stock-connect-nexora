@@ -10,6 +10,7 @@ import {
   failOperation,
   finishProgress,
   setOperationRetry,
+  setUpdatedProducts,
 } from '#helpers/geminiTranslate.js';
 import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 import { buildFilter } from '#util/buildFilter.js';
@@ -69,14 +70,15 @@ export const translateProductField = async ({ translate, sellerId, filters = [],
   console.log(`[TranslateService] Tasks: ${totalTasks} to translate, ${skipped} skipped (already in target lang)`);
 
   if (!totalTasks) {
-    initProgress(sellerId, []);
+    initProgress(sellerId, [], { totalProducts: products.length });
     finishProgress(sellerId);
     return { total: products.length, translated: 0, skipped, failed: 0 };
   }
 
   initProgress(
     sellerId,
-    operations.map(({ field, lang, tasks }) => ({ field, lang, total: tasks.length }))
+    operations.map(({ field, lang, tasks }) => ({ field, lang, total: tasks.length })),
+    { totalProducts: products.length }
   );
 
   const updateMap = {};
@@ -108,6 +110,7 @@ export const translateProductField = async ({ translate, sellerId, filters = [],
       if (!updateMap[id]) updateMap[id] = {};
       updateMap[id][field] = translated;
     });
+    setUpdatedProducts(sellerId, Object.keys(updateMap).length);
   }
 
   const bulkOps = Object.entries(updateMap).map(([id, updates]) => ({
@@ -118,6 +121,7 @@ export const translateProductField = async ({ translate, sellerId, filters = [],
   }));
 
   if (bulkOps.length) await Product.bulkWrite(bulkOps);
+  setUpdatedProducts(sellerId, bulkOps.length);
 
   console.log(`[TranslateService] Done — updated: ${bulkOps.length}, skipped: ${skipped}, failed: ${failedTasks}`);
   const result = {
