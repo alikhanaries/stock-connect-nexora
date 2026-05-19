@@ -528,7 +528,21 @@ export const createFullShipmentService = async (shipmentData) => {
         }))
       ),
       shipmentMethod: 'AYMAKAN',
-      extraData: { aymakan: aymakanResult },
+      extraData: {
+        aymakan: aymakanResult,
+        shipmentDetails: {
+          length: shipmentData.length ?? null,
+          width: shipmentData.width ?? null,
+          height: shipmentData.height ?? null,
+          weight: shipmentData.weight ?? null,
+          tax_identification_number: shipmentData.tax_identification_number ?? null,
+          invoice_number: shipmentData.invoice_number ?? null,
+          invoice_date: shipmentData.invoice_date ?? null,
+          shipment_type: shipmentData.shipment_type ?? null,
+          pieces: pieces ?? 0,
+          pickupAddress: collectionData ?? null,
+        },
+      },
       shipmentMerchantDetails: {
         name: AYMAKAN_INFO.NAME,
         email: AYMAKAN_INFO.EMAIL,
