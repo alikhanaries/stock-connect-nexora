@@ -4,6 +4,7 @@ import { PRODUCT_STATUSES, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import PickupAddress from '#models/PickUpAddress.js';
 import { formatSellerResponse } from '#helpers/formatSellerResponse.js';
+import { autoAssignAllChannelsToSeller } from './channelService.js';
 const createSeller = async (sellerData) => {
   try {
     const { name, ocpSlugId, shopifyConfig } = sellerData;
@@ -43,6 +44,11 @@ const createSeller = async (sellerData) => {
     }
 
     const seller = await Seller.create(sellerPayload);
+
+    const channelResult = await autoAssignAllChannelsToSeller(seller._id);
+    if (!channelResult.success) {
+      console.error('autoAssignAllChannelsToSeller failed for seller:', seller._id, channelResult.message);
+    }
 
     return {
       isExist: false,

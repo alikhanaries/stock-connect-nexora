@@ -432,6 +432,44 @@ export const removeUserChannels = async (sellerId, ids) => {
   }
 };
 
+/** FUNC - AUTO ASSIGN ALL AVAILABLE CHANNELS TO A SELLER */
+export const autoAssignAllChannelsToSeller = async (sellerId) => {
+  try {
+    const channels = await Channel.find({}, { channelId: 1 }).lean();
+
+    if (!channels.length) {
+      return { success: false, message: 'No active channels found' };
+    }
+
+    // Avoid duplicates by checking already-assigned channel ids
+    const existingDoc = await UserChannels.findOne({ sellerId: new ObjectId(sellerId) }, { 'channelIds.id': 1 }).lean();
+
+    const existingIds = new Set(existingDoc?.channelIds?.map((c) => c.id) || []);
+
+    const newChannels = channels
+      .filter((ch) => !existingIds.has(ch.channelId))
+      .map((ch) => ({ id: ch.channelId, status: 'active' }));
+
+    if (!newChannels.length) {
+      return { success: true, message: 'All channels already assigned' };
+    }
+
+    const userChannels = await UserChannels.findOneAndUpdate(
+      { sellerId: new ObjectId(sellerId) },
+      { $push: { channelIds: { $each: newChannels } } },
+      { new: true, upsert: true }
+    );
+
+    return {
+      success: true,
+      data: userChannels,
+    };
+  } catch (err) {
+    console.error('Error in autoAssignAllChannelsToSeller:', err);
+    return { success: false, message: err.message };
+  }
+};
+
 export default {
   getAllChannelsFromChannelPartner,
   getAllChannels,
@@ -440,4 +478,5 @@ export default {
   updateUserChannelsStatus,
   removeUserChannels,
   updateSampleTemplate,
+  autoAssignAllChannelsToSeller,
 };
