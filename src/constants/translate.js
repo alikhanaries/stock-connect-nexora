@@ -1,4 +1,4 @@
-export const BATCH_SIZE = 500;
+export const BATCH_SIZE = 50;
 
 export const SOURCE_FIELD_MAP = {
   nameAr: 'name',

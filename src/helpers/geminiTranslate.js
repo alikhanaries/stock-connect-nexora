@@ -66,25 +66,29 @@ const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL) =
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
       const isTimeout = error.message?.includes('timed out');
+      const isMalformed = error.retryable === true;
       const isExhausted =
         error.message?.includes('limit: 0') ||
         error.message?.includes('RESOURCE_EXHAUSTED') ||
         error.message?.toLowerCase().includes('quota');
 
-      if ((is429 || is503 || isTimeout) && !isExhausted && attempt < retries) {
-        const delay = is429 ? parseRetryDelay(error.message) : isTimeout ? 10000 : 30000 * attempt;
+      if ((is429 || is503 || isTimeout || isMalformed) && !isExhausted && attempt < retries) {
+        const delay = is429 ? parseRetryDelay(error.message) : isTimeout ? 10000 : isMalformed ? 5000 : 30000 * attempt;
         const retryAfterSeconds = Math.ceil(delay / 1000);
-        const retryLabel = is429 ? 'Rate limited' : isTimeout ? 'Request timed out' : 'Service unavailable';
+        const retryLabel = is429
+          ? 'Rate limited'
+          : isTimeout
+            ? 'Request timed out'
+            : isMalformed
+              ? 'Incomplete model response'
+              : 'High demand on translation service';
+        const userMessage = is503
+          ? `High demand right now. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries})`
+          : `${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries})`;
         console.warn(
-          `[${label}] ${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries}) — ${isTimeout ? error.message : formatGeminiError(error.message)}`
+          `[${label}] ${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries}) — ${isTimeout || isMalformed ? error.message : formatGeminiError(error.message)}`
         );
-        onRetry?.({
-          message: `${retryLabel}. Retrying in ${retryAfterSeconds}s`,
-          type: is429 ? 'RATE_LIMIT' : isTimeout ? 'TIMEOUT' : 'SERVICE_UNAVAILABLE',
-          retryAfterSeconds,
-          attempt,
-          totalRetries: retries,
-        });
+        onRetry?.({ message: userMessage });
         await sleep(delay);
         onRetry?.(null);
       } else {
@@ -213,7 +217,7 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
   const prompt = buildTranslatePrompt(texts, targetLanguage);
   const client = getAIClient();
 
-  const raw = await callWithRetry(
+  return callWithRetry(
     async () => {
       const response = await client.models.generateContent({
         model: config.GEMINI_MODEL,
@@ -223,33 +227,64 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
           systemInstruction: TRANSLATE_SYSTEM_INSTRUCTION,
         },
       });
-      return response.text.trim();
+      const raw = (response.text ?? '').trim();
+      const jsonStr = raw
+        .replace(/^```json?\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+
+      const finishReason = response.candidates?.[0]?.finishReason;
+      const reasonHint = finishReason && finishReason !== 'STOP' ? ` (finishReason: ${finishReason})` : '';
+
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch {
+        const err = new Error(`AI returned non-JSON response${reasonHint}: ${jsonStr.slice(0, 200)}`);
+        err.retryable = true;
+        throw err;
+      }
+
+      // Accept either indexed object {"0": "...", "1": "..."} or legacy array form
+      let indexed;
+      if (Array.isArray(parsed)) {
+        indexed = parsed.reduce((acc, val, i) => {
+          if (typeof val === 'string') acc[i] = val;
+          return acc;
+        }, {});
+      } else if (parsed && typeof parsed === 'object') {
+        indexed = parsed;
+      } else {
+        const err = new Error(`AI response was not an object or array (got ${typeof parsed})${reasonHint}`);
+        err.retryable = true;
+        throw err;
+      }
+
+      const result = texts.map((_, i) => {
+        const v = indexed[String(i)] ?? indexed[i];
+        return typeof v === 'string' && v.trim() ? v : null;
+      });
+
+      const got = result.filter((v) => v !== null).length;
+      if (got === 0) {
+        const err = new Error(`AI response had no usable translations (expected ${texts.length})${reasonHint}`);
+        err.retryable = true;
+        throw err;
+      }
+      if (got < texts.length) {
+        console.warn(`[AI] Partial response: ${got}/${texts.length} items translated${reasonHint}`);
+      }
+      return result;
     },
     6,
     onRetry,
     PROVIDER_LABEL
   );
-
-  const jsonStr = raw
-    .replace(/^```json?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch {
-    throw new Error(`AI returned non-JSON response: ${jsonStr.slice(0, 200)}`);
-  }
-
-  if (!Array.isArray(parsed)) {
-    throw new Error(`AI response was not an array (got ${typeof parsed})`);
-  }
-
-  return parsed;
 };
 
-export const translateBatch = async (texts, langCode, onProgress, onRetry) => {
+const CHUNK_CONCURRENCY = 3;
+
+export const translateBatch = async (texts, langCode, onProgress, onRetry, onChunk) => {
   const targetLanguage = getLangName(langCode);
   const chunks = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -257,16 +292,22 @@ export const translateBatch = async (texts, langCode, onProgress, onRetry) => {
   }
 
   console.log(
-    `[AI] Provider: ${PROVIDER_LABEL} | Translating ${texts.length} texts → ${targetLanguage} in ${chunks.length} chunk(s)`
+    `[AI] Provider: ${PROVIDER_LABEL} | Translating ${texts.length} texts → ${targetLanguage} in ${chunks.length} chunk(s), concurrency: ${CHUNK_CONCURRENCY}`
   );
 
-  const results = [];
-  for (let i = 0; i < chunks.length; i++) {
-    console.log(`[AI] Sending chunk ${i + 1}/${chunks.length} (${chunks[i].length} texts)`);
-    const translated = await translateChunk(chunks[i], targetLanguage, onRetry);
-    results.push(...translated);
-    onProgress?.(chunks[i].length);
-  }
+  const results = new Array(chunks.length);
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < chunks.length) {
+      const i = cursor++;
+      const startIndex = i * BATCH_SIZE;
+      console.log(`[AI] Sending chunk ${i + 1}/${chunks.length} (${chunks[i].length} texts)`);
+      results[i] = await translateChunk(chunks[i], targetLanguage, onRetry);
+      await onChunk?.(results[i], startIndex);
+      onProgress?.(chunks[i].length);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, worker));
 
-  return results;
+  return results.flat();
 };

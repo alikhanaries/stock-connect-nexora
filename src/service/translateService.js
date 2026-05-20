@@ -86,13 +86,34 @@ export const translateProductField = async ({ translate, sellerId, filters = [],
   for (const { field, lang, tasks } of operations) {
     console.log(`[TranslateService] Translating ${tasks.length} texts — field: "${field}", lang: "${lang}"`);
     startOperation(sellerId, field, lang);
-    let translatedTexts;
+
+    const persistChunk = async (chunkTexts, startIndex) => {
+      const chunkOps = [];
+      chunkTexts.forEach((translated, i) => {
+        if (!translated) return;
+        const task = tasks[startIndex + i];
+        if (!task) return;
+        const id = task.productId.toString();
+        if (!updateMap[id]) updateMap[id] = {};
+        updateMap[id][field] = translated;
+        chunkOps.push({
+          updateOne: {
+            filter: { _id: new mongoose.Types.ObjectId(task.productId) },
+            update: { $set: { [field]: translated } },
+          },
+        });
+      });
+      if (chunkOps.length) await Product.bulkWrite(chunkOps);
+      setUpdatedProducts(sellerId, Object.keys(updateMap).length);
+    };
+
     try {
-      translatedTexts = await translateBatch(
+      await translateBatch(
         tasks.map((t) => t.text),
         lang,
         (count) => addProgress(sellerId, field, lang, count),
-        (retryInfo) => setOperationRetry(sellerId, field, lang, retryInfo)
+        (retryInfo) => setOperationRetry(sellerId, field, lang, retryInfo),
+        persistChunk
       );
       finishOperation(sellerId, field, lang);
     } catch (error) {
@@ -102,31 +123,15 @@ export const translateProductField = async ({ translate, sellerId, filters = [],
       failedTasks += tasks.length;
       continue;
     }
-
-    tasks.forEach((task, i) => {
-      const translated = translatedTexts[i];
-      if (!translated) return;
-      const id = task.productId.toString();
-      if (!updateMap[id]) updateMap[id] = {};
-      updateMap[id][field] = translated;
-    });
-    setUpdatedProducts(sellerId, Object.keys(updateMap).length);
   }
 
-  const bulkOps = Object.entries(updateMap).map(([id, updates]) => ({
-    updateOne: {
-      filter: { _id: new mongoose.Types.ObjectId(id) },
-      update: { $set: updates },
-    },
-  }));
+  const updatedCount = Object.keys(updateMap).length;
+  setUpdatedProducts(sellerId, updatedCount);
 
-  if (bulkOps.length) await Product.bulkWrite(bulkOps);
-  setUpdatedProducts(sellerId, bulkOps.length);
-
-  console.log(`[TranslateService] Done — updated: ${bulkOps.length}, skipped: ${skipped}, failed: ${failedTasks}`);
+  console.log(`[TranslateService] Done — updated: ${updatedCount}, skipped: ${skipped}, failed: ${failedTasks}`);
   const result = {
     total: products.length,
-    translated: bulkOps.length,
+    translated: updatedCount,
     skipped,
     failed: failedTasks,
   };
