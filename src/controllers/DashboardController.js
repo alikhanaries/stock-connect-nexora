@@ -212,3 +212,23 @@ export const getReturnsOverview = async (req, res) => {
     return Responses.errorResponse(res, error, 500);
   }
 };
+
+export const getCancelOrdersOverview = async (req, res) => {
+  try {
+    const sellerIds = req.sellerIds;
+    const { period, startDate, endDate, month, channel } = req.query;
+
+    const data = await dashboardService.getCancelOrdersOverview(sellerIds, period, {
+      startDate,
+      endDate,
+      month,
+      channel,
+    });
+
+    if (!data) return Responses.failResponse(res, req.locale.NOT_FOUND, 404);
+    return Responses.successResponse(res, req.locale.SUCCESS, 200, data);
+  } catch (error) {
+    errorLog(error);
+    return Responses.errorResponse(res, error, 500);
+  }
+};
