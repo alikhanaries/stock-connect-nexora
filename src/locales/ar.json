@@ -189,5 +189,9 @@
   "TRANSLATION_STARTED": "بدأت الترجمة في الخلفية",
   "NO_PRODUCTS_TO_TRANSLATE": "لم يتم العثور على منتجات للترجمة",
   "NO_ACTIVE_TRANSLATION": "لم يتم العثور على ترجمة نشطة لهذا البائع",
-  "TRANSLATION_ALREADY_RUNNING": "الترجمة قيد التشغيل بالفعل لهذا البائع"
+  "TRANSLATION_ALREADY_RUNNING": "الترجمة قيد التشغيل بالفعل لهذا البائع",
+  "EMPTY_VALUES_NOT_TRANSLATABLE": "العملية غير ممكنة للقيم الفارغة",
+  "TRANSLATION_FAILED": "فشلت الترجمة",
+  "TRANSLATION_COMPLETED": "اكتملت الترجمة. راجع التغييرات في الكتالوج.",
+  "TRANSLATION_IN_PROGRESS": "الترجمة قيد التقدم"
 }
