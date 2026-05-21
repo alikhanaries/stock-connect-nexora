@@ -88,7 +88,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       long: config.AYMAKAN_DELIVERY_LONG,
       delivery_duty_type: 'DDP',
       delivery_description: (productsData || [])
-        .map((p) => p.description)
+        .map((p) => [p.description, p.sku].filter(Boolean).join(' | '))
         .filter(Boolean)
         .join(', '),
       ...buildPartyPayload(collectionData, 'collection'),
