@@ -110,6 +110,10 @@ const SkuSchema = new mongoose.Schema(
     expectedShipmentDate: Date,
     latestShipmentDate: Date,
     airWaybillNo: { type: String, index: true },
+    cancelReason: {
+      type: String,
+      trim: true,
+    },
   },
   { _id: false }
 );

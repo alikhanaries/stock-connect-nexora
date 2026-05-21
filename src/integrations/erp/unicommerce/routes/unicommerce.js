@@ -98,7 +98,8 @@ const UniCommerceRouter = express.Router();
  *         description: Internal server error
  */
 
-UniCommerceRouter.post('/authToken', loginValidator, checkLanguage, login);
+const parseJsonAnyContentType = express.json({ type: () => true });
+UniCommerceRouter.post('/authToken', parseJsonAnyContentType, loginValidator, checkLanguage, login);
 
 /**
  * @openapi

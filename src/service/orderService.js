@@ -1416,7 +1416,7 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
       return {
         ...sku,
         status: canceledQty === orderedQty ? ORDER_STATUS_MAP.CANCELED : ORDER_STATUS_MAP.IN_PROGRESS,
-
+        cancelReason: reason || 'NA',
         cancellationRequestedQuantity: canceledQty,
 
         statusBreakdown: {

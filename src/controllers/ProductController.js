@@ -11,6 +11,9 @@ import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 import expressWarehouseService from '../service/expressWarehouseService.js';
+import { translateProductField as translateProductFieldService } from '#service/translateService.js';
+import { getProgress, setPendingProgress, clearProgress } from '#helpers/geminiTranslate.js';
+import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -589,6 +592,79 @@ export const getExpressWareHouseProducts = async (req, res) => {
     return errorResponse(res, error, 500);
   }
 };
+const translationInProgress = new Set();
+
+export const translateProductField = async (req, res) => {
+  try {
+    const translate = req.body;
+    const sellerId = req.sellerId;
+    const { search, productId } = req.query;
+    const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
+
+    if (translationInProgress.has(sellerId)) {
+      return failResponse(res, req.locale.TRANSLATION_ALREADY_RUNNING, 409);
+    }
+
+    const fields = [...new Set(translate.map((t) => t.field))];
+    const sourceFields = fields.map((f) => SOURCE_FIELD_MAP[f] ?? f);
+
+    const exists = await Product.exists({
+      sellerId: new mongoose.Types.ObjectId(sellerId),
+      $or: sourceFields.map((f) => ({ [f]: { $exists: true, $nin: [null, ''] } })),
+    });
+
+    if (!exists) {
+      return failResponse(res, req.locale.NO_PRODUCTS_TO_TRANSLATE, 404);
+    }
+
+    setPendingProgress(sellerId);
+    translationInProgress.add(sellerId);
+    successResponse(res, req.locale.TRANSLATION_STARTED, 200);
+
+    translateProductFieldService({ translate, sellerId, filters, search, productId })
+      .then((result) => console.log(`Translation complete: ${JSON.stringify(result)}`))
+      .catch((error) => errorLog(error))
+      .finally(() => {
+        translationInProgress.delete(sellerId);
+        // Delay cleanup so clients can poll the final status (done or error) before it disappears
+        setTimeout(() => clearProgress(sellerId), 60_000);
+      });
+  } catch (error) {
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
+const PROGRESS_TYPES = ['translate'];
+
+export const getProgressStatus = (req, res) => {
+  try {
+    const { type } = req.query;
+
+    if (!type || !PROGRESS_TYPES.includes(type)) {
+      return failResponse(res, `Invalid type. Allowed: ${PROGRESS_TYPES.join(', ')}`, 400);
+    }
+
+    const progress = getProgress(req.sellerId);
+
+    if (!progress) {
+      return failResponse(res, req.locale.NO_ACTIVE_TRANSLATION, 404);
+    }
+
+    const hasError = progress.operations.some((o) => o.status === 'error');
+    const message = hasError
+      ? 'Translation failed'
+      : progress.status === 'done'
+        ? 'Translation completed. Review changes in the catalog.'
+        : 'Translation in progress';
+
+    return successResponse(res, message, 200, { type, ...progress });
+  } catch (error) {
+    errorLog(error);
+    return errorResponse(res, error.message, 500);
+  }
+};
+
 export default {
   getProducts,
   getTopSellingProduct,
@@ -609,4 +685,6 @@ export default {
   freezeOrUnfreezeProducts,
   syncProducts,
   getExpressWareHouseProducts,
+  translateProductField,
+  getProgressStatus,
 };
