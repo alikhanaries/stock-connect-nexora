@@ -489,6 +489,7 @@ const sanitizeOrdersData = async (orders) => {
             exactShipmentDate: line.ExactShipmentDate,
             expectedShipmentDate: line.ExpectedShipmentDate,
             latestShipmentDate: line.LatestShipmentDate,
+            cancelReason: existingSku?.cancelReason || null,
           };
         })
       : [];
