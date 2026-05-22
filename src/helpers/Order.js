@@ -2,6 +2,7 @@ import Order from '#models/Orders.js';
 import Product from '../models/Product.js';
 import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
+import { createEntegraOrder } from '../integrations/erp/entegra/service/orderService.js';
 
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
@@ -373,7 +374,15 @@ export const buildStatuses = ({ line, existingSku }) => {
   ];
 };
 
+const getEntegraOrders = (orders) => {
+  console.log('Entegra orders:', JSON.stringify(orders, null, 2));
+  console.log(`[Entegra] Found ${orders.length} orders to push → IDs: [${orders.map((o) => o.Id).join(', ')}]`);
+  createEntegraOrder(orders).catch((err) => console.error('createEntegraOrder error:', err));
+};
+
 export const sanitizeOrdersData = async (orders) => {
+  orders = orders?.filter((o) => o.Id === 1859) || [];
+  console.log('Sanitizing orders data for order IDs:', orders);
   const orderIds = [];
   const skuSet = new Set();
 
@@ -392,12 +401,24 @@ export const sanitizeOrdersData = async (orders) => {
   const [existingOrdersDb, productsDb] = await Promise.all([
     Order.find({ orderId: { $in: orderIds } }).lean(),
     Product.find({ productSkuCode: { $in: Array.from(skuSet) } })
-      .select('productSkuCode sellerId')
+      .select('productSkuCode sellerId brand')
       .lean(),
   ]);
 
   const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
   const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
+
+  const entegraSkuSet = new Set(
+    productsDb
+      .filter((p) => p.brand?.toLowerCase() === 'manijero' || p.brand?.toLowerCase() === 'krahe')
+      .map((p) => p.productSkuCode)
+  );
+
+  const entegraOrders = orders.filter(
+    (order) => Array.isArray(order.Lines) && order.Lines.some((line) => entegraSkuSet.has(line.MerchantProductNo))
+  );
+
+  getEntegraOrders(entegraOrders);
 
   //  final outputs
   const bulkOps = [];
@@ -422,6 +443,7 @@ export const sanitizeOrdersData = async (orders) => {
     // SKU LIST
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
+          console.log('Processing line:', line);
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
 
           const sellerIdFromMap = productSellerMap.get(line.MerchantProductNo) || null;
