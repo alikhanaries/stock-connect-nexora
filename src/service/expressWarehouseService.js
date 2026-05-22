@@ -30,7 +30,7 @@ export const fetchExpressWareHouseProducts = async (filters = [], query, sellerI
   }
 
   // -----------------------------
-  // FETCH SKUs
+  // FETCH SKUs + quantity per SKU
   // -----------------------------
   const inventoryData = await ExpressWarehouseInventory.aggregate([
     {
@@ -40,15 +40,23 @@ export const fetchExpressWareHouseProducts = async (filters = [], query, sellerI
     },
     {
       $group: {
-        _id: null,
-        skus: { $addToSet: '$sku' },
+        _id: '$sku',
+        quantity: { $sum: '$quantity' },
         latestSync: { $max: '$lastSyncedAt' },
       },
     },
   ]);
 
-  const expressWarehouseSkus = inventoryData?.[0]?.skus || [];
-  const latestInventorySync = inventoryData?.[0]?.latestSync || null;
+  const skuQuantityMap = {};
+  let latestInventorySync = null;
+  for (const item of inventoryData) {
+    skuQuantityMap[item._id] = item.quantity;
+    if (!latestInventorySync || item.latestSync > latestInventorySync) {
+      latestInventorySync = item.latestSync;
+    }
+  }
+
+  const expressWarehouseSkus = Object.keys(skuQuantityMap);
 
   if (!expressWarehouseSkus.length) {
     return {
@@ -106,9 +114,13 @@ export const fetchExpressWareHouseProducts = async (filters = [], query, sellerI
       )
       .lean(),
   ]);
+  const productsWithStock = products.map((p) => ({
+    ...p,
+    currentStockCount: skuQuantityMap[p.productSkuCode] ?? 0,
+  }));
 
   return {
-    products,
+    products: productsWithStock,
     pagination: getPagination(total, currentPage, limit),
     latestProductSyncDate: latestInventorySync,
     latestInventorySync: latestInventorySync,
