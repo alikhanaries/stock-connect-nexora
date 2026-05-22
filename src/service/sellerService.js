@@ -1,9 +1,11 @@
 import Seller from '#models/Seller.js';
+import Product from '#models/Product.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { PRODUCT_STATUSES, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import PickupAddress from '#models/PickUpAddress.js';
 import { formatSellerResponse } from '#helpers/formatSellerResponse.js';
+import { autoAssignAllChannelsToSeller } from './channelService.js';
 const createSeller = async (sellerData) => {
   try {
     const { name, ocpSlugId, shopifyConfig } = sellerData;
@@ -43,6 +45,11 @@ const createSeller = async (sellerData) => {
     }
 
     const seller = await Seller.create(sellerPayload);
+
+    const channelResult = await autoAssignAllChannelsToSeller(seller._id);
+    if (!channelResult.success) {
+      console.error('autoAssignAllChannelsToSeller failed for seller:', seller._id, channelResult.message);
+    }
 
     return {
       isExist: false,
@@ -138,11 +145,13 @@ const updateSeller = async (id, payload) => {
   if (!seller) return null; // SELLER NOT FOUND
 
   let isUpdated = false;
+  let nameChanged = false;
   const updateData = {};
 
   if (name !== undefined && name.trim() !== seller.name) {
     updateData.name = name.trim();
     isUpdated = true;
+    nameChanged = true;
   }
 
   if (status !== undefined && status !== seller.status) {
@@ -177,6 +186,15 @@ const updateSeller = async (id, payload) => {
 
   // 3️ Update
   const updatedSeller = await Seller.findByIdAndUpdate(id, { $set: updateData }, { new: true });
+
+  // 4️ If seller name changed, propagate it to the brand field of all products under this seller
+  if (nameChanged) {
+    try {
+      await Product.updateMany({ sellerId: id }, { $set: { brand: updateData.name } });
+    } catch (err) {
+      console.error('Failed to propagate seller name to product brand:', err);
+    }
+  }
 
   return { isUpdated: true, seller: updatedSeller };
 };

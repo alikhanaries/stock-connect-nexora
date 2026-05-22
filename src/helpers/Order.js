@@ -413,6 +413,9 @@ const sanitizeOrdersData = async (orders) => {
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+          const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
+            ? existingSku.status
+            : normalizeSkuStatus(line.Status);
 
           return {
             // ---------- REQUIRED ----------
@@ -422,9 +425,7 @@ const sanitizeOrdersData = async (orders) => {
             unitPriceInclVat: line.UnitPriceInclVat ?? 0,
 
             // ---------- STATUS ----------
-            status: ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
-              ? existingSku.status
-              : normalizeSkuStatus(line.Status),
+            status: skuStatus,
 
             statusBreakdown: buildStatusBreakdown({
               line,
@@ -489,6 +490,7 @@ const sanitizeOrdersData = async (orders) => {
             exactShipmentDate: line.ExactShipmentDate,
             expectedShipmentDate: line.ExpectedShipmentDate,
             latestShipmentDate: line.LatestShipmentDate,
+            cancelReason: existingSku?.cancelReason || (skuStatus === 'CANCELED' ? 'Other' : null),
           };
         })
       : [];
