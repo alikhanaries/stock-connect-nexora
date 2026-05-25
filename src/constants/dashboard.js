@@ -5,14 +5,13 @@ export const ORDER_FLOW_STATUS_CONFIG = [
   // { key: 'cancelled', label: 'Cancelled', statuses: ['CANCELLED', 'CANCELED'] },
   { key: 'shipped', label: 'Shipped', statuses: ['SHIPPED'] },
   { key: 'closed', label: 'Closed', statuses: ['CLOSED'] },
-  { key: 'returned', label: 'Returned', statuses: ['RETURNED'] },
 ];
 
 export const SHIPMENT_STATUS = [
-  { key: 'SHIPMENT_CREATED', label: 'Ready to ship' },
-  { key: 'SHIPPED', label: 'In transit' },
-  { key: 'DELIVERED', label: 'Delivered' },
-  { key: 'CANCELED', label: 'Canceled' },
+  { statuses: ['SHIPMENT_CREATED'], label: 'Ready to ship' },
+  { statuses: ['SHIPMENT_PROCESSED', 'HUB_RECIEVED', 'OUT_FOR_DELIVERY', 'OMNIFUL_PROCESSED'], label: 'In transit' },
+  { statuses: ['DELIVERED'], label: 'Delivered' },
+  { statuses: ['CANCELED'], label: 'Canceled' },
 ];
 
 export const CHANNEL_TO_GLOBAL_NAMES = Object.freeze({
