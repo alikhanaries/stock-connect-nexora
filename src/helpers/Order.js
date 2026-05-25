@@ -381,7 +381,7 @@ const getEntegraOrders = (orders) => {
 };
 
 export const sanitizeOrdersData = async (orders) => {
-  orders = orders?.filter((o) => o.Id === 1859) || [];
+  orders = orders?.filter((o) => o.Id === 1861) || [];
   console.log('Sanitizing orders data for order IDs:', orders);
   const orderIds = [];
   const skuSet = new Set();
@@ -418,8 +418,6 @@ export const sanitizeOrdersData = async (orders) => {
     (order) => Array.isArray(order.Lines) && order.Lines.some((line) => entegraSkuSet.has(line.MerchantProductNo))
   );
 
-  getEntegraOrders(entegraOrders);
-
   //  final outputs
   const bulkOps = [];
   const sellerOrderPayloads = [];
@@ -444,7 +442,6 @@ export const sanitizeOrdersData = async (orders) => {
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
           console.log('Processing line:', line);
-          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
 
           const sellerIdFromMap = productSellerMap.get(line.MerchantProductNo) || null;
           const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
@@ -456,9 +453,11 @@ export const sanitizeOrdersData = async (orders) => {
           const sellerOrderId = `${data.Id}_${sellerId}`;
           const extraStatus = getExtraStatus(line?.ExtraData);
           const normalizedExtraStatus = extraStatus?.toLowerCase();
-
+          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
           const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
-
+          const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
+            ? existingSku.status
+            : mainStatus;
           //  DELIVERY DETECTION
 
           const alreadyDelivered = existingSku?.status === 'DELIVERED';
@@ -492,10 +491,15 @@ export const sanitizeOrdersData = async (orders) => {
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
             unitPriceInclVat: line.UnitPriceInclVat ?? 0,
-            status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED', 'DELIVERED'].includes(existingSku?.status)
-              ? existingSku.status
-              : mainStatus,
-            statusBreakdown: buildStatusBreakdown({ line, existingSku }),
+
+            // ---------- STATUS ----------
+            status: skuStatus,
+
+            statusBreakdown: buildStatusBreakdown({
+              line,
+              existingSku,
+            }),
+
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
 
@@ -557,7 +561,7 @@ export const sanitizeOrdersData = async (orders) => {
             exactShipmentDate: line.ExactShipmentDate,
             expectedShipmentDate: line.ExpectedShipmentDate,
             latestShipmentDate: line.LatestShipmentDate,
-            cancelReason: existingSku?.cancelReason || null,
+            cancelReason: existingSku?.cancelReason || (skuStatus === 'CANCELED' ? 'Other' : null),
           };
         }).filter(Boolean)
       : [];
@@ -695,7 +699,7 @@ export const sanitizeOrdersData = async (orders) => {
       },
     });
   }
-
+  getEntegraOrders(entegraOrders);
   return {
     bulkOps,
     sellerOrderPayloads,

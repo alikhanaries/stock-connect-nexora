@@ -189,5 +189,9 @@
   "TRANSLATION_STARTED": "Çeviri arka planda başlatıldı",
   "NO_PRODUCTS_TO_TRANSLATE": "Çeviri için ürün bulunamadı",
   "NO_ACTIVE_TRANSLATION": "Bu satıcı için aktif çeviri bulunamadı",
-  "TRANSLATION_ALREADY_RUNNING": "Bu satıcı için çeviri zaten devam ediyor"
+  "TRANSLATION_ALREADY_RUNNING": "Bu satıcı için çeviri zaten devam ediyor",
+  "EMPTY_VALUES_NOT_TRANSLATABLE": "Boş değerler için işlem mümkün değil",
+  "TRANSLATION_FAILED": "Çeviri başarısız oldu",
+  "TRANSLATION_COMPLETED": "Çeviri tamamlandı. Değişiklikleri katalogda inceleyin.",
+  "TRANSLATION_IN_PROGRESS": "Çeviri devam ediyor"
 }

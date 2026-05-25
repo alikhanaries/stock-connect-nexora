@@ -13,7 +13,6 @@ import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } fro
 import expressWarehouseService from '../service/expressWarehouseService.js';
 import { translateProductField as translateProductFieldService } from '#service/translateService.js';
 import { getProgress, setPendingProgress, clearProgress } from '#helpers/geminiTranslate.js';
-import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -605,12 +604,9 @@ export const translateProductField = async (req, res) => {
       return failResponse(res, req.locale.TRANSLATION_ALREADY_RUNNING, 409);
     }
 
-    const fields = [...new Set(translate.map((t) => t.field))];
-    const sourceFields = fields.map((f) => SOURCE_FIELD_MAP[f] ?? f);
-
     const exists = await Product.exists({
       sellerId: new mongoose.Types.ObjectId(sellerId),
-      $or: sourceFields.map((f) => ({ [f]: { $exists: true, $nin: [null, ''] } })),
+      ...(productId && { _id: new mongoose.Types.ObjectId(productId) }),
     });
 
     if (!exists) {
@@ -621,7 +617,14 @@ export const translateProductField = async (req, res) => {
     translationInProgress.add(sellerId);
     successResponse(res, req.locale.TRANSLATION_STARTED, 200);
 
-    translateProductFieldService({ translate, sellerId, filters, search, productId })
+    translateProductFieldService({
+      translate,
+      sellerId,
+      filters,
+      search,
+      productId,
+      emptyValuesMessage: req.locale.EMPTY_VALUES_NOT_TRANSLATABLE,
+    })
       .then((result) => console.log(`Translation complete: ${JSON.stringify(result)}`))
       .catch((error) => errorLog(error))
       .finally(() => {
@@ -653,10 +656,10 @@ export const getProgressStatus = (req, res) => {
 
     const hasError = progress.operations.some((o) => o.status === 'error');
     const message = hasError
-      ? 'Translation failed'
+      ? req.locale.TRANSLATION_FAILED
       : progress.status === 'done'
-        ? 'Translation completed. Review changes in the catalog.'
-        : 'Translation in progress';
+        ? req.locale.TRANSLATION_COMPLETED
+        : req.locale.TRANSLATION_IN_PROGRESS;
 
     return successResponse(res, message, 200, { type, ...progress });
   } catch (error) {

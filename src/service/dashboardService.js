@@ -671,7 +671,7 @@ export const getCancelOrdersOverview = async (sellerId, period, { startDate, end
   const channelIds = pickChannelIdsFromChannel(channel);
   const buildCancelOrdersPipeline = (sellerIds, range, channelIds) => {
     const matchStage = {
-      // sellerId: { $in: sellerIds },
+      sellerId: { $in: sellerIds },
       orderDate: { $gte: range.start, $lte: range.end },
     };
 
