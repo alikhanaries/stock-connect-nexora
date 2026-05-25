@@ -1984,7 +1984,7 @@ const getAnalyticsOrders = async (query) => {
       pagination: getPagination(totalOrders, page, size),
     };
   } catch (err) {
-    console.error('[getAnalyticsOrders] Error fetching analytics orders:', err);
+    console.error('Error fetching orders:', err);
     throw err;
   }
 };
