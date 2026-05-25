@@ -423,10 +423,6 @@ export const sanitizeOrdersData = async (orders) => {
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
-          const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
-          const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
-            ? existingSku.status
-            : mainStatus;
 
           const sellerIdFromMap = productSellerMap.get(line.MerchantProductNo) || null;
           const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
@@ -438,7 +434,10 @@ export const sanitizeOrdersData = async (orders) => {
           const sellerOrderId = `${data.Id}_${sellerId}`;
           const extraStatus = getExtraStatus(line?.ExtraData);
           const normalizedExtraStatus = extraStatus?.toLowerCase();
-
+          const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
+          const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
+            ? existingSku.status
+            : mainStatus;
           //  DELIVERY DETECTION
 
           const alreadyDelivered = existingSku?.status === 'DELIVERED';
