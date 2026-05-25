@@ -1765,7 +1765,6 @@ export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
   return documentId;
 };
 const getAnalyticsOrders = async (query) => {
-  console.log('[getAnalyticsOrders] Called with query:', JSON.stringify(query));
   try {
     const {
       page = 1,
@@ -1881,9 +1880,6 @@ const getAnalyticsOrders = async (query) => {
       appliedFilters.status = status.map((s) => s.toLowerCase());
     }
 
-    console.log('[getAnalyticsOrders] Applied filters:', JSON.stringify(appliedFilters));
-    console.log('[getAnalyticsOrders] DB filter:', JSON.stringify(filter));
-
     // -------------------------
     // BASE PIPELINE
     // -------------------------
@@ -1952,9 +1948,6 @@ const getAnalyticsOrders = async (query) => {
     ]);
 
     const totalOrders = countResult[0]?.total || 0;
-    console.log(
-      `[getAnalyticsOrders] Query complete — totalOrders: ${totalOrders}, page: ${page}, size: ${size}, returned: ${orders.length}`
-    );
 
     // -------------------------
     // CHANNEL MAP
