@@ -22,11 +22,14 @@ import fs from 'fs';
 import path from 'path';
 import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 
-const formatOrder = async (order, channelImage, sellerId) => {
+const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null) => {
   let sellerName = '';
   let sellerObjectId = null;
 
-  if (sellerId) {
+  if (preloadedSeller) {
+    sellerObjectId = preloadedSeller._id;
+    sellerName = preloadedSeller.companyName || preloadedSeller.name || '';
+  } else if (sellerId) {
     sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
 
     const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
@@ -1967,11 +1970,15 @@ const getAnalyticsOrders = async (query) => {
     // -------------------------
     // RESPONSE
     // -------------------------
-    return {
-      data: orders.map((order) => {
+    const formattedOrders = await Promise.all(
+      orders.map((order) => {
         const matchingChannel = channelMap[order.channelId] || null;
-        return formatOrder(order, matchingChannel);
-      }),
+        return formatOrder(order, matchingChannel, null, order.seller);
+      })
+    );
+
+    return {
+      data: formattedOrders,
       appliedFilters,
       latestOrderSyncDate,
       pagination: getPagination(totalOrders, page, size),
