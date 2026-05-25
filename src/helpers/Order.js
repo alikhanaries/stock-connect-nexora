@@ -423,6 +423,10 @@ export const sanitizeOrdersData = async (orders) => {
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+          const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
+          const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
+            ? existingSku.status
+            : mainStatus;
 
           const sellerIdFromMap = productSellerMap.get(line.MerchantProductNo) || null;
           const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
@@ -434,8 +438,6 @@ export const sanitizeOrdersData = async (orders) => {
           const sellerOrderId = `${data.Id}_${sellerId}`;
           const extraStatus = getExtraStatus(line?.ExtraData);
           const normalizedExtraStatus = extraStatus?.toLowerCase();
-
-          const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
 
           //  DELIVERY DETECTION
 
@@ -470,10 +472,15 @@ export const sanitizeOrdersData = async (orders) => {
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
             unitPriceInclVat: line.UnitPriceInclVat ?? 0,
-            status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED', 'DELIVERED'].includes(existingSku?.status)
-              ? existingSku.status
-              : mainStatus,
-            statusBreakdown: buildStatusBreakdown({ line, existingSku }),
+
+            // ---------- STATUS ----------
+            status: skuStatus,
+
+            statusBreakdown: buildStatusBreakdown({
+              line,
+              existingSku,
+            }),
+
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
 
@@ -535,7 +542,7 @@ export const sanitizeOrdersData = async (orders) => {
             exactShipmentDate: line.ExactShipmentDate,
             expectedShipmentDate: line.ExpectedShipmentDate,
             latestShipmentDate: line.LatestShipmentDate,
-            cancelReason: existingSku?.cancelReason || null,
+            cancelReason: existingSku?.cancelReason || (skuStatus === 'CANCELED' ? 'Other' : null),
           };
         }).filter(Boolean)
       : [];

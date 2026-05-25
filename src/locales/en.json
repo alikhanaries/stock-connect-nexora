@@ -191,5 +191,9 @@
   "TRANSLATION_STARTED": "Translation started in background",
   "NO_PRODUCTS_TO_TRANSLATE": "No products found for translation",
   "NO_ACTIVE_TRANSLATION": "No active translation found for this seller",
-  "TRANSLATION_ALREADY_RUNNING": "Translation already running for this seller"
+  "TRANSLATION_ALREADY_RUNNING": "Translation already running for this seller",
+  "EMPTY_VALUES_NOT_TRANSLATABLE": "Operation is not possible for empty values",
+  "TRANSLATION_FAILED": "Translation failed",
+  "TRANSLATION_COMPLETED": "Translation completed. Review changes in the catalog.",
+  "TRANSLATION_IN_PROGRESS": "Translation in progress"
 }

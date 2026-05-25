@@ -166,7 +166,6 @@ export const finishOperation = (sellerId, field, lang) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   if (op) {
     op.status = 'done';
-    op.completed = op.total;
   }
 };
 
