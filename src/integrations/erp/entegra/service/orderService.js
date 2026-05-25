@@ -78,7 +78,7 @@ export const createEntegraOrder = async (orders = []) => {
 
   for (const order of orders) {
     const mapped = mapOrderToEntegra(order);
-    console.log('mapped', mapped);
+
     let lastError = null;
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -122,4 +122,8 @@ export const createEntegraOrder = async (orders = []) => {
   console.log(
     `[Entegra] Order push complete — success: ${successCount}, failed: ${failCount}, total: ${orders.length}`
   );
+};
+
+export const getEntegraOrders = (orders) => {
+  createEntegraOrder(orders).catch((err) => console.error('createEntegraOrder error:', err));
 };

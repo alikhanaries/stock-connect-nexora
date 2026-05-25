@@ -2,7 +2,7 @@ import Order from '#models/Orders.js';
 import Product from '../models/Product.js';
 import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
-import { createEntegraOrder } from '../integrations/erp/entegra/service/orderService.js';
+import { getEntegraOrders } from '../integrations/erp/entegra/service/orderService.js';
 
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
@@ -374,15 +374,7 @@ export const buildStatuses = ({ line, existingSku }) => {
   ];
 };
 
-const getEntegraOrders = (orders) => {
-  console.log('Entegra orders:', JSON.stringify(orders, null, 2));
-  console.log(`[Entegra] Found ${orders.length} orders to push → IDs: [${orders.map((o) => o.Id).join(', ')}]`);
-  createEntegraOrder(orders).catch((err) => console.error('createEntegraOrder error:', err));
-};
-
 export const sanitizeOrdersData = async (orders) => {
-  orders = orders?.filter((o) => o.Id === 1861) || [];
-  console.log('Sanitizing orders data for order IDs:', orders);
   const orderIds = [];
   const skuSet = new Set();
 
@@ -441,7 +433,7 @@ export const sanitizeOrdersData = async (orders) => {
     // SKU LIST
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
-          console.log('Processing line:', line);
+          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
 
           const sellerIdFromMap = productSellerMap.get(line.MerchantProductNo) || null;
           const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
@@ -453,7 +445,7 @@ export const sanitizeOrdersData = async (orders) => {
           const sellerOrderId = `${data.Id}_${sellerId}`;
           const extraStatus = getExtraStatus(line?.ExtraData);
           const normalizedExtraStatus = extraStatus?.toLowerCase();
-          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+
           const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
           const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
             ? existingSku.status
