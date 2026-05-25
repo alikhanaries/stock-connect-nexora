@@ -22,11 +22,14 @@ import fs from 'fs';
 import path from 'path';
 import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 
-const formatOrder = async (order, channelImage, sellerId) => {
+const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null) => {
   let sellerName = '';
   let sellerObjectId = null;
 
-  if (sellerId) {
+  if (preloadedSeller) {
+    sellerObjectId = preloadedSeller._id;
+    sellerName = preloadedSeller.companyName || preloadedSeller.name || '';
+  } else if (sellerId) {
     sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
 
     const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
@@ -1762,6 +1765,7 @@ export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
   return documentId;
 };
 const getAnalyticsOrders = async (query) => {
+  console.log('[getAnalyticsOrders] Called with query:', JSON.stringify(query));
   try {
     const {
       page = 1,
@@ -1877,6 +1881,9 @@ const getAnalyticsOrders = async (query) => {
       appliedFilters.status = status.map((s) => s.toLowerCase());
     }
 
+    console.log('[getAnalyticsOrders] Applied filters:', JSON.stringify(appliedFilters));
+    console.log('[getAnalyticsOrders] DB filter:', JSON.stringify(filter));
+
     // -------------------------
     // BASE PIPELINE
     // -------------------------
@@ -1945,6 +1952,9 @@ const getAnalyticsOrders = async (query) => {
     ]);
 
     const totalOrders = countResult[0]?.total || 0;
+    console.log(
+      `[getAnalyticsOrders] Query complete — totalOrders: ${totalOrders}, page: ${page}, size: ${size}, returned: ${orders.length}`
+    );
 
     // -------------------------
     // CHANNEL MAP
@@ -1967,17 +1977,21 @@ const getAnalyticsOrders = async (query) => {
     // -------------------------
     // RESPONSE
     // -------------------------
-    return {
-      data: orders.map((order) => {
+    const formattedOrders = await Promise.all(
+      orders.map((order) => {
         const matchingChannel = channelMap[order.channelId] || null;
-        return formatOrder(order, matchingChannel);
-      }),
+        return formatOrder(order, matchingChannel, null, order.seller);
+      })
+    );
+
+    return {
+      data: formattedOrders,
       appliedFilters,
       latestOrderSyncDate,
       pagination: getPagination(totalOrders, page, size),
     };
   } catch (err) {
-    console.error('Error fetching orders:', err);
+    console.error('[getAnalyticsOrders] Error fetching analytics orders:', err);
     throw err;
   }
 };
