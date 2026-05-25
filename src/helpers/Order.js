@@ -445,7 +445,6 @@ export const sanitizeOrdersData = async (orders) => {
           const sellerOrderId = `${data.Id}_${sellerId}`;
           const extraStatus = getExtraStatus(line?.ExtraData);
           const normalizedExtraStatus = extraStatus?.toLowerCase();
-
           const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
           const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
             ? existingSku.status
