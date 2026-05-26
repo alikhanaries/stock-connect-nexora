@@ -14,6 +14,7 @@ import { cancelAymakanShipment, createAymakanDocumentId } from '#service/aymakan
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
 import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
 import { formatDateTime, truncate, resolveDateRange } from '#helpers/Common.js';
+import { pickChannelIdsFromChannel } from '#root/src/helpers/dashboard.js';
 import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
@@ -105,19 +106,7 @@ const getAllOrders = async (query, sellerId) => {
 
     // ---------------- CHANNEL FILTER ----------------
     if (channel) {
-      const channelNames = []
-        .concat(channel)
-        .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
-        .map((c) => String(c).trim())
-        .filter(Boolean);
-
-      const regexArray = channelNames.map((name) => ({
-        channelName: { $regex: name, $options: 'i' },
-      }));
-
-      const matchedChannels = await Channel.find({ $or: regexArray }).select('channelId').lean();
-
-      const channelIds = matchedChannels.map((c) => c.channelId);
+      const channelIds = await pickChannelIdsFromChannel(channel);
 
       if (channelIds.length === 1) {
         filter.channelId = channelIds[0];
@@ -1549,18 +1538,7 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     }
 
     if (channel) {
-      const channelNames = channel
-        .split(',')
-        .map((c) => c.trim())
-        .filter(Boolean);
-
-      const regexArray = channelNames.map((name) => ({
-        channelName: { $regex: name, $options: 'i' },
-      }));
-
-      const matchedChannels = await Channel.find({ $or: regexArray }).select('channelId').lean();
-
-      const channelIds = matchedChannels.map((c) => c.channelId);
+      const channelIds = await pickChannelIdsFromChannel(channel);
 
       //  If no channel matched → return empty
       if (!channelIds.length) {
@@ -1808,18 +1786,7 @@ const getAnalyticsOrders = async (query) => {
     // CHANNEL FILTER (resolve names → channelIds)
     // -------------------------
     if (channel.length) {
-      const channelNames = channel
-        .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
-        .map((c) => String(c).trim())
-        .filter(Boolean);
-
-      const matchedChannels = await Channel.find({
-        $or: channelNames.map((name) => ({ channelName: { $regex: escapeRegex(name), $options: 'i' } })),
-      })
-        .select('channelId')
-        .lean();
-
-      const channelIds = matchedChannels.map((c) => c.channelId);
+      const channelIds = await pickChannelIdsFromChannel(channel);
 
       if (channelIds.length === 0) {
         filter.channelId = { $in: [] };
