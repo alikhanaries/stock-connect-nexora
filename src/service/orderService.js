@@ -106,7 +106,19 @@ const getAllOrders = async (query, sellerId) => {
 
     // ---------------- CHANNEL FILTER ----------------
     if (channel) {
-      const channelIds = await pickChannelIdsFromChannel(channel);
+      const channelNames = []
+        .concat(channel)
+        .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
+        .map((c) => String(c).trim())
+        .filter(Boolean);
+
+      const regexArray = channelNames.map((name) => ({
+        channelName: { $regex: name, $options: 'i' },
+      }));
+
+      const matchedChannels = await Channel.find({ $or: regexArray }).select('channelId').lean();
+
+      const channelIds = matchedChannels.map((c) => c.channelId);
 
       if (channelIds.length === 1) {
         filter.channelId = channelIds[0];
@@ -1538,7 +1550,18 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
     }
 
     if (channel) {
-      const channelIds = await pickChannelIdsFromChannel(channel);
+      const channelNames = channel
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean);
+
+      const regexArray = channelNames.map((name) => ({
+        channelName: { $regex: name, $options: 'i' },
+      }));
+
+      const matchedChannels = await Channel.find({ $or: regexArray }).select('channelId').lean();
+
+      const channelIds = matchedChannels.map((c) => c.channelId);
 
       //  If no channel matched → return empty
       if (!channelIds.length) {
