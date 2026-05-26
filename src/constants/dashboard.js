@@ -21,14 +21,6 @@ export const CHANNEL_TO_GLOBAL_NAMES = Object.freeze({
   ocp: ['OCP'],
 });
 
-export const CHANNEL_KEY_TO_IDS = Object.freeze({
-  noon: [1],
-  amazon: [3],
-  namshi: [4],
-  ocp: [6],
-  trendyol: [5],
-});
-
 export const CHANNEL_STATUS_CONFIG = [
   { label: 'Published', key: 'PUBLISHED' },
   { label: 'Not Published', key: 'NOT_PUBLISHED' },
