@@ -1,4 +1,8 @@
-import { CHANNEL_TO_GLOBAL_NAMES, CHANNEL_KEY_TO_IDS } from '#constants/dashboard.js';
+import { CHANNEL_TO_GLOBAL_NAMES } from '#constants/dashboard.js';
+import Channel from '../models/Channel.js';
+
+const escapeRegexForChannel = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -180,7 +184,7 @@ export const getPreviousRange = (period, currentRange) => {
 export const isComparablePeriod = (period) =>
   ['today', 'weekly', 'monthly', 'month'].includes(period) || /^last_(\d{1,3})_days$/.test(period);
 
-export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, range, ...globalChannelFilter }) => {
+export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, range, channelFilter = {} }) => {
   const isMonthly = period === 'monthly';
   const isToday = period === 'today';
   const isAll = period === 'all';
@@ -236,30 +240,14 @@ export const buildAggregationPipeline = ({ sellerObjectIds, period, metric, rang
       $match: {
         sellerId: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
-        ...globalChannelFilter,
+        ...channelFilter,
       },
     },
   ];
-  if (metric === 'sales') {
-    pipeline.push({
-      $unwind: { path: '$orderSkuList.skuList', preserveNullAndEmptyArrays: false },
-    });
-  }
-
   pipeline.push({
     $group: {
       _id: groupId,
-      value:
-        metric === 'sales'
-          ? {
-              $sum: {
-                $multiply: [
-                  { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
-                  { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
-                ],
-              },
-            }
-          : { $sum: 1 },
+      value: metric === 'sales' ? { $sum: '$deliveredAmount' } : { $sum: 1 },
     },
   });
 
@@ -366,14 +354,24 @@ export const normalizeSeries = (period, raw = [], range) => {
   }));
 };
 
-export const pickChannelIdsFromChannel = (channel) => {
-  const keys = String(channel ?? '')
-    .split(',')
-    .map((v) => v.trim().toLowerCase())
+export const pickChannelIdsFromChannel = async (channel) => {
+  if (!channel) return [];
+
+  const arr = Array.isArray(channel) ? channel : [channel];
+  const names = arr
+    .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
+    .map((c) => String(c ?? '').trim())
     .filter(Boolean);
 
-  const ids = keys.flatMap((k) => CHANNEL_KEY_TO_IDS[k] ?? []);
-  return [...new Set(ids)].filter((n) => Number.isFinite(n));
+  if (!names.length) return [];
+
+  const matched = await Channel.find({
+    $or: names.map((name) => ({ channelName: { $regex: escapeRegexForChannel(name), $options: 'i' } })),
+  })
+    .select('channelId')
+    .lean();
+
+  return [...new Set(matched.map((c) => c.channelId).filter((n) => Number.isFinite(n)))];
 };
 
 export const buildInventorySkuStatusPipeline = () => [
@@ -552,12 +550,13 @@ export const topFacetPipeline = (sellerObjectIds, range, type, globalChannelFilt
   return [
     {
       $match: {
-        sellerId: { $in: sellerObjectIds },
+        sellerIds: { $in: sellerObjectIds },
         ...globalChannelFilter,
         orderDate: { $gte: range.start, $lte: range.end },
       },
     },
     { $unwind: '$orderSkuList.skuList' },
+    { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } },
     { $match: { 'orderSkuList.skuList.merchantProductNo': { $type: 'string', $ne: '' } } },
     {
       $lookup: {
@@ -603,12 +602,13 @@ export const topFacetPipeline = (sellerObjectIds, range, type, globalChannelFilt
 export const prevRevenuePipeline = (sellerObjectIds, prevRange, keys = [], globalChannelFilter = {}) => [
   {
     $match: {
-      sellerId: { $in: sellerObjectIds },
+      sellerIds: { $in: sellerObjectIds },
       ...globalChannelFilter,
       orderDate: { $gte: prevRange.start, $lte: prevRange.end },
     },
   },
   { $unwind: '$orderSkuList.skuList' },
+  { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } },
 
   { $match: { 'orderSkuList.skuList.merchantProductNo': { $in: keys } } },
 
@@ -733,6 +733,7 @@ export const buildChannelStatusPipeline = (sellerObjectIds, range, channelIds = 
 export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = []) => {
   const match = {
     ...(range?.start && range?.end ? { placedOn: { $gte: range.start, $lte: range.end } } : {}),
+    sellerIds: { $in: sellerObjectIds },
   };
 
   if (Array.isArray(channelIds) && channelIds.length) {
@@ -740,36 +741,24 @@ export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = 
   }
   return [
     { $match: match },
-
+    { $unwind: '$sellerIds' },
+    { $match: { sellerIds: { $in: sellerObjectIds } } },
     {
-      $lookup: {
-        from: 'channelengineorders',
-        let: {
-          returnChannelOrderNo: '$channelOrderNo',
-        },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $eq: ['$channelOrderNumber', '$$returnChannelOrderNo'] },
-                  { $in: ['$sellerId', sellerObjectIds] },
-                ],
+      $addFields: {
+        sellerStatus: {
+          $arrayElemAt: [
+            {
+              $filter: {
+                input: '$sellerStatuses',
+                as: 'sellerStatuses',
+                cond: { $eq: ['$$sellerStatuses.sellerId', '$sellerIds'] },
               },
             },
-          },
-          {
-            $project: {
-              _id: 0,
-              sellerId: 1,
-            },
-          },
-        ],
-        as: 'order',
+            0,
+          ],
+        },
       },
     },
-
-    { $unwind: '$order' },
 
     {
       $facet: {
@@ -779,7 +768,7 @@ export const buildReturnsStatusPipeline = (sellerObjectIds, range, channelIds = 
           { $sort: { value: -1 } },
         ],
         statusSummary: [
-          { $group: { _id: '$status', value: { $sum: 1 } } },
+          { $group: { _id: '$sellerStatus.status', value: { $sum: 1 } } },
           { $project: { _id: 0, key: '$_id', value: 1 } },
           { $sort: { key: 1 } },
         ],

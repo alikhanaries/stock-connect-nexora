@@ -9,7 +9,7 @@ import {
   cancelShipment,
   createManualShipment,
   createReverseShipment,
-  exportShipmentController,
+  exportShipmentsToCSV,
   downloadAymakanShipmentLabel,
 } from '#root/src/controllers/ShipmentController.js';
 import { authMiddleware, verifySellerAccess } from '#middleware/index.js';
@@ -20,7 +20,7 @@ import {
   cancelShipmentValidator,
   createManualShipmentValidator,
   createReverseShipmentValidator,
-  exportShipmentValidator,
+  exportShipmentsToCSVValidator,
   downloadLabelValidator,
 } from '#validations/shipment.js';
 
@@ -74,6 +74,15 @@ const router = express.Router();
  *       400: { description: "Validation failed" }
  */
 router.post('/createShipment', createShipmentValidator, checkLanguage, authMiddleware, createShipment);
+
+router.get(
+  '/exportShipmentsToCSV',
+  exportShipmentsToCSVValidator,
+  checkLanguage,
+  authMiddleware,
+  verifySellerAccess,
+  exportShipmentsToCSV
+);
 
 // GET ALL SHIPMENT
 /**
@@ -349,10 +358,11 @@ router.post(
   createReverseShipmentValidator,
   checkLanguage,
   authMiddleware,
+  verifySellerAccess,
   createReverseShipment
 );
 
-router.get('/exportShipment', exportShipmentValidator, authMiddleware, verifySellerAccess, exportShipmentController);
+router.get('/exportShipment', exportShipmentsToCSVValidator, authMiddleware, verifySellerAccess, exportShipmentsToCSV);
 
 router.get(
   '/downloadLabel/:shipmentId',

@@ -108,7 +108,7 @@ export const flattenAggregatedOrder = (order = {}) => {
     safeGet(order, 'orderSkuList') && Array.isArray(order.orderSkuList.skuList) ? order.orderSkuList.skuList : [];
 
   if (!Array.isArray(skuList) || skuList.length === 0) {
-    flattened['orderSkuList_skuList_count'] = 0;
+    flattened['orderSkuListCount'] = 0;
     // ensure commonly expected sku columns exist so headers align
     [
       'id',
@@ -128,10 +128,11 @@ export const flattenAggregatedOrder = (order = {}) => {
       'expectedDeliveryDate',
       'expectedShipmentDate',
     ].forEach((k) => {
-      flattened[`skuList_${k}_list`] = 'N/A';
+      const key = `sku${k.charAt(0).toUpperCase()}${k.slice(1)}`;
+      flattened[key] = 'N/A';
     });
   } else {
-    flattened['orderSkuList_skuList_count'] = skuList.length;
+    flattened['orderSkuListCount'] = skuList.length;
 
     // union of sku keys
     const allSkuKeys = new Set();
@@ -257,23 +258,23 @@ export const getAggregatedOrderHeaders = (sampleOrder) => {
 
   // SKU list headers
   const skuHeaders = [
-    'orderSkuList_skuList_count',
-    'skuList_id_list',
-    'skuList_merchantProductNo_list',
-    'skuList_description_list',
-    'skuList_quantity_list',
-    'skuList_status_list',
-    'skuList_unitPriceInclVat_list',
-    'skuList_lineTotalInclVat_list',
-    'skuList_gtin_list',
-    'skuList_channelProductNo_list',
-    'skuList_airWaybillNo_list',
-    'skuList_condition_list',
-    'skuList_vatRate_list',
-    'skuList_unitVat_list',
-    'skuList_lineVat_list',
-    'skuList_expectedDeliveryDate_list',
-    'skuList_expectedShipmentDate_list',
+    'orderSkuListCount',
+    'skuId',
+    'skuMerchantProductNo',
+    'skuDescription',
+    'skuQuantity',
+    'skuStatus',
+    'skuUnitPriceInclVat',
+    'skuLineTotalInclVat',
+    'skuGtin',
+    'skuChannelProductNo',
+    'skuAirWaybillNo',
+    'skuCondition',
+    'skuVatRate',
+    'skuUnitVat',
+    'skuLineVat',
+    'skuExpectedDeliveryDate',
+    'skuExpectedShipmentDate',
   ];
 
   return {
@@ -372,7 +373,7 @@ export const buildStatuses = ({ line, existingSku }) => {
   ];
 };
 
-const sanitizeOrdersData = async (orders) => {
+export const sanitizeOrdersData = async (orders) => {
   const orderIds = [];
   const skuSet = new Set();
 
@@ -398,28 +399,75 @@ const sanitizeOrdersData = async (orders) => {
   const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
   const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
 
-  // Step 3: map orders into bulkWrite operations
-  return orders.map((data) => {
+  //  final outputs
+  const bulkOps = [];
+  const sellerOrderPayloads = [];
+  const pendingLogs = [];
+
+  //  LOOP (NO async map)
+  for (const data of orders) {
     const existingOrder = existingOrdersMap.get(String(data.Id));
 
-    // Determine sellerId from first SKU
+    // sellerId from first SKU
     let finalSellerId = null;
     if (Array.isArray(data.Lines) && data.Lines.length > 0) {
       const firstSku = data.Lines[0].MerchantProductNo;
-      if (firstSku) finalSellerId = productSellerMap.get(firstSku) || null;
+      if (firstSku) {
+        finalSellerId = productSellerMap.get(firstSku) || null;
+      }
     }
 
-    // Build SKU list with normalized statuses & preserved fields
+    const sellerIdSet = new Set();
+
+    // SKU LIST
     const skuList = Array.isArray(data.Lines)
       ? data.Lines.map((line) => {
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+
+          const sellerIdFromMap = productSellerMap.get(line.MerchantProductNo) || null;
+          const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
+
+          if (!sellerId) return null;
+
+          sellerIdSet.add(String(sellerId));
+
+          const sellerOrderId = `${data.Id}_${sellerId}`;
+          const extraStatus = getExtraStatus(line?.ExtraData);
+          const normalizedExtraStatus = extraStatus?.toLowerCase();
+          const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
           const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
             ? existingSku.status
-            : normalizeSkuStatus(line.Status);
+            : mainStatus;
+          //  DELIVERY DETECTION
 
+          const alreadyDelivered = existingSku?.status === 'DELIVERED';
+          const isNowDelivered = normalizedExtraStatus === 'delivered' && !alreadyDelivered;
+          //  RETURN DETECTION
+          const alreadyReturned = existingSku?.status === 'RETURNED';
+          const isNowReturned = normalizedExtraStatus === 'returned' && !alreadyReturned;
+
+          if (isNowDelivered) {
+            pendingLogs.push({
+              orderId: data.Id, // string ID (important)
+              sellerId,
+              description: `SKU ${line.MerchantProductNo} has been delivered`,
+              createdAt: new Date(),
+              status: 'DELIVERED',
+            });
+          }
+          if (isNowReturned) {
+            pendingLogs.push({
+              orderId: data.Id,
+              sellerId,
+              description: `SKU ${line.MerchantProductNo} has been returned`,
+              createdAt: new Date(),
+              status: 'RETURNED',
+            });
+          }
           return {
-            // ---------- REQUIRED ----------
             id: line.Id,
+            sellerOrderId,
+            sellerId,
             merchantProductNo: line.MerchantProductNo,
             quantity: line.Quantity,
             unitPriceInclVat: line.UnitPriceInclVat ?? 0,
@@ -437,7 +485,7 @@ const sanitizeOrdersData = async (orders) => {
 
             airWaybillNo: existingSku?.airWaybillNo ?? null,
 
-            // ---------- OPTIONAL / METADATA ----------
+            // METADATA
             channelOrderLineNo: line.ChannelOrderLineNo,
             isFulfillmentByMarketplace: line.IsFulfillmentByMarketplace ?? false,
             gtin: line.Gtin,
@@ -450,6 +498,7 @@ const sanitizeOrdersData = async (orders) => {
                 }
               : undefined,
 
+            // PRICING
             unitVat: line.UnitVat,
             lineTotalInclVat: line.LineTotalInclVat,
             lineVat: line.LineVat,
@@ -472,6 +521,7 @@ const sanitizeOrdersData = async (orders) => {
             originalUnitPriceExclVat: line.OriginalUnitPriceExclVat,
             originalLineTotalExclVat: line.OriginalLineTotalExclVat,
 
+            // EXTRA
             extraData: Array.isArray(line.ExtraData)
               ? line.ExtraData.map((e) => ({
                   key: e.Key,
@@ -484,6 +534,7 @@ const sanitizeOrdersData = async (orders) => {
             feeRate: line.FeeRate,
             condition: line.Condition ?? 'UNKNOWN',
 
+            // DATES
             exactDeliveryDate: line.ExactDeliveryDate,
             expectedDeliveryDate: line.ExpectedDeliveryDate,
             latestDeliveryDate: line.LatestDeliveryDate,
@@ -492,15 +543,19 @@ const sanitizeOrdersData = async (orders) => {
             latestShipmentDate: line.LatestShipmentDate,
             cancelReason: existingSku?.cancelReason || (skuStatus === 'CANCELED' ? 'Other' : null),
           };
-        })
+        }).filter(Boolean)
       : [];
-
-    // Build update payload
+    // IGNORE ORDER IF SKU LIST IS EMPTY
+    if (!skuList.length) {
+      continue;
+    }
+    const orderSellerIds = Array.from(sellerIdSet);
     const updatePayload = {
-      orderId: data.Id,
+      orderId: data.Id?.toString(),
       channelOrderNumber: data.ChannelOrderNo,
       channelId: data.ChannelId,
       sellerId: finalSellerId,
+      sellerIds: orderSellerIds, //  multi-seller support
       channelName: data.ChannelName,
       globalChannelName: data.GlobalChannelName,
       globalChannelId: data.GlobalChannelId,
@@ -508,29 +563,39 @@ const sanitizeOrdersData = async (orders) => {
       merchantComment: data.MerchantComment,
       merchantOrderNo: data.MerchantOrderNo,
       isBusinessOrder: data.IsBusinessOrder,
+
+      // TOTALS
       subTotalInclVat: data.SubTotalInclVat,
       subTotalVat: data.SubTotalVat,
       shippingCostsInclVat: data.ShippingCostsInclVat,
       totalInclVat: data.TotalInclVat,
       totalVat: data.TotalVat,
+
+      subTotalExclVat: data.SubTotalExclVat,
+      totalExclVat: data.TotalExclVat,
+      shippingCostsExclVat: data.ShippingCostsExclVat,
+
+      // ORIGINAL TOTALS
       originalSubTotalInclVat: data.OriginalSubTotalInclVat,
       originalSubTotalVat: data.OriginalSubTotalVat,
       originalShippingCostsInclVat: data.OriginalShippingCostsInclVat,
       originalShippingCostsVat: data.OriginalShippingCostsVat,
       originalTotalInclVat: data.OriginalTotalInclVat,
       originalTotalVat: data.OriginalTotalVat,
-      subTotalExclVat: data.SubTotalExclVat,
-      totalExclVat: data.TotalExclVat,
-      shippingCostsExclVat: data.ShippingCostsExclVat,
+
       originalSubTotalExclVat: data.OriginalSubTotalExclVat,
       originalShippingCostsExclVat: data.OriginalShippingCostsExclVat,
       originalTotalExclVat: data.OriginalTotalExclVat,
+
+      // FEES
       originalSubTotalFee: data.OriginalSubTotalFee,
       subTotalFee: data.SubTotalFee,
       originalOrderFee: data.OriginalOrderFee,
       orderFee: data.OrderFee,
       originalTotalFee: data.OriginalTotalFee,
       totalFee: data.TotalFee,
+
+      // CUSTOMER
       orderCustomer: {
         orderId: data?.Id ?? null,
         gender: data?.BillingAddress?.Gender ?? 'NA',
@@ -542,6 +607,8 @@ const sanitizeOrdersData = async (orders) => {
         companyRegistrationNo: data?.CompanyRegistrationNo ?? null,
         channelCustomerNo: data?.ChannelCustomerNo ?? null,
       },
+
+      // PAYMENT
       orderPaymentDetails: {
         orderId: data?.Id ?? 'NA',
         vatNo: data?.VatNo ?? 'NA',
@@ -549,10 +616,14 @@ const sanitizeOrdersData = async (orders) => {
         paymentReferenceNo: data?.PaymentReferenceNo ?? 'NA',
         currencyCode: data?.CurrencyCode ?? 'NA',
       },
+
+      // SKU LIST
       orderSkuList: {
         orderId: data.Id,
         skuList,
       },
+
+      // SHIPPING ADDRESS
       orderShippingAddress: {
         line1: data?.ShippingAddress?.Line1 ?? 'NA',
         line2: data?.ShippingAddress?.Line2 ?? 'NA',
@@ -569,6 +640,8 @@ const sanitizeOrdersData = async (orders) => {
         region: data?.ShippingAddress?.Region ?? 'NA',
         countryIso: data?.ShippingAddress?.CountryIso ?? 'SA',
       },
+
+      // BILLING ADDRESS
       orderBillingAddress: {
         line1: data?.BillingAddress?.Line1 ?? 'NA',
         line2: data?.BillingAddress?.Line2 ?? 'NA',
@@ -586,21 +659,33 @@ const sanitizeOrdersData = async (orders) => {
         countryIso: data?.BillingAddress?.CountryIso ?? 'NA',
       },
 
+      // status: normalizeOrderStatus(data?.Status),
       status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
         ? existingOrder.status
         : normalizeOrderStatus(data?.Status),
     };
 
-    return {
+    //  Prepare SellerOrder payload (NO DB CALL HERE)
+    sellerOrderPayloads.push({
+      orderPayload: updatePayload,
+    });
+
+    // Order bulk
+    bulkOps.push({
       updateOne: {
-        filter: { orderId: data.Id },
+        filter: { orderId: String(data.Id), channelOrderNumber: data.ChannelOrderNo }, // FIXED UNIQUE FILTER
         update: { $set: updatePayload },
         upsert: true,
       },
-    };
-  });
-};
+    });
+  }
 
+  return {
+    bulkOps,
+    sellerOrderPayloads,
+    pendingLogs,
+  };
+};
 export const deriveOrderStatusFromSkus = (skuList = []) => {
   const s = aggregateSkuStatus(skuList);
 
