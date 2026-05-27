@@ -64,7 +64,7 @@ const buildAiEnrichBlock = (sellerId) => {
   const status = hasError ? 'error' : allDone ? 'done' : anyRunning ? 'running' : 'initializing';
 
   const totalProducts = translate?.totalProducts ?? categoryMap?.total ?? 0;
-  const updatedProducts = Math.max(translate?.updatedProducts ?? 0, categoryMap?.updated ?? 0);
+  const updatedProducts = operations.reduce((max, o) => Math.max(max, o.completed ?? 0), 0);
   const totalOperations = operations.length;
   const completedOperations = operations.filter((o) => o.status === 'done').length;
   const totalPercentage = totalOperations
