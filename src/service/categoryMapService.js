@@ -98,7 +98,11 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
     }
     await flushBuffer();
   } catch (error) {
-    // already marked as error in flushBuffer; just exit
+    try {
+      cursor.close?.();
+    } catch {
+      // ignore cursor close failure; original error is more relevant
+    }
     console.error('[CategoryMapService] Aborted due to error:', error.message);
     return { total: totalProducts, updated: updatedCount, error: true };
   }

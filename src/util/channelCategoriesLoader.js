@@ -111,7 +111,20 @@ export const loadChannelCategories = async () => {
     // Env override holding an HTTP(S) URL — e.g. a published Google Sheet.
     // Fetched once, then cached for the rest of the process.
     const url = toSheetCsvUrl(csvSource);
-    const res = await fetch(url);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    let res;
+    try {
+      res = await fetch(url, { signal: controller.signal });
+    } catch (err) {
+      const msg =
+        err.name === 'AbortError'
+          ? `Timed out fetching channel categories CSV after 30s from ${url}`
+          : `Failed to fetch channel categories CSV: ${err.message}`;
+      throw new Error(msg);
+    } finally {
+      clearTimeout(timeout);
+    }
     if (!res.ok) {
       throw new Error(`Failed to fetch channel categories CSV (${res.status} ${res.statusText}) from ${url}`);
     }
