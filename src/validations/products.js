@@ -865,28 +865,49 @@ export const getExpressWareHouseProductsValidator = validate(async (req) => {
 export const translateProductFieldValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
-  const querySchema = z.object({
-    sellerId: z
-      .string({ required_error: 'sellerId query param is required' })
-      .length(24, 'sellerId must be exactly 24 characters')
-      .regex(/^[0-9a-fA-F]{24}$/, 'Invalid sellerId format'),
-  });
+  const querySchema = z
+    .object({
+      sellerId: z
+        .string({ required_error: 'sellerId query param is required' })
+        .length(24, 'sellerId must be exactly 24 characters')
+        .regex(/^[0-9a-fA-F]{24}$/, 'Invalid sellerId format'),
+      productId: z
+        .string()
+        .length(24, 'productId must be exactly 24 characters')
+        .regex(/^[0-9a-fA-F]{24}$/, 'Invalid productId format')
+        .optional(),
+    })
+    .passthrough();
   querySchema.parse(req.query);
 
-  const bodySchema = z
+  const translateFieldsSchema = z
     .array(
       z
         .object({
           field: z.string({ required_error: 'field is required' }).min(1, 'field must not be empty'),
           lang: z.string({ required_error: 'lang is required' }).min(2).max(20),
         })
-        .strict(),
-      { required_error: 'request body must be an array of { field, lang } objects' }
+        .strict()
     )
-    .min(1, 'request body array must not be empty')
     .refine(
       (arr) => new Set(arr.map((i) => `${i.field}:${i.lang}`)).size === arr.length,
-      'duplicate field+lang combinations are not allowed'
+      'duplicate field+lang combinations are not allowed in translateFields'
+    )
+    .optional();
+
+  const bodySchema = z
+    .object({
+      translateFields: translateFieldsSchema,
+      enhanceImages: z.boolean().optional(),
+      mapCategories: z.boolean().optional(),
+    })
+    .strict()
+    .refine(
+      (b) =>
+        (Array.isArray(b.translateFields) && b.translateFields.length > 0) ||
+        b.enhanceImages === true ||
+        b.mapCategories === true,
+      'at least one of translateFields (non-empty), enhanceImages=true, or mapCategories=true must be provided'
     );
 
   bodySchema.parse(req.body);
