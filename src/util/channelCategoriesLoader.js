@@ -3,6 +3,8 @@ import path from 'path';
 import { config } from '#config/config.js';
 
 let _cache = null;
+let _cacheExpiresAt = 0;
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — restart not required for sheet updates
 
 const stripBom = (str) => (str.charCodeAt(0) === 0xfeff ? str.slice(1) : str);
 
@@ -95,7 +97,7 @@ const toSheetCsvUrl = (url) => {
 };
 
 export const loadChannelCategories = async () => {
-  if (_cache) return _cache;
+  if (_cache && Date.now() < _cacheExpiresAt) return _cache;
 
   const csvSource = config.CHANNEL_CATEGORIES_CSV;
   if (!csvSource) {
@@ -136,11 +138,13 @@ export const loadChannelCategories = async () => {
 
   console.log(`[ChannelCategories] Loaded ${paths.length} category paths from ${sourceLabel}`);
   _cache = { paths, pathSet: new Set(paths) };
+  _cacheExpiresAt = Date.now() + CACHE_TTL_MS;
   return _cache;
 };
 
 export const clearChannelCategoriesCache = () => {
   _cache = null;
+  _cacheExpiresAt = 0;
 };
 
 export const humanizeCategoryPath = (rawPath) => {

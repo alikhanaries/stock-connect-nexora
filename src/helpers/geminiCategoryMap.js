@@ -257,6 +257,8 @@ export const classifyProductsBatch = async (products, allowedPaths, pathSet, onC
   let cursor = 0;
   const worker = async () => {
     while (cursor < chunks.length) {
+      // cursor++ is a synchronous read-then-increment so each worker claims
+      // a unique chunk index before yielding at the first await below.
       const i = cursor++;
       const startIndex = i * CATEGORY_BATCH_SIZE;
       console.log(`[AI] Sending category chunk ${i + 1}/${chunks.length} (${chunks[i].length} products)`);

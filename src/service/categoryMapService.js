@@ -69,8 +69,9 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
       });
       if (ops.length) {
         const res = await Product.bulkWrite(ops, { ordered: false });
-        updatedCount += res.modifiedCount ?? ops.length;
-        addCategoryMapProgress(sellerId, results.length, ops.length);
+        const modifiedCount = res.modifiedCount ?? ops.length;
+        updatedCount += modifiedCount;
+        addCategoryMapProgress(sellerId, results.length, modifiedCount);
       } else {
         addCategoryMapProgress(sellerId, results.length, 0);
       }
