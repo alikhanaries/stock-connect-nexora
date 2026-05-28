@@ -191,6 +191,7 @@
   "NO_PRODUCTS_TO_ENRICH": "لم يتم العثور على منتجات لتحسين الذكاء الاصطناعي",
   "NO_ACTIVE_ENRICHMENT": "لم يتم العثور على تحسين ذكاء اصطناعي نشط لهذا البائع",
   "ENRICHMENT_ALREADY_RUNNING": "تحسين الذكاء الاصطناعي قيد التشغيل بالفعل لهذا البائع",
+  "NO_ENRICHMENT_JOB_REQUESTED": "يجب طلب مهمة واحدة على الأقل لتحسين الذكاء الاصطناعي",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "العملية غير ممكنة للقيم الفارغة",
   "ENRICHMENT_FAILED": "فشل تحسين الذكاء الاصطناعي",
   "ENRICHMENT_COMPLETED": "اكتمل. راجع التغييرات في الكتالوج."

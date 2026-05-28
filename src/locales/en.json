@@ -192,6 +192,7 @@
   "NO_PRODUCTS_TO_ENRICH": "No products found for AI Enrichment",
   "NO_ACTIVE_ENRICHMENT": "No active AI Enrichment found for this seller",
   "ENRICHMENT_ALREADY_RUNNING": "AI Enrichment already running for this seller",
+  "NO_ENRICHMENT_JOB_REQUESTED": "At least one AI Enrichment job must be requested",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "Operation is not possible for empty values",
   "ENRICHMENT_FAILED": "AI Enrichment failed",
   "ENRICHMENT_COMPLETED": "Finished. Review changes in the catalogue."

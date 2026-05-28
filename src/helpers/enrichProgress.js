@@ -38,15 +38,17 @@ const decorateCategoryMapOp = (categoryMap) => {
 };
 
 const pickActiveMessage = (operations, { doneMessage, errorMessage }) => {
+  if (!operations.length) return doneMessage;
+
   const errored = operations.find((o) => o.status === 'error');
   if (errored) return `${errorMessage}: ${errored.label}`;
 
   const active = operations.find((o) => o.status !== 'done');
   if (active) return active.label;
 
-  if (operations.length && operations.every((o) => o.status === 'done')) return doneMessage;
+  if (operations.every((o) => o.status === 'done')) return doneMessage;
 
-  return errorMessage.replace(/failed$/i, 'starting');
+  return doneMessage;
 };
 
 const buildAiEnrichBlock = (sellerId) => {
@@ -91,8 +93,9 @@ export const BLOCK_BUILDERS = {
 
 export const aggregateStatus = (blocks) => {
   const statuses = blocks.map((b) => b?.status).filter(Boolean);
+  if (!statuses.length) return 'done';
   if (statuses.some((s) => s === 'error')) return 'error';
-  if (statuses.length && statuses.every((s) => s === 'done')) return 'done';
+  if (statuses.every((s) => s === 'done')) return 'done';
   if (statuses.some((s) => s === 'running')) return 'running';
   return 'initializing';
 };

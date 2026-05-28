@@ -607,6 +607,10 @@ export const translateProductField = async (req, res) => {
     const wantMapCategories = mapCategories === true;
     const wantEnhanceImages = enhanceImages === true;
 
+    if (!wantTranslate && !wantMapCategories && !wantEnhanceImages) {
+      return failResponse(res, req.locale.NO_ENRICHMENT_JOB_REQUESTED, 400);
+    }
+
     if (enrichInProgress.has(sellerId)) {
       return failResponse(res, req.locale.ENRICHMENT_ALREADY_RUNNING, 409);
     }

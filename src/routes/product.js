@@ -692,7 +692,7 @@ productsRouter.patch(
  *       - `enhanceImages: true` → reserved; not yet implemented; silently skipped.
  *
  *       At least one of the three must be provided. Runs in the background — poll
- *       /products/progress-status?type=enrich (or ?type=translate / ?type=category-map for sub-jobs).
+ *       /products/progress-status?type=ai-enrich to check status.
  *     parameters:
  *       - in: header
  *         name: Accept-Language

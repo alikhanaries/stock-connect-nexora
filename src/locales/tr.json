@@ -190,6 +190,7 @@
   "NO_PRODUCTS_TO_ENRICH": "Yapay Zekâ Zenginleştirme için ürün bulunamadı",
   "NO_ACTIVE_ENRICHMENT": "Bu satıcı için aktif Yapay Zekâ Zenginleştirme bulunamadı",
   "ENRICHMENT_ALREADY_RUNNING": "Bu satıcı için Yapay Zekâ Zenginleştirme zaten devam ediyor",
+  "NO_ENRICHMENT_JOB_REQUESTED": "En az bir Yapay Zekâ Zenginleştirme işi talep edilmelidir",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "Boş değerler için işlem mümkün değil",
   "ENRICHMENT_FAILED": "Yapay Zekâ Zenginleştirme başarısız oldu",
   "ENRICHMENT_COMPLETED": "Tamamlandı. Değişiklikleri katalogda inceleyin."
