@@ -680,8 +680,19 @@ productsRouter.patch(
  * /products/translate-field:
  *   post:
  *     tags: [Products]
- *     summary: Translate product field(s) for all products of a seller using Gemini AI
- *     description: Auto-detects source language per field and skips fields already in the target language. Runs in the background.
+ *     summary: Run AI enrichment jobs (translate / map categories / enhance images) for a seller's products
+ *     description: |
+ *       Global AI pipeline. The body decides which jobs run:
+ *
+ *       - `translateFields` (non-empty array of `{field, lang}`) → translate each field/lang via the
+ *         translate service. Auto-detects source language per field and skips values already in the
+ *         target language.
+ *       - `mapCategories: true` → classify products against the channel categories CSV
+ *         (CHANNEL_CATEGORIES_CSV env) using Gemini and write the humanized path to `categoryTrail`.
+ *       - `enhanceImages: true` → reserved; not yet implemented; silently skipped.
+ *
+ *       At least one of the three must be provided. Runs in the background — poll
+ *       /products/progress-status?type=ai-enrich to check status.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -691,30 +702,34 @@ productsRouter.patch(
  *         required: true
  *         schema: { type: string }
  *         example: 692ff269d38670a5807918ac
+ *       - in: query
+ *         name: productId
+ *         required: false
+ *         description: If provided, enrich only this product. Otherwise enrich all non-removed products for the seller.
+ *         schema: { type: string }
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [translate]
  *             properties:
- *               translate:
+ *               translateFields:
  *                 type: array
  *                 items:
  *                   type: object
  *                   required: [field, lang]
  *                   properties:
- *                     field:
- *                       type: string
- *                       example: nameAr
- *                     lang:
- *                       type: string
- *                       example: en
+ *                     field: { type: string, example: nameAr }
+ *                     lang:  { type: string, example: ar }
+ *               enhanceImages: { type: boolean, example: true }
+ *               mapCategories: { type: boolean, example: true }
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  *       403: { $ref: "#/components/schemas/FailResponse" }
+ *       404: { $ref: "#/components/schemas/FailResponse" }
+ *       409: { $ref: "#/components/schemas/FailResponse" }
  */
 productsRouter.post(
   '/translate-field',
@@ -730,7 +745,7 @@ productsRouter.post(
  * /products/progress-status:
  *   get:
  *     tags: [Products]
- *     summary: Get the progress of an active background job (translate or sync)
+ *     summary: Get the progress of the AI enrichment job (translate + map categories + enhance images)
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -743,39 +758,53 @@ productsRouter.post(
  *       - in: query
  *         name: type
  *         required: true
- *         schema: { type: string, enum: [translate, sync] }
- *         description: The type of background job to check progress for
+ *         schema: { type: string, example: ai-enrich }
+ *         description: |
+ *           Comma-separated list of progress streams to fetch. Allowed values: `ai-enrich`, `sync`.
+ *           Examples: `?type=ai-enrich`, `?type=ai-enrich,sync`. The response shape is the same in both cases —
+ *           a `results` object keyed by the requested types.
  *     responses:
  *       200:
- *         description: Progress status returned successfully
+ *         description: Progress status returned successfully. The `message` reflects the currently-active operation's label.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 type:
- *                   type: string
- *                   example: translate
+ *                 types:
+ *                   type: array
+ *                   items: { type: string }
+ *                   example: [ai-enrich, sync]
  *                 status:
  *                   type: string
- *                   enum: [initializing, running, done]
- *                 totalOperations:
- *                   type: integer
- *                 completedOperations:
- *                   type: integer
- *                 operations:
- *                   type: array
- *                   items:
+ *                   enum: [initializing, running, done, error]
+ *                   description: Aggregate status across all requested types.
+ *                 results:
+ *                   type: object
+ *                   description: Keyed by type. Each block has its own internal status + operations.
+ *                   additionalProperties:
  *                     type: object
  *                     properties:
- *                       field: { type: string, example: nameAr }
- *                       lang: { type: string, example: ar }
- *                       total: { type: integer }
- *                       completed: { type: integer }
- *                       percentage: { type: integer }
- *                       status: { type: string, enum: [pending, running, done, error] }
- *                       error: { type: object, properties: { message: { type: string } } }
- *                       retryInfo: { type: object, properties: { message: { type: string } } }
+ *                       status: { type: string, enum: [initializing, running, done, error] }
+ *                       totalProducts: { type: integer }
+ *                       updatedProducts: { type: integer }
+ *                       totalOperations: { type: integer }
+ *                       completedOperations: { type: integer }
+ *                       operations:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             label: { type: string, example: Translate Description to Arabic }
+ *                             field: { type: string, example: descriptionAr, description: "Target field on Product. categoryTrail for the category-mapping op." }
+ *                             lang:  { type: string, example: ar, description: "Present only on translate operations." }
+ *                             total: { type: integer }
+ *                             completed: { type: integer }
+ *                             updated:   { type: integer, description: "Present only on category-map operations." }
+ *                             percentage: { type: integer }
+ *                             status: { type: string, enum: [pending, running, done, error, initializing] }
+ *                             error:     { type: object, properties: { message: { type: string } }, description: "Present only when status=error." }
+ *                             retryInfo: { type: object, properties: { message: { type: string } }, description: "Present only while a retry is in progress." }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  *       403: { $ref: "#/components/schemas/FailResponse" }
  *       404: { $ref: "#/components/schemas/FailResponse" }

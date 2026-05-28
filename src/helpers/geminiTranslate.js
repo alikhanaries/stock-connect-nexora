@@ -128,8 +128,17 @@ export const clearProgress = (sellerId) => {
   progressStore.delete(key(sellerId));
 };
 
-export const setPendingProgress = (sellerId) =>
-  progressStore.set(key(sellerId), { status: 'initializing', operations: [] });
+export const setPendingProgress = (sellerId, translateFields = []) =>
+  progressStore.set(key(sellerId), {
+    status: 'initializing',
+    operations: translateFields.map(({ field, lang }) => ({
+      field,
+      lang,
+      total: 0,
+      completed: 0,
+      status: 'pending',
+    })),
+  });
 
 export const initProgress = (sellerId, operations, { totalProducts = 0 } = {}) =>
   progressStore.set(key(sellerId), {

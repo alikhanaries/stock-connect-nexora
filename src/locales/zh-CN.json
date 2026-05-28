@@ -192,12 +192,12 @@
   "PRICE_MISSING": "缺少价格",
   "INVALID_ROW_DATA": "行数据无效",
   "INVALID_PRICE": "无效价格",
-  "TRANSLATION_STARTED": "翻译已在后台启动",
-  "NO_PRODUCTS_TO_TRANSLATE": "未找到需要翻译的产品",
-  "NO_ACTIVE_TRANSLATION": "未找到该卖家的活动翻译",
-  "TRANSLATION_ALREADY_RUNNING": "该卖家的翻译任务已在运行中",
+  "ENRICHMENT_STARTED": "智能增强已在后台启动",
+  "NO_PRODUCTS_TO_ENRICH": "未找到需要智能增强的产品",
+  "NO_ACTIVE_ENRICHMENT": "未找到该卖家的活动智能增强",
+  "ENRICHMENT_ALREADY_RUNNING": "该卖家的智能增强任务已在运行中",
+  "NO_ENRICHMENT_JOB_REQUESTED": "必须至少请求一个智能增强任务",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "无法对空值执行操作",
-  "TRANSLATION_FAILED": "翻译失败",
-  "TRANSLATION_COMPLETED": "翻译已完成。请在目录中检查更改。",
-  "TRANSLATION_IN_PROGRESS": "翻译进行中"
+  "ENRICHMENT_FAILED": "智能增强失败",
+  "ENRICHMENT_COMPLETED": "已完成。请在目录中检查更改。"
 }
