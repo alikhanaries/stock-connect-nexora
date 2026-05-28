@@ -557,7 +557,7 @@ export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
 
     const quantity = returnProduct.quantity || 0;
 
-    const unitPriceExclVat = matchingSku?.unitPriceExclVat || matchingSku?.lineTotalInclVat || 0;
+    const unitPriceExclVat = matchingSku?.unitPriceExclVat || matchingSku?.lineTotalInclVat || returnProduct.price || 0;
     const unitVat = matchingSku?.unitVat || 0;
     const unitPriceInclVat = unitPriceExclVat + unitVat;
 
