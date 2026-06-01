@@ -6,6 +6,7 @@ import Order from '../models/Orders.js';
 import OrderLogs from '../models/OrderLogs.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import { errorLog } from '../middleware/errorLogMiddleware.js';
+import { upsertSellerOrdersFromOrder } from './sellerOrderService.js';
 
 export const syncAmazonOrders = async (sellerId, locale, userId) => {
   try {
@@ -61,19 +62,27 @@ export async function getNewAmazonOrders(url, locale, sellerId) {
 
 export const processAmazonOrders = async (orders, sellerId, userId) => {
   try {
-    const operations = await sanitizeAmazonOrdersData(orders, sellerId);
+    const { bulkOps, sellerOrderPayloads } = await sanitizeAmazonOrdersData(orders, sellerId);
 
-    if (operations.length === 0) {
+    if (bulkOps.length === 0) {
       return { success: true, data: { upsertedCount: 0, modifiedCount: 0 } };
     }
 
-    const result = await Order.bulkWrite(operations);
+    const result = await Order.bulkWrite(bulkOps);
+
+    // Upsert into SellerOrder collection
+    await Promise.all(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
     const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
 
-    const orderLogs = upsertedIndexes.map((index, i) => {
+    // Build log entries for each newly created order (one per seller)
+    const orderLogs = [];
+
+    for (let i = 0; i < upsertedIndexes.length; i++) {
+      const index = upsertedIndexes[i];
       const order = orders[index];
       const orderId = upsertedOrderIds[i];
+      const latestOrderData = await Order.findOne({ _id: orderId }, { _id: 1, orderId: 1, sellerIds: 1 }).lean();
 
       const logDetails = [
         {
@@ -83,15 +92,44 @@ export const processAmazonOrders = async (orders, sellerId, userId) => {
         },
       ];
 
-      return {
-        orderId,
-        details: logDetails,
-      };
-    });
+      const sellerIds = latestOrderData?.sellerIds?.length ? latestOrderData.sellerIds : [sellerId];
 
-    // Insert logs only for newly created orders
-    if (orderLogs.length > 0) {
-      await OrderLogs.insertMany(orderLogs);
+      for (const sId of sellerIds) {
+        orderLogs.push({
+          orderId,
+          sellerId: sId,
+          details: logDetails,
+        });
+      }
+    }
+
+    const orderLogsBulkOps = [];
+
+    for (const log of orderLogs) {
+      for (const detail of log.details) {
+        orderLogsBulkOps.push({
+          updateOne: {
+            filter: {
+              orderId: log.orderId,
+              sellerId: log.sellerId,
+            },
+            update: {
+              $addToSet: {
+                details: {
+                  status: detail.status,
+                  description: detail.description,
+                  createdAt: detail.createdAt,
+                },
+              },
+            },
+            upsert: true,
+          },
+        });
+      }
+    }
+
+    if (orderLogsBulkOps.length) {
+      await OrderLogs.bulkWrite(orderLogsBulkOps);
       console.log('Inserted order logs:', orderLogs.length);
     } else {
       console.log('No new orders created — skipping log insertion');

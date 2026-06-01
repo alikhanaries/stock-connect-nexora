@@ -1,22 +1,21 @@
 import { config } from '#config/config.js';
 import Order from '../models/Orders.js';
 import Return from '../models/Return.js';
+import Seller from '#root/src/models/Seller.js';
 import Product from '../models/Product.js';
-import Shipment from '../models/Shipment/Shipment.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
+import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 import mongoose from 'mongoose';
 import { formatDateTime } from '#root/src/helpers/Common.js';
 import {
   sanitizeReturnData,
   getOrderDataByOrderLineIds,
-  isNameOrEmailSearch,
   buildReturnAggregationPipeline,
   buildReturnMatchAndPipeline,
   formatReturnDetails,
 } from '#helpers/ReturnHandler.js';
 import {
-  escapeCsv,
   generateCSVFilename,
   createCSVExportResponse,
   validateExportData,
@@ -33,63 +32,117 @@ const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 export const getReturns = async (queryParams = {}) => {
   try {
-    const params = new URLSearchParams({
-      ...queryParams,
-      apikey: `${CHANNEL_ENGINE_API_KEY}`,
-    });
+    let page = 1;
+    const pageSize = 100;
+    let hasMore = true;
 
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
-    const responseData = await response.json();
+    let totalProcessed = 0;
+    let totalUpserted = 0;
+    let totalModified = 0;
 
-    if (!response.ok) {
-      return { success: false, message: `ChannelEngine API error: ${response.status}`, error: responseData };
-    }
+    while (hasMore) {
+      const params = new URLSearchParams({
+        ...queryParams,
+        apikey: CHANNEL_ENGINE_API_KEY,
+        page,
+        pageSize,
+      });
 
-    const { Content = [] } = responseData;
-    if (!Content.length) return { success: true, data: { Content: [], upsertedCount: 0, totalProcessed: 0 } };
+      const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
 
-    // Save returns using bulk operations to track new vs existing
-    const bulkOps = [];
-
-    for (const returnData of Content) {
-      // Sanitize return data using helper
-      const sanitizationResult = await sanitizeReturnData(returnData, Order);
-      if (!sanitizationResult.success) {
-        console.warn('Sanitization failed for return:', returnData.Id);
-        continue;
+      if (!response.ok) {
+        return {
+          success: false,
+          message: `ChannelEngine API error: ${response.status}`,
+        };
       }
 
-      const simplifiedReturnDocument = sanitizationResult.data;
+      const responseData = await response.json();
+      const { Content = [] } = responseData;
 
-      // Add bulk upsert operation
-      bulkOps.push({
-        updateOne: {
-          filter: { returnId: simplifiedReturnDocument.returnId },
-          update: { $set: simplifiedReturnDocument },
-          upsert: true,
-        },
-      });
-    }
+      if (!Content.length) {
+        hasMore = false;
+        break;
+      }
 
-    let upsertedCount = 0;
-    let modifiedCount = 0;
-    if (bulkOps.length > 0) {
-      const result = await Return.bulkWrite(bulkOps);
-      upsertedCount = result.upsertedCount || 0;
-      modifiedCount = result.modifiedCount || 0;
+      const bulkOps = [];
+      const normalizedReturns = []; //  for order updates
+
+      for (const returnData of Content) {
+        // Sanitize return data using helper
+        const sanitizationResult = await sanitizeReturnData(returnData, Order);
+        if (!sanitizationResult.success) {
+          console.warn('Sanitization failed for return:', returnData?.Id);
+          continue;
+        }
+
+        const simplifiedReturnDocument = sanitizationResult.data;
+
+        // Add bulk upsert operation
+        bulkOps.push({
+          updateOne: {
+            filter: {
+              returnId: simplifiedReturnDocument.returnId,
+            },
+            update: {
+              $set: simplifiedReturnDocument,
+            },
+            upsert: true,
+          },
+        });
+
+        //  Prepare for Order SKU update
+        if (Array.isArray(simplifiedReturnDocument.products)) {
+          for (const product of simplifiedReturnDocument.products) {
+            normalizedReturns.push({
+              returnId: simplifiedReturnDocument.returnId,
+              orderId: simplifiedReturnDocument.orderId,
+
+              //  IMPORTANT: match with your Order schema field
+              channelOrderLineNo: String(product.orderLineId),
+
+              quantity: product.quantity || 0,
+            });
+          }
+        }
+      }
+
+      if (bulkOps.length > 0) {
+        const result = await Return.bulkWrite(bulkOps);
+
+        totalUpserted += result.upsertedCount || 0;
+        totalModified += result.modifiedCount || 0;
+
+        //  Update SKU breakdown in Orders
+        if (normalizedReturns.length > 0) {
+          await applyReturnToOrder(normalizedReturns);
+        }
+      }
+
+      totalProcessed += Content.length;
+
+      // stop when last page reached
+      if (Content.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
     }
 
     return {
       success: true,
       data: {
-        ...responseData,
-        upsertedCount,
-        modifiedCount,
-        totalProcessed: Content.length,
+        totalProcessed,
+        totalUpserted,
+        totalModified,
       },
     };
   } catch (error) {
-    return { success: false, message: 'Error communicating with ChannelEngine.', error: error.message };
+    return {
+      success: false,
+      message: 'Error communicating with ChannelEngine.',
+      error: error.message,
+    };
   }
 };
 
@@ -141,21 +194,85 @@ export const saveReturnToDatabase = async (returnData) => {
 
 //Gets returns from the database with pagination and filtering using aggregation.
 
-export const getReturnsFromDatabase = async (query = {}) => {
+export const getReturnsFromDatabase = async (query = {}, sellerId = null) => {
   try {
-    const { status, sortOrder = 'asc', sortBy = 'placedOn', page = 1, size = 10, channelId, platform, channel } = query;
+    const {
+      status,
+      platform,
+      search,
+      size = 100000,
+      sortBy = 'placedOn',
+      sortOrder = 'desc',
+      dateFrom,
+      dateTo,
+      page = 1,
+      channel,
+    } = query;
+
+    //   pass sellerId separately (so sellerStatus filter works)
+    const queryObj = {
+      channel,
+      status,
+      platform,
+      search,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortOrder,
+      size,
+      page,
+    };
 
     const skip = (parseInt(page, 10) - 1) * parseInt(size, 10);
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
+    const { pipeline } = await buildReturnMatchAndPipeline(queryObj, {
+      includeSearchNameSplit: true,
+    });
     const appliedFilters = {};
-    // Validate status if provided
+
+    //  Apply channel filter early
+    let channelIdsFromName = [];
+
+    if (channel) {
+      const channelNames = channel
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean);
+
+      const regexArray = channelNames.map((name) => ({
+        channelName: { $regex: name, $options: 'i' },
+      }));
+
+      const matchedChannels = await Channel.find({ $or: regexArray }).select('channelId').lean();
+
+      channelIdsFromName = matchedChannels.map((c) => c.channelId);
+
+      pipeline.push({
+        $match: { channelId: { $in: channelIdsFromName } },
+      });
+
+      appliedFilters.channel = channel;
+    }
+
+    let sellerObjectId = null;
+
+    if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
+      sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
+
+      pipeline.push({
+        $match: {
+          $or: [{ sellerIds: { $in: [sellerObjectId] } }, { sellerIds: { $exists: false } }],
+        },
+      });
+    }
+
+    //  STATUS FILTER (Seller-specific)
     if (status) {
       const statusArray = status
         .toString()
         .split(',')
         .map((s) => s.trim().toUpperCase());
 
-      // Check each provided status
       const invalid = statusArray.filter((s) => !Object.values(RETURN_STATUS).includes(s));
 
       if (invalid.length > 0) {
@@ -165,80 +282,55 @@ export const getReturnsFromDatabase = async (query = {}) => {
       }
 
       appliedFilters.status = status;
-    }
 
-    // Add other filters to appliedFilters
-    if (channelId) appliedFilters.channelId = channelId;
-    if (channel) appliedFilters.channel = channel;
-    if (platform) appliedFilters.platform = platform;
-
-    const { pipeline } = buildReturnMatchAndPipeline(query, {
-      includeSearchNameSplit: true,
-    });
-
-    pipeline.push(
-      {
-        $addFields: {
-          orderID: { $ifNull: ['$orderId', '$orderInfo.orderId'] },
-          customer: {
-            $concat: [
-              { $ifNull: ['$orderInfo.orderCustomer.firstName', ''] },
-              ' ',
-              { $ifNull: ['$orderInfo.orderCustomer.lastName', ''] },
+      if (sellerObjectId) {
+        pipeline.push({
+          $match: {
+            $or: [
+              {
+                sellerStatuses: {
+                  $elemMatch: {
+                    sellerId: sellerObjectId,
+                    status: { $in: statusArray },
+                  },
+                },
+              },
+              // fallback for old data
+              { sellerStatuses: { $exists: false }, status: { $in: statusArray } },
             ],
           },
-          email: '$orderInfo.orderCustomer.email',
-          phoneNumber: '$orderInfo.orderCustomer.phone',
-          orderTotalPrice: '$orderInfo.totalInclVat',
-          placedOn: { $ifNull: ['$placedOn', '$createdAt'] },
+        });
+      } else {
+        pipeline.push({
+          $match: {
+            status: { $in: statusArray },
+          },
+        });
+      }
+    }
+
+    // Normalize fields
+    pipeline.push({
+      $addFields: {
+        orderID: { $ifNull: ['$orderId', '$orderInfo.orderId'] },
+        placedOn: { $ifNull: ['$placedOn', '$createdAt'] },
+      },
+    });
+
+    // Customer extraction
+    pipeline.push({
+      $addFields: {
+        customer: {
+          firstName: { $ifNull: ['$orderInfo.orderCustomer.firstName', 'NA'] },
+          lastName: { $ifNull: ['$orderInfo.orderCustomer.lastName', 'NA'] },
+          email: { $ifNull: ['$orderInfo.orderCustomer.email', 'NA'] },
+          phone: { $ifNull: ['$orderInfo.orderCustomer.phone', 'NA'] },
         },
       },
-      {
-        $addFields: {
-          customer: {
-            $cond: [{ $eq: [{ $trim: { input: '$customer' } }, ''] }, null, { $trim: { input: '$customer' } }],
-          },
-          quantity: '$totalQuantity',
-          totalPrice: { $ifNull: ['$orderTotalPrice', '$totalPrice'] },
-          orderSkus: {
-            $map: {
-              input: { $ifNull: ['$orderInfo.orderSkuList.skuList', []] },
-              as: 'sku',
-              in: {
-                productSku: '$$sku.merchantProductNo',
-                productPrice: '$$sku.originalUnitPriceInclVat',
-              },
-            },
-          },
-        },
-      }
-    );
-    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (query.search && isNameOrEmailSearch(query.search)) {
-      const words = query.search.trim().split(/\s+/);
+    });
 
-      const andConditions = words.map((word) => {
-        const safeWord = escapeRegex(word);
-        const regex = new RegExp(safeWord, 'i');
-
-        return {
-          $or: [{ customer: { $regex: regex } }, { email: { $regex: regex } }, { orderID: { $regex: regex } }],
-        };
-      });
-
-      pipeline.push({
-        $match: { $and: andConditions },
-      });
-    }
-
-    // ====== Count and Paginate ======
-    const countPipeline = [...pipeline, { $count: 'total' }];
-
-    // Handle sorting - map orderID to the actual field name
+    // Sorting
     let actualSortBy = sortBy;
-    if (sortBy === 'placedOn') {
-      actualSortBy = 'placedOn';
-    }
 
     if (sortBy === 'returnId') {
       pipeline.push({
@@ -248,6 +340,8 @@ export const getReturnsFromDatabase = async (query = {}) => {
       });
       actualSortBy = 'returnIdNumeric';
     }
+
+    const countPipeline = [...pipeline, { $count: 'total' }];
 
     pipeline.push({ $sort: { [actualSortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size, 10) });
 
@@ -265,48 +359,77 @@ export const getReturnsFromDatabase = async (query = {}) => {
     const totalReturns = countResult?.[0]?.total || 0;
 
     const formattedReturns = results.map((r) => {
-      const orderSkuMap = new Map((r.orderSkus || []).map((sku) => [sku.productSku, sku]));
+      const sellerObjectIdStr = sellerObjectId ? String(sellerObjectId) : null;
 
-      const matchedSkus = (r.products || []).map((p) => {
+      const orderSkuMap = new Map(
+        (r.orderInfo?.orderSkuList?.skuList || []).map((sku) => [sku.merchantProductNo, sku])
+      );
+
+      const sellerProducts = (r.products || []).filter((p) => {
+        if (!sellerObjectIdStr) return true;
+        const orderSku = orderSkuMap.get(p.productSkuCode);
+        return orderSku && String(orderSku.sellerId) === sellerObjectIdStr;
+      });
+
+      //  Seller-specific status logic
+      let sellerStatus = r.status || 'NA';
+
+      if (sellerObjectIdStr && Array.isArray(r.sellerStatuses)) {
+        const sellerStatusObj = r.sellerStatuses.find((s) => String(s.sellerId) === sellerObjectIdStr);
+
+        if (sellerStatusObj?.status) {
+          sellerStatus = sellerStatusObj.status;
+        } else {
+          sellerStatus = 'IN_PROGRESS';
+        }
+      }
+
+      const mappedProducts = sellerProducts.map((p) => {
         const quantity = p.quantity || 0;
         const orderSku = orderSkuMap.get(p.productSkuCode);
 
         let productPrice = 0;
-        if (orderSku && typeof orderSku.productPrice === 'number') {
-          productPrice = orderSku.productPrice;
-        } else if (typeof p.price === 'number') {
+        if (orderSku?.originalUnitPriceInclVat) {
+          productPrice = orderSku.originalUnitPriceInclVat;
+        } else if (p.price) {
           productPrice = p.price;
-        } else {
-          console.warn(`Missing price for returned product SKU ${p.productSkuCode} in return ${r._id}`);
         }
 
         return {
-          productSku: p.productSkuCode,
-          productPrice,
           quantity,
-          totalPrice: (productPrice || 0) * quantity,
+          totalPrice: productPrice * quantity,
         };
       });
 
-      const totalPrice = matchedSkus.reduce((sum, sku) => sum + sku.totalPrice, 0) || 0;
+      const totalQuantity = mappedProducts.reduce((sum, p) => sum + p.quantity, 0);
+      const totalPrice = mappedProducts.reduce((sum, p) => sum + p.totalPrice, 0);
 
       return {
         _id: r._id,
-        orderID: r.orderID || null,
-        channelId: r.channelId || null,
-        quantity: r.quantity || 0,
+        returnId: r.returnId || 'NA',
+        orderID: r.orderID || 'NA',
+        channelId: r.channelId,
+        channelImage: channelMap[r.channelId] || 'NA',
+
+        //  UPDATED STATUS
+        status: sellerStatus,
+
+        platform: r.platform || 'NA',
+        placedOn: r.placedOn || 'NA',
+
+        quantity: totalQuantity,
         totalPrice,
-        customer: r.customer || null,
-        placedOn: r.placedOn,
-        email: r.email || null,
-        phoneNumber: r.phoneNumber || null,
-        status: r.status,
-        platform: r.platform,
-        returnId: r.returnId,
-        reason: r.reason || null,
-        customerComment: r.customerComment || null,
-        merchantComment: r.merchantComment || null,
-        channelImage: channelMap[r.channelId],
+        sellerId,
+
+        reason: r.reason || 'NA',
+        customerComment: r.customerComment || 'NA',
+        merchantComment: r.merchantComment || 'NA',
+
+        customerInfo: {
+          name: `${r.orderInfo?.orderCustomer?.firstName || 'NA'} ${r.orderInfo?.orderCustomer?.lastName || ''}`.trim(),
+          email: r.orderInfo?.orderCustomer?.email || 'NA',
+          phoneNo: r.orderInfo?.orderCustomer?.phone || 'NA',
+        },
       };
     });
 
@@ -477,20 +600,53 @@ export const acceptOrRejectReturn = async (returnData) => {
     };
   }
 };
-
-export const getReturnById = async (id) => {
+export const getReturnById = async (id, sellerId) => {
   try {
-    const returnDataCheck = await Return.findById(id).lean();
-    if (!returnDataCheck) {
-      return null;
-    }
+    if (!mongoose.Types.ObjectId.isValid(id)) return null;
 
-    // --- Step 1: Sync shipment status before fetching ---
+    const returnDataCheck = await Return.findById(id).lean();
+    if (!returnDataCheck) return null;
+
     await syncReturnShipmentStatus(id);
 
-    // --- Step 2: Aggregate Return + Latest Shipment ---
+    //  Proper sellerId validation
+    let sellerObjectId = null;
+
+    if (sellerId && sellerId !== 'null' && sellerId !== 'undefined' && mongoose.Types.ObjectId.isValid(sellerId)) {
+      sellerObjectId = new mongoose.Types.ObjectId(sellerId);
+    }
+
+    const matchStage = {
+      _id: new mongoose.Types.ObjectId(id),
+    };
+
+    //  Filter by seller products if sellerId present
+    if (sellerObjectId) {
+      matchStage['products.sellerId'] = sellerObjectId;
+    }
+
     const [returnData] = await Return.aggregate([
-      { $match: { _id: new mongoose.Types.ObjectId(id) } },
+      { $match: matchStage },
+
+      ...(sellerObjectId
+        ? [
+            {
+              $addFields: {
+                products: {
+                  $filter: {
+                    input: '$products',
+                    as: 'product',
+                    cond: {
+                      $eq: ['$$product.sellerId', sellerObjectId],
+                    },
+                  },
+                },
+              },
+            },
+            { $match: { products: { $ne: [] } } },
+          ]
+        : []),
+
       {
         $lookup: {
           from: 'shipments',
@@ -499,11 +655,15 @@ export const getReturnById = async (id) => {
             {
               $match: {
                 $expr: {
-                  $and: [{ $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] }],
+                  $and: [
+                    { $in: ['$_id', { $ifNull: ['$$shipment_ids', []] }] },
+                    ...(sellerObjectId ? [{ $eq: ['$sellerId', sellerObjectId] }] : []),
+                    { $eq: ['$type', 'REVERSE'] },
+                  ],
                 },
               },
             },
-            { $sort: { createdAt: -1 } }, // get the latest
+            { $sort: { createdAt: -1 } },
             { $limit: 1 },
             {
               $project: {
@@ -511,7 +671,8 @@ export const getReturnById = async (id) => {
                 merchantShipmentNo: 1,
                 status: 1,
                 createdAt: 1,
-                _id: 0,
+                _id: 1,
+                deliveryId: 1,
               },
             },
           ],
@@ -524,30 +685,66 @@ export const getReturnById = async (id) => {
           preserveNullAndEmptyArrays: true,
         },
       },
+
+      // Product lookup for images
+      {
+        $lookup: {
+          from: 'products',
+          let: { skuCodes: '$products.productSkuCode' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $in: ['$productSkuCode', { $ifNull: ['$$skuCodes', []] }],
+                },
+              },
+            },
+            {
+              $project: {
+                productSkuCode: 1,
+                primaryImageUrl: 1,
+                imageUrl: 1,
+                images: 1,
+              },
+            },
+          ],
+          as: 'productData',
+        },
+      },
     ]);
 
     if (!returnData) return null;
 
-    // Extract orderLineIds from products
+    //  NEW: Seller-specific status logic
+    let finalStatus = returnData.status || 'NA';
+
+    if (sellerObjectId && Array.isArray(returnData.sellerStatuses)) {
+      const sellerStatusObj = returnData.sellerStatuses.find((s) => String(s.sellerId) === String(sellerObjectId));
+
+      if (sellerStatusObj?.status) {
+        finalStatus = sellerStatusObj.status;
+      } else {
+        finalStatus = 'IN_PROGRESS'; // fallback if seller not found
+      }
+    }
+
+    //  Fetch order info
     const orderLineIds = returnData.products?.map((p) => p.orderLineId).filter(Boolean) || [];
 
     let orderInfo = null;
 
-    // --- Step 4: Fetch order data if applicable ---
     if (orderLineIds.length > 0) {
       orderInfo = await getOrderDataByOrderLineIds(orderLineIds, Order, {
         orderId: 1,
-        totalInclVat: 1,
         subTotalExclVat: 1,
         subTotalVat: 1,
         shippingCostsExclVat: 1,
         shippingCostsVat: 1,
-        channelName: 1,
-        orderCustomer: 1,
-        orderShippingAddress: 1,
-        orderPaymentDetails: 1,
-        'orderSkuList.skuList': 1,
+        orderSkuList: 1,
         _id: 1,
+        orderShippingAddress: 1,
+        orderCustomer: 1,
+        orderPaymentDetails: 1,
       });
     }
     const skuCodes = returnData.products?.map((p) => p.productSkuCode).filter(Boolean) || [];
@@ -558,11 +755,11 @@ export const getReturnById = async (id) => {
       : [];
     const imageMap = Object.fromEntries(productImages.map((p) => [p.productSkuCode, p.imageUrl ?? null]));
 
-    // Format the log details safely
     const returnLogsData = returnData?.logs?.length ? formatReturnTrackingInf(returnData.logs) : [];
+
     const aggregatedResult = {
       ...returnData,
-      totalQuantity: returnData.products?.reduce((sum, product) => sum + (product.quantity || 0), 0) || 0,
+      status: finalStatus, //  override with seller-specific status
       orderInfo,
       returnLogsData,
       omniful: returnData.omniful || null,
@@ -593,6 +790,17 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       return { success: false, message: 'Seller ID is required for export' };
     }
 
+    let sellerName = '';
+
+    const seller = await Seller.findById(sellerId).select('name');
+    sellerName = seller?.name || '';
+
+    const safeSellerName = sellerName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/gi, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
+
     const {
       status,
       platform,
@@ -603,13 +811,25 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       dateFrom,
       dateTo,
       page = 1,
+      channel,
     } = filters;
 
-    const queryObj = { sellerId, status, platform, search, dateFrom, dateTo, sortBy, sortOrder, size, page };
+    //   pass sellerId separately (so sellerStatus filter works)
+    const queryObj = {
+      channel,
+      status,
+      platform,
+      search,
+      dateFrom,
+      dateTo,
+      sortBy,
+      sortOrder,
+      size,
+      page,
+    };
 
-    const basicResult = await (typeof getReturnsFromDatabase === 'function'
-      ? getReturnsFromDatabase(queryObj)
-      : Promise.resolve({ data: [] }));
+    const basicResult = await getReturnsFromDatabase(queryObj, sellerId);
+
     const validation = validateExportData(basicResult.data, 'returns');
     if (!validation.success) return validation;
 
@@ -623,14 +843,6 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       })
       .filter(Boolean);
 
-    const pickupModelFields = Array.isArray(generateDynamicHeaders(PickupAddress))
-      ? generateDynamicHeaders(PickupAddress).filter((h) => h !== '_id')
-      : [];
-    const deliveryModelFields = Array.isArray(generateDynamicHeaders(DeliveryAddress))
-      ? generateDynamicHeaders(DeliveryAddress).filter((h) => h !== '_id')
-      : [];
-
-    // When no return IDs found → show message
     if (!returnIds.length) {
       return {
         success: false,
@@ -639,36 +851,11 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
       };
     }
 
+    const pickupModelFields = generateDynamicHeaders(PickupAddress)?.filter((h) => h !== '_id') || [];
+    const deliveryModelFields = generateDynamicHeaders(DeliveryAddress)?.filter((h) => h !== '_id') || [];
+
     const pipeline = typeof buildReturnAggregationPipeline === 'function' ? buildReturnAggregationPipeline() : [];
     pipeline.push({ $match: { _id: { $in: returnIds } } });
-
-    pipeline.push({
-      $lookup: {
-        from: Shipment.collection?.collectionName || 'shipments',
-        let: { orderIdFromOrderInfo: '$orderInfo._id', orderIdFromReturn: '$orderId' },
-        pipeline: [
-          {
-            $match: {
-              $expr: {
-                $and: [
-                  { $ne: ['$status', 'CANCELED'] },
-                  {
-                    $or: [
-                      { $eq: ['$orderId', '$$orderIdFromOrderInfo'] },
-                      { $eq: ['$orderId', { $toString: '$$orderIdFromOrderInfo' }] },
-                      { $eq: ['$orderId', '$$orderIdFromReturn'] },
-                      { $eq: ['$_id', '$$orderIdFromReturn'] },
-                    ],
-                  },
-                ],
-              },
-            },
-          },
-          { $limit: 1 },
-        ],
-        as: 'shipments',
-      },
-    });
 
     pipeline.push({ $addFields: { shipment: { $arrayElemAt: ['$shipments', 0] } } });
 
@@ -677,7 +864,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         shipment: {
           $cond: [
             { $ifNull: ['$shipment', false] },
-            { pickUpId: '$shipment.pickUpId', deliveryId: '$shipment.deliveryId' },
+            { pickUpId: '$shipmentData.pickUpId', deliveryId: '$shipmentData.deliveryId' },
             null,
           ],
         },
@@ -691,17 +878,12 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     pipeline.push({
       $lookup: {
         from: pickupCollectionName,
-        let: { pickupId: '$shipment.pickUpId' },
+        let: { pickupId: '$shipmentData.deliveryId' },
         pipeline: [
           {
             $match: {
               $expr: {
-                $and: [
-                  { $ne: ['$$pickupId', null] },
-                  {
-                    $or: [{ $eq: ['$_id', '$$pickupId'] }, { $eq: [{ $toString: '$_id' }, '$$pickupId'] }],
-                  },
-                ],
+                $and: [{ $ne: ['$$pickupId', null] }, { $eq: ['$_id', '$$pickupId'] }],
               },
             },
           },
@@ -715,17 +897,12 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     pipeline.push({
       $lookup: {
         from: deliveryCollectionName,
-        let: { deliveryId: '$shipment.deliveryId' },
+        let: { deliveryId: '$shipmentData.pickUpId' },
         pipeline: [
           {
             $match: {
               $expr: {
-                $and: [
-                  { $ne: ['$$deliveryId', null] },
-                  {
-                    $or: [{ $eq: ['$_id', '$$deliveryId'] }, { $eq: [{ $toString: '$_id' }, '$$deliveryId'] }],
-                  },
-                ],
+                $and: [{ $ne: ['$$deliveryId', null] }, { $eq: ['$_id', '$$deliveryId'] }],
               },
             },
           },
@@ -734,30 +911,46 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         as: 'deliveryAddress',
       },
     });
-
     pipeline.push({
       $addFields: {
         'shipment.pickupAddress': { $arrayElemAt: ['$pickupAddress', 0] },
         'shipment.deliveryAddress': { $arrayElemAt: ['$deliveryAddress', 0] },
       },
     });
-
     pipeline.push({ $project: { shipments: 0, pickupAddress: 0, deliveryAddress: 0 } });
 
     const aggregated = await Return.aggregate(pipeline).allowDiskUse(true);
 
-    const detailedValidation = validateExportData(aggregated, 'detailed return data');
-    if (!detailedValidation.success) return detailedValidation;
+    const returnHeadersRaw = generateDynamicHeaders(Return);
 
-    const returnHeaders = generateDynamicHeaders(Return);
-    const shipmentSingleHeader = ['pickUpId', 'deliveryId'];
-    const pickupPrefixedHeaders = pickupModelFields.map((h) => `pickup_${h}`);
-    const deliveryPrefixedHeaders = deliveryModelFields.map((h) => `delivery_${h}`);
+    const returnHeaders = returnHeadersRaw.filter(
+      (h) =>
+        h !== 'sellerIds' &&
+        h !== 'products' &&
+        h !== 'logs' &&
+        h !== 'omniful' &&
+        h !== 'shipmentId' &&
+        h !== 'sellerStatuses'
+    );
+
+    const finalReturnHeaders = [...returnHeaders];
+    finalReturnHeaders.splice(1, 0, 'sellerId');
+    const productHeaders = [
+      'productSkuCode',
+      'orderLineId',
+      'quantity',
+      'acceptedQuantity',
+      'rejectedQuantity',
+      'unitPrice',
+      'totalPrice',
+    ];
     const csvHeaders = [
-      ...returnHeaders,
-      ...shipmentSingleHeader,
-      ...pickupPrefixedHeaders,
-      ...deliveryPrefixedHeaders,
+      ...finalReturnHeaders,
+      ...productHeaders,
+      'pickUpId',
+      'deliveryId',
+      ...deliveryModelFields.map((h) => `pickup_${h}`),
+      ...pickupModelFields.map((h) => `delivery_${h}`),
     ];
 
     const simpleFormat = (v) => {
@@ -779,10 +972,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
         const parts = String(f).split('.');
         let cur = doc;
         for (const p of parts) {
-          if (cur == null) {
-            cur = null;
-            break;
-          }
+          if (cur == null) break;
           cur = cur[p];
         }
         return simpleFormat(cur);
@@ -792,37 +982,93 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
     const csvRows = [csvHeaders.join(',')];
 
     for (const doc of aggregated) {
-      const baseRow = generateDynamicRowData(doc, Return);
+      const filteredProducts = (doc.products || []).filter((p) => String(p.sellerId) === String(sellerId));
 
-      const pickUpIdValue = doc?.shipment?.pickUpId ? String(doc.shipment.pickUpId) : '';
-      const deliveryIdValue = doc?.shipment?.deliveryId ? String(doc.shipment.deliveryId) : '';
-      const shipmentRow = [simpleFormat(pickUpIdValue), simpleFormat(deliveryIdValue)];
+      if (!filteredProducts.length) continue;
 
-      const pickupDoc = doc?.shipment?.pickupAddress ?? null;
-      const deliveryDoc = doc?.shipment?.deliveryAddress ?? null;
+      let isFirstRow = true;
 
-      const pickupRow = mapModelFields(pickupDoc, pickupModelFields);
-      const deliveryRow = mapModelFields(deliveryDoc, deliveryModelFields);
+      for (const product of filteredProducts) {
+        const tempDoc = { ...doc, products: [product] };
 
-      const fullRowArray = [...baseRow, ...shipmentRow, ...pickupRow, ...deliveryRow];
+        // SELLER STATUS OVERRIDE
+        let sellerStatus = doc.status || 'NA';
 
-      const csvLine =
-        typeof escapeCsv === 'function'
-          ? escapeCsv(fullRowArray)
-          : fullRowArray
-              .map((v) => {
-                const s = simpleFormat(v);
-                if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-                return s;
-              })
-              .join(',');
+        if (Array.isArray(doc.sellerStatuses)) {
+          const sellerStatusObj = doc.sellerStatuses.find((s) => String(s.sellerId) === String(sellerId));
 
-      csvRows.push(csvLine);
+          if (sellerStatusObj?.status) {
+            sellerStatus = sellerStatusObj.status;
+          } else {
+            sellerStatus = 'IN_PROGRESS';
+          }
+        }
+
+        tempDoc.status = sellerStatus;
+
+        let baseRow = generateDynamicRowData(tempDoc, Return, [
+          'products',
+          'logs',
+          'omniful',
+          'shipmentId',
+          'sellerStatuses',
+        ]);
+
+        const sellerIdsIndex = returnHeadersRaw.indexOf('sellerIds');
+        if (sellerIdsIndex !== -1) baseRow.splice(sellerIdsIndex, 1);
+
+        const returnIdIndex = returnHeaders.indexOf('returnId');
+        if (!isFirstRow && returnIdIndex !== -1) {
+          baseRow[returnIdIndex] = '';
+        }
+
+        const shipmentRow = [doc?.shipment?.pickUpId?.toString(), doc?.shipment?.deliveryId?.toString()];
+        const pickupRow = mapModelFields(doc?.shipment?.pickupAddress, pickupModelFields);
+        const deliveryRow = mapModelFields(doc?.shipment?.deliveryAddress, deliveryModelFields);
+
+        const totalPrice = (product.quantity || 0) * (product.price || 0);
+
+        const productRow = [
+          simpleFormat(product.productSkuCode),
+          simpleFormat(product.orderLineId),
+          simpleFormat(product.quantity),
+          simpleFormat(product.acceptedQuantity),
+          simpleFormat(product.rejectedQuantity),
+          simpleFormat(product.price),
+          simpleFormat(totalPrice),
+        ];
+        const fullRowArray = [
+          baseRow[0],
+          String(sellerId),
+          ...baseRow.slice(1),
+          ...productRow,
+          ...shipmentRow,
+          ...deliveryRow,
+          ...pickupRow,
+        ];
+
+        const csvLine = fullRowArray
+          .map((v) => {
+            const s = simpleFormat(v);
+            if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+            return s;
+          })
+          .join(',');
+
+        csvRows.push(csvLine);
+
+        isFirstRow = false;
+      }
     }
 
+    const datePart = new Date().toISOString().split('T')[0];
+
     const filename =
-      typeof generateCSVFilename === 'function' ? generateCSVFilename('returns') : `returns-${Date.now()}.csv`;
-    return createCSVExportResponse(csvRows, filename, aggregated.length);
+      typeof generateCSVFilename === 'function'
+        ? generateCSVFilename(`returns-${safeSellerName}`)
+        : `returns-${safeSellerName}-${datePart}.csv`;
+
+    return createCSVExportResponse(csvRows, filename, csvRows.length - 1);
   } catch (err) {
     console.error('Error exporting returns :', err?.message, err?.stack);
     throw err;
@@ -874,6 +1120,125 @@ export const getReturnsForWebhook = async (queryParams = {}) => {
   }
 };
 
+export const applyReturnToOrder = async (returns = []) => {
+  try {
+    if (!returns.length) {
+      console.log(' No returns received');
+      return;
+    }
+
+    const bulkOps = [];
+    const orderIdsToSync = new Set();
+
+    //  STEP 1: Aggregate returns per orderId + lineId
+    const returnMap = {};
+
+    for (const ret of returns) {
+      const { orderId, channelOrderLineNo, quantity = 0, returnId } = ret;
+
+      if (!orderId || !channelOrderLineNo) {
+        console.warn(' Skipping invalid return:', ret);
+        continue;
+      }
+
+      const lineId = Number(channelOrderLineNo);
+      const key = `${orderId}_${lineId}`;
+
+      if (!returnMap[key]) {
+        returnMap[key] = {
+          orderId,
+          lineId,
+          quantity: 0,
+          returnIds: [],
+        };
+      }
+
+      returnMap[key].quantity += quantity;
+      returnMap[key].returnIds.push(returnId);
+    }
+
+    //  STEP 2: Build bulkOps using aggregated values
+    for (const key in returnMap) {
+      const { orderId, lineId, quantity } = returnMap[key];
+
+      //  REPLACE returned value (not increment)
+      const updateOperation = [
+        {
+          $set: {
+            'orderSkuList.skuList': {
+              $map: {
+                input: '$orderSkuList.skuList',
+                as: 'sku',
+                in: {
+                  $cond: [
+                    { $eq: ['$$sku.id', lineId] },
+
+                    {
+                      $mergeObjects: [
+                        '$$sku',
+                        {
+                          statusBreakdown: {
+                            $mergeObjects: [
+                              '$$sku.statusBreakdown',
+                              {
+                                returned: quantity,
+                              },
+                            ],
+                          },
+
+                          status: {
+                            $cond: [
+                              {
+                                $eq: [quantity, '$$sku.quantity'],
+                              },
+                              'RETURNED',
+                              '$$sku.status',
+                            ],
+                          },
+                        },
+                      ],
+                    },
+
+                    '$$sku',
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ];
+
+      bulkOps.push({
+        updateOne: {
+          filter: {
+            orderId,
+            'orderSkuList.skuList.id': lineId,
+          },
+          update: updateOperation,
+        },
+      });
+
+      orderIdsToSync.add(orderId);
+    }
+
+    if (bulkOps.length) {
+      await Order.bulkWrite(bulkOps);
+
+      //  Sync sellers
+      const orderDocs = await Order.find({ orderId: { $in: [...orderIdsToSync] } }, { _id: 1 }).lean();
+
+      const orderIdsArray = orderDocs.map((o) => o._id);
+
+      for (const id of orderIdsArray) {
+        await syncSellerOrdersFromOrder(id);
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error(' Error updating order SKU returns:', err);
+  }
+};
 export default {
   getReturns,
   getReturnsFromDatabase,

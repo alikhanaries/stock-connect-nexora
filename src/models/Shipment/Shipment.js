@@ -87,6 +87,14 @@ const shipmentSchema = new mongoose.Schema(
     omniful: {
       statusCode: { type: String, index: true },
       trackingNo: { type: String, index: true },
+      omnifulId: {
+        type: String,
+        index: true,
+      },
+      omnifulOrderId: {
+        type: String,
+        index: true,
+      },
     },
   },
   {

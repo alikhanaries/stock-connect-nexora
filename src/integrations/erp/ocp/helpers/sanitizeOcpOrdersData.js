@@ -1,74 +1,134 @@
 import Channel from '#root/src/models/Channel.js';
 import Order from '#root/src/models/Orders.js';
+import Product from '#root/src/models/Product.js';
 import { OCP_STATUS_MAP } from '../constants/common.js';
 
 export const sanitizeOcpOrdersData = async (orders, sellerId) => {
-  const orderIds = orders.map((data) => String(data.id));
+  if (!orders?.length) return { bulkOps: [], sellerOrderPayloads: [] };
 
-  const [channelNo, existingOrdersDb] = await Promise.all([
+  const orderIds = orders.map((data) => `${sellerId}${data.id}`);
+  const skuSet = new Set();
+
+  orders.forEach((order) => {
+    const items = [
+      ...(order.unShippedItems || []),
+      ...flattenShippedItems(order.shippedItems),
+      ...(order.cancelledItems || []),
+    ];
+
+    items.forEach((item) => {
+      if (item?.sku) skuSet.add(item.sku.trim());
+    });
+  });
+
+  const [channelNo, existingOrdersDb, productDocs] = await Promise.all([
     Channel.findOne({ channelName: 'OCP' }).select('channelId globalChannelId -_id').lean(),
     Order.find({
       orderId: { $in: orderIds },
     }).lean(),
+
+    Product.find({
+      productSkuCode: { $in: Array.from(skuSet) },
+    })
+      .select('productSkuCode sellerId')
+      .lean(),
   ]);
 
   const existingOrdersMap = new Map(existingOrdersDb.map((order) => [order.orderId, order]));
+  const productSellerMap = new Map(productDocs.map((p) => [p.productSkuCode, p.sellerId]));
 
-  return orders.map((data) => {
-    const orderIdRaw = `${sellerId}${data.id}`;
+  const bulkOps = [];
+  const sellerOrderPayloads = [];
 
-    const existingOrder = existingOrdersMap.get(String(orderIdRaw));
+  for (const data of orders) {
+    const orderId = `${sellerId}${data.id}`;
+    const existingOrder = existingOrdersMap.get(orderId);
+
     const rawStatus = (data.status ?? data.Status ?? 'PENDING').toUpperCase();
     const mappedStatus = OCP_STATUS_MAP[rawStatus] || 'NEW';
+    const sellerIDsSet = new Set();
 
-    const allRawItems = [...(data.unShippedItems || []), ...(data.shippedItems || []), ...(data.cancelledItems || [])];
+    const allRawItems = [
+      ...(data.unShippedItems || []).map((item) => ({ ...item, _source: 'unshipped' })),
+      ...flattenShippedItems(data.shippedItems).map((item) => ({ ...item, _source: 'shipped' })),
+      ...(data.cancelledItems || []).map((item) => ({ ...item, _source: 'canceled' })),
+    ];
 
     const validItems = allRawItems.filter((item) => item.id);
-    const merchantOrderNo = `${channelNo.channelId ?? 6}_OCP_${orderIdRaw}`;
+    const merchantOrderNo = `${channelNo?.channelId ?? 6}_OCP_${orderId}`;
+    const existingSkuMap = new Map(existingOrder?.orderSkuList?.skuList?.map((s) => [s.id, s]) || []);
 
-    const skuList = validItems.map((line) => {
-      const lineId = String(line.id);
+    // Aggregate items by SKU code — same product can appear across unShippedItems, shippedItems, cancelledItems
+    const skuAggMap = new Map();
 
-      const lineName = line.name ?? line.slug ?? '';
-      const lineSku = line.sku ?? '';
-      const lineNodeId = String(line.nodeId ?? '');
+    validItems.forEach((line) => {
+      const trimmedSku = line.sku?.trim();
+      if (!trimmedSku) return;
 
       const qty = Number(line.quantity ?? 0);
+      const breakdown = getSourceBreakdown(line._source, line.shipmentStatus, qty);
+
+      if (skuAggMap.has(trimmedSku)) {
+        const agg = skuAggMap.get(trimmedSku);
+        agg.totalQty += qty;
+        agg.breakdown.confirmed += breakdown.confirmed;
+        agg.breakdown.shipped += breakdown.shipped;
+        agg.breakdown.delivered += breakdown.delivered;
+        agg.breakdown.returned += breakdown.returned;
+        agg.breakdown.canceled += breakdown.canceled;
+        agg.breakdown.shipmentCreated += breakdown.shipmentCreated;
+        // keep first encountered line as the representative
+      } else {
+        skuAggMap.set(trimmedSku, {
+          line,
+          totalQty: qty,
+          breakdown: { ...breakdown },
+        });
+      }
+    });
+
+    const skuList = Array.from(skuAggMap.values()).map(({ line, totalQty, breakdown }) => {
+      const trimmedSku = line.sku?.trim();
+      const lineId = String(line.id);
+      const skuSellerId = productSellerMap.get(trimmedSku) || sellerId;
+      if (skuSellerId) {
+        sellerIDsSet.add(String(skuSellerId));
+      }
+      const existingSku = existingSkuMap.get(lineId);
+
       const rawPrice = line.effectiveLineItemPrice ?? line.price ?? 0;
       const price = Number(rawPrice);
-
-      const existingSkuMap = new Map(existingOrder?.orderSkuList?.skuList?.map((s) => [s.id, s]) || []);
-      const existingSku = existingSkuMap.get(lineId);
 
       const rawLineStatus = (line.status ?? line.Status ?? 'PENDING').toUpperCase();
       const lineStatus = OCP_STATUS_MAP[rawLineStatus] || 'NEW';
 
-      const imageUri = line.image?.imageURI ?? null;
-      const slug = line.slug ?? null;
+      const statusBreakdown = existingSku?.statusBreakdown ?? breakdown;
 
       return {
         id: lineId,
+        sellerId: skuSellerId,
         channelOrderLineNo: lineId,
         status: lineStatus,
+        statusBreakdown,
         isFulfillmentByMarketplace: false,
         gtin: null,
-        description: lineName,
+        description: line.name ?? line.slug ?? '',
         stockLocation: null,
 
         unitVat: 0,
-        lineTotalInclVat: price * qty,
+        lineTotalInclVat: price * totalQty,
         lineVat: 0,
         originalUnitPriceInclVat: price,
         originalUnitVat: 0,
-        originalLineTotalInclVat: price * qty,
+        originalLineTotalInclVat: price * totalQty,
         originalLineTotalExclVat: 0,
         unitPriceExclVat: 0,
         lineTotalExclVat: 0,
 
-        channelProductNo: lineNodeId,
-        merchantProductNo: lineSku,
+        channelProductNo: String(line.nodeId ?? ''),
+        merchantProductNo: trimmedSku ?? '',
 
-        quantity: qty,
+        quantity: totalQty,
         cancellationRequestedQuantity: existingSku?.cancellationRequestedQuantity ?? 0,
 
         unitPriceInclVat: price,
@@ -85,13 +145,26 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
 
         airWaybillNo: existingSku?.airWaybillNo ?? null,
         extraData: [
-          { Key: 'imageURI', Value: imageUri },
-          { Key: 'slug', Value: slug },
+          {
+            key: 'imageURI',
+            value: line.image?.imageURI ?? '',
+          },
+          {
+            key: 'status',
+            value: String(lineStatus).toLowerCase(),
+          },
+          {
+            key: 'sellerId',
+            value: String(skuSellerId ?? ''),
+          },
+          {
+            key: 'slug',
+            value: line.slug ?? null,
+          },
         ],
       };
     });
 
-    const orderId = String(orderIdRaw);
     const createdAt = data.createdAt ?? data.CreatedAt ?? new Date();
 
     const amounts = data.amounts || data.Amounts || {};
@@ -105,15 +178,15 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
     const billAddr = cust.billingAddress || cust.BillingAddress || {};
 
     const updatePayload = {
-      orderId: orderId,
-      channelId: Number(channelNo.channelId ?? 6),
+      orderId,
+      channelId: Number(channelNo?.channelId ?? 6),
       channelName: 'OCP',
       status: mappedStatus,
       globalChannelName: 'OCP',
-      globalChannelId: Number(channelNo.globalChannelId ?? 0),
+      globalChannelId: Number(channelNo?.globalChannelId ?? 0),
       orderDate: createdAt,
       merchantComment: null,
-      merchantOrderNo: merchantOrderNo,
+      merchantOrderNo,
       isBusinessOrder: false,
 
       subTotalInclVat: subTotal,
@@ -122,6 +195,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       totalInclVat: total,
       totalVat: tax,
       totalExclVat: subTotal,
+      sellerIds: Array.from(sellerIDsSet),
 
       originalSubTotalInclVat: subTotal,
       originalShippingCostsInclVat: shipping,
@@ -133,7 +207,7 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       orderFee: 0,
 
       orderCustomer: {
-        orderId: orderId,
+        orderId,
         gender: null,
         firstName: cust.firstName ?? cust.FirstName,
         lastName: cust.lastName ?? cust.LastName,
@@ -144,27 +218,21 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
         channelCustomerNo: String(cust.id ?? cust.Id ?? ''),
       },
       orderPaymentDetails: {
-        orderId: orderId,
+        orderId,
         vatNo: null,
         paymentMethod: data.paymentMethod ?? data.PaymentMethod ?? 'UNKNOWN',
         paymentReferenceNo: data.transactionId ?? data.TransactionId ?? null,
         currencyCode: 'SAR',
       },
       orderSkuList: {
-        orderId: orderId,
+        orderId,
         skuList,
       },
       orderShippingAddress: {
         line1: shipAddr.line1 ?? shipAddr.Line1 ?? '',
-        line2: null,
-        line3: null,
-        gender: null,
-        companyName: null,
         firstName: shipAddr.firstName ?? shipAddr.FirstName,
         lastName: shipAddr.lastName ?? shipAddr.LastName,
         streetName: shipAddr.street ?? shipAddr.Street,
-        houseNr: null,
-        houseNrAddition: null,
         zipCode: shipAddr.zipCode ?? shipAddr.ZipCode,
         city: shipAddr.city,
         region: shipAddr.state === 'NA' ? shipAddr.city : shipAddr.state,
@@ -188,19 +256,57 @@ export const sanitizeOcpOrdersData = async (orders, sellerId) => {
       },
     };
 
-    const updateOperation = {
-      $set: updatePayload,
-      $setOnInsert: {
-        sellerId: sellerId,
-      },
-    };
+    sellerOrderPayloads.push({ orderPayload: updatePayload });
 
-    return {
+    bulkOps.push({
       updateOne: {
-        filter: { orderId: orderId },
-        update: updateOperation,
+        filter: { orderId },
+        update: {
+          $set: updatePayload,
+          $setOnInsert: { sellerId },
+        },
         upsert: true,
       },
-    };
-  });
+    });
+  }
+  return { bulkOps, sellerOrderPayloads };
+};
+
+const flattenShippedItems = (shippedItems) => {
+  if (!shippedItems?.length) return [];
+  return shippedItems.flatMap((shipment) =>
+    (shipment.lineItems || []).map((item) => ({
+      ...item,
+      _trackingNumber: shipment.trackingNumber ?? null,
+      _shipmentId: shipment.shipmentId ?? null,
+      _externalShipmentId: shipment.externalShipmentId ?? null,
+      _shipmentReferenceId: shipment.shipmentReferenceId ?? null,
+    }))
+  );
+};
+
+const getSourceBreakdown = (source, shipmentStatus, qty) => {
+  const empty = {
+    confirmed: 0,
+    shipped: 0,
+    delivered: 0,
+    returned: 0,
+    canceled: 0,
+    shipmentCreated: 0,
+  };
+
+  if (source === 'canceled') {
+    return { ...empty, canceled: qty };
+  }
+
+  if (source === 'shipped') {
+    const upper = (shipmentStatus || '').toUpperCase();
+    if (upper === 'SHIPMENT_CREATED') return { ...empty, shipmentCreated: qty };
+    if (upper === 'OUT_FOR_DELIVERY') return { ...empty, shipped: qty };
+    if (upper === 'DELIVERED') return { ...empty, delivered: qty };
+    return { ...empty, shipmentCreated: qty };
+  }
+
+  // unshipped items are confirmed
+  return { ...empty, confirmed: qty };
 };
