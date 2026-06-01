@@ -197,7 +197,54 @@ export const resolveDateRange = (query) => {
     appliedPeriod: period,
   };
 };
+export const formatToInvoiceDate = (input) => {
+  if (!input) return '';
 
+  // If already a Date object
+  let date;
+
+  if (input instanceof Date) {
+    date = input;
+  } else {
+    const dateString = String(input);
+
+    // already formatted like: MM/DD/YYYY HH:mm:ss 00:00
+    if (dateString.includes('/') && dateString.includes(':') && dateString.includes('00:00')) {
+      return dateString;
+    }
+
+    // Try native parsing first
+    const parsed = new Date(dateString);
+
+    if (!isNaN(parsed.getTime())) {
+      date = parsed;
+    } else {
+      // Handle custom format:
+      // MM/DD/YYYY HH:mm:ss 00:00
+      const match = dateString.match(/^(\d{2})\/(\d{2})\/(\d{4})\s(\d{2}):(\d{2}):(\d{2})/);
+
+      if (!match) {
+        return dateString;
+      }
+
+      const [, MM, DD, YYYY, HH, mm, ss] = match;
+
+      date = new Date(Date.UTC(Number(YYYY), Number(MM) - 1, Number(DD), Number(HH), Number(mm), Number(ss)));
+    }
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  const MM = pad(date.getUTCMonth() + 1);
+  const DD = pad(date.getUTCDate());
+  const YYYY = date.getUTCFullYear();
+
+  const HH = pad(date.getUTCHours());
+  const mm = pad(date.getUTCMinutes());
+  const ss = pad(date.getUTCSeconds());
+
+  return `${MM}/${DD}/${YYYY} ${HH}:${mm}:${ss} 00:00`;
+};
 export default {
   formatDateTime,
   formatCustomerName,

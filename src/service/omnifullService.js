@@ -1,8 +1,11 @@
 import Return from '../models/Return.js';
+import OrderLogs from '#models/OrderLogs.js';
 import Order from '../models/Orders.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import forwardShipmentService from './forwardShipmentService.js';
-
+import { updateOrderSkuStatusToShipped } from '#root/src/service/orderService.js';
+import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
+import { convetDateToUTC } from '#root/src/helpers/Common.js';
 export const handleOmnifulQCWebhook = async (webhookPayload) => {
   try {
     const {
@@ -144,7 +147,8 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
     }
     const shipmentId = data.order_id;
     const omnifulStatusCode = data.order_status;
-    const result = await Shipment.updateOne(
+    const awbNumber = data?.shipment?.awb_number;
+    await Shipment.updateOne(
       {
         _id: shipmentId,
       },
@@ -156,12 +160,32 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
       }
     );
 
-    if (result.matchedCount === 0) {
+    const updateFields = {
+      'omniful.statusCode': omnifulStatusCode,
+      updatedAt: new Date(),
+    };
+
+    let shouldSyncOrder = false;
+
+    if (omnifulStatusCode === 'ready_to_ship' && awbNumber) {
+      updateFields['omniful.trackingNo'] = awbNumber;
+      updateFields.status = 'OUT_FOR_DELIVERY';
+      shouldSyncOrder = true;
+    }
+
+    const shipmentData = await Shipment.findOneAndUpdate(
+      { _id: shipmentId },
+      { $set: updateFields },
+      { new: true }
+    ).lean();
+
+    if (!shipmentData) {
       throw new Error('OrderId does not exist');
     }
-    const shipmentData = await Shipment.findOne({
-      _id: shipmentId,
-    }).lean();
+
+    if (shouldSyncOrder) {
+      await updateOrderSkuStatusToShipped(shipmentData);
+    }
 
     if (omnifulStatusCode === 'ready_to_ship') {
       const omnifulAwbNumber = data?.shipment?.awb_number;
@@ -169,7 +193,30 @@ export const handleOmnifulOrdersWebhook = async (payload) => {
         await Shipment.findByIdAndUpdate(shipmentData._id, { 'omniful.trackingNo': omnifulAwbNumber });
       }
       await forwardShipmentService.createShipmentwithCE(shipmentData);
+
+      await OrderLogs.updateOne(
+        {
+          orderId: shipmentData?.orderId,
+          sellerId: shipmentData?.sellerId,
+        },
+        {
+          $push: {
+            details: {
+              status: 'SHIPMENT_SHIPPED',
+              description: `Shipment with Omniful Tracking Id - ${awbNumber} has been shipped`,
+              createdAt: convetDateToUTC(new Date()),
+            },
+          },
+          $setOnInsert: {
+            orderId: shipmentData?.orderId,
+            sellerId: shipmentData?.sellerId,
+          },
+        },
+        { upsert: true }
+      );
     }
+
+    await syncSellerOrdersFromOrder(shipmentData?.orderId);
 
     return {
       success: true,
