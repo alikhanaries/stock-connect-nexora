@@ -23,7 +23,7 @@ export const authMiddleware = async (req, res, next) => {
       if (!user || user.isDeleted) {
         return Responses.failResponse(res, 'User unauthorized', 403);
       }
-
+      console.timeEnd('authMiddleware');
       req.user = user;
       req.sellerIds = decoded.sellerIds;
       next();
@@ -34,8 +34,6 @@ export const authMiddleware = async (req, res, next) => {
   } catch (error) {
     console.log('authMiddleware error:', error.message);
     return Responses.failResponse(res, 'Server error', 500);
-  } finally {
-    console.timeEnd('authMiddleware');
   }
 };
 

@@ -4,11 +4,11 @@ export const AYMAKAN_STATUS = {
     description: 'Shipment is created at collection point',
   },
   'AY-0002': {
-    status: 'SHIPMENT_PROCESSED',
+    status: 'SHIPPED',
     description: 'Shipment was collected from collection point',
   },
   'AY-0003': {
-    status: 'HUB_RECIEVED',
+    status: 'SHIPPED',
     description: 'Shipment is received at hub',
   },
   'AY-0026': {

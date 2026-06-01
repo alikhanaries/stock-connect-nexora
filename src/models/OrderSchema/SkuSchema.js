@@ -6,17 +6,6 @@ const SkuSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    sellerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Seller',
-      required: true,
-      index: true,
-    },
-    sellerOrderId: {
-      type: String,
-      required: true,
-      default: 'NA',
-    },
     channelOrderLineNo: { type: String, trim: true },
     status: {
       type: String,
@@ -117,4 +106,6 @@ const SkuSchema = new mongoose.Schema(
   },
   { _id: false }
 );
+SkuSchema.index({ merchantProductNo: 1 });
+
 export default SkuSchema;

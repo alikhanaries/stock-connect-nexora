@@ -5,7 +5,6 @@ import { AMAZON_STATUS_MAP, ORDER_STATUS_MAP } from '../constants/common.js';
 import Order from '../models/Orders.js';
 import Seller from '../models/Seller.js';
 import Channel from '../models/Channel.js';
-import Product from '../models/Product.js';
 
 const ROW_CONCURRENCY = 50;
 const limit = pLimit(ROW_CONCURRENCY);
@@ -248,22 +247,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
 
   const skuSet = new Set();
   orders.forEach((row) => {
-    if (row.sku) {
-      skuSet.add(row.sku.trim());
-    }
-  });
-  const productDocs = await Product.find({
-    productSkuCode: {
-      $in: Array.from(skuSet).map((sku) => sku.trim()),
-    },
-  })
-    .select('productSkuCode sellerId')
-    .lean();
-
-  const productSellerMap = new Map();
-
-  productDocs.forEach((product) => {
-    productSellerMap.set(product.productSkuCode, product.sellerId);
+    if (row.sku) skuSet.add(row.sku);
   });
 
   const brandNameSet = new Set();
@@ -304,23 +288,22 @@ export const sanitizeAmazonOrdersData = async (orders) => {
   });
 
   const operations = [];
-  const sellerOrderPayloads = [];
 
   for (const [orderId, orderData] of orderMap) {
     const { orderInfo, items } = orderData;
+    const existingOrder = existingOrdersMap.get(orderId);
 
-    // Skip order if any item's SKU is not found in product collection
-    const hasUnknownSku = items.some((item) => {
-      const sku = item.sku?.trim();
-      return !sku || !productSellerMap.has(sku);
-    });
+    let finalSellerId = null;
 
-    if (hasUnknownSku) {
-      console.log(`Skipping order ${orderId}: one or more SKUs not found in product collection`);
-      continue;
+    if (orderInfo.brandName) {
+      const brandKey = orderInfo.brandName.toLowerCase().trim();
+      finalSellerId = brandSellerMap.get(brandKey) || null;
     }
 
-    const existingOrder = existingOrdersMap.get(orderId);
+    if (!finalSellerId) {
+      console.warn(`Skipping order ${orderId}: no seller found for brand "${orderInfo.brandName}"`);
+      continue;
+    }
 
     const purchaseDate = parseAmazonDate(orderInfo.purchaseDate);
 
@@ -333,24 +316,18 @@ export const sanitizeAmazonOrdersData = async (orders) => {
       totalTax += parseFloat(item.itemTax) || 0;
       totalShipping += parseFloat(item.shippingPrice) || 0;
     });
-    const sellerIDsSet = new Set();
 
     const skuList = items.map((item, index) => {
-      const skuSellerId = productSellerMap.get(item.sku?.trim()) || null;
-
-      if (skuSellerId) {
-        sellerIDsSet.add(String(skuSellerId));
-      }
       const existingSku = existingOrder?.orderSkuList?.skuList?.find(
-        (s) => s.id === item.orderItemId || s.merchantProductNo === item.sku?.trim()
+        (s) => s.id === item.orderItemId || s.merchantProductNo === item.sku
       );
+
       const qty = parseInt(item.quantityPurchased) || 1;
       const mappedStatus = existingSku?.status || mapAmazonStatus(item.orderStatus);
 
       const statusBreakdown = existingSku?.statusBreakdown ?? buildAmazonStatusBreakdown(mappedStatus, qty);
 
       return {
-        sellerId: skuSellerId,
         id: item.orderItemId || `${orderId}-${index}`,
         channelOrderLineNo: item.orderItemId,
         status: mappedStatus,
@@ -378,7 +355,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
         originalLineTotalExclVat: parseFloat(item.itemPrice) || 0,
         extraData: null,
         channelProductNo: item.orderItemId,
-        merchantProductNo: item.sku?.trim(),
+        merchantProductNo: item.sku,
         quantity: qty,
         cancellationRequestedQuantity: existingSku?.cancellationRequestedQuantity || 0,
         unitPriceInclVat: parseFloat(item.itemPrice) || 0,
@@ -405,7 +382,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
       orderId: orderId,
       channelOrderNumber: orderId,
       channelId: channelInfo.channelId,
-      sellerIds: Array.from(sellerIDsSet),
+      sellerId: finalSellerId,
       channelName: channelInfo.channelName,
       globalChannelName: channelInfo.globalChannelName,
       globalChannelId: channelInfo.globalChannelId,
@@ -493,8 +470,6 @@ export const sanitizeAmazonOrdersData = async (orders) => {
       },
     };
 
-    sellerOrderPayloads.push({ orderPayload: updatePayload });
-
     operations.push({
       updateOne: {
         filter: { orderId: orderId },
@@ -505,7 +480,7 @@ export const sanitizeAmazonOrdersData = async (orders) => {
   }
 
   console.log('Total operations to execute:', operations.length);
-  return { bulkOps: operations, sellerOrderPayloads };
+  return operations;
 };
 
 const parseAmazonDate = (dateStr) => {

@@ -2,12 +2,12 @@ import { errorLog } from '#root/src/middleware/errorLogMiddleware.js';
 import OrderLogs from '#root/src/models/OrderLogs.js';
 import Order from '#root/src/models/Orders.js';
 import Seller from '#root/src/models/Seller.js';
+// import { ocpConfig } from '../config/config.js';
 import { sanitizeOcpOrdersData } from '../helpers/sanitizeOcpOrdersData.js';
 import { createERPAdapter } from '../../base/ERPFactory.js';
 import { cancelAymakanShipment } from '#root/src/service/aymakanService.js';
 import Shipment from '#root/src/models/Shipment/Shipment.js';
 import { BLOCKED_STATUSES, ORDER_STATUS_MAP } from '#root/src/constants/common.js';
-import { upsertSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 
 const adaptor = createERPAdapter('ocp');
 
@@ -45,24 +45,18 @@ export const processOrders = async (orders, sellerId) => {
       return { success: true, data: { message: 'No orders to sync' } };
     }
     // Prepare bulk operations
-    const { bulkOps, sellerOrderPayloads } = await sanitizeOcpOrdersData(orders, sellerId);
+    const operations = await sanitizeOcpOrdersData(orders, sellerId);
 
     // Execute the bulk write
-    const result = await Order.bulkWrite(bulkOps);
-    // Upsert into SellerOrder collection
-    await Promise.all(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
+    const result = await Order.bulkWrite(operations);
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
     const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
 
-    // Build log entries for each newly created order (one per seller)
-    const orderLogs = [];
-
-    for (let i = 0; i < upsertedIndexes.length; i++) {
-      const index = upsertedIndexes[i];
+    // Build log entries for each newly created order
+    const orderLogs = upsertedIndexes.map((index, i) => {
       const order = orders[index];
       const orderId = upsertedOrderIds[i];
-      const latestOrderData = await Order.findOne({ _id: orderId }, { _id: 1, orderId: 1, sellerIds: 1 }).lean();
 
       const logDetails = [
         {
@@ -72,44 +66,15 @@ export const processOrders = async (orders, sellerId) => {
         },
       ];
 
-      const sellerIds = latestOrderData?.sellerIds?.length ? latestOrderData.sellerIds : [sellerId];
+      return {
+        orderId,
+        details: logDetails,
+      };
+    });
 
-      for (const sId of sellerIds) {
-        orderLogs.push({
-          orderId,
-          sellerId: sId,
-          details: logDetails,
-        });
-      }
-    }
-
-    const orderLogsBulkOps = [];
-
-    for (const log of orderLogs) {
-      for (const detail of log.details) {
-        orderLogsBulkOps.push({
-          updateOne: {
-            filter: {
-              orderId: log.orderId,
-              sellerId: log.sellerId,
-            },
-            update: {
-              $addToSet: {
-                details: {
-                  status: detail.status,
-                  description: detail.description,
-                  createdAt: detail.createdAt,
-                },
-              },
-            },
-            upsert: true,
-          },
-        });
-      }
-    }
-
-    if (orderLogsBulkOps.length) {
-      await OrderLogs.bulkWrite(orderLogsBulkOps);
+    // Insert logs only for newly created orders
+    if (orderLogs.length > 0) {
+      await OrderLogs.insertMany(orderLogs);
       console.log('Inserted order logs:', orderLogs.length);
     } else {
       console.log('No new orders created — skipping log insertion');

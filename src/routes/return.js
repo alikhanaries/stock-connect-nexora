@@ -52,7 +52,7 @@ const router = express.Router();
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
  */
-router.get('/', getAllReturnsValidator, checkLanguage, authMiddleware, verifySellerAccess, getAllReturns);
+router.get('/', getAllReturnsValidator, checkLanguage, authMiddleware, getAllReturns);
 // Export returns as CSV
 /**
  * @swagger
@@ -136,7 +136,7 @@ router.get('/sync', syncReturnsValidator, checkLanguage, authMiddleware, syncRet
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       404: { $ref: "#/components/schemas/FailResponse" }
  */
-router.get('/:id', getReturnByIdValidator, checkLanguage, authMiddleware, verifySellerAccess, getReturnById);
+router.get('/:id', getReturnByIdValidator, checkLanguage, authMiddleware, getReturnById);
 // Create a new return
 /**
  * @swagger

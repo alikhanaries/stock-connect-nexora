@@ -2,7 +2,6 @@ import mongoose from 'mongoose';
 import { ORDER_FLOW_STATUS_CONFIG, SHIPMENT_STATUS, CHANNEL_STATUS_CONFIG } from '#constants/dashboard.js';
 import Shipment from '../models/Shipment/Shipment.js';
 import Order from '#models/Orders.js';
-import SellerOrder from '../models/OrderSchema/SellerOrder.js';
 import InventoryStatus from '#models/InventoryStatus.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import Return from '../models/Return.js';
@@ -40,14 +39,13 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     // Calculate previous range
     const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
 
-    const channelIds = await pickChannelIdsFromChannel(channel);
-    const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
-
+    const globalChannelFilter = buildGlobalChannelFilter(channel);
+    // Aggregate current & previous
     const buildAgg = (range) => [
       {
         $match: {
           sellerId: { $in: sellerObjectIds },
-          ...channelFilter,
+          ...globalChannelFilter,
           orderDate: { $gte: range.start, $lte: range.end },
         },
       },
@@ -60,18 +58,18 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     ];
 
     const [currentAgg, previousAgg] = await Promise.all(
-      [currentRange, previousRange].map((range) => SellerOrder.aggregate(buildAgg(range)))
+      [currentRange, previousRange].map((range) => Order.aggregate(buildAgg(range)))
     );
 
-    const toStatusMap = (arr) => Object.fromEntries(arr.map(({ _id, count }) => [_id, count]));
-    const [currentStatus, previousStatus] = [toStatusMap(currentAgg), toStatusMap(previousAgg)];
+    const toMap = (arr) => Object.fromEntries(arr.map((s) => [s._id.toUpperCase(), s.count]));
+    const [currentStatus, previousStatus] = [toMap(currentAgg), toMap(previousAgg)];
 
     // Final data mapping
     return ORDER_FLOW_STATUS_CONFIG.map(({ key, label, statuses }) => {
-      const currentValue = statuses.reduce((sum, s) => sum + (currentStatus[s] || 0), 0);
+      const currentValue = statuses.reduce((sum, s) => sum + (currentStatus[s.toUpperCase()] || 0), 0);
       if (period === 'all') return { key, label, value: currentValue, changePercent: 100, trend: 'up' };
       if (!comparable) return { key, label, value: currentValue, changePercent: 0, trend: 'neutral' };
-      const previousValue = statuses.reduce((sum, s) => sum + (previousStatus[s] || 0), 0);
+      const previousValue = statuses.reduce((sum, s) => sum + (previousStatus[s.toUpperCase()] || 0), 0);
 
       let changePercent =
         previousValue > 0 ? ((currentValue - previousValue) / previousValue) * 100 : currentValue > 0 ? 100 : 0;
@@ -100,42 +98,58 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const comparable = period !== 'all' && (isComparablePeriod(period) || currentRange.kind === 'custom');
   const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
-  const channelIds = await pickChannelIdsFromChannel(channel);
-  const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
+  const baseMatch = {
+    sellerId: { $in: sellerObjectIds },
+    ...globalChannelFilter,
+  };
 
   const aggregateMetrics = async ({ start, end }) => {
-    const [data] = await SellerOrder.aggregate([
+    const [data] = await Order.aggregate([
       {
         $match: {
-          sellerId: { $in: sellerObjectIds },
-          ...channelFilter,
+          ...baseMatch,
           orderDate: { $gte: start, $lte: end },
+        },
+      },
+      { $unwind: '$orderSkuList.skuList' },
+      {
+        $group: {
+          _id: '$_id',
+          status: { $first: '$status' },
+          totalOrderValue: { $first: { $ifNull: ['$originalTotalInclVat', 0] } },
+          deliveredTotal: {
+            $sum: {
+              $multiply: [
+                { $ifNull: ['$orderSkuList.skuList.statusBreakdown.delivered', 0] },
+                { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+              ],
+            },
+          },
+          canceledTotal: {
+            $sum: {
+              $multiply: [
+                { $ifNull: ['$orderSkuList.skuList.statusBreakdown.canceled', 0] },
+                { $ifNull: ['$orderSkuList.skuList.originalUnitPriceInclVat', 0] },
+              ],
+            },
+          },
+
+          totalProducts: {
+            $sum: '$orderSkuList.skuList.quantity',
+          },
         },
       },
       {
         $group: {
           _id: null,
           totalOrders: { $sum: 1 },
-          totalDeliveredSales: { $sum: '$deliveredAmount' },
-          totalOrderValue: { $sum: '$totalAmount' },
-          netAmount: { $sum: '$netAmount' },
-          totalProducts: { $sum: '$totalQuantity' },
-          totalCanceledAmount: { $sum: '$canceledAmount' },
-          totalReturnedAmount: { $sum: '$returnedAmount' },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          totalOrders: 1,
-          totalDeliveredSales: 1,
-          totalOrderValue: 1,
-          netAmount: 1,
-          totalCanceledAmount: 1,
-          totalReturnedAmount: 1,
-          avgProductsPerOrder: {
-            $cond: [{ $eq: ['$totalOrders', 0] }, 0, { $divide: ['$totalProducts', '$totalOrders'] }],
-          },
+          totalDeliveredSales: { $sum: '$deliveredTotal' },
+          totalOrderValue: { $sum: '$totalOrderValue' },
+
+          cancellationValue: { $sum: '$canceledTotal' },
+
+          avgProductsPerOrder: { $avg: '$totalProducts' },
         },
       },
     ]);
@@ -145,10 +159,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
         totalOrders: 0,
         totalDeliveredSales: 0,
         totalOrderValue: 0,
-        netAmount: 0,
+        cancellationValue: 0,
         avgProductsPerOrder: 0,
-        totalCanceledAmount: 0,
-        totalReturnedAmount: 0,
       }
     );
   };
@@ -182,6 +194,9 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const prevAvgOrderValue = previous.totalOrders > 0 ? previous.totalOrderValue / previous.totalOrders : 0;
 
+  const currNetGmv = current.totalOrderValue - current.cancellationValue;
+  const prevNetGmv = previous.totalOrderValue - previous.cancellationValue;
+
   return [
     buildMetric(
       'totalSales',
@@ -195,20 +210,7 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
       current.totalOrderValue,
       previous.totalOrderValue
     ),
-    buildMetric('netGmv', 'Net GMV', current.netAmount, previous.netAmount),
-
-    buildMetric(
-      'totalCanceledAmount',
-      'Total Cancel Amount',
-      current.totalCanceledAmount,
-      previous.totalCanceledAmount
-    ),
-    buildMetric(
-      'totalReturnedAmount',
-      'Total Return Amount',
-      current.totalReturnedAmount,
-      previous.totalReturnedAmount
-    ),
+    buildMetric('netGmv', 'Net GMV', currNetGmv, prevNetGmv),
     buildMetric('orders', 'Orders', current.totalOrders, previous.totalOrders),
     buildMetric('avgOrderValue', 'Avg Order Value', currAvgOrderValue, prevAvgOrderValue),
     buildMetric(
@@ -238,7 +240,7 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
     {
       $match: {
         sellerId: { $in: sellerObjectIds },
-        status: { $in: SHIPMENT_STATUS.flatMap((s) => s.statuses) },
+        status: { $in: SHIPMENT_STATUS.map((s) => s.key) },
         ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
       },
     },
@@ -274,11 +276,12 @@ const getShipmentAnalytics = async (sellerId, period, { startDate, endDate, mont
   const map = new Map(raw.map((r) => [r._id, r.value]));
   return SHIPMENT_STATUS.map((s) => ({
     label: s.label,
-    value: s.statuses.reduce((sum, status) => sum + (map.get(status) || 0), 0),
+    value: map.get(s.key) || 0,
   }));
 };
 
 const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
+  const globalChannelFilter = buildGlobalChannelFilter(channel);
   const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
   const sellerObjectIds = ids
@@ -288,16 +291,23 @@ const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, mo
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range) throw new Error(`Invalid period "${period}"`);
 
-  const channelIds = await pickChannelIdsFromChannel(channel);
-  const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
+  const salesPipeline = buildAggregationPipeline({
+    sellerObjectIds,
+    period,
+    metric: 'sales',
+    range,
+    ...globalChannelFilter,
+  });
 
-  const salesPipeline = buildAggregationPipeline({ sellerObjectIds, period, metric: 'sales', range, channelFilter });
-  const ordersPipeline = buildAggregationPipeline({ sellerObjectIds, period, metric: 'orders', range, channelFilter });
+  const ordersPipeline = buildAggregationPipeline({
+    sellerObjectIds,
+    period,
+    metric: 'orders',
+    range,
+    ...globalChannelFilter,
+  });
 
-  const [salesRaw, ordersRaw] = await Promise.all([
-    SellerOrder.aggregate(salesPipeline),
-    SellerOrder.aggregate(ordersPipeline),
-  ]);
+  const [salesRaw, ordersRaw] = await Promise.all([Order.aggregate(salesPipeline), Order.aggregate(ordersPipeline)]);
 
   return {
     sales: normalizeSeries(period, salesRaw, range),
@@ -401,7 +411,7 @@ const getInventoryStatus = async (sellerId, period, { startDate, endDate, month,
   const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
   if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
 
-  const channelIds = await pickChannelIdsFromChannel(channel);
+  const channelIds = pickChannelIdsFromChannel(channel);
   const match = {
     sellerId: { $in: sellerObjectIds },
     ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
@@ -498,7 +508,7 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
   const pipeline = [
     {
       $match: {
-        sellerIds: { $in: sellerObjectIds },
+        sellerId: { $in: sellerObjectIds },
         orderDate: { $gte: range.start, $lte: range.end },
         globalChannelName: { $type: 'string', $ne: '' },
       },
@@ -509,7 +519,6 @@ const getSalesByChannel = async (sellerId, period = null, { startDate, endDate, 
         preserveNullAndEmptyArrays: false,
       },
     },
-    { $match: { 'orderSkuList.skuList.sellerId': { $in: sellerObjectIds } } },
     {
       $group: {
         _id: '$globalChannelName',
@@ -559,30 +568,29 @@ const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate,
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
 
-  const channelIds = await pickChannelIdsFromChannel(channel);
-  const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
+  const selectedNames = pickSelectedGlobalNames(channel);
+  const hasChannel = selectedNames.length > 0;
 
   const pipeline = [
     {
       $match: {
         sellerId: { $in: sellerObjectIds },
-        ...channelFilter,
         orderDate: { $gte: range.start, $lte: range.end },
-        channelName: { $type: 'string', $ne: '' },
+        globalChannelName: { $type: 'string', $ne: '' },
       },
     },
-    { $group: { _id: '$channelName', count: { $sum: 1 } } },
+    { $group: { _id: '$globalChannelName', count: { $sum: 1 } } },
     {
       $project: {
         _id: 0,
         key: '$_id',
-        value: '$count',
+        value: hasChannel ? { $cond: [{ $in: ['$_id', selectedNames] }, '$count', 0] } : '$count',
       },
     },
     { $sort: { value: -1, key: 1 } },
   ];
 
-  const data = await SellerOrder.aggregate(pipeline).allowDiskUse(true);
+  const data = await Order.aggregate(pipeline).allowDiskUse(true);
   return Array.isArray(data) ? data : [];
 };
 
@@ -605,7 +613,7 @@ export const getChannelStatus = async (sellerId, period, { startDate, endDate, m
     }
   }
 
-  const channelIds = await pickChannelIdsFromChannel(channel);
+  const channelIds = pickChannelIdsFromChannel(channel);
   const pipeline = buildChannelStatusPipeline(sellerObjectIds, range, channelIds);
 
   const result = await UserChannelProducts.aggregate(pipeline).allowDiskUse(true);
@@ -635,7 +643,7 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}"`);
 
-  const channelIds = await pickChannelIdsFromChannel(channel);
+  const channelIds = pickChannelIdsFromChannel(channel);
 
   const pipeline = buildReturnsStatusPipeline(sellerObjectIds, range, channelIds);
 
@@ -655,7 +663,6 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   return { total, reasons, statusSummary };
 };
-
 export const getCancelOrdersOverview = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
   const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
@@ -669,7 +676,7 @@ export const getCancelOrdersOverview = async (sellerId, period, { startDate, end
     throw new Error(`Invalid period "${period}"`);
   }
 
-  const channelIds = await pickChannelIdsFromChannel(channel);
+  const channelIds = pickChannelIdsFromChannel(channel);
   const buildCancelOrdersPipeline = (sellerIds, range, channelIds) => {
     const matchStage = {
       sellerId: { $in: sellerIds },
@@ -753,7 +760,6 @@ export const getCancelOrdersOverview = async (sellerId, period, { startDate, end
 
   return { total, reasons, statusSummary };
 };
-
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,

@@ -83,29 +83,27 @@ export const generateDynamicHeaders = (model, excludeFields = []) => {
 
   return finalHeaders;
 };
-export const generateDynamicRowData = (doc, model, excludeFields = [], nestedObj = null) => {
+
+export const generateDynamicRowData = (doc, model, excludeFields = []) => {
   const schema = model.schema;
   const paths = schema.paths;
   const row = [];
 
+  // Standard exclusions for internal fields
   const defaultExclusions = ['__v', '_id'];
   const allExclusions = [...defaultExclusions, ...excludeFields];
 
   Object.keys(paths).forEach((path) => {
+    // Skip excluded fields and nested array paths
     if (allExclusions.includes(path) || path.includes('.$') || path === 'createdAt' || path === 'updatedAt') {
       return;
     }
 
-    let value = doc[path];
-
-    // NEW: If value is undefined and nestedObj exists, try from nested object
-    if ((value === undefined || value === null) && nestedObj) {
-      value = nestedObj[path];
-    }
-
+    const value = doc[path];
     row.push(formatValueForCSV(value, path));
   });
 
+  // Add timestamps at the end if they exist
   if (paths.createdAt) {
     row.push(formatDateTime(doc.createdAt)?.date || 'N/A');
   }
@@ -194,257 +192,6 @@ export const formatAddressForCSV = (address) => {
   ];
 };
 
-export const buildExportOrderRow = (order, sku, sellerTotal, sellerId, totalSkuCount) => {
-  return {
-    orderId: order.orderId,
-    sellerId,
-    channelId: order?.channelId,
-    channelOrderNumber: order.channelOrderNumber,
-    status: order.status,
-    channelName: order.channelName,
-    orderDate: order.orderDate,
-    merchantOrderNo: order.merchantOrderNo,
-    isBusinessOrder: order.isBusinessOrder,
-    orderSkuListCount: totalSkuCount,
-
-    shippingCostsInclVat: order.shippingCostsInclVat,
-    shippingCostsVat: order.shippingCostsVat,
-    originalShippingCostsVat: order.originalShippingCostsVat,
-    shippingCostsExclVat: order.shippingCostsExclVat,
-    originalShippingCostsExclVat: order.originalShippingCostsExclVat,
-
-    subTotalFee: order.subTotalFee,
-    orderFee: order.orderFee,
-
-    orderSkuCount: sellerTotal || 1,
-
-    skuId: sku.id,
-    skuMerchantProductNo: sku.merchantProductNo,
-    skuDescription: sku.description,
-    skuQuantity: sku.quantity,
-    skuStatus: sku.status,
-    skuUnitPriceInclVat: sku.unitPriceInclVat,
-    skuLineTotalInclVat: sku.lineTotalInclVat,
-    skuGtin: sku.gtin,
-    skuChannelProductNo: sku.channelProductNo,
-    skuAirWaybillNo: sku.airwaybillNumber || '',
-    skuCondition: sku.condition,
-    skuVatRate: sku.vatRate,
-    skuUnitVat: sku.unitVat,
-    skuLineVat: sku.lineVat,
-    skuExpectedDeliveryDate: sku.expectedDeliveryDate,
-    skuExpectedShipmentDate: sku.expectedShipmentDate,
-
-    orderShippingAddressLine1: order.orderShippingAddress?.line1,
-    orderShippingAddressLine2: order.orderShippingAddress?.line2,
-    orderShippingAddressLine3: order.orderShippingAddress?.line3,
-    orderShippingAddressCompanyName: order.orderShippingAddress?.companyName,
-    orderShippingAddressFirstName: order.orderShippingAddress?.firstName,
-    orderShippingAddressLastName: order.orderShippingAddress?.lastName,
-    orderShippingAddressStreetName: order.orderShippingAddress?.streetName,
-    orderShippingAddressHouseNr: order.orderShippingAddress?.houseNr,
-    orderShippingAddressHouseNrAddition: order.orderShippingAddress?.houseNrAddition,
-    orderShippingAddressZipCode: order.orderShippingAddress?.zipCode,
-    orderShippingAddressCity: order.orderShippingAddress?.city,
-    orderShippingAddressRegion: order.orderShippingAddress?.region,
-    orderShippingAddressCountryIso: order.orderShippingAddress?.countryIso,
-
-    orderBillingAddressLine1: order.orderBillingAddress?.line1,
-    orderBillingAddressLine2: order.orderBillingAddress?.line2,
-    orderBillingAddressLine3: order.orderBillingAddress?.line3,
-    orderBillingAddressCompanyName: order.orderBillingAddress?.companyName,
-    orderBillingAddressFirstName: order.orderBillingAddress?.firstName,
-    orderBillingAddressLastName: order.orderBillingAddress?.lastName,
-    orderBillingAddressStreetName: order.orderBillingAddress?.streetName,
-    orderBillingAddressHouseNr: order.orderBillingAddress?.houseNr,
-    orderBillingAddressHouseNrAddition: order.orderBillingAddress?.houseNrAddition,
-    orderBillingAddressZipCode: order.orderBillingAddress?.zipCode,
-    orderBillingAddressCity: order.orderBillingAddress?.city,
-    orderBillingAddressRegion: order.orderBillingAddress?.region,
-    orderBillingAddressCountryIso: order.orderBillingAddress?.countryIso,
-
-    orderCustomerGender: order.orderCustomer?.gender,
-    orderCustomerFirstName: order.orderCustomer?.firstName,
-    orderCustomerLastName: order.orderCustomer?.lastName,
-    orderCustomerPhone: order.orderCustomer?.phone,
-    orderCustomerEmail: order.orderCustomer?.email,
-    orderCustomerCompanyRegistrationNo: order.orderCustomer?.companyRegistrationNo,
-    orderCustomerChannelCustomerNo: order.orderCustomer?.channelCustomerNo,
-
-    orderPaymentDetailsVatNo: order.orderPaymentDetails?.vatNo,
-    orderPaymentDetailsPaymentMethod: order.orderPaymentDetails?.paymentMethod,
-    orderPaymentDetailsPaymentReferenceNo: order.orderPaymentDetails?.paymentReferenceNo,
-
-    createdAt: order.createdAt,
-    updatedAt: order.updatedAt,
-  };
-};
-
-export const ORDER_EXPORT_HEADERS = [
-  'orderId',
-  'sellerId',
-  'channelId',
-  'channelOrderNumber',
-  'status',
-  'channelName',
-  'orderDate',
-  'merchantOrderNo',
-  'isBusinessOrder',
-  'orderSkuListCount',
-  'shippingCostsInclVat',
-  'shippingCostsVat',
-  'originalShippingCostsVat',
-  'shippingCostsExclVat',
-  'originalShippingCostsExclVat',
-  'subTotalFee',
-  'orderFee',
-
-  'skuId',
-  'skuMerchantProductNo',
-  'skuDescription',
-  'skuQuantity',
-  'skuStatus',
-  'skuUnitPriceInclVat',
-  'skuLineTotalInclVat',
-  'skuGtin',
-  'skuChannelProductNo',
-  'skuAirWaybillNo',
-  'skuCondition',
-  'skuVatRate',
-  'skuUnitVat',
-  'skuLineVat',
-  'skuExpectedDeliveryDate',
-  'skuExpectedShipmentDate',
-  'orderShippingAddressLine1',
-  'orderShippingAddressLine2',
-  'orderShippingAddressLine3',
-  'orderShippingAddressCompanyName',
-  'orderShippingAddressFirstName',
-  'orderShippingAddressLastName',
-  'orderShippingAddressStreetName',
-  'orderShippingAddressHouseNr',
-  'orderShippingAddressHouseNrAddition',
-  'orderShippingAddressZipCode',
-  'orderShippingAddressCity',
-  'orderShippingAddressRegion',
-  'orderShippingAddressCountryIso',
-
-  'orderBillingAddressLine1',
-  'orderBillingAddressLine2',
-  'orderBillingAddressLine3',
-  'orderBillingAddressCompanyName',
-  'orderBillingAddressFirstName',
-  'orderBillingAddressLastName',
-  'orderBillingAddressStreetName',
-  'orderBillingAddressHouseNr',
-  'orderBillingAddressHouseNrAddition',
-  'orderBillingAddressZipCode',
-  'orderBillingAddressCity',
-  'orderBillingAddressRegion',
-  'orderBillingAddressCountryIso',
-
-  'orderCustomerGender',
-  'orderCustomerFirstName',
-  'orderCustomerLastName',
-  'orderCustomerPhone',
-  'orderCustomerEmail',
-  'orderCustomerCompanyRegistrationNo',
-  'orderCustomerChannelCustomerNo',
-
-  'orderPaymentDetailsVatNo',
-  'orderPaymentDetailsPaymentMethod',
-  'orderPaymentDetailsPaymentReferenceNo',
-  'createdAt',
-  'updatedAt',
-];
-
-export const buildExportShipmentRow = (shipment, product = {}) => {
-  const safe = (v) => (v === null || v === undefined ? '' : v);
-
-  const order = shipment.order || {};
-  const latest = shipment.latestTracking || {};
-  const skuData = shipment.filteredSkus?.find((sku) => sku.merchantProductNo === product.merchantProductNo) || {};
-
-  return {
-    //  Shipment
-    'Shipment ID': safe(shipment?._id?.toString()),
-    'Shipment Menthod': shipment?.shipmentMethod,
-    'Shipment Status': safe(shipment.status),
-    'Shipment Merchant': shipment?.method || 'N/A',
-    'Merchant Shipment Number': safe(shipment.merchantShipmentNo),
-    'Aymakan Tracking Number': safe(shipment.airWaybillNo),
-    'Omniful Tracking Number': safe(shipment.omnifulTrackingCode),
-    'Number of Packages': safe(shipment.pieces),
-
-    'Shipment Created Date': shipment.createdAt ? new Date(shipment.createdAt).toISOString() : '',
-    'Shipment Last Updated Date': shipment.updatedAt ? new Date(shipment.updatedAt).toISOString() : '',
-
-    //  Order
-    'Order ID': safe(order?.orderId || shipment?.orderId),
-    'Merchant Order Number': safe(order?.merchantOrderNo),
-    'Sales Channel': safe(order?.channelName),
-    'Channel Order ID': safe(order?.channelOrderNumber),
-    'Order Date': order?.orderDate ? new Date(order.orderDate).toISOString() : '',
-    'Order Status': safe(shipment.orderStatus),
-
-    //  Aggregated
-    'Total Products': safe(shipment?.products?.length),
-    'Product SKUs': safe(product?.merchantProductNo), //  PER ROW
-    'Total Quantity': safe(product?.quantity), //  PER ROW
-    'HS Codes': safe(product?.hsCode), //  PER ROW
-
-    'Subtotal Amount': skuData.lineTotalExclVat || 0,
-    'Tax Amount (VAT)': skuData.lineVat || 0,
-    'Total Amount': skuData.lineTotalInclVat || 0,
-    'Shipment Total Amount': shipment.shipmentTotalAmount || 0,
-    'Payment Method': safe(order?.orderPaymentDetails?.method),
-
-    //  Tracking
-    'Tracking Updates Count': safe(shipment.trackingCount),
-    'Latest Tracking Status Code': safe(latest?.statusCode),
-    'Latest Tracking Status Description': safe(latest?.description),
-    'Latest Tracking Date': latest?.createdAt ? new Date(latest.createdAt).toISOString() : '',
-
-    'Tracking Status History': safe(shipment.trackingHistory),
-  };
-};
-
-export const SHIPMENT_EXPORT_HEADERS = [
-  'Shipment ID', //  NEW FIELD'
-  'Order ID',
-  'Shipment Menthod',
-  'Shipment Status',
-  'Order Status',
-  'Shipment Merchant',
-  'Merchant Shipment Number',
-  'Aymakan Tracking Number',
-  'Omniful Tracking Number',
-  'Number of Packages',
-  'Shipment Created Date',
-  'Shipment Last Updated Date',
-
-  'Merchant Order Number',
-  'Sales Channel',
-  'Channel Order ID',
-  'Order Date',
-
-  'Total Products',
-  'Product SKUs',
-  'Total Quantity',
-  'HS Codes',
-
-  'Subtotal Amount',
-  'Tax Amount (VAT)',
-  'Total Amount',
-  'Shipment Total Amount',
-  'Payment Method',
-
-  'Tracking Updates Count',
-  'Latest Tracking Status Code',
-  'Latest Tracking Status Description',
-  'Latest Tracking Date',
-  'Tracking Status History',
-];
 export default {
   escapeCsv,
   generateCSVFilename,
@@ -455,8 +202,4 @@ export default {
   generateDynamicRowData,
   formatValueForCSV,
   formatAddressForCSV,
-  buildExportOrderRow,
-  ORDER_EXPORT_HEADERS,
-  buildExportShipmentRow,
-  SHIPMENT_EXPORT_HEADERS,
 };

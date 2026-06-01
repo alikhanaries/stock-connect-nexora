@@ -11,7 +11,6 @@ import {
   cancelPartialOrder,
   generateDocumentId,
   exportOrders,
-  generateSellerInvoice,
   getAnalyticsOrders,
   handleOmnifulOrderWebhook,
 } from '#controllers/OrderController.js';
@@ -26,7 +25,6 @@ import {
   cancelFullOrderValidator,
   cancelPartialOrderValidator,
   exportOrdersValidator,
-  generateSellerInvoiceValidator,
   getAnalyticsOrdersValidator,
   generateDocumentIdValidator,
 } from '#validations/orders.js';
@@ -382,71 +380,6 @@ router.put(
   authMiddleware,
   verifySellerAccess,
   cancelPartialOrder
-);
-
-// GENERATE ORDER INVOICE
-
-/**
- * @swagger
- * /orders/generateSellerInvoice:
- *   post:
- *     tags: [Orders]
- *     summary: Generate seller invoice for an order
- *     description: Generates invoice PDF/data for the given orderId
- *     parameters:
- *       - in: header
- *         name: Accept-Language
- *         schema:
- *           type: string
- *           enum: [en, ar, zh-CN, tr]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               orderId:
- *                 type: string
- *                 description: MongoDB ObjectId of the order
- *                 example: 69bd24f86a31299529e7d778
- *             required: [orderId]
- *     security:
- *       - BearerAuth: []
- *     responses:
- *       200:
- *         description: Invoice generated successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: Invoice generated successfully
- *                 data:
- *                   type: object
- *                   description: Invoice details or file URL/base64
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: "#/components/schemas/FailResponse"
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden (seller access issue)
- */
-router.post(
-  '/generateSellerInvoice',
-  generateSellerInvoiceValidator,
-  authMiddleware,
-  verifySellerAccess,
-  generateSellerInvoice
 );
 
 router.post(

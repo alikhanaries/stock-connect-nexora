@@ -8,13 +8,6 @@ const ReturnSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
-    sellerIds: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Seller',
-        index: true,
-      },
-    ],
     merchantReturnNo: {
       type: String,
       index: true,
@@ -58,30 +51,12 @@ const ReturnSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
-    sellerStatuses: [
-      {
-        sellerId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'Seller',
-          index: true,
-        },
-        status: {
-          type: String,
-          index: true,
-        },
-      },
-    ],
     platform: {
       type: String,
     },
     products: [
       {
         _id: false,
-        sellerId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: 'Seller',
-          required: true,
-        },
         productSkuCode: {
           type: String,
         },

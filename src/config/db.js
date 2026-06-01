@@ -10,7 +10,6 @@ const connect = async () => {
   try {
     console.time('MongoDB Connection');
     dbConnection = await mongoose.connect(config.DB_URL);
-    console.log('config.DB_URL', config.DB_URL);
     console.timeEnd('MongoDB Connection');
     return dbConnection;
   } catch (err) {

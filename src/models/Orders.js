@@ -15,6 +15,7 @@ const OrderSchema = new mongoose.Schema(
     channelOrderNumber: {
       type: String,
       required: true,
+      unique: true,
       index: true,
     },
     sellerId: {
@@ -23,13 +24,6 @@ const OrderSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    sellerIds: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Seller',
-        index: true,
-      },
-    ],
     channelId: {
       type: Number,
       required: true,
@@ -129,7 +123,6 @@ const OrderSchema = new mongoose.Schema(
 OrderSchema.index({ sellerId: 1, status: 1, orderDate: -1 });
 OrderSchema.index({ sellerId: 1, orderDate: -1 });
 OrderSchema.index({ status: 1, createdAt: -1, sellerId: 1, orderDate: 1 });
-OrderSchema.index({ orderId: 1, channelOrderNumber: 1 }, { unique: true });
 const Order = mongoose.model('ChannelEngineOrder', OrderSchema);
 
 export default Order;

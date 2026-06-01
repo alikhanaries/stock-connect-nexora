@@ -4,8 +4,6 @@ import User from '../models/User.js';
 import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
 import Return from '#models/Return.js';
-import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
-import { SHIPMENT_EXPORT_HEADERS, buildExportShipmentRow } from '#helpers/export.js';
 import {
   createAymakanShipment,
   trackAymakanShipment,
@@ -331,7 +329,7 @@ export const createFullShipmentService = async (shipmentData) => {
 
     if (!order) return { success: false, message: 'Order not found.' };
 
-    if (!order.sellerIds.map(String).includes(String(sellerId))) {
+    if (sellerId !== order.sellerId.toString()) {
       return { success: false, message: 'Wrong seller Id.' };
     }
     const { orderSkuList, merchantOrderNo, orderId } = order;
@@ -587,25 +585,16 @@ export const createFullShipmentService = async (shipmentData) => {
 
     const logEntry = {
       status: 'SHIPMENT CREATED',
-      description: `Shipment created at Aymakan with AWB - ${trackingNumber}. Items to be picked: ${qtyMessage}.`,
+      description: `Shipment created with AWB - ${trackingNumber}. Items shipped: ${qtyMessage}.`,
       createdAt: new Date(),
     };
 
-    await OrderLogs.updateOne(
-      {
-        orderId: new mongoose.Types.ObjectId(id),
-        sellerId: new mongoose.Types.ObjectId(sellerId),
-      },
-      {
-        $push: { details: logEntry },
-        $setOnInsert: {
-          orderId: new mongoose.Types.ObjectId(id),
-          sellerId: new mongoose.Types.ObjectId(sellerId),
-        },
-      },
-      { upsert: true }
-    );
-    await syncSellerOrdersFromOrder(id);
+    await OrderLogs.updateOne({ orderId: id }, { $push: { details: logEntry } }, { upsert: true });
+
+    if (stockPayloads.length > 0) {
+      sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
+    }
+
     return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
     console.error('Error in createPartialShipmentService:', error);
@@ -684,6 +673,8 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
       aggregationPipeline.push({
         $match: { $and: andConditions },
       });
+
+      appliedFilters.search = search;
     }
 
     // Data Pipeline
@@ -829,7 +820,7 @@ export const ayMakanWebHookService = async (data) => {
     if (!data?.tracking) {
       return { success: false, message: 'Missing tracking in webhook payload' };
     }
-    let omnifulResponse = null;
+
     // ---------------- FIND SHIPMENT ----------------
     const shipmentData = await Shipment.findOne(
       { airWaybillNo: data.tracking },
@@ -842,7 +833,6 @@ export const ayMakanWebHookService = async (data) => {
         status: 1,
         orderId: 1,
         submissionDate: 1,
-        sellerId: 1,
       }
     ).lean();
 
@@ -866,28 +856,29 @@ export const ayMakanWebHookService = async (data) => {
       };
     }
 
-    if (shipmentStatus === 'HUB_RECIEVED') {
-      omnifulResponse = await forwardShipmentService.forwardAymakanShipment(shipmentData);
-      await safeExecute(async () => {}, 'Updating delivery state in ChannelEngine');
+    if (shipmentStatus === 'DELIVERED') {
+      await forwardShipmentService.forwardAymakanShipment(shipmentData);
+      await safeExecute(async () => {
+        await updateShipmentDeliveryStateChannelEngine(
+          'DELIVERED',
+          data?.tracking?.delivery_date || new Date(),
+          shipmentData.merchantShipmentNo
+        );
+      }, 'Updating delivery state in ChannelEngine');
     }
 
     // ---------------- UPDATE SHIPMENT ----------------
     const updateData = {
-      status: omnifulResponse?.id ? 'OMNIFUL_PROCESSED' : shipmentStatus,
+      status: shipmentStatus,
       trackingInfo: (data.tracking_info || []).map((i) => ({
         statusCode: i.status_code,
         description: i.description,
         createdAt: i.created_at,
       })),
-
-      omniful: {
-        omnifulId: omnifulResponse?.id,
-        omnifulOrderId: omnifulResponse?.orderId,
-      },
     };
 
     // Add submissionDate only when status is SHIPPED and submissionDate is not already set
-    if (shipmentStatus === 'SHIPMENT_PROCESSED' && !shipmentData.submissionDate) {
+    if (shipmentStatus === 'SHIPPED' && !shipmentData.submissionDate) {
       updateData.submissionDate = new Date();
     }
 
@@ -899,7 +890,7 @@ export const ayMakanWebHookService = async (data) => {
     let deliveredDelta = 0;
     let canceledDelta = 0;
 
-    if (shipmentStatus === 'SHIPMENT_PROCESSED' || shipmentStatus === 'CANCELED' || shipmentStatus === 'HUB_RECIEVED') {
+    if (shipmentStatus === 'SHIPPED' || shipmentStatus === 'DELIVERED' || shipmentStatus === 'CANCELED') {
       const orderDoc = await Order.findById(shipmentData.orderId);
 
       if (orderDoc?.orderSkuList?.skuList?.length) {
@@ -915,6 +906,28 @@ export const ayMakanWebHookService = async (data) => {
 
           const sb = sku.statusBreakdown || {};
           const safe = (n) => Math.max(n, 0);
+
+          // SHIPPED
+
+          if (shipmentStatus === 'SHIPPED') {
+            const moveQty = Math.min(sb.shipmentCreated || 0, qty);
+
+            sb.shipmentCreated = safe(sb.shipmentCreated - moveQty);
+            sb.shipped = safe((sb.shipped || 0) + moveQty);
+
+            shippedDelta += moveQty;
+          }
+
+          //  DELIVERED
+
+          if (shipmentStatus === 'DELIVERED') {
+            const moveQty = Math.min(sb.shipped || 0, qty);
+
+            sb.shipped = safe(sb.shipped - moveQty);
+            sb.delivered = safe((sb.delivered || 0) + moveQty);
+
+            deliveredDelta += moveQty;
+          }
 
           //  CANCELED
 
@@ -951,8 +964,64 @@ export const ayMakanWebHookService = async (data) => {
     // ORDER STATUS DERIVATION (BREAKDOWN DRIVEN)
 
     const order = await Order.findById(shipmentData.orderId).lean();
+    const skuList = order.orderSkuList?.skuList || [];
 
-    let finalOrderStatus = 'IN_PROGRESS';
+    const aggregated = skuList.reduce(
+      (acc, sku) => {
+        const sb = sku.statusBreakdown || {};
+        acc.totalQty += sku.quantity || 0;
+        acc.confirmed += sb.confirmed || 0;
+        acc.shipmentCreated += sb.shipmentCreated || 0;
+        acc.shipped += sb.shipped || 0;
+        acc.delivered += sb.delivered || 0;
+        acc.canceled += sb.canceled || 0;
+        acc.returned += sb.returned || 0;
+        return acc;
+      },
+      {
+        totalQty: 0,
+        confirmed: 0,
+        shipmentCreated: 0,
+        shipped: 0,
+        delivered: 0,
+        canceled: 0,
+        returned: 0,
+      }
+    );
+
+    const activeShipmentsCount = await Shipment.countDocuments({
+      orderId: shipmentData.orderId,
+      status: { $ne: 'CANCELED' },
+    });
+
+    let finalOrderStatus;
+
+    if (activeShipmentsCount === 0 && aggregated.canceled === aggregated.totalQty) {
+      //  All canceled, no shipments
+      finalOrderStatus = 'NEW';
+    } else if (aggregated.delivered === aggregated.totalQty) {
+      //  Fully delivered
+      finalOrderStatus = 'DELIVERED';
+    } else if (aggregated.delivered + aggregated.canceled === aggregated.totalQty) {
+      //  Finished: some delivered, some canceled
+      finalOrderStatus = 'CLOSED';
+    } else if (
+      aggregated.shipped > 0 &&
+      aggregated.confirmed === 0 &&
+      aggregated.shipmentCreated === 0 &&
+      aggregated.delivered === 0 &&
+      aggregated.returned === 0
+    ) {
+      //  Shipped, nothing pending
+      finalOrderStatus = 'SHIPPED';
+    } else {
+      //  Anything still pending
+      finalOrderStatus = 'IN_PROGRESS';
+    }
+    // FORCE RULE: Delivered orders must be Closed
+    if (finalOrderStatus === 'DELIVERED') {
+      finalOrderStatus = 'CLOSED';
+    }
 
     // STATUS PRIORITY GUARD
 
@@ -965,7 +1034,7 @@ export const ayMakanWebHookService = async (data) => {
       // forward progress
       nextPriority > currentPriority ||
       // reset to NEW only if not final
-      (finalOrderStatus === 'NEW' && !['HUB_RECIEVED', 'CLOSED', 'CANCELED', 'PAYMENT_FAILED'].includes(order.status));
+      (finalOrderStatus === 'NEW' && !['DELIVERED', 'CLOSED', 'CANCELED', 'PAYMENT_FAILED'].includes(order.status));
 
     if (canUpdate) {
       await Order.findByIdAndUpdate(order._id, { status: finalOrderStatus });
@@ -976,37 +1045,20 @@ export const ayMakanWebHookService = async (data) => {
     if (shippedDelta > 0 || deliveredDelta > 0 || canceledDelta > 0 || canUpdate) {
       const descriptionParts = [];
 
-      // AWB based message
-      if (shipmentStatus === 'SHIPMENT_PROCESSED') {
-        descriptionParts.push(
-          `Shipment with AWB ${shipmentData.airWaybillNo} has been picked by Aymakan from collection point`
-        );
-      }
-
-      if (shipmentStatus === 'HUB_RECIEVED') {
-        descriptionParts.push(
-          `Shipment with AWB ${shipmentData.airWaybillNo} has been delivered at ware house by Aymakan`
-        );
-      }
-
-      if (shipmentStatus === 'CANCELED') {
-        descriptionParts.push(`Shipment with AWB ${shipmentData.airWaybillNo} has been canceled by Aymakan`);
-      }
-
-      // Quantity-based messages
+      //  Quantity-based messages (what changed)
       if (deliveredDelta > 0) {
-        descriptionParts.push(`${deliveredDelta} item(s) delivered to Omniful by Aymakan`);
+        descriptionParts.push(`${deliveredDelta} item(s) delivered`);
       }
 
       if (shippedDelta > 0) {
-        descriptionParts.push(`${shippedDelta} item(s) shipped by Aymakan`);
+        descriptionParts.push(`${shippedDelta} item(s) shipped`);
       }
 
       if (canceledDelta > 0) {
-        descriptionParts.push(`${canceledDelta} item(s) canceled by Aymakan`);
+        descriptionParts.push(`${canceledDelta} item(s) canceled`);
       }
 
-      // Status-based meaning
+      //  Status-based meaning (what it means)
       if (finalOrderStatus === 'CLOSED') {
         descriptionParts.push('All actions completed; the order has been closed.');
       } else if (finalOrderStatus === 'DELIVERED' && deliveredDelta === 0) {
@@ -1015,57 +1067,32 @@ export const ayMakanWebHookService = async (data) => {
         descriptionParts.push('Order fully canceled');
       } else if (finalOrderStatus === 'NEW') {
         descriptionParts.push('All shipments canceled, order reset');
-      } else if (finalOrderStatus === 'SHIPMENT_PROCESSED' && shippedDelta === 0) {
-        descriptionParts.push('All shippable items to be shipped');
+      } else if (finalOrderStatus === 'SHIPPED' && shippedDelta === 0) {
+        descriptionParts.push('All shippable items shipped');
       } else if (finalOrderStatus === 'IN_PROGRESS' && descriptionParts.length === 0) {
         descriptionParts.push('Order in progress');
       }
 
-      const logEntries = [];
-
-      // First log
       const description = `${descriptionParts.join('. ')}.`;
 
-      logEntries.push({
-        status: finalOrderStatus,
-        shippedQty: shippedDelta || 0,
-        deliveredQty: deliveredDelta || 0,
-        canceledQty: canceledDelta || 0,
-        description,
-        createdAt: convetDateToUTC(new Date()),
-      });
-
-      // Second log (only if omnifulResponse exists)
-      if (omnifulResponse) {
-        logEntries.push({
-          status: finalOrderStatus,
-          shippedQty: shippedDelta || 0,
-          deliveredQty: deliveredDelta || 0,
-          canceledQty: canceledDelta || 0,
-          description: `Shipment Order with id ${omnifulResponse?.orderId} has been generated at Omniful`,
-          createdAt: convetDateToUTC(new Date()),
-        });
-      }
-
-      // Single DB call
       await OrderLogs.updateOne(
-        {
-          orderId: order._id,
-          sellerId: shipmentData.sellerId,
-        },
+        { orderId: order._id },
         {
           $push: {
-            details: { $each: logEntries },
-          },
-          $setOnInsert: {
-            orderId: order._id,
-            sellerId: shipmentData.sellerId,
+            details: {
+              status: finalOrderStatus,
+              shippedQty: shippedDelta || 0,
+              deliveredQty: deliveredDelta || 0,
+              canceledQty: canceledDelta || 0,
+              description,
+              createdAt: convetDateToUTC(new Date()),
+            },
           },
         },
         { upsert: true }
       );
     }
-    await syncSellerOrdersFromOrder(order?._id);
+
     return {
       success: true,
       message: `Shipment ${data.tracking} updated successfully`,
@@ -1238,8 +1265,6 @@ export const getSingleShipmentService = async (id) => {
         paymentInfo: '$orderDetails.orderPaymentDetails',
         orderId: '$orderDetails.orderId',
         orderMongoId: '$orderDetails._id',
-        invoiceDocumentId: 1,
-        omniful: 1,
       },
     }
   );
@@ -1332,8 +1357,6 @@ const transformShipmentResponse = (response) => {
     deliveryDetails,
     pickUpDetails,
     shipmentMethod: data?.shipmentMethod,
-    invoiceDocumentId: data?.invoiceDocumentId,
-    omniful: data?.omniful,
   };
 };
 export const formatShipmentTrackingInfo = (data) => {
@@ -1386,7 +1409,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     const stockPayloads = [];
     for (const product of products || []) {
-      const sku = order?.orderSkuList?.skuList.find((s) => String(s.id) === String(product.orderLineId));
+      const sku = order.orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
 
       if (!sku) continue;
 
@@ -1411,7 +1434,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       sku.statusBreakdown.confirmed += qty;
 
       // SKU status correction
-      sku.status = 'IN_PROGRESS';
+      sku.status = sku.statusBreakdown.confirmed === sku.quantity ? 'NEW' : 'IN_PROGRESS';
 
       const stockResult = await increaseStock(product.merchantProductNo, qty, shipment.sellerId, sellerName, 'CE');
       if (!stockResult?.success) {
@@ -1423,27 +1446,26 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }
 
-    order.status = 'IN_PROGRESS';
+    // Step 6: Determine final order status and save order in one operation
+    const hasActiveShipment = await Shipment.exists({
+      orderId,
+      status: { $ne: 'CANCELED' },
+    });
+
+    order.status = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
     await order.save();
 
     // Order logs
     const qtyMessage = (products || []).map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
     await OrderLogs.updateOne(
-      {
-        orderId: orderId,
-        sellerId: shipment.sellerId,
-      },
+      { orderId },
       {
         $push: {
           details: {
             status: 'SHIPMENT CANCELED',
-            description: `Shipment with AWB ${airWaybillNo} has been canceled. Items reverted: ${qtyMessage}.`,
+            description: `Shipment canceled (AWB - ${airWaybillNo}). Items reverted: ${qtyMessage}.`,
             createdAt: new Date(),
           },
-        },
-        $setOnInsert: {
-          orderId: orderId,
-          sellerId: shipment.sellerId,
         },
       },
       { upsert: true }
@@ -1525,6 +1547,7 @@ export const syncShipmentStatus = async (orderId) => {
         }));
 
         if (!trackingInfo.length) {
+          console.log('No tracking info for shipment:', shipment._id);
           continue;
         }
 
@@ -1542,6 +1565,7 @@ export const syncShipmentStatus = async (orderId) => {
 
         // Avoid duplicate / downgrade updates
         if (shipment.status && ORDER_PRIORITY.indexOf(shipmentStatus) <= ORDER_PRIORITY.indexOf(shipment.status)) {
+          console.log('Skipping downgrade or duplicate update:', shipment.status, '→', shipmentStatus);
           continue;
         }
 
@@ -1838,7 +1862,9 @@ export const createReverseShipmentWithAymakan = async (shipmentData) => {
     throw error;
   }
 };
-export const createReverseShipmentService = async (shipmentData, sellerId) => {
+
+export const createReverseShipmentService = async (shipmentData) => {
+  const session = await mongoose.startSession();
   try {
     const { orderId, userId, deliverId, pieces = 0, returnId } = shipmentData;
 
@@ -1848,7 +1874,6 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
     if (!userId) missingFields.push('userId');
     if (!deliverId) missingFields.push('deliverId');
     if (!returnId) missingFields.push('returnId');
-    if (!sellerId) missingFields.push('sellerId');
 
     if (missingFields.length > 0) {
       throw new Error(`Missing required shipment fields: ${missingFields.join(', ')}`);
@@ -1863,49 +1888,49 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
 
     if (!returnData) return { success: false, message: 'Return data not found.' };
 
-    const { merchantOrderNo, orderSkuList } = order;
+    const returnProducts = returnData?.products;
+    const { merchantOrderNo, orderSkuList, sellerId } = order;
 
-    const sellerProducts = (returnData.products || []).filter((p) => p.sellerId.toString() === sellerId.toString());
-
-    if (!sellerProducts.length) {
-      return { success: false, message: 'No products found for this seller in return.' };
+    // Validate SKU list
+    if (!returnProducts || returnProducts.length === 0) {
+      return { success: false, message: 'Retrun has empty line items.' };
     }
 
     // Filter products to valid SKUs
-    const validProducts = sellerProducts.filter((product) =>
+    const validProducts = returnProducts.filter((product) =>
       orderSkuList.skuList.some((s) => s.merchantProductNo === product.productSkuCode)
     );
     if (validProducts.length === 0) {
-      return { success: false, message: 'No valid SKUs found in order for this seller.' };
+      return { success: false, message: 'No valid SKUs found in order for shipment.' };
     }
 
-    // Prevent duplicate reverse shipment (seller-level)
-    const productSkuCodes = validProducts.map((p) => p.productSkuCode);
+    //  Step 3: Find existing shipments for given SKUs
+    const productLineIds = returnProducts.map((p) => p.productSkuCode);
 
-    const existingShipment = await Shipment.findOne({
-      orderId,
-      returnId,
-      sellerId,
-      type: 'REVERSE',
-      status: { $ne: 'CANCELED' },
-      'products.merchantProductNo': { $in: productSkuCodes },
-    });
-
-    if (existingShipment) {
-      return { success: false, message: 'Reverse shipment already exists for this seller.' };
+    const [existingShipments, sellerDoc] = await Promise.all([
+      Shipment.find({
+        orderId,
+        type: 'REVERSE',
+        status: { $ne: 'CANCELED' },
+        'products.merchantProductNo': { $in: productLineIds },
+      }).lean(),
+      Seller.findById(sellerId).select('name').lean(),
+    ]);
+    if (!sellerDoc) {
+      return { success: false, message: 'Seller not found' };
     }
-
-    // Step 6: Prepare addresses
+    const sellerName = sellerDoc?.name;
+    if (existingShipments && existingShipments?.length !== 0) {
+      return { success: false, message: `Shipment already created` };
+    }
+    //  Step 6: Prepare delivery & pickup details
     const pickUpData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
     if (!pickUpData) throw new Error('Invalid pickup information');
-
     const collectionData = await saveDeliveryAddress(pickUpData);
 
     const deliveryData = await getPickUpAddress(deliverId);
     if (!deliveryData) throw new Error('Invalid delivery information');
-
-    //Format ONLY seller products
-    const formatedProducts = validProducts.map((pro) => {
+    const formatedProducts = returnProducts?.map((pro) => {
       const plain = JSON.parse(JSON.stringify(pro));
 
       return {
@@ -1916,7 +1941,7 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
       };
     });
 
-    // Step 8: Create shipment in Aymakan
+    // //  Step 7: Create shipment in Aymakan
     const aymakanResult = await createReverseShipmentWithAymakan({
       ...shipmentData,
       deliveryData,
@@ -1930,9 +1955,10 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
     }
 
     const trackingNumber = aymakanResult.shipping.tracking_number;
+
     const merchantShipmentNo = `MS-${orderId}-${Date.now()}`;
 
-    // Step 9: Track shipment
+    //  Step 8: Track shipment for initial status info
     const aymakanTrackingResult = await trackAymakanShipment(trackingNumber);
     const trackingInfo = Array.isArray(aymakanTrackingResult?.trackingInfo)
       ? aymakanTrackingResult.trackingInfo.map((info) => ({
@@ -1946,6 +1972,19 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
         }))
       : [];
 
+    const stockPayloads = [];
+    for (const product of validProducts) {
+      const qty = Number(product.quantity || 0);
+
+      const stockResult = await increaseStock(product.productSkuCode, qty, sellerId, sellerName, 'CE');
+
+      if (!stockResult?.success) {
+        throw new Error(`Unable to start shipment: ${stockResult?.message || 'unknown error'}`);
+      }
+
+      if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
+    }
+
     //  Step 9: Prepare & save shipment document
     const shipmentDocument = new Shipment({
       orderId: new mongoose.Types.ObjectId(orderId),
@@ -1956,7 +1995,6 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
       airWaybillNo: trackingNumber,
       merchantShipmentNo,
       merchantOrderNo,
-      returnId,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
       products: formatedProducts,
@@ -1967,39 +2005,20 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
       },
       pieces,
       type: 'REVERSE',
-      shipmentMethod: 'AYMAKAN',
     });
 
     const newShipmentData = await shipmentDocument.save();
 
-    // Step 11: Acknowledge Channel Engine
-    const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
-    await fetch(ceUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ReturnId: returnData?.returnId,
-        MerchantReturnNo: returnData?.merchantReturnNo,
-      }),
-    });
-
     // UPDATE RETURN STATUS AS APPROVED
-    await Return.findOneAndUpdate(
+    await Return.findByIdAndUpdate(
+      returnId,
       {
-        _id: returnId,
-        'sellerStatuses.sellerId': new mongoose.Types.ObjectId(sellerId),
-      },
-      {
-        $addToSet: {
-          shipmentId: newShipmentData._id,
-        },
-        $set: {
-          'sellerStatuses.$.status': 'SHIPMENT_CREATED', //  update only this seller
-        },
+        $set: { status: 'SHIPMENT_CREATED' },
         $push: {
+          shipmentId: newShipmentData?._id,
           logs: {
             status: 'SHIPMENT_CREATED',
-            description: `Reverse shipment created for seller ${sellerId}`,
+            description: 'Shipment Created',
             createdAt: new Date(),
           },
         },
@@ -2007,10 +2026,35 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
       { new: true }
     );
 
+    if (stockPayloads.length > 0) {
+      sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
+    }
+
+    // ACKNOWLDGE CHANNEL ENGINE ABOUT APPROVAL
+    try {
+      const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
+      const ceResponse = await fetch(ceUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ReturnId: returnData?.returnId,
+          MerchantReturnNo: returnData?.merchantReturnNo,
+        }),
+      });
+
+      if (!ceResponse.ok) {
+        console.error(`ChannelEngine return-acknowledge failed with status ${ceResponse.status}`);
+      }
+    } catch (error) {
+      console.error('Network error during ChannelEngine return-acknowledge:', error.message);
+    }
+
     return { success: true, shipmentId: shipmentDocument._id };
   } catch (error) {
     console.error('Error in createReverseShipmentService:', error);
     throw error;
+  } finally {
+    session.endSession();
   }
 };
 
@@ -2082,9 +2126,7 @@ export const createManualShipmentService = async (shipmentData) => {
     if (existingAwb) throw new Error(`AWB number '${airWaybillNo}' already exists`);
     if (!order) throw new Error(`Order with ID ${orderId} not found`);
     if (!user) throw new Error(`User with ID ${userId} not found`);
-    if (!order.sellerIds.map(String).includes(String(sellerId))) {
-      return { success: false, message: 'Wrong seller Id.' };
-    }
+
     /* -------------------- ORDER SKU MAP -------------------- */
     const orderSkuMap = new Map();
     order.orderSkuList?.skuList?.forEach((sku) => {
@@ -2096,7 +2138,7 @@ export const createManualShipmentService = async (shipmentData) => {
 
     const existingShipments = await Shipment.find({
       orderId,
-      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED', 'OUT_FOR_DELIVERY'] },
+      status: { $in: ['SHIPMENT_CREATED', 'SHIPPED', 'DELIVERED'] },
       'products.orderLineId': { $in: productLineIds },
     }).lean();
 
@@ -2180,33 +2222,12 @@ export const createManualShipmentService = async (shipmentData) => {
     /* -------------------- CREATE SHIPMENT -------------------- */
     const totalPieces = validatedProducts.reduce((s, p) => s + p.quantity, 0);
 
-    try {
-      const ceResult = await createShipmentWithChannelEngine({
-        merchantShipmentNo,
-        merchantOrderNo: order.merchantOrderNo || order.orderId,
-        lines: validatedProducts,
-        trackTraceNo: airWaybillNo,
-        trackTraceUrl,
-        method,
-        shippedFromCountryCode,
-        shipmentDate: new Date(),
-        isMerchantCreator: true,
-        airWaybillNo,
-      });
-
-      if (!ceResult?.success) {
-        console.error(`ChannelEngine create shipment failed: ${ceResult?.message}`);
-      }
-    } catch (error) {
-      console.error(`CE create shipment failed due to ${error.message}`);
-    }
-
     const shipment = await new Shipment({
       orderId,
       sellerId,
       userId,
       deliveryId,
-      ...(pickupData && { pickUpId: pickupData._id }),
+      ...(pickupData && { pickUpId: pickupData._id }), // ✅ optional
       airWaybillNo,
       merchantShipmentNo,
       merchantOrderNo: order.merchantOrderNo || order.orderId,
@@ -2214,7 +2235,7 @@ export const createManualShipmentService = async (shipmentData) => {
       shippedFromCountryCode,
       products: validatedProducts,
       pieces: totalPieces,
-      status: 'OUT_FOR_DELIVERY',
+      status: 'SHIPPED',
       submissionDate: new Date(),
       shipmentMethod: 'MANUAL',
       isMerchantCreator: true,
@@ -2296,25 +2317,15 @@ export const createManualShipmentService = async (shipmentData) => {
     });
 
     /* -------------------- LOGS -------------------- */
-
     await OrderLogs.updateOne(
-      {
-        orderId: orderId,
-        sellerId: sellerId,
-      },
+      { orderId },
       {
         $push: {
           details: {
             status: allShipped ? 'SHIPPED' : 'IN_PROGRESS',
-            description: allShipped
-              ? `Shipment with AWB ${airWaybillNo} has been shipped. All available items shipped`
-              : `Shipment with AWB ${airWaybillNo} has been shipped.`,
+            description: allShipped ? 'All available items shipped' : 'Order partially shipped',
             createdAt: convetDateToUTC(new Date()),
           },
-        },
-        $setOnInsert: {
-          orderId: orderId,
-          sellerId: sellerId,
         },
       },
       { upsert: true }
@@ -2324,7 +2335,27 @@ export const createManualShipmentService = async (shipmentData) => {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
     }
 
-    await syncSellerOrdersFromOrder(orderId);
+    try {
+      const ceResult = await createShipmentWithChannelEngine({
+        merchantShipmentNo,
+        merchantOrderNo: order.merchantOrderNo || order.orderId,
+        lines: validatedProducts,
+        trackTraceNo: airWaybillNo,
+        trackTraceUrl,
+        method,
+        shippedFromCountryCode,
+        shipmentDate: new Date(),
+        isMerchantCreator: true,
+        airWaybillNo,
+      });
+
+      if (!ceResult?.success) {
+        console.error(`ChannelEngine create shipment failed: ${ceResult?.message}`);
+      }
+    } catch (error) {
+      console.error(`CE create shipment failed due to ${error.message}`);
+    }
+
     return {
       success: true,
       message: 'MANUAL shipment created successfully',
@@ -2420,7 +2451,7 @@ async function handleShipmentReturnStatusUpdate({ shipment, shipmentStatus, trac
 }
 export const getChannelEngineShipmentDetailsService = async (userId) => {
   const pageSize = 100; // ChannelEngine hard limit
-  const MAX_PAGES_PER_RUN = 7; // rate-limit safe
+  const MAX_PAGES_PER_RUN = 3; // rate-limit safe
   const DELAY_MS = 300;
 
   const baseUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`;
@@ -2441,7 +2472,7 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
   const safeFetch = async (url) => {
     try {
       const response = await fetch(url, { method: 'GET', headers });
-
+      console.log('response', response);
       if (response.status === 429) {
         return handleRateLimit(response);
       }
@@ -2512,343 +2543,205 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
 
 export const createShipmentsFromChannelEngine = async (channelEngineShipments, userId) => {
   if (!Array.isArray(channelEngineShipments) || !channelEngineShipments.length) {
-    console.log('No channel engine shipments found');
     return true;
   }
 
   const bulkOps = [];
 
   try {
-    // ---- collect channel order nos
-    const channelOrderNos = new Set();
-
-    for (const s of channelEngineShipments) {
-      const channelOrderNo = s?.ChannelOrderNo || s?.channelOrderNumber;
-
-      if (channelOrderNo) {
-        channelOrderNos.add(String(channelOrderNo));
-      }
-    }
-
-    // ---- fetch orders using channelOrderNo
-    const channelOrders = channelOrderNos.size
-      ? await Order.find({
-          channelOrderNumber: {
-            $in: [...channelOrderNos],
-          },
-        }).lean()
-      : [];
-
-    const orderByChannelOrderNo = new Map();
-
-    channelOrders.forEach((o) => {
-      if (o?.channelOrderNumber) {
-        orderByChannelOrderNo.set(String(o.channelOrderNumber), o);
-      }
-    });
-
     // ---- 1️ Collect lookup keys upfront
     const merchantOrderNos = new Set();
+    const channelOrderLineNos = new Set();
 
     for (const s of channelEngineShipments) {
-      if (s?.MerchantOrderNo) {
-        merchantOrderNos.add(s.MerchantOrderNo);
-      }
+      if (s.MerchantOrderNo) merchantOrderNos.add(s.MerchantOrderNo);
+
+      (s.Lines || []).forEach((l) => {
+        const no = l?.OrderLine?.ChannelOrderLineNo;
+        if (no) channelOrderLineNos.add(no);
+      });
     }
 
-    // ---- fetch orders
-    const orders = merchantOrderNos.size
-      ? await Order.find({
-          merchantOrderNo: {
-            $in: [...merchantOrderNos],
-          },
-        }).lean()
-      : [];
+    // ---- 2️ Fetch orders in TWO queries only
+    const [ordersByMerchantNo, ordersBySku] = await Promise.all([
+      merchantOrderNos.size ? Order.find({ merchantOrderNo: { $in: [...merchantOrderNos] } }).lean() : [],
+      channelOrderLineNos.size
+        ? Order.find({
+            'orderSkuList.skuList.channelOrderLineNo': {
+              $in: [...channelOrderLineNos],
+            },
+          }).lean()
+        : [],
+    ]);
 
+    // ---- 3️ Build fast lookup maps
     const orderByMerchantNo = new Map();
+    const orderByChannelLineNo = new Map();
 
-    orders.forEach((o) => {
-      if (o?.merchantOrderNo) {
-        orderByMerchantNo.set(o.merchantOrderNo, o);
-      }
+    ordersByMerchantNo.forEach((o) => {
+      if (o.merchantOrderNo) orderByMerchantNo.set(o.merchantOrderNo, o);
     });
 
-    // ------------------------------------------------------------
-    // ---- collect product sku codes
-    // ------------------------------------------------------------
-    const productSkuCodes = new Set();
-
-    for (const s of channelEngineShipments) {
-      const lines = Array.isArray(s?.Lines) ? s.Lines : [];
-
-      for (const l of lines) {
-        if (l?.MerchantProductNo) {
-          productSkuCodes.add(String(l.MerchantProductNo).trim());
+    ordersBySku.forEach((o) => {
+      o.orderSkuList?.skuList?.forEach((sku) => {
+        if (sku.channelOrderLineNo) {
+          orderByChannelLineNo.set(sku.channelOrderLineNo, o);
         }
-      }
-    }
-
-    // ------------------------------------------------------------
-    // ---- fetch products
-    // ------------------------------------------------------------
-    const products = productSkuCodes.size
-      ? await Product.find({
-          productSkuCode: {
-            $in: [...productSkuCodes],
-          },
-        })
-          .select('_id sellerId productSkuCode')
-          .lean()
-      : [];
-
-    const productMap = new Map();
-
-    products.forEach((p) => {
-      if (p?.productSkuCode) {
-        productMap.set(String(p.productSkuCode).trim(), p);
-      }
+      });
     });
 
-    // ---- process shipments
+    // ---- 4️ Process shipments
     for (const ceShipment of channelEngineShipments) {
       if (!ceShipment?.MerchantShipmentNo?.trim()) {
-        console.log('Skipping shipment because MerchantShipmentNo missing');
+        console.warn('Skipping shipment without MerchantShipmentNo');
         continue;
       }
+      const lines = ceShipment.Lines || [];
+      if (!lines.length) continue;
 
-      const lines = Array.isArray(ceShipment?.Lines) ? ceShipment.Lines : [];
+      let order = ceShipment.MerchantOrderNo && orderByMerchantNo.get(ceShipment.MerchantOrderNo);
 
-      if (!lines.length) {
-        console.log('Skipping shipment because no lines found');
-        continue;
-      }
-
-      let order = null;
-
-      const channelOrderNo = ceShipment?.ChannelOrderNo || ceShipment?.channelOrderNumber;
-
-      if (ceShipment?.MerchantOrderNo) {
-        order = orderByMerchantNo.get(String(ceShipment?.MerchantOrderNo));
-      } else {
-        order = orderByChannelOrderNo.get(String(channelOrderNo));
+      if (!order) {
+        for (const l of lines) {
+          const no = l?.OrderLine?.ChannelOrderLineNo;
+          if (no && orderByChannelLineNo.has(no)) {
+            order = orderByChannelLineNo.get(no);
+            break;
+          }
+        }
       }
 
       if (!order) {
-        console.log(`Order not found for channelOrderNo: ${channelOrderNo}`);
+        console.warn('Order not found for shipment:', ceShipment.MerchantShipmentNo || ceShipment.ChannelShipmentNo);
         continue;
       }
 
-      // ---- group by seller
-      const sellerLineMap = new Map();
+      let deliveryDetails = null;
+      try {
+        const deliveryData = await formatChannelEngineShipmentDeliveryAddress(
+          order.orderShippingAddress,
+          order.orderCustomer
+        );
+        deliveryDetails = await saveDeliveryAddress(deliveryData);
+      } catch (err) {
+        console.error('Delivery address save failed (ignored):', err.message);
+      }
+
+      const products = buildShipmentProducts(lines);
+      const pieces = lines.reduce((s, l) => s + (l.Quantity || 0), 0);
+      //  Extract sellerId from matching SKU
+      let shipmentSellerId = null;
 
       for (const l of lines) {
         const merchantProductNo = l?.MerchantProductNo;
 
-        if (!merchantProductNo) {
-          console.log('Skipping line because MerchantProductNo missing');
-          continue;
-        }
+        if (!merchantProductNo) continue;
 
-        let sellerIds = [];
+        const matchedSku = order?.orderSkuList?.skuList?.find((sku) => sku.merchantProductNo === merchantProductNo);
 
-        // ------------------------------------------------------------
-        // ---- get sellerId directly from Product collection
-        // ------------------------------------------------------------
-        const matchedProduct = productMap.get(String(merchantProductNo).trim());
-
-        if (matchedProduct?.sellerId) {
-          sellerIds = Array.isArray(matchedProduct.sellerId) ? matchedProduct.sellerId : [matchedProduct.sellerId];
-
-          console.log('sellerIds found from Product collection--------------------------------', sellerIds);
-        } else {
-          console.log(`Seller not found in Product collection for SKU: ${merchantProductNo}`);
-
-          // ---- fallback to order sellerIds array
-          sellerIds = Array.isArray(order?.sellerIds) ? order.sellerIds : [order?.sellerIds].filter(Boolean);
-        }
-
-        // ---- remove duplicates + normalize
-        const uniqueSellerIds = [...new Set(sellerIds.map((id) => id?.toString()).filter(Boolean))];
-
-        for (const sellerId of uniqueSellerIds) {
-          if (!sellerId) {
-            console.log('Skipping because sellerId empty after normalization');
-            continue;
-          }
-
-          const key = sellerId.toString();
-
-          if (!sellerLineMap.has(key)) {
-            sellerLineMap.set(key, []);
-          }
-
-          sellerLineMap.get(key).push(l);
+        if (matchedSku?.sellerId) {
+          shipmentSellerId = matchedSku.sellerId;
+          break; // stop once found
         }
       }
 
-      // ---- fallback
-      if (sellerLineMap.size === 0 && Array.isArray(order?.sellerIds) && order.sellerIds.length) {
-        for (const sellerId of order.sellerIds) {
-          if (!sellerId) continue;
-
-          sellerLineMap.set(sellerId.toString(), lines);
-        }
+      // fallback to order level sellerId if not found
+      if (!shipmentSellerId) {
+        shipmentSellerId = order.sellerId;
       }
-
-      // ---- create shipment per seller
-      for (const [sellerIdStr, sellerLines] of sellerLineMap.entries()) {
-        const sellerId = new mongoose.Types.ObjectId(sellerIdStr);
-
-        let deliveryDetails = null;
-
-        try {
-          const deliveryData = await formatChannelEngineShipmentDeliveryAddress(
-            order.orderShippingAddress,
-            order.orderCustomer
-          );
-
-          deliveryDetails = await saveDeliveryAddress(deliveryData);
-        } catch (err) {
-          console.error('Delivery address save failed (ignored):', err.message);
-        }
-
-        const products = buildShipmentProducts(sellerLines, order);
-
-        bulkOps.push({
-          updateOne: {
-            filter: {
-              merchantShipmentNo: ceShipment.MerchantShipmentNo,
-              sellerId,
-            },
-
-            update: {
-              $set: {
-                status: mapCEShipmentStatus(ceShipment),
-
-                pickupDate: ceShipment.ShipmentDate ? new Date(ceShipment.ShipmentDate) : null,
-
-                deliveryDate: ceShipment.DeliveredAt ? new Date(ceShipment.DeliveredAt) : null,
-
-                shipmentMerchantDetails: {
-                  name: ceShipment.Method ?? 'NA',
-                  email: 'NA',
-                },
-              },
-
-              $setOnInsert: {
-                orderId: order._id,
-                sellerId,
-                userId,
-
-                shipmentMethod: 'CHANNEL_ENGINE',
-
-                products,
-
-                pieces: 1,
-
-                merchantOrderNo: ceShipment?.MerchantOrderNo,
-
-                trackingInfo: ceShipment.TrackTraceNo
-                  ? [
-                      {
-                        trackingNo: ceShipment.TrackTraceNo,
-
-                        trackingUrl: ceShipment.TrackTraceUrl,
-
-                        carrier: ceShipment.Method,
-
-                        createdAt: new Date(),
-
-                        statusCode: 'NA',
-                      },
-                    ]
-                  : [],
-
-                airWaybillNo: ceShipment?.AirWaybillNo || ceShipment?.TrackTraceNo || ceShipment?.MerchantShipmentNo,
-
-                method: ceShipment?.Method,
-
-                shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
-
-                shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
-
-                isMerchantCreator: ceShipment.IsMerchantCreator ?? true,
-
-                submissionDate: new Date(ceShipment.CreatedAt),
-
-                type: 'FORWARD',
-
-                extraData: {
-                  channelEngine: ceShipment,
-                },
-
-                deliveryId: deliveryDetails?._id || null,
-                createdAt: ceShipment.CreatedAt ? new Date(ceShipment.CreatedAt) : new Date(),
-              },
-            },
-
-            upsert: true,
+      bulkOps.push({
+        updateOne: {
+          filter: {
+            merchantShipmentNo: ceShipment.MerchantShipmentNo,
           },
-        });
-      }
+          update: {
+            $set: {
+              status: mapCEShipmentStatus(ceShipment),
+
+              pickupDate: ceShipment.ShipmentDate ? new Date(ceShipment.ShipmentDate) : null,
+              deliveryDate: ceShipment.DeliveredAt ? new Date(ceShipment.DeliveredAt) : null,
+
+              shipmentMerchantDetails: {
+                name: ceShipment.Method ?? 'NA',
+                email: 'NA',
+              },
+            },
+            $setOnInsert: {
+              orderId: order._id,
+              sellerId: shipmentSellerId,
+              userId,
+              shipmentMethod: 'CHANNEL_ENGINE',
+              products,
+              pieces,
+              trackingInfo: ceShipment.TrackTraceNo
+                ? [
+                    {
+                      trackingNo: ceShipment.TrackTraceNo,
+                      trackingUrl: ceShipment.TrackTraceUrl,
+                      carrier: ceShipment.Method,
+                      createdAt: new Date(),
+                      statusCode: 'NA',
+                    },
+                  ]
+                : [],
+              merchantOrderNo: ceShipment.MerchantOrderNo,
+
+              airWaybillNo: ceShipment.AirWaybillNo || ceShipment.TrackTraceNo || ceShipment.MerchantShipmentNo,
+
+              method: ceShipment.Method,
+              shippedFromCountryCode: ceShipment.ShippedFromCountryCode || null,
+              shippedFromStockLocationId: ceShipment.ShippedFromStockLocationId ?? 0,
+
+              isMerchantCreator: ceShipment.IsMerchantCreator ?? true,
+
+              submissionDate: new Date(ceShipment.CreatedAt),
+              type: 'FORWARD',
+              extraData: { channelEngine: ceShipment },
+              deliveryId: deliveryDetails?._id || null,
+            },
+          },
+          upsert: true,
+        },
+      });
     }
 
     if (!bulkOps.length) {
-      console.log('No bulkOps generated, returning true');
+      console.log('No shipment operations to write');
       return true;
     }
 
-    const result = await Shipment.bulkWrite(bulkOps, {
-      ordered: false,
-    });
+    const result = await Shipment.bulkWrite(bulkOps, { ordered: false });
 
-    console.log('Bulk result:', {
+    console.log('Bulk shipment sync result:', {
       inserted: result.upsertedCount,
       modified: result.modifiedCount,
+      matched: result.matchedCount,
     });
 
     return true;
   } catch (err) {
-    console.error('Shipment sync failed:', err);
-
+    console.error('Shipment sync failed (ignored):', err.message);
     return false;
   }
 };
 
-// ---- build products
-const buildShipmentProducts = (lines = [], order) => {
-  const map = new Map();
-
-  for (const line of lines) {
-    const merchantProductNo = line?.MerchantProductNo;
-    if (!merchantProductNo) continue;
-
-    const matchedSku = order.orderSkuList.skuList.find((item) => item.merchantProductNo == merchantProductNo);
-
-    const product = {
-      merchantProductNo,
-      orderLineId: line?.OrderLine?.Id,
-      quantity: line?.Quantity || 0,
-      lineTotalInclVat: matchedSku?.lineTotalInclVat || 0,
-      hsCode: matchedSku?.hsCode || '1111111',
-    };
-
-    const key = `${product.merchantProductNo}_${product.orderLineId}`;
-    if (!map.has(key)) {
-      map.set(key, product);
-    }
-  }
-
-  return [...map.values()];
+const buildShipmentProducts = (lines = []) => {
+  return lines.map((line) => ({
+    merchantProductNo: line.MerchantProductNo,
+    channelProductNo: line.ChannelProductNo,
+    quantity: line.Quantity,
+    status: line.ShipmentStatus,
+    orderLineId: line.OrderLine?.Id,
+    extraData: {
+      channelEngine: line,
+    },
+  }));
 };
-
-// ---- helpers
-
 const mapCEShipmentStatus = (ceShipment) => {
   if (ceShipment.DeliveredAt) return 'DELIVERED';
 
   if (ceShipment.Lines?.some((l) => l.ShipmentStatus === 'SHIPPED')) {
-    return 'OUT_FOR_DELIVERY';
+    return 'SHIPPED';
   }
 
   return 'SHIPMENT_CREATED';
@@ -2935,264 +2828,6 @@ export const formatChannelEngineShipments = ({ content = [], order, userId }) =>
   });
 };
 
-export const exportShipmentsToCSVService = async (sellerId, filters = {}, sellerName = '') => {
-  try {
-    if (!sellerId) {
-      return { success: false, message: 'Seller ID is required for export' };
-    }
-
-    const sellerObjectId = new mongoose.Types.ObjectId(sellerId);
-
-    const { status, search, shipmentMethod, type, sortBy = 'createdAt', sortOrder = 'desc' } = filters;
-
-    // -------------------------
-    // FIND ORDER _IDs FROM ORDER COLLECTION
-    // -------------------------
-    let orderObjectIds = [];
-
-    if (search) {
-      const regex = new RegExp(search, 'i');
-
-      const matchedOrders = await Order.find({
-        $or: [
-          { orderId: regex }, // numeric/string orderId (e.g. 1783)
-          { channelOrderNumber: regex },
-          { merchantOrderNo: regex },
-        ],
-      }).select('_id');
-
-      orderObjectIds = matchedOrders.map((o) => o._id);
-    }
-
-    // -------------------------
-    // MATCH
-    // -------------------------
-    const match = {
-      sellerId: sellerObjectId,
-    };
-
-    if (search) {
-      const regex = { $regex: search, $options: 'i' };
-
-      match.$or = [
-        { airWaybillNo: regex },
-        { merchantOrderNo: regex },
-        { merchantShipmentNo: regex },
-        ...(orderObjectIds.length ? [{ orderId: { $in: orderObjectIds } }] : []),
-      ];
-    }
-
-    if (status) {
-      const statusArray = status.split(',').map((s) => s.trim().toUpperCase());
-      match.status = { $in: statusArray };
-    }
-
-    if (shipmentMethod) match.shipmentMethod = shipmentMethod;
-    if (type) match.type = type;
-
-    const sort = {
-      [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1,
-    };
-
-    // -------------------------
-    // AGGREGATION
-    // -------------------------
-    const shipments = await Shipment.aggregate([
-      { $match: match },
-
-      //  ORDER LOOKUP
-      {
-        $lookup: {
-          from: 'channelengineorders',
-          localField: 'orderId',
-          foreignField: '_id',
-          as: 'order',
-          pipeline: [
-            {
-              $project: {
-                orderId: 1,
-                channelName: 1,
-                channelOrderNumber: 1,
-                orderDate: 1,
-                status: 1,
-                orderSkuList: 1,
-                merchantOrderNo: 1,
-              },
-            },
-          ],
-        },
-      },
-      { $unwind: { path: '$order', preserveNullAndEmptyArrays: true } },
-
-      //  SELLER ORDER STATUS
-      {
-        $lookup: {
-          from: 'sellerorders',
-          let: {
-            orderIdStr: '$order.orderId',
-            sellerId: sellerObjectId,
-          },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [{ $eq: ['$orderId', '$$orderIdStr'] }, { $eq: ['$sellerId', '$$sellerId'] }],
-                },
-              },
-            },
-            { $project: { status: 1 } },
-          ],
-          as: 'sellerOrder',
-        },
-      },
-
-      //  PREP
-      {
-        $addFields: {
-          shipmentProductNos: {
-            $map: {
-              input: { $ifNull: ['$products', []] },
-              as: 'p',
-              in: '$$p.merchantProductNo',
-            },
-          },
-        },
-      },
-
-      //  FILTER SKU (CORE)
-      {
-        $addFields: {
-          filteredSkus: {
-            $filter: {
-              input: '$order.orderSkuList.skuList',
-              as: 'sku',
-              cond: {
-                $and: [
-                  { $in: ['$$sku.merchantProductNo', '$shipmentProductNos'] },
-                  { $eq: ['$$sku.sellerId', sellerObjectId] },
-                ],
-              },
-            },
-          },
-        },
-      },
-
-      //  TOTALS (IMPORTANT)
-      {
-        $addFields: {
-          shipmentSubtotal: { $sum: '$filteredSkus.lineTotalExclVat' },
-          shipmentTax: { $sum: '$filteredSkus.lineVat' },
-          shipmentTotal: { $sum: '$filteredSkus.lineTotalInclVat' },
-        },
-      },
-
-      // SELLER STATUS
-      {
-        $addFields: {
-          sellerOrderStatus: {
-            $ifNull: [{ $arrayElemAt: ['$sellerOrder.status', 0] }, ''],
-          },
-        },
-      },
-
-      // TRACKING
-      {
-        $addFields: {
-          omnifulTrackingCode: {
-            $ifNull: ['$omniful.trackingNo', ''],
-          },
-        },
-      },
-      { $sort: sort },
-    ]);
-
-    if (!shipments.length) {
-      return { success: false, message: 'No shipments found' };
-    }
-
-    // -------------------------
-    // CSV BUILD
-    // -------------------------
-    const headers = SHIPMENT_EXPORT_HEADERS;
-    const csvRows = [headers.join(',')];
-
-    for (const shipment of shipments) {
-      const products = shipment.products || [];
-
-      //  Attach values for row builder
-      shipment.subtotalAmount = shipment.shipmentSubtotal || 0;
-      shipment.taxAmount = shipment.shipmentTax || 0;
-      shipment.totalAmount = shipment.shipmentTotal || 0;
-
-      //  NEW FIELD
-      shipment.shipmentTotalAmount = shipment.shipmentTotal || 0;
-
-      shipment.omnifulTrackingCode = shipment.omnifulTrackingCode || '';
-      shipment.orderStatus = shipment.sellerOrderStatus || '';
-
-      // -------------------------
-      // NO PRODUCTS
-      // -------------------------
-      if (!products.length) {
-        const rowObject = buildExportShipmentRow(shipment, {});
-
-        const row = headers.map((header) => {
-          const value = rowObject?.[header];
-          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
-
-          return `"${safeValue}"`;
-        });
-
-        csvRows.push(row.join(','));
-        continue;
-      }
-
-      // -------------------------
-      // MULTIPLE PRODUCTS
-      // -------------------------
-      for (let i = 0; i < products.length; i++) {
-        const product = products[i];
-
-        const rowObject = buildExportShipmentRow(shipment, product);
-
-        const row = headers.map((header) => {
-          let value = rowObject?.[header];
-
-          //  SHOW Shipment ID ONLY IN FIRST ROW
-          if (header === 'Shipment ID' && i > 0) {
-            value = '';
-          }
-
-          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
-
-          return `"${safeValue}"`;
-        });
-
-        csvRows.push(row.join(','));
-      }
-    }
-
-    // -------------------------
-    // FILENAME
-    // -------------------------
-    const sanitizedSellerName = sellerName ? sellerName.trim().replace(/[^a-zA-Z0-9]/g, '_') : 'Seller';
-
-    const exportDate = new Date().toISOString().split('T')[0];
-
-    const filename = `${sanitizedSellerName}_ShipmentExport_${exportDate}.csv`;
-
-    return {
-      success: true,
-      filename,
-      data: csvRows.join('\n'),
-      count: shipments.length,
-    };
-  } catch (error) {
-    console.error('Error exporting shipments:', error.message);
-    throw error;
-  }
-};
-
 const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
   const confirmed = sb.confirmed || 0;
   const shipped = sb.shipped || 0;
@@ -3203,7 +2838,7 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
 
   // 1️ Fully delivered
   if (delivered + canceled === quantity) {
-    return 'IN_PROGRESS';
+    return 'DELIVERED';
   }
 
   // 2️ Fully canceled
@@ -3213,7 +2848,7 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
 
   // 3️ Shipped but nothing pending
   if (shipped > 0 && confirmed === 0 && shipmentCreated === 0 && delivered === 0 && returned === 0) {
-    return 'IN_PROGRESS';
+    return 'SHIPPED';
   }
 
   // 4️ Anything partially done
@@ -3250,6 +2885,5 @@ export default {
   syncReturnShipmentStatus,
   createManualShipmentService,
   getChannelEngineShipmentDetailsService,
-  exportShipmentsToCSVService,
   downloadShipmentLabelService,
 };

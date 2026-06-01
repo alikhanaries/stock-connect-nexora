@@ -1,7 +1,4 @@
 import mongoose from 'mongoose';
-import Return from '../models/Return.js';
-import Channel from '#root/src/models/Channel.js';
-import Product from '#root/src/models/Product.js';
 import { RETURN_STATUS } from '#root/src/constants/common.js';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
@@ -35,114 +32,29 @@ export const getOrderDataByOrderLineIds = async (orderLineIds, Order, projection
   }
 };
 
-export const sanitizeReturnData = async (returnData, OrderModel = null) => {
+export const sanitizeReturnData = async (returnData, Order = null) => {
   try {
     if (!returnData) {
       throw new Error('Return data is required');
     }
 
-    const returnId = returnData.Id?.toString();
-
-    // Collect all SKU codes
-    const skuCodes = Array.isArray(returnData.Lines)
-      ? returnData.Lines.map((line) => line?.MerchantProductNo).filter(Boolean)
+    const products = Array.isArray(returnData.Lines)
+      ? returnData.Lines.map((line) => ({
+          productSkuCode: line.MerchantProductNo,
+          orderLineId: line.OrderLine?.Id || null,
+          quantity: line.Quantity || 0,
+          acceptedQuantity: line.AcceptedQuantity || 0,
+          rejectedQuantity: line.RejectedQuantity || 0,
+          price: line.OrderLine?.UnitPriceInclVat || 0,
+        }))
       : [];
 
-    // Run DB calls in parallel
-    const [existingReturn, orderData, productDocs] = await Promise.all([
-      Return.findOne({ returnId }, { sellerStatuses: 1 }).lean(),
-
-      OrderModel && returnData.MerchantOrderNo
-        ? OrderModel.findOne({
-            merchantOrderNo: returnData.MerchantOrderNo,
-          }).lean()
-        : null,
-
-      Product.find(
-        {
-          productSkuCode: { $in: skuCodes },
-        },
-        {
-          productSkuCode: 1,
-          sellerId: 1,
-          brand: 1,
-        }
-      ).lean(),
-    ]);
-
-    // Build SKU -> sellerId map
-    const skuSellerMap = new Map();
-
-    for (const product of productDocs) {
-      if (product?.productSkuCode && product?.sellerId) {
-        skuSellerMap.set(String(product.productSkuCode), String(product.sellerId));
-      }
-    }
-
-    const sellerIdSet = new Set();
-
-    // Build products array
-    let products = Array.isArray(returnData.Lines)
-      ? returnData.Lines.reduce((acc, line) => {
-          const skuCode = String(line?.MerchantProductNo || '');
-
-          const sellerId = skuSellerMap.get(skuCode);
-
-          // Ignore invalid SKU
-          if (!sellerId) {
-            return acc;
-          }
-
-          sellerIdSet.add(sellerId);
-
-          const productObj = {
-            productSkuCode: skuCode,
-            orderLineId: line.OrderLine?.Id || null,
-            quantity: line.Quantity || 0,
-            acceptedQuantity: line.AcceptedQuantity || 0,
-            rejectedQuantity: line.RejectedQuantity || 0,
-            price: line.OrderLine?.UnitPriceInclVat || 0,
-            sellerId,
-          };
-
-          acc.push(productObj);
-
-          return acc;
-        }, [])
-      : [];
-
-    // Ignore complete return if no products found
-    if (!products.length) {
-      return {
-        success: false,
-        ignored: true,
-        message: 'No matching products found in products collection',
-      };
-    }
-
-    // Existing seller status map
-    const existingStatusMap = new Map((existingReturn?.sellerStatuses || []).map((s) => [String(s.sellerId), s]));
-
-    // Build sellerStatuses
-    const sellerStatuses = [];
-
-    for (const sellerId of sellerIdSet) {
-      const existing = existingStatusMap.get(String(sellerId));
-
-      if (existing && existing.status !== 'IN_PROGRESS') {
-        sellerStatuses.push(existing);
-      } else {
-        const newStatus = {
-          sellerId,
-          status: returnData.Status,
-        };
-
-        sellerStatuses.push(newStatus);
-      }
-    }
+    // Extract orderLineIds and find the corresponding orderId
+    const orderLineIds = products.map((p) => p.orderLineId).filter(Boolean);
+    const orderData = Order ? await getOrderDataByOrderLineIds(orderLineIds, Order) : null;
 
     const sanitizedData = {
-      returnId,
+      returnId: returnData.Id?.toString(),
       reason: returnData.Reason || '',
       customerComment: returnData.CustomerComment || '',
       merchantComment: returnData.MerchantComment || '',
@@ -152,33 +64,18 @@ export const sanitizeReturnData = async (returnData, OrderModel = null) => {
       channelReturnNo: returnData.ChannelReturnNo,
       channelId: returnData.ChannelId,
       orderId: orderData?.orderId || null,
-
-      sellerIds: Array.from(sellerIdSet),
-
-      status: returnData.Status,
-
-      sellerStatuses,
-
       totalPrice: returnData.RefundInclVat || 0,
-
       placedOn: returnData.CreatedAt ? new Date(returnData.CreatedAt) : null,
-
       acknowledgeDate: returnData.AcknowledgedDate ? new Date(returnData.AcknowledgedDate) : null,
-
+      status: returnData.Status,
       platform: returnData.ChannelName,
-
-      products,
-
+      products: products,
       returnDate: returnData?.ReturnDate || null,
     };
 
-    return {
-      success: true,
-      data: sanitizedData,
-    };
+    return { success: true, data: sanitizedData };
   } catch (error) {
-    console.error('Error sanitizing return data:', error);
-
+    console.error('Error sanitizing return data:', error.message);
     return {
       success: false,
       message: `Error sanitizing return data: ${error.message}`,
@@ -253,8 +150,6 @@ export const buildReturnAggregationPipeline = () => {
               status: 1,
               createdAt: 1,
               _id: 0,
-              deliveryId: 1,
-              pickUpId: 1,
             },
           },
         ],
@@ -291,8 +186,6 @@ export const buildReturnAggregationPipeline = () => {
         updatedAt: 1,
         orderInfo: 1,
         shipmentData: 1,
-        sellerIds: 1,
-        sellerStatuses: 1,
       },
     },
   ];
@@ -304,8 +197,9 @@ export const addFilter = (matchConditions, key, value, transform = (v) => v) => 
   }
 };
 
-export const buildReturnMatchAndPipeline = async (query = {}) => {
-  const { status, returnId, orderID, search, dateFrom, dateTo, sellerId } = query;
+export const buildReturnMatchAndPipeline = (query = {}) => {
+  const { status, platform, channel, channelId, returnId, orderID, sellerId, search, dateFrom, dateTo } = query;
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   const matchConditions = {};
 
@@ -331,61 +225,36 @@ export const buildReturnMatchAndPipeline = async (query = {}) => {
     $in: v.split(',').map((s) => new RegExp(`^${s.trim()}$`, 'i')),
   }));
 
+  if (channel) {
+    const channelArray = channel.split(',').map((s) => s.trim());
+    matchConditions.platform = {
+      $in: channelArray.map((s) => new RegExp(`${escapeRegex(s)}`, 'i')),
+    };
+  } else if (platform) {
+    addFilter(matchConditions, 'platform', platform, (v) => ({
+      $regex: new RegExp(v, 'i'),
+    }));
+  }
+
+  addFilter(matchConditions, 'channelId', channelId, (v) => parseInt(v, 10));
+
   addFilter(matchConditions, 'returnId', returnId);
   addFilter(matchConditions, 'orderId', orderID);
 
-  // Date filter
-  if (dateFrom || dateTo) {
-    matchConditions.createdAt = {};
-    if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
-    if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
-  }
+  addFilter(matchConditions, 'orderInfo.sellerId', sellerId, (v) => new mongoose.Types.ObjectId(v));
 
-  // Seller filter (return document level)
-  if (sellerId && mongoose.Types.ObjectId.isValid(sellerId)) {
-    const sellerObjectId = new mongoose.Types.ObjectId(String(sellerId));
-
-    matchConditions.$or = [
-      { sellerIds: sellerObjectId },
-      { sellerIds: { $exists: false } }, // support old records
-    ];
-  }
-
-  // Start pipeline
-  const pipeline = [];
-
-  if (Object.keys(matchConditions).length > 0) {
-    pipeline.push({ $match: matchConditions });
-  }
-
-  // Main aggregation pipeline
-  pipeline.push(...buildReturnAggregationPipeline());
-
-  // Search filter (after lookup because it uses orderInfo)
+  // Search Filter
   if (search) {
     const searchRegex = new RegExp(search, 'i');
-
-    //  Fetch matching channelIds
-    const matchingChannels = await Channel.find({
-      channelName: { $regex: searchRegex },
-    })
-      .select('channelId')
-      .lean();
-
-    const channelIdsFromSearch = matchingChannels.map((c) => c.channelId);
-
     const searchConditions = [
       { returnId: { $regex: searchRegex } },
       { orderId: { $regex: searchRegex } },
-
-      //  Channel name → channelId mapping
-      ...(channelIdsFromSearch.length ? [{ channelId: { $in: channelIdsFromSearch } }] : []),
-
       { 'orderInfo.orderCustomer.firstName': { $regex: searchRegex } },
       { 'orderInfo.orderCustomer.lastName': { $regex: searchRegex } },
       { 'orderInfo.orderCustomer.email': { $regex: searchRegex } },
     ];
 
+    // Handle full name searches
     const searchTerms = search.trim().split(/\s+/);
     if (searchTerms.length > 1) {
       const [firstTerm, ...rest] = searchTerms;
@@ -409,11 +278,21 @@ export const buildReturnMatchAndPipeline = async (query = {}) => {
       );
     }
 
-    pipeline.push({
-      $match: {
-        $or: searchConditions,
-      },
-    });
+    matchConditions.$or = searchConditions;
+  }
+
+  // Date Filter
+  if (dateFrom || dateTo) {
+    matchConditions.createdAt = {};
+    if (dateFrom) matchConditions.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) matchConditions.createdAt.$lte = new Date(dateTo);
+  }
+
+  // Build Aggregation
+  const pipeline = buildReturnAggregationPipeline();
+
+  if (Object.keys(matchConditions).length > 0) {
+    pipeline.push({ $match: matchConditions });
   }
 
   return { pipeline, matchConditions };
@@ -487,18 +366,11 @@ export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
   const returnData = aggregatedResult;
   const orderInfo = aggregatedResult.orderInfo;
 
-  // Build product image map (O(n))
-  const productMap = {};
-  (returnData.productData || []).forEach((p) => {
-    productMap[p.productSkuCode] = p;
-  });
-
   if (!orderInfo) {
     return {
       _id: returnData._id,
       returnId: returnData.returnId || null,
       orderId: null,
-      orderDbId: null,
       paymentInfo: {
         channelName: returnData.platform || null,
         paymentMethod: null,
@@ -510,10 +382,10 @@ export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
         phoneNo: null,
       },
       shippingAddress: {
-        address: 'NA',
-        city: 'NA',
-        region: 'NA',
-        zipCode: 'NA',
+        address: null,
+        city: null,
+        region: null,
+        zipCode: null,
       },
       products:
         returnData.products?.map((product, index) => ({
@@ -534,44 +406,43 @@ export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
           rejectedQuantity: product.rejectedQuantity || 0,
         })) || [],
       omniful: returnData.omniful || null,
-      status: returnData.status || 'UNKNOWN',
+      status: returnData.status || null,
       subtotal: 0,
       tax: 0,
       total: 0,
       shippingFee: 0,
-      trackingNumber: null,
-      shipmentStatus: null,
-      logsDetails: returnData?.returnLogsData || [],
-      orderLogsData: returnData?.returnLogsData || [],
     };
   }
 
   const returnedSkus = returnData.products || [];
   const orderSkus = orderInfo.orderSkuList?.skuList || [];
 
-  let subtotal = 0;
-  let tax = 0;
+  // Calculate shipping and total quantities
+  const totalReturnQuantity = returnedSkus.reduce((sum, product) => sum + (product.quantity || 0), 0);
+  const totalOrderQuantity = orderSkus.reduce((sum, sku) => sum + (sku.quantity || 0), 0);
+  const returnProportion = totalOrderQuantity > 0 ? totalReturnQuantity / totalOrderQuantity : 0;
 
+  // Calculate proportional costs
+  const proportionalSubtotalExclVat = (orderInfo.subTotalExclVat || 0) * returnProportion;
+  const proportionalSubtotalVat = (orderInfo.subTotalVat || 0) * returnProportion;
+  const proportionalShippingExclVat = (orderInfo.shippingCostsExclVat || 0) * returnProportion;
+  const proportionalShippingVat = (orderInfo.shippingCostsVat || 0) * returnProportion;
+
+  // Calculate totals
+  const subtotal = proportionalSubtotalExclVat;
+  const tax = proportionalSubtotalVat + proportionalShippingVat;
+  const shippingFee = proportionalShippingExclVat;
+  const total = subtotal + tax + shippingFee;
+
+  // Map returned items to products format - now using orderLineId matching
   const products = returnedSkus.map((returnProduct, index) => {
-    const matchingSku = orderSkus.find((sku) => Number(sku.id) === Number(returnProduct.orderLineId));
+    // Match by orderLineId instead of merchantProductNo
+    const matchingSku = orderSkus.find((sku) => sku.id === returnProduct.orderLineId);
 
-    const quantity = returnProduct.quantity || 0;
-
-    const unitPriceExclVat = matchingSku?.unitPriceExclVat || matchingSku?.lineTotalInclVat || 0;
+    const unitPriceExclVat = matchingSku?.unitPriceExclVat || 0;
     const unitVat = matchingSku?.unitVat || 0;
     const unitPriceInclVat = unitPriceExclVat + unitVat;
-
-    const lineTotalExclVat = unitPriceExclVat * quantity;
-    const lineVat = unitVat * quantity;
-    const lineTotalInclVat = unitPriceInclVat * quantity;
-
-    subtotal += lineTotalExclVat;
-    tax += lineVat;
-
-    // Get image from productMap
-    const productMatch = productMap[returnProduct.productSkuCode];
-
-    const imageUrl = productMatch?.primaryImageUrl || productMatch?.imageUrl || productMatch?.images?.[0] || null;
+    const quantity = returnProduct.quantity || 0;
 
     return {
       id: index + 1,
@@ -579,38 +450,41 @@ export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
       merchantProductNo: returnProduct.productSkuCode,
       channelProductNo: matchingSku?.channelProductNo || null,
       name: matchingSku?.description || 'Product',
-      imageUrl,
-      unitPriceInclVat,
-      unitPriceExclVat,
-      unitVat,
-      lineTotalInclVat,
-      lineTotalExclVat,
-      lineVat,
-      quantity,
+      imageUrl: imageMap[returnProduct.productSkuCode] ?? null,
+      unitPriceInclVat: unitPriceInclVat,
+      unitPriceExclVat: unitPriceExclVat,
+      unitVat: unitVat,
+      lineTotalInclVat: unitPriceInclVat * quantity,
+      lineTotalExclVat: unitPriceExclVat * quantity,
+      lineVat: unitVat * quantity,
+      quantity: quantity,
       acceptedQuantity: returnProduct.acceptedQuantity || 0,
       rejectedQuantity: returnProduct.rejectedQuantity || 0,
-      sellerId: returnProduct.sellerId || null,
     };
   });
 
-  // Seller-safe shipping logic (optional)
-  let shippingFee = 0;
-  const total = subtotal + tax + shippingFee;
-
+  // Build shipping address
   const shippingAddress = orderInfo.orderShippingAddress
     ? {
-        address: [orderInfo.orderShippingAddress.line1].filter(Boolean).join(' '),
+        address: [
+          orderInfo.orderShippingAddress.line1,
+          orderInfo.orderShippingAddress.line2,
+          orderInfo.orderShippingAddress.line3,
+          orderInfo.orderShippingAddress.streetName,
+          orderInfo.orderShippingAddress.houseNr,
+          orderInfo.orderShippingAddress.houseNrAddition,
+        ]
+          .filter(Boolean)
+          .join(' '),
         city: orderInfo.orderShippingAddress.city || '',
         region: orderInfo.orderShippingAddress.region || '',
         zipCode: orderInfo.orderShippingAddress.zipCode || '',
-        country: orderInfo.orderShippingAddress.countryIso || '',
       }
     : {
         address: '',
         city: '',
         region: '',
         zipCode: '',
-        country: '',
       };
 
   return {
@@ -633,8 +507,8 @@ export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
       email: orderInfo.orderCustomer?.email || null,
       phoneNo: orderInfo.orderCustomer?.phone || null,
     },
-    shippingAddress,
-    products,
+    shippingAddress: shippingAddress,
+    products: products,
     omniful: returnData.omniful || null,
     status: returnData.status || 'UNKNOWN',
     subtotal: parseFloat(subtotal.toFixed(2)),

@@ -8,26 +8,7 @@ import omnifullService from '#service/omnifullService.js';
 
 export const getAllReturns = async (req, res) => {
   try {
-    const sellerId = req.sellerId;
-
-    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-      return Responses.failResponse(res, 'Invalid seller ID format', 400);
-    }
-
-    const { status, channel, search, dateFrom, dateTo, sortOrder } = req.query;
-
-    const filters = Object.fromEntries(
-      Object.entries({ status, channel, search, dateFrom, dateTo, sortOrder }).filter(([, v]) => v != null && v !== '')
-    );
-
-    // Remove undefined values
-    Object.keys(filters).forEach((key) => {
-      if (!filters[key]) {
-        delete filters[key];
-      }
-    });
-
-    const result = await returnService.getReturnsFromDatabase(filters, sellerId);
+    const result = await returnService.getReturnsFromDatabase(req.query);
 
     if (result.success && !result.success) {
       return Responses.failResponse(res, result.message || req.locale.NO_RETURNS_FOUND, 400);
@@ -172,15 +153,12 @@ export const updateReturn = async (req, res) => {
 export const getReturnById = async (req, res) => {
   try {
     const { id } = req.params;
-    const sellerId = req.sellerId;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return Responses.failResponse(res, req.locale.INVALID_RETURN_ID_FORMAT || 'Invalid return ID format', 400);
     }
-    if (!mongoose.Types.ObjectId.isValid(sellerId)) {
-      return Responses.failResponse(res, 'Invalid seller ID format', 400);
-    }
-    const returnData = await returnService.getReturnById(id, sellerId);
+
+    const returnData = await returnService.getReturnById(id);
     if (!returnData) {
       return Responses.failResponse(res, req?.locale?.NO_RETURNS_FOUND || 'Return not found', 404);
     }
@@ -202,10 +180,10 @@ export const getReturnById = async (req, res) => {
 export const exportReturns = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    const { status, channel, search, dateFrom, dateTo } = req.query;
+    const { status, platform, channelId, search, dateFrom, dateTo } = req.query;
 
     const filters = Object.fromEntries(
-      Object.entries({ status, channel, search, dateFrom, dateTo }).filter(([, v]) => v != null && v !== '')
+      Object.entries({ status, platform, channelId, search, dateFrom, dateTo }).filter(([, v]) => v != null && v !== '')
     );
 
     // Remove undefined values
