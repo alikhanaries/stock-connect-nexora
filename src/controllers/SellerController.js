@@ -53,6 +53,10 @@ export const updateSeller = async (req, res) => {
       return response.failResponse(res, req.locale.SELLER_NOT_FOUND, 404);
     }
 
+    if (updatedSeller.isExist) {
+      return response.failResponse(res, req.locale.SELLER_NAME_EXISTS, 409);
+    }
+
     if (!updatedSeller.isUpdated) {
       return response.failResponse(res, req.locale.NOTHING_TO_UPDATE || 'No changes detected', 400);
     }
