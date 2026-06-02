@@ -1,17 +1,22 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '#config/config.js';
-import { buildTranslatePrompt, TRANSLATE_SYSTEM_INSTRUCTION } from '#helpers/geminiPromptBuilders/translatePrompt.js';
-import { BATCH_SIZE, SCRIPT_PATTERNS, LANG_CODE_TO_SCRIPT, LANG_CODE_TO_NAME } from '#constants/translate.js';
+import {
+  buildCategoryMapPrompt,
+  CATEGORY_MAP_SYSTEM_INSTRUCTION,
+} from '#helpers/geminiPromptBuilders/categoryMapPrompt.js';
 
 const PROVIDER = (config.GEMINI_PROVIDER || 'gemini').toLowerCase();
 const isVertex = PROVIDER === 'vertex';
 const PROVIDER_LABEL = isVertex ? 'Vertex' : 'Gemini';
 
+const CATEGORY_BATCH_SIZE = 20;
+const CHUNK_CONCURRENCY = 3;
+const MAX_RETRIES = 6;
+
 let _client = null;
 
 const getAIClient = () => {
   if (_client) return _client;
-
   if (isVertex) {
     if (!config.GOOGLE_CLOUD_PROJECT) {
       throw new Error('[AI] GOOGLE_CLOUD_PROJECT is required when GEMINI_PROVIDER=vertex');
@@ -52,13 +57,13 @@ const formatGeminiError = (raw) => {
   return parts.length ? parts.join(' | ') : raw;
 };
 
-const withTimeout = (promise, ms = 90000) =>
+const withTimeout = (promise, ms = 120000) =>
   Promise.race([
     promise,
     new Promise((_, rej) => setTimeout(() => rej(new Error(`[AI] Request timed out after ${ms}ms`)), ms)),
   ]);
 
-const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL) => {
+const callWithRetry = async (fn, retries = MAX_RETRIES, onRetry, label = PROVIDER_LABEL) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await withTimeout(fn());
@@ -81,14 +86,11 @@ const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL) =
             ? 'Request timed out'
             : isMalformed
               ? 'Incomplete model response'
-              : 'High demand on translation service';
-        const userMessage = is503
-          ? `High demand right now. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries})`
-          : `${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries})`;
+              : 'High demand on AI service';
         console.warn(
           `[${label}] ${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries}) — ${isTimeout || isMalformed ? error.message : formatGeminiError(error.message)}`
         );
-        onRetry?.({ message: userMessage });
+        onRetry?.({ message: `${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries})` });
         await sleep(delay);
         onRetry?.(null);
       } else {
@@ -103,126 +105,74 @@ const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL) =
   }
 };
 
-const detectScript = (text) => {
-  for (const [script, pattern] of Object.entries(SCRIPT_PATTERNS)) {
-    if (pattern.test(text)) return script;
-  }
-  return 'latin';
-};
-
-export const isAlreadyInLang = (text, langCode) => {
-  const code = langCode.toLowerCase();
-  const targetScript = LANG_CODE_TO_SCRIPT[code];
-  if (!targetScript) return false;
-
-  return detectScript(text) === targetScript;
-};
-
-export const getLangName = (langCode) => LANG_CODE_TO_NAME[langCode.toLowerCase()] ?? langCode;
-
-// In-memory progress store keyed by sellerId string
+// ---------------- Progress store ----------------
 const progressStore = new Map();
 const key = (sellerId) => String(sellerId);
 
-export const clearProgress = (sellerId) => {
+export const clearCategoryMapProgress = (sellerId) => {
   progressStore.delete(key(sellerId));
 };
 
-export const setPendingProgress = (sellerId, translateFields = []) =>
-  progressStore.set(key(sellerId), {
-    status: 'initializing',
-    operations: translateFields.map(({ field, lang }) => ({
-      field,
-      lang,
-      total: 0,
-      completed: 0,
-      status: 'pending',
-    })),
-  });
+// "pending" mirrors translate-op semantics so the UI renders "Queued" for the
+// category-map row while it waits for the translate phase to finish.
+export const setPendingCategoryMapProgress = (sellerId) =>
+  progressStore.set(key(sellerId), { status: 'pending', total: 0, completed: 0, updated: 0 });
 
-export const initProgress = (sellerId, operations, { totalProducts = 0 } = {}) =>
+export const initCategoryMapProgress = (sellerId, total) =>
   progressStore.set(key(sellerId), {
     status: 'running',
-    totalProducts,
-    updatedProducts: 0,
-    operations: operations.map(({ field, lang, total }) => ({
-      field,
-      lang,
-      total,
-      completed: 0,
-      status: 'pending',
-    })),
+    total,
+    completed: 0,
+    updated: 0,
+    retryInfo: null,
+    error: null,
   });
 
-export const setUpdatedProducts = (sellerId, count) => {
-  const p = progressStore.get(key(sellerId));
-  if (p) p.updatedProducts = count;
-};
-
-const findOp = (p, field, lang) => p?.operations.find((o) => o.field === field && o.lang === lang);
-
-export const startOperation = (sellerId, field, lang) => {
-  const op = findOp(progressStore.get(key(sellerId)), field, lang);
-  if (op) op.status = 'running';
-};
-
-export const addProgress = (sellerId, field, lang, count) => {
-  const op = findOp(progressStore.get(key(sellerId)), field, lang);
-  if (op) op.completed += count;
-};
-
-export const finishOperation = (sellerId, field, lang) => {
-  const op = findOp(progressStore.get(key(sellerId)), field, lang);
-  if (op) {
-    op.status = 'done';
-  }
-};
-
-export const failOperation = (sellerId, field, lang, error) => {
-  const op = findOp(progressStore.get(key(sellerId)), field, lang);
-  if (!op) return;
-  op.status = 'error';
-  const g = error?.geminiError;
-  const raw = g?.message ?? error?.message ?? 'Unknown error';
-  op.error = { message: raw.split('\n')[0].split('. ')[0].trim() };
-};
-
-export const setOperationRetry = (sellerId, field, lang, retryInfo) => {
-  const op = findOp(progressStore.get(key(sellerId)), field, lang);
-  if (!op) return;
-  if (retryInfo) {
-    op.retryInfo = retryInfo;
-  } else {
-    delete op.retryInfo;
-  }
-};
-
-export const finishProgress = (sellerId) => {
+export const addCategoryMapProgress = (sellerId, completedDelta, updatedDelta = 0) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
-  const hasError = p.operations.some((o) => o.status === 'error');
-  p.status = hasError ? 'error' : 'done';
+  p.completed += completedDelta;
+  p.updated += updatedDelta;
 };
 
-export const getProgress = (sellerId) => {
+export const setCategoryMapRetry = (sellerId, retryInfo) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return;
+  p.retryInfo = retryInfo || null;
+};
+
+export const failCategoryMapProgress = (sellerId, error) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return;
+  p.status = 'error';
+  const g = error?.geminiError;
+  const raw = g?.message ?? error?.message ?? 'Unknown error';
+  p.error = { message: raw.split('\n')[0].split('. ')[0].trim() };
+};
+
+export const finishCategoryMapProgress = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return;
+  if (p.status !== 'error') p.status = 'done';
+};
+
+export const getCategoryMapProgress = (sellerId) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return null;
-  const completedOperations = p.operations.filter((o) => o.status === 'done').length;
   return {
     status: p.status,
-    totalProducts: p.totalProducts ?? 0,
-    updatedProducts: p.updatedProducts ?? 0,
-    totalOperations: p.operations.length,
-    completedOperations,
-    operations: p.operations.map((o) => ({
-      ...o,
-      percentage: o.total > 0 ? Math.round((o.completed / o.total) * 100) : 0,
-    })),
+    total: p.total ?? 0,
+    completed: p.completed ?? 0,
+    updated: p.updated ?? 0,
+    percentage: p.total > 0 ? Math.round((p.completed / p.total) * 100) : 0,
+    retryInfo: p.retryInfo ?? null,
+    error: p.error ?? null,
   };
 };
 
-const translateChunk = async (texts, targetLanguage, onRetry) => {
-  const prompt = buildTranslatePrompt(texts, targetLanguage);
+// ---------------- Gemini call ----------------
+const classifyChunk = async (chunk, allowedPaths, pathSet, onRetry) => {
+  const prompt = buildCategoryMapPrompt(chunk, allowedPaths);
   const client = getAIClient();
 
   return callWithRetry(
@@ -231,8 +181,8 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
         model: config.GEMINI_MODEL,
         contents: prompt,
         config: {
-          maxOutputTokens: 65536,
-          systemInstruction: TRANSLATE_SYSTEM_INSTRUCTION,
+          maxOutputTokens: 16384,
+          systemInstruction: CATEGORY_MAP_SYSTEM_INSTRUCTION,
         },
       });
       const raw = (response.text ?? '').trim();
@@ -253,7 +203,6 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
         throw err;
       }
 
-      // Accept either indexed object {"0": "...", "1": "..."} or legacy array form
       let indexed;
       if (Array.isArray(parsed)) {
         indexed = parsed.reduce((acc, val, i) => {
@@ -268,54 +217,55 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
         throw err;
       }
 
-      const result = texts.map((_, i) => {
+      const result = chunk.map((_, i) => {
         const v = indexed[String(i)] ?? indexed[i];
-        return typeof v === 'string' && v.trim() ? v : null;
+        if (typeof v !== 'string') return null;
+        const trimmed = v.trim();
+        if (!trimmed) return null;
+        // enforce that AI returned a value from the allowed list
+        if (!pathSet.has(trimmed)) return null;
+        return trimmed;
       });
 
       const got = result.filter((v) => v !== null).length;
       if (got === 0) {
-        const err = new Error(`AI response had no usable translations (expected ${texts.length})${reasonHint}`);
+        const err = new Error(`AI response had no usable category matches (expected ${chunk.length})${reasonHint}`);
         err.retryable = true;
         throw err;
       }
-      if (got < texts.length) {
-        console.warn(`[AI] Partial response: ${got}/${texts.length} items translated${reasonHint}`);
+      if (got < chunk.length) {
+        console.warn(`[AI] Partial response: ${got}/${chunk.length} products classified${reasonHint}`);
       }
       return result;
     },
-    6,
+    MAX_RETRIES,
     onRetry,
     PROVIDER_LABEL
   );
 };
 
-const CHUNK_CONCURRENCY = 3;
-
-export const translateBatch = async (texts, langCode, onProgress, onRetry, onChunk) => {
-  const targetLanguage = getLangName(langCode);
+export const classifyProductsBatch = async (products, allowedPaths, pathSet, onChunk, onRetry) => {
   const chunks = [];
-  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    chunks.push(texts.slice(i, i + BATCH_SIZE));
+  for (let i = 0; i < products.length; i += CATEGORY_BATCH_SIZE) {
+    chunks.push(products.slice(i, i + CATEGORY_BATCH_SIZE));
   }
 
   console.log(
-    `[AI] Provider: ${PROVIDER_LABEL} | Translating ${texts.length} texts → ${targetLanguage} in ${chunks.length} chunk(s), concurrency: ${CHUNK_CONCURRENCY}`
+    `[AI] Provider: ${PROVIDER_LABEL} | Classifying ${products.length} products against ${allowedPaths.length} categories in ${chunks.length} chunk(s), concurrency: ${CHUNK_CONCURRENCY}`
   );
 
-  const results = new Array(chunks.length);
   let cursor = 0;
   const worker = async () => {
     while (cursor < chunks.length) {
+      // cursor++ is a synchronous read-then-increment so each worker claims
+      // a unique chunk index before yielding at the first await below.
       const i = cursor++;
-      const startIndex = i * BATCH_SIZE;
-      console.log(`[AI] Sending chunk ${i + 1}/${chunks.length} (${chunks[i].length} texts)`);
-      results[i] = await translateChunk(chunks[i], targetLanguage, onRetry);
-      await onChunk?.(results[i], startIndex);
-      onProgress?.(chunks[i].length);
+      const startIndex = i * CATEGORY_BATCH_SIZE;
+      console.log(`[AI] Sending category chunk ${i + 1}/${chunks.length} (${chunks[i].length} products)`);
+      const result = await classifyChunk(chunks[i], allowedPaths, pathSet, onRetry);
+      await onChunk?.(result, startIndex, chunks[i]);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, worker));
 
-  return results.flat();
+  await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, worker));
 };
