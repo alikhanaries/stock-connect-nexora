@@ -5,6 +5,7 @@ import { processAmazonOrderImportStream, sanitizeAmazonOrdersData } from '../hel
 import Order from '../models/Orders.js';
 import OrderLogs from '../models/OrderLogs.js';
 import Shipment from '../models/Shipment/Shipment.js';
+import Return from '../models/Return.js';
 import { errorLog } from '../middleware/errorLogMiddleware.js';
 import { upsertSellerOrdersFromOrder } from './sellerOrderService.js';
 
@@ -46,16 +47,13 @@ export const syncAmazonOrders = async (sellerId, locale, userId) => {
 
 export async function getNewAmazonOrders(url, locale, sellerId) {
   try {
-    console.log('Fetching Google Sheet from URL:', url);
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.statusText}`);
     const stream = Readable.fromWeb(res.body);
-    return await processAmazonOrderImportStream(stream, { locale, sellerId });
+    const result = await processAmazonOrderImportStream(stream, { locale, sellerId });
+    return result;
   } catch (error) {
-    console.error('Error fetching new orders from Amazon:', error.message);
-    if (error.cause) {
-      console.error('Fetch error cause:', error.cause);
-    }
+    console.error('[getNewAmazonOrders] Error:', error.message, error.cause ? { cause: error.cause } : '');
     return { success: false, message: error.message };
   }
 }
@@ -144,7 +142,15 @@ export const processAmazonOrders = async (orders, sellerId, userId) => {
     try {
       await createAmazonShipmentsForNewOrders(allProcessedOrderIds, sellerId, userId);
     } catch (shipmentError) {
-      console.error('Shipment creation failed:', shipmentError.message);
+      console.error('[processAmazonOrders] Shipment creation failed:', shipmentError.message, {
+        cause: shipmentError.cause,
+      });
+    }
+
+    try {
+      await createAmazonReturnsForReturnedOrders(allProcessedOrderIds, sellerId);
+    } catch (returnError) {
+      console.error('[processAmazonOrders] Return creation failed:', returnError.message, { cause: returnError.cause });
     }
 
     return {
@@ -199,14 +205,21 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => 
       const awbNumber = `AMZ-${order.orderId}`;
 
       const sheetDeliveryDate = skuList[0]?.expectedDeliveryDate;
-      const deliveryDate =
-        order.status === 'DELIVERED' ? (sheetDeliveryDate ? new Date(sheetDeliveryDate) : new Date()) : null;
+      const isDeliveredOrReturned = order.status === 'DELIVERED' || order.status === 'RETURNED';
+      const shipmentStatus = isDeliveredOrReturned ? 'DELIVERED' : order.status;
+      const deliveryDate = isDeliveredOrReturned
+        ? sheetDeliveryDate
+          ? new Date(sheetDeliveryDate)
+          : new Date()
+        : null;
+
+      const orderSellerId = order.sellerIds?.[0] || sellerId;
 
       shipmentsToCreate.push({
         orderId: order._id,
-        sellerId: sellerId,
+        sellerId: orderSellerId,
         userId: userId,
-        status: order.status,
+        status: shipmentStatus,
         airWaybillNo: awbNumber,
         merchantOrderNo: order.merchantOrderNo || order.orderId,
         shipmentMethod: 'AMAZON',
@@ -219,8 +232,8 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => 
         deliveryDate,
         trackingInfo: [
           {
-            statusCode: order.status,
-            description: `Order ${order.status.toLowerCase()} via Amazon`,
+            statusCode: shipmentStatus,
+            description: `Order ${shipmentStatus.toLowerCase()} via Amazon`,
             createdAt: new Date(),
           },
         ],
@@ -233,7 +246,73 @@ const createAmazonShipmentsForNewOrders = async (orderIds, sellerId, userId) => 
 
     return shipmentsToCreate;
   } catch (error) {
-    console.error('Error creating Amazon shipments:', error.message);
-    throw error;
+    console.error('[createAmazonShipments] Error:', error.message, { cause: error.cause });
+    throw new Error('Shipment creation failed', { cause: error });
+  }
+};
+
+const createAmazonReturnsForReturnedOrders = async (orderIds, sellerId) => {
+  if (!orderIds || orderIds.length === 0) return;
+
+  try {
+    const returnedOrders = await Order.find({
+      _id: { $in: orderIds },
+      status: 'RETURNED',
+    }).lean();
+
+    if (returnedOrders.length === 0) return;
+
+    const existingReturns = await Return.find({
+      orderId: { $in: returnedOrders.map((o) => o.orderId) },
+    }).lean();
+
+    const ordersWithReturns = new Set(existingReturns.map((r) => r.orderId));
+
+    const returnsToCreate = [];
+
+    for (const order of returnedOrders) {
+      if (ordersWithReturns.has(order.orderId)) continue;
+
+      const skuList = order.orderSkuList?.skuList || [];
+      if (skuList.length === 0) continue;
+
+      const products = skuList.map((sku) => ({
+        sellerId: sku.sellerId || sellerId,
+        productSkuCode: sku.merchantProductNo,
+        orderLineId: sku.channelOrderLineNo || sku.id,
+        quantity: sku.quantity,
+        acceptedQuantity: 0,
+        rejectedQuantity: 0,
+        price: sku.lineTotalInclVat || 0,
+      }));
+
+      const sellerIds = order.sellerIds?.length ? order.sellerIds : [sellerId];
+
+      returnsToCreate.push({
+        returnId: `AMZ-RETURN-${order.orderId}`,
+        sellerIds,
+        orderId: order.orderId,
+        channelOrderNo: order.orderId,
+        channelReturnNo: `AMZ-RETURN-${order.orderId}`,
+        merchantReturnNo: `AMZ-RETURN-${order.orderId}`,
+        merchantOrderNo: order.merchantOrderNo || order.orderId,
+        channelId: order.channelId,
+        status: 'CREATED',
+        platform: 'AMAZON',
+        reason: 'Returned by customer',
+        products,
+        sellerStatuses: sellerIds.map((sId) => ({ sellerId: sId, status: 'CREATED' })),
+        placedOn: order.orderDate || new Date(),
+      });
+    }
+
+    if (returnsToCreate.length > 0) {
+      await Return.insertMany(returnsToCreate);
+    }
+
+    return returnsToCreate;
+  } catch (error) {
+    console.error('[createAmazonReturns] Error:', error.message, { cause: error.cause });
+    throw new Error('Return creation failed', { cause: error });
   }
 };
