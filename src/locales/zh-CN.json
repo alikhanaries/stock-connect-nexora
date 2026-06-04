@@ -199,5 +199,7 @@
   "NO_ENRICHMENT_JOB_REQUESTED": "必须至少请求一个智能增强任务",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "无法对空值执行操作",
   "ENRICHMENT_FAILED": "智能增强失败",
-  "ENRICHMENT_COMPLETED": "已完成。请在目录中检查更改。"
+  "ENRICHMENT_COMPLETED": "已完成。请在目录中检查更改。",
+  "ENRICHMENT_CANCELLED": "智能增强已取消",
+  "NO_CANCELLABLE_OPS": "没有可取消的活动智能增强任务"
 }

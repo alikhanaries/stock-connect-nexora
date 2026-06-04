@@ -193,5 +193,7 @@
   "NO_ENRICHMENT_JOB_REQUESTED": "En az bir Yapay Zekâ Zenginleştirme işi talep edilmelidir",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "Boş değerler için işlem mümkün değil",
   "ENRICHMENT_FAILED": "Yapay Zekâ Zenginleştirme başarısız oldu",
-  "ENRICHMENT_COMPLETED": "Tamamlandı. Değişiklikleri katalogda inceleyin."
+  "ENRICHMENT_COMPLETED": "Tamamlandı. Değişiklikleri katalogda inceleyin.",
+  "ENRICHMENT_CANCELLED": "Yapay Zekâ Zenginleştirme iptal edildi",
+  "NO_CANCELLABLE_OPS": "İptal edilecek aktif Yapay Zekâ Zenginleştirme işlemi yok"
 }
