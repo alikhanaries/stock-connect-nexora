@@ -297,11 +297,11 @@ const createAmazonReturnsForReturnedOrders = async (orderIds, sellerId) => {
         merchantReturnNo: `AMZ-RETURN-${order.orderId}`,
         merchantOrderNo: order.merchantOrderNo || order.orderId,
         channelId: order.channelId,
-        status: 'CREATED',
+        status: 'RECEIVED',
         platform: 'AMAZON',
         reason: 'Returned by customer',
         products,
-        sellerStatuses: sellerIds.map((sId) => ({ sellerId: sId, status: 'CREATED' })),
+        sellerStatuses: sellerIds.map((sId) => ({ sellerId: sId, status: 'RECEIVED' })),
         placedOn: order.orderDate || new Date(),
       });
     }
