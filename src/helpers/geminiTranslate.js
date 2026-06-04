@@ -58,11 +58,16 @@ const withTimeout = (promise, ms = 90000) =>
     new Promise((_, rej) => setTimeout(() => rej(new Error(`[AI] Request timed out after ${ms}ms`)), ms)),
   ]);
 
+const isAbortError = (error) => error?.name === 'AbortError' || error?.message?.toLowerCase().includes('aborted');
+
 const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await withTimeout(fn());
     } catch (error) {
+      // Abort = user cancelled. Don't retry, don't log noise — let the worker handle it.
+      if (isAbortError(error)) throw error;
+
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
       const isTimeout = error.message?.includes('timed out');
@@ -128,6 +133,8 @@ export const clearProgress = (sellerId) => {
   progressStore.delete(key(sellerId));
 };
 
+export const hasProgressEntry = (sellerId) => progressStore.has(key(sellerId));
+
 export const setPendingProgress = (sellerId, translateFields = []) =>
   progressStore.set(key(sellerId), {
     status: 'initializing',
@@ -137,22 +144,33 @@ export const setPendingProgress = (sellerId, translateFields = []) =>
       total: 0,
       completed: 0,
       status: 'pending',
+      cancelRequested: false,
+      abortController: null,
     })),
   });
 
-export const initProgress = (sellerId, operations, { totalProducts = 0 } = {}) =>
+export const initProgress = (sellerId, operations, { totalProducts = 0 } = {}) => {
+  const prior = progressStore.get(key(sellerId));
+  const priorFlag = (field, lang) =>
+    prior?.operations?.find((o) => o.field === field && o.lang === lang)?.cancelRequested === true;
   progressStore.set(key(sellerId), {
     status: 'running',
     totalProducts,
     updatedProducts: 0,
-    operations: operations.map(({ field, lang, total }) => ({
-      field,
-      lang,
-      total,
-      completed: 0,
-      status: 'pending',
-    })),
+    operations: operations.map(({ field, lang, total }) => {
+      const wasCancelled = priorFlag(field, lang);
+      return {
+        field,
+        lang,
+        total,
+        completed: 0,
+        status: wasCancelled ? 'cancelled' : 'pending',
+        cancelRequested: wasCancelled,
+        abortController: null,
+      };
+    }),
   });
+};
 
 export const setUpdatedProducts = (sellerId, count) => {
   const p = progressStore.get(key(sellerId));
@@ -163,7 +181,10 @@ const findOp = (p, field, lang) => p?.operations.find((o) => o.field === field &
 
 export const startOperation = (sellerId, field, lang) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
-  if (op) op.status = 'running';
+  if (!op) return;
+  // Don't flip a cancelled op back to running — the user already pulled the plug.
+  if (op.cancelRequested || op.status === 'cancelled') return;
+  op.status = 'running';
 };
 
 export const addProgress = (sellerId, field, lang, count) => {
@@ -175,21 +196,72 @@ export const finishOperation = (sellerId, field, lang) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   if (op) {
     op.status = 'done';
+    op.abortController = null;
   }
 };
 
 export const failOperation = (sellerId, field, lang, error) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   if (!op) return;
+  // If the user already cancelled this op, don't downgrade it to error —
+  // an in-flight chunk failing after cancel is expected, not a real failure.
+  if (op.status === 'cancelled' || op.cancelRequested) return;
   op.status = 'error';
+  op.abortController = null;
   const g = error?.geminiError;
   const raw = g?.message ?? error?.message ?? 'Unknown error';
   op.error = { message: raw.split('\n')[0].split('. ')[0].trim() };
 };
 
+export const setOperationAbortController = (sellerId, field, lang, ac) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (op) op.abortController = ac ?? null;
+};
+
+export const isOperationCancelled = (sellerId, field, lang) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  return op?.cancelRequested === true;
+};
+
+const TERMINAL_STATUSES = ['done', 'error', 'cancelled'];
+
+const applyCancelToOp = (op) => {
+  op.cancelRequested = true;
+  op.status = 'cancelled';
+  delete op.error;
+  delete op.retryInfo;
+  try {
+    op.abortController?.abort();
+  } catch {
+    /* ignore */
+  }
+  op.abortController = null;
+};
+
+export const cancelOperation = (sellerId, field, lang) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (!op || TERMINAL_STATUSES.includes(op.status)) return null;
+  const previous = op.status;
+  applyCancelToOp(op);
+  return previous;
+};
+
+export const cancelAllOperations = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return [];
+  const cancelled = [];
+  for (const op of p.operations) {
+    if (TERMINAL_STATUSES.includes(op.status)) continue;
+    cancelled.push({ field: op.field, lang: op.lang, previous: op.status });
+    applyCancelToOp(op);
+  }
+  return cancelled;
+};
+
 export const setOperationRetry = (sellerId, field, lang, retryInfo) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   if (!op) return;
+  if (op.cancelRequested || op.status === 'cancelled') return;
   if (retryInfo) {
     op.retryInfo = retryInfo;
   } else {
@@ -201,7 +273,10 @@ export const finishProgress = (sellerId) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
   const hasError = p.operations.some((o) => o.status === 'error');
-  p.status = hasError ? 'error' : 'done';
+  const hasCancelled = p.operations.some((o) => o.status === 'cancelled');
+  if (hasError) p.status = 'error';
+  else if (hasCancelled) p.status = 'cancelled';
+  else p.status = 'done';
 };
 
 export const getProgress = (sellerId) => {
@@ -215,13 +290,19 @@ export const getProgress = (sellerId) => {
     totalOperations: p.operations.length,
     completedOperations,
     operations: p.operations.map((o) => ({
-      ...o,
+      field: o.field,
+      lang: o.lang,
+      total: o.total ?? 0,
+      completed: o.completed ?? 0,
+      status: o.status,
+      error: o.error ?? null,
+      retryInfo: o.retryInfo ?? null,
       percentage: o.total > 0 ? Math.round((o.completed / o.total) * 100) : 0,
     })),
   };
 };
 
-const translateChunk = async (texts, targetLanguage, onRetry) => {
+const translateChunk = async (texts, targetLanguage, onRetry, abortSignal) => {
   const prompt = buildTranslatePrompt(texts, targetLanguage);
   const client = getAIClient();
 
@@ -233,6 +314,7 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
         config: {
           maxOutputTokens: 65536,
           systemInstruction: TRANSLATE_SYSTEM_INSTRUCTION,
+          ...(abortSignal ? { abortSignal } : {}),
         },
       });
       const raw = (response.text ?? '').trim();
@@ -292,7 +374,7 @@ const translateChunk = async (texts, targetLanguage, onRetry) => {
 
 const CHUNK_CONCURRENCY = 3;
 
-export const translateBatch = async (texts, langCode, onProgress, onRetry, onChunk) => {
+export const translateBatch = async (texts, langCode, onProgress, onRetry, onChunk, isCancelled, abortSignal) => {
   const targetLanguage = getLangName(langCode);
   const chunks = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -307,10 +389,17 @@ export const translateBatch = async (texts, langCode, onProgress, onRetry, onChu
   let cursor = 0;
   const worker = async () => {
     while (cursor < chunks.length) {
+      if (isCancelled?.()) return;
       const i = cursor++;
       const startIndex = i * BATCH_SIZE;
       console.log(`[AI] Sending chunk ${i + 1}/${chunks.length} (${chunks[i].length} texts)`);
-      results[i] = await translateChunk(chunks[i], targetLanguage, onRetry);
+      try {
+        results[i] = await translateChunk(chunks[i], targetLanguage, onRetry, abortSignal);
+      } catch (err) {
+        if (isCancelled?.() || isAbortError(err)) return;
+        throw err;
+      }
+      if (isCancelled?.()) return;
       await onChunk?.(results[i], startIndex);
       onProgress?.(chunks[i].length);
     }
