@@ -213,3 +213,4 @@ export const MAX_PRICE = 1145;
 
 export const AYMAKAN_VAT_DIVISOR = 1.15;
 export const AYMAKAN_PRICE_CURRENCY = 'USD';
+export const INVENTORY_SYNC_CRON_SELLERS = ['exquise'];
