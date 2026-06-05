@@ -2,6 +2,7 @@ import Seller from '#root/src/models/Seller.js';
 import { INVENTORY_SYNC_CRON_SELLERS } from '#constants/common.js';
 import { syncShopifyExquiseInventory } from '../../integrations/erp/shopify/exquise/service/inventoryService.js';
 import { getShopifyConfig } from '../../integrations/erp/shopify/exquise/service/shopifyService.js';
+import { syncStockToChannelEngine } from '#service/InventoryService.js';
 
 const brandSyncHandlers = {
   exquise: syncShopifyExquiseInventory,
@@ -30,6 +31,12 @@ const syncInventory = async (slug) => {
   }
 
   await sync(seller._id, shopifyConfig);
+
+  try {
+    await syncStockToChannelEngine(seller._id);
+  } catch (err) {
+    console.error(`Channel Engine stock sync failed for "${slug}":`, err.message);
+  }
 };
 
 export const runInventorySync = async () => {
