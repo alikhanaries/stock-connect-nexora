@@ -691,8 +691,11 @@ export const translateProductField = async (req, res) => {
       return failResponse(res, req.locale.NO_PRODUCTS_TO_ENRICH, 404);
     }
 
+    // Clear stale progress from a previous run before new one
     if (wantTranslate) setPendingProgress(sellerId, translateFields);
+    else clearProgress(sellerId);
     if (wantMapCategories) setPendingCategoryMapProgress(sellerId);
+    else clearCategoryMapProgress(sellerId);
 
     enrichInProgress.add(sellerId);
     successResponse(res, req.locale.ENRICHMENT_STARTED, 200, {
