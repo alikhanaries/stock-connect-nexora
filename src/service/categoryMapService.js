@@ -7,6 +7,8 @@ import {
   setCategoryMapRetry,
   failCategoryMapProgress,
   finishCategoryMapProgress,
+  isCategoryMapCancelled,
+  setCategoryMapAbortController,
 } from '#helpers/geminiCategoryMap.js';
 import { loadChannelCategories, humanizeCategoryPath } from '#utils/channelCategoriesLoader.js';
 import { buildFilter } from '#util/buildFilter.js';
@@ -42,6 +44,11 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
 
   initCategoryMapProgress(sellerId, totalProducts);
 
+  // One AbortController for the whole category-map pass so cancel aborts the
+  // in-flight Gemini call immediately instead of waiting for the natural timeout.
+  const ac = new AbortController();
+  setCategoryMapAbortController(sellerId, ac);
+
   const cursor = Product.find(finalFilter).select('_id name description').lean().cursor();
 
   let buffer = [];
@@ -49,10 +56,12 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
 
   const flushBuffer = async () => {
     if (!buffer.length) return;
+    if (isCategoryMapCancelled(sellerId)) return;
     const work = buffer;
     buffer = [];
 
     const persistChunk = async (results, startIndex, chunk) => {
+      if (isCategoryMapCancelled(sellerId)) return;
       const ops = [];
       results.forEach((rawPath, i) => {
         const task = chunk[i] ?? work[startIndex + i];
@@ -78,10 +87,17 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
     };
 
     try {
-      await classifyProductsBatch(work, allowedPaths, pathSet, persistChunk, (retryInfo) =>
-        setCategoryMapRetry(sellerId, retryInfo)
+      await classifyProductsBatch(
+        work,
+        allowedPaths,
+        pathSet,
+        persistChunk,
+        (retryInfo) => setCategoryMapRetry(sellerId, retryInfo),
+        () => isCategoryMapCancelled(sellerId),
+        ac.signal
       );
     } catch (error) {
+      if (isCategoryMapCancelled(sellerId)) return;
       const detail = (error.geminiError?.message ?? error.message ?? 'Unknown error').split('\n')[0].trim();
       console.error(`[CategoryMapService] Batch failed: ${detail}`);
       failCategoryMapProgress(sellerId, error);
@@ -91,23 +107,34 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
 
   try {
     for await (const doc of cursor) {
+      if (isCategoryMapCancelled(sellerId)) break;
       buffer.push(doc);
       if (buffer.length >= SCOPE_BATCH_SIZE) {
         await flushBuffer();
+        if (isCategoryMapCancelled(sellerId)) break;
       }
     }
-    await flushBuffer();
+    if (!isCategoryMapCancelled(sellerId)) await flushBuffer();
   } catch (error) {
     try {
       cursor.close?.();
     } catch {
       // ignore cursor close failure; original error is more relevant
     }
+    if (isCategoryMapCancelled(sellerId)) {
+      console.log('[CategoryMapService] Cancelled by user');
+      return { total: totalProducts, updated: updatedCount, cancelled: true };
+    }
     console.error('[CategoryMapService] Aborted due to error:', error.message);
     return { total: totalProducts, updated: updatedCount, error: true };
   }
 
+  // finishCategoryMapProgress preserves the 'cancelled' status set by the helper.
   finishCategoryMapProgress(sellerId);
+  if (isCategoryMapCancelled(sellerId)) {
+    console.log(`[CategoryMapService] Cancelled — updated: ${updatedCount}/${totalProducts}`);
+    return { total: totalProducts, updated: updatedCount, cancelled: true };
+  }
   console.log(`[CategoryMapService] Done — total: ${totalProducts}, updated: ${updatedCount}`);
   return { total: totalProducts, updated: updatedCount };
 };
