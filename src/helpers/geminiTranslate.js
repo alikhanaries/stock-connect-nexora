@@ -273,8 +273,10 @@ export const finishProgress = (sellerId) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
   const hasError = p.operations.some((o) => o.status === 'error');
+  const hasDone = p.operations.some((o) => o.status === 'done');
   const hasCancelled = p.operations.some((o) => o.status === 'cancelled');
   if (hasError) p.status = 'error';
+  else if (hasDone) p.status = 'done';
   else if (hasCancelled) p.status = 'cancelled';
   else p.status = 'done';
 };
