@@ -37,16 +37,16 @@ const decorateCategoryMapOp = (categoryMap) => {
   return out;
 };
 
-const pickActiveMessage = (operations, { doneMessage, errorMessage }) => {
+const pickActiveMessage = (operations, { doneMessage, errorMessage, cancelledMessage }) => {
   if (!operations.length) return doneMessage;
 
   const errored = operations.find((o) => o.status === 'error');
   if (errored) return `${errorMessage}: ${errored.label}`;
 
-  const active = operations.find((o) => o.status !== 'done');
+  const active = operations.find((o) => o.status !== 'done' && o.status !== 'cancelled');
   if (active) return active.label;
 
-  if (operations.every((o) => o.status === 'done')) return doneMessage;
+  if (operations.every((o) => o.status === 'cancelled')) return cancelledMessage;
 
   return doneMessage;
 };
@@ -61,16 +61,26 @@ const buildAiEnrichBlock = (sellerId) => {
   const operations = [...translateOps, ...(categoryMapOp ? [categoryMapOp] : [])];
 
   const hasError = operations.some((o) => o.status === 'error');
-  const allDone = operations.length > 0 && operations.every((o) => o.status === 'done');
   const anyRunning = operations.some((o) => o.status === 'running');
-  const status = hasError ? 'error' : allDone ? 'done' : anyRunning ? 'running' : 'initializing';
+  const activeOps = operations.filter((o) => o.status !== 'cancelled');
+  const allActiveDone = activeOps.length > 0 && activeOps.every((o) => o.status === 'done');
+  const allCancelled = operations.length > 0 && operations.every((o) => o.status === 'cancelled');
+  const status = hasError
+    ? 'error'
+    : anyRunning
+      ? 'running'
+      : allActiveDone
+        ? 'done'
+        : allCancelled
+          ? 'cancelled'
+          : 'initializing';
 
   const totalProducts = translate?.totalProducts ?? categoryMap?.total ?? 0;
   const updatedProducts = operations.reduce((max, o) => Math.max(max, o.completed ?? 0), 0);
   const totalOperations = operations.length;
   const completedOperations = operations.filter((o) => o.status === 'done').length;
-  const totalPercentage = totalOperations
-    ? Math.round(operations.reduce((sum, o) => sum + (o.percentage || 0), 0) / totalOperations)
+  const totalPercentage = activeOps.length
+    ? Math.round(activeOps.reduce((sum, o) => sum + (o.percentage || 0), 0) / activeOps.length)
     : 0;
 
   return {
@@ -95,8 +105,10 @@ export const aggregateStatus = (blocks) => {
   const statuses = blocks.map((b) => b?.status).filter(Boolean);
   if (!statuses.length) return 'done';
   if (statuses.some((s) => s === 'error')) return 'error';
-  if (statuses.every((s) => s === 'done')) return 'done';
   if (statuses.some((s) => s === 'running')) return 'running';
+  if (statuses.every((s) => s === 'done' || s === 'cancelled')) {
+    return statuses.some((s) => s === 'done') ? 'done' : 'cancelled';
+  }
   return 'initializing';
 };
 
@@ -105,5 +117,6 @@ export const aggregateMessage = (blocks, locale) => {
   return pickActiveMessage(operations, {
     doneMessage: locale.ENRICHMENT_COMPLETED,
     errorMessage: locale.ENRICHMENT_FAILED,
+    cancelledMessage: locale.ENRICHMENT_CANCELLED,
   });
 };

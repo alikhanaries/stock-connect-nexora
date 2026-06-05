@@ -11,6 +11,8 @@ import {
   finishProgress,
   setOperationRetry,
   setUpdatedProducts,
+  isOperationCancelled,
+  setOperationAbortController,
 } from '#helpers/geminiTranslate.js';
 import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 import { buildFilter } from '#util/buildFilter.js';
@@ -110,6 +112,12 @@ export const translateProductField = async ({
   const updateMap = {};
 
   for (const { field, lang } of translate) {
+    // Skip ops the user cancelled while the prior op was running (or before this op started).
+    if (isOperationCancelled(sellerId, field, lang)) {
+      console.log(`[TranslateService] Skipping cancelled op — field: "${field}", lang: "${lang}"`);
+      continue;
+    }
+
     const tasks = tasksByOperation[`${field}:${lang}`]?.tasks ?? [];
 
     if (!tasks.length) {
@@ -120,7 +128,15 @@ export const translateProductField = async ({
     console.log(`[TranslateService] Translating ${tasks.length} texts — field: "${field}", lang: "${lang}"`);
     startOperation(sellerId, field, lang);
 
+    // One AbortController per op so cancel can interrupt the in-flight Gemini call
+    // immediately instead of waiting up to ~90s for the request to time out.
+    const ac = new AbortController();
+    setOperationAbortController(sellerId, field, lang, ac);
+
     const persistChunk = async (chunkTexts, startIndex) => {
+      // Discard chunk writes if cancel arrived between the Gemini call and the DB write —
+      // we don't want a cancelled op to keep producing translated rows.
+      if (isOperationCancelled(sellerId, field, lang)) return;
       const chunkOps = [];
       chunkTexts.forEach((translated, i) => {
         if (!translated) return;
@@ -146,10 +162,15 @@ export const translateProductField = async ({
         lang,
         (count) => addProgress(sellerId, field, lang, count),
         (retryInfo) => setOperationRetry(sellerId, field, lang, retryInfo),
-        persistChunk
+        persistChunk,
+        () => isOperationCancelled(sellerId, field, lang),
+        ac.signal
       );
+      // If the loop exited because of cancel, leave the helper's 'cancelled' status alone.
+      if (isOperationCancelled(sellerId, field, lang)) continue;
       finishOperation(sellerId, field, lang);
     } catch (error) {
+      if (isOperationCancelled(sellerId, field, lang)) continue;
       const detail = (error.geminiError?.message ?? error.message ?? 'Unknown error').split('\n')[0].trim();
       console.error(`[TranslateService] Batch failed — field: "${field}", lang: "${lang}": ${detail}`);
       failOperation(sellerId, field, lang, error);
