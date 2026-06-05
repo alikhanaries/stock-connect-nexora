@@ -897,18 +897,21 @@ export const translateProductFieldValidator = validate(async (req) => {
 
   const bodySchema = z
     .object({
+      action: z.enum(['start', 'cancel']).optional(),
       translateFields: translateFieldsSchema,
       enhanceImages: z.boolean().optional(),
       mapCategories: z.boolean().optional(),
     })
     .strict()
-    .refine(
-      (b) =>
+    .refine((b) => {
+      // For cancel, scope is optional — omitting both means "cancel the whole job".
+      if (b.action === 'cancel') return true;
+      return (
         (Array.isArray(b.translateFields) && b.translateFields.length > 0) ||
         b.enhanceImages === true ||
-        b.mapCategories === true,
-      'at least one of translateFields (non-empty), enhanceImages=true, or mapCategories=true must be provided'
-    );
+        b.mapCategories === true
+      );
+    }, 'at least one of translateFields (non-empty), enhanceImages=true, or mapCategories=true must be provided');
 
   bodySchema.parse(req.body);
 });
