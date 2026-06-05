@@ -133,8 +133,6 @@ const SellerOrderSchema = new mongoose.Schema(
 
 SellerOrderSchema.index({ sellerId: 1, orderDate: -1 });
 SellerOrderSchema.index({ orderDate: -1 });
-SellerOrderSchema.index({ status: 1 });
-SellerOrderSchema.index({ channelId: 1 });
 SellerOrderSchema.index({ sellerId: 1, status: 1 });
 SellerOrderSchema.index({ sellerId: 1, channelId: 1 });
 const SellerOrder = mongoose.model('sellerorders', SellerOrderSchema);
