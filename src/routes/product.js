@@ -680,10 +680,11 @@ productsRouter.patch(
  * /products/translate-field:
  *   post:
  *     tags: [Products]
- *     summary: Run AI enrichment jobs (translate / map categories / enhance images) for a seller's products
+ *     summary: Start or cancel AI enrichment jobs (translate / map categories / enhance images) for a seller's products
  *     description: |
- *       Global AI pipeline. The body decides which jobs run:
+ *       Global AI pipeline. The `action` field in the body decides what to do (defaults to `start`).
  *
+ *       **action: "start"** (default)
  *       - `translateFields` (non-empty array of `{field, lang}`) → translate each field/lang via the
  *         translate service. Auto-detects source language per field and skips values already in the
  *         target language.
@@ -692,7 +693,18 @@ productsRouter.patch(
  *       - `enhanceImages: true` → reserved; not yet implemented; silently skipped.
  *
  *       At least one of the three must be provided. Runs in the background — poll
- *       /products/progress-status?type=ai-enrich to check status.
+ *       `/products/progress-status?type=ai-enrich` for status.
+ *
+ *       **action: "cancel"**
+ *       - Stops in-flight ops cooperatively (workers check between chunks; an in-flight chunk may
+ *         finish its current Gemini call before the check fires).
+ *       - Scope the cancel via `translateFields` (per-op) and/or `mapCategories: true`. Omit both
+ *         to cancel the whole job.
+ *       - Returns `{ action: "cancel", affected: [...], skipped: [...] }`. Ops that were already
+ *         terminal (`done`/`error`/`cancelled`) appear under `skipped` with `reason: not_cancellable`.
+ *         Requested ops that aren't part of the current job appear under `skipped` with `reason: not_in_job`.
+ *       - 404 when there's no active enrichment for the seller.
+ *       - 409 when nothing in scope was cancellable.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -705,7 +717,7 @@ productsRouter.patch(
  *       - in: query
  *         name: productId
  *         required: false
- *         description: If provided, enrich only this product. Otherwise enrich all non-removed products for the seller.
+ *         description: For `start`, enrich only this product. Ignored for `cancel`.
  *         schema: { type: string }
  *     requestBody:
  *       required: true
@@ -714,6 +726,13 @@ productsRouter.patch(
  *           schema:
  *             type: object
  *             properties:
+ *               action:
+ *                 type: string
+ *                 enum: [start, cancel]
+ *                 default: start
+ *                 description: |
+ *                   `start` (default) — kick off enrichment.
+ *                   `cancel` — cancel in-flight ops; scope via translateFields/mapCategories, or omit both to cancel everything still running.
  *               translateFields:
  *                 type: array
  *                 items:
@@ -724,6 +743,26 @@ productsRouter.patch(
  *                     lang:  { type: string, example: ar }
  *               enhanceImages: { type: boolean, example: true }
  *               mapCategories: { type: boolean, example: true }
+ *           examples:
+ *             startTranslateAndMap:
+ *               summary: Start translate + map categories
+ *               value:
+ *                 translateFields:
+ *                   - { field: nameAr, lang: ar }
+ *                   - { field: descriptionAr, lang: ar }
+ *                 mapCategories: true
+ *             cancelTwoOpsAndCategoryMap:
+ *               summary: Cancel two translate ops and the category-map op
+ *               value:
+ *                 action: cancel
+ *                 translateFields:
+ *                   - { field: size, lang: en }
+ *                   - { field: color, lang: en }
+ *                 mapCategories: true
+ *             cancelWholeJob:
+ *               summary: Cancel everything still running
+ *               value:
+ *                 action: cancel
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }

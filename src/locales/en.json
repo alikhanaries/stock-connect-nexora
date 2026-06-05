@@ -195,5 +195,7 @@
   "NO_ENRICHMENT_JOB_REQUESTED": "At least one AI Enrichment job must be requested",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "Operation is not possible for empty values",
   "ENRICHMENT_FAILED": "AI Enrichment failed",
-  "ENRICHMENT_COMPLETED": "Finished. Review changes in the catalogue."
+  "ENRICHMENT_COMPLETED": "Finished. Review changes in the catalogue.",
+  "ENRICHMENT_CANCELLED": "AI Enrichment cancelled",
+  "NO_CANCELLABLE_OPS": "No active AI Enrichment operations to cancel"
 }
