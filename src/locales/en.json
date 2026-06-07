@@ -197,5 +197,10 @@
   "ENRICHMENT_FAILED": "AI Enrichment failed",
   "ENRICHMENT_COMPLETED": "Finished. Review changes in the catalogue.",
   "ENRICHMENT_CANCELLED": "AI Enrichment cancelled",
-  "NO_CANCELLABLE_OPS": "No active AI Enrichment operations to cancel"
+  "NO_CANCELLABLE_OPS": "No active AI Enrichment operations to cancel",
+  "ENRICHMENT_PAUSED": "AI Enrichment paused",
+  "ENRICHMENT_RESUMED": "AI Enrichment resumed",
+  "NO_PAUSABLE_OPS": "No active AI Enrichment operations to pause",
+  "NO_RESUMABLE_OPS": "No paused AI Enrichment operations to resume",
+  "INVALID_ACTION": "Invalid action. Allowed: start, cancel, pause, resume"
 }
