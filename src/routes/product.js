@@ -728,11 +728,13 @@ productsRouter.patch(
  *             properties:
  *               action:
  *                 type: string
- *                 enum: [start, cancel]
+ *                 enum: [start, cancel, pause, resume]
  *                 default: start
  *                 description: |
  *                   `start` (default) — kick off enrichment.
- *                   `cancel` — cancel in-flight ops; scope via translateFields/mapCategories, or omit both to cancel everything still running.
+ *                   `cancel` — terminal stop. Status → cancelled, in-flight chunks discarded. Scope via translateFields/mapCategories, omit both for whole job.
+ *                   `pause`  — non-terminal stop. Status → paused, completed count + in-flight chunks preserved. Same scoping rules.
+ *                   `resume` — re-runs paused ops, skipping products whose target field is already populated. Same scoping rules. 409 if a job is still draining.
  *               translateFields:
  *                 type: array
  *                 items:
@@ -763,6 +765,26 @@ productsRouter.patch(
  *               summary: Cancel everything still running
  *               value:
  *                 action: cancel
+ *             pauseOneOp:
+ *               summary: Pause a single op (preserves progress, can be resumed)
+ *               value:
+ *                 action: pause
+ *                 translateFields:
+ *                   - { field: size, lang: en }
+ *             pauseWholeJob:
+ *               summary: Pause everything still running
+ *               value:
+ *                 action: pause
+ *             resumeOneOp:
+ *               summary: Resume a paused op
+ *               value:
+ *                 action: resume
+ *                 translateFields:
+ *                   - { field: size, lang: en }
+ *             resumeWholeJob:
+ *               summary: Resume every paused op
+ *               value:
+ *                 action: resume
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
@@ -816,7 +838,7 @@ productsRouter.post(
  *                   example: [ai-enrich, sync]
  *                 status:
  *                   type: string
- *                   enum: [initializing, running, done, error]
+ *                   enum: [initializing, running, done, error, cancelled, paused]
  *                   description: Aggregate status across all requested types.
  *                 results:
  *                   type: object
@@ -824,7 +846,7 @@ productsRouter.post(
  *                   additionalProperties:
  *                     type: object
  *                     properties:
- *                       status: { type: string, enum: [initializing, running, done, error] }
+ *                       status: { type: string, enum: [initializing, running, done, error, cancelled, paused] }
  *                       totalProducts: { type: integer }
  *                       updatedProducts: { type: integer }
  *                       totalOperations: { type: integer }
@@ -841,7 +863,9 @@ productsRouter.post(
  *                             completed: { type: integer }
  *                             updated:   { type: integer, description: "Present only on category-map operations." }
  *                             percentage: { type: integer }
- *                             status: { type: string, enum: [pending, running, done, error, initializing] }
+ *                             status:    { type: string, enum: [pending, running, done, error, initializing, cancelled, paused] }
+ *                             canPause:  { type: boolean, description: "True when status is pending/running/initializing — FE can show Pause." }
+ *                             canResume: { type: boolean, description: "True when status is paused — FE can show Resume." }
  *                             error:     { type: object, properties: { message: { type: string } }, description: "Present only when status=error." }
  *                             retryInfo: { type: object, properties: { message: { type: string } }, description: "Present only while a retry is in progress." }
  *       400: { $ref: "#/components/schemas/FailResponse" }
