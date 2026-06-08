@@ -1099,6 +1099,7 @@ const transformOrderResponse = (response, allOrderSkus = [], sellerOrderStatus) 
   return {
     _id: data?._id,
     merchantOrderNo: data?.merchantOrderNo || '',
+    orderDate: data?.orderDate || null,
     channelId: data?.channelId,
     channelName: data?.channelName,
     orderId: data?.orderId,
