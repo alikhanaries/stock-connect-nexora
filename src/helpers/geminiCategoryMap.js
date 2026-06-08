@@ -35,7 +35,25 @@ const getAIClient = () => {
   return _client;
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms, signal) =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      const err = new Error('Aborted');
+      err.name = 'AbortError';
+      return reject(err);
+    }
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(t);
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        reject(err);
+      },
+      { once: true }
+    );
+  });
 
 const parseRetryDelay = (errorMessage) => {
   const match = errorMessage?.match(/Please retry in ([\d.]+)s/);
@@ -65,9 +83,14 @@ const withTimeout = (promise, ms = 120000) =>
 
 const isAbortError = (error) => error?.name === 'AbortError' || error?.message?.toLowerCase().includes('aborted');
 
-const callWithRetry = async (fn, retries = MAX_RETRIES, onRetry, label = PROVIDER_LABEL) => {
+const callWithRetry = async (fn, retries = MAX_RETRIES, onRetry, label = PROVIDER_LABEL, signal) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      if (signal?.aborted) {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
       return await withTimeout(fn());
     } catch (error) {
       if (isAbortError(error)) throw error;
@@ -94,7 +117,12 @@ const callWithRetry = async (fn, retries = MAX_RETRIES, onRetry, label = PROVIDE
           `[${label}] ${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries}) — ${isTimeout || isMalformed ? error.message : formatGeminiError(error.message)}`
         );
         onRetry?.({ message: `${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries})` });
-        await sleep(delay);
+        try {
+          await sleep(delay, signal);
+        } catch (abortErr) {
+          onRetry?.(null);
+          throw abortErr;
+        }
         onRetry?.(null);
       } else {
         error.geminiError = parseGeminiError(error.message);
@@ -127,20 +155,25 @@ export const setPendingCategoryMapProgress = (sellerId) =>
     completed: 0,
     updated: 0,
     cancelRequested: false,
+    pauseRequested: false,
     abortController: null,
   });
 
-export const initCategoryMapProgress = (sellerId, total) => {
+export const initCategoryMapProgress = (sellerId, total, { preserveCompleted = false } = {}) => {
   const prior = progressStore.get(key(sellerId));
   const wasCancelled = prior?.cancelRequested === true;
+  const priorCompleted = prior?.completed ?? 0;
+  const priorUpdated = prior?.updated ?? 0;
+  const priorTotal = prior?.total ?? 0;
   progressStore.set(key(sellerId), {
     status: wasCancelled ? 'cancelled' : 'running',
-    total,
-    completed: 0,
-    updated: 0,
+    total: preserveCompleted ? priorTotal : total,
+    completed: preserveCompleted ? priorCompleted : 0,
+    updated: preserveCompleted ? priorUpdated : 0,
     retryInfo: null,
     error: null,
     cancelRequested: wasCancelled,
+    pauseRequested: false,
     abortController: null,
   });
 };
@@ -153,6 +186,11 @@ export const setCategoryMapAbortController = (sellerId, ac) => {
 export const isCategoryMapCancelled = (sellerId) => {
   const p = progressStore.get(key(sellerId));
   return p?.cancelRequested === true;
+};
+
+export const isCategoryMapStopped = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  return p?.cancelRequested === true || p?.pauseRequested === true;
 };
 
 // Returns the previous status if a cancel actually happened, else null.
@@ -174,6 +212,31 @@ export const cancelCategoryMap = (sellerId) => {
   return previous;
 };
 
+export const pauseCategoryMap = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return null;
+  if (['done', 'error', 'cancelled', 'paused'].includes(p.status)) return null;
+  const previous = p.status;
+  p.pauseRequested = true;
+  p.status = 'paused';
+  try {
+    p.abortController?.abort();
+  } catch {
+    /* ignore */
+  }
+  p.abortController = null;
+  return previous;
+};
+
+export const resumeCategoryMap = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return null;
+  if (p.status !== 'paused') return null;
+  p.pauseRequested = false;
+  p.status = 'pending';
+  return 'paused';
+};
+
 export const addCategoryMapProgress = (sellerId, completedDelta, updatedDelta = 0) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
@@ -185,6 +248,7 @@ export const setCategoryMapRetry = (sellerId, retryInfo) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
   if (p.cancelRequested || p.status === 'cancelled') return;
+  if (p.pauseRequested || p.status === 'paused') return;
   p.retryInfo = retryInfo || null;
 };
 
@@ -192,6 +256,7 @@ export const failCategoryMapProgress = (sellerId, error) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
   if (p.status === 'cancelled' || p.cancelRequested) return;
+  if (p.status === 'paused' || p.pauseRequested) return;
   p.status = 'error';
   p.abortController = null;
   const g = error?.geminiError;
@@ -202,7 +267,7 @@ export const failCategoryMapProgress = (sellerId, error) => {
 export const finishCategoryMapProgress = (sellerId) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
-  if (p.status !== 'error' && p.status !== 'cancelled') p.status = 'done';
+  if (!['error', 'cancelled', 'paused'].includes(p.status)) p.status = 'done';
   p.abortController = null;
 };
 
@@ -291,7 +356,8 @@ const classifyChunk = async (chunk, allowedPaths, pathSet, onRetry, abortSignal)
     },
     MAX_RETRIES,
     onRetry,
-    PROVIDER_LABEL
+    PROVIDER_LABEL,
+    abortSignal
   );
 };
 

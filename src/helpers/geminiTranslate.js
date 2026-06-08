@@ -30,7 +30,25 @@ const getAIClient = () => {
   return _client;
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms, signal) =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      const err = new Error('Aborted');
+      err.name = 'AbortError';
+      return reject(err);
+    }
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(t);
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        reject(err);
+      },
+      { once: true }
+    );
+  });
 
 const parseRetryDelay = (errorMessage) => {
   const match = errorMessage?.match(/Please retry in ([\d.]+)s/);
@@ -60,9 +78,14 @@ const withTimeout = (promise, ms = 90000) =>
 
 const isAbortError = (error) => error?.name === 'AbortError' || error?.message?.toLowerCase().includes('aborted');
 
-const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL) => {
+const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL, signal) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
+      if (signal?.aborted) {
+        const err = new Error('Aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
       return await withTimeout(fn());
     } catch (error) {
       // Abort = user cancelled. Don't retry, don't log noise — let the worker handle it.
@@ -94,7 +117,12 @@ const callWithRetry = async (fn, retries = 6, onRetry, label = PROVIDER_LABEL) =
           `[${label}] ${retryLabel}. Retrying in ${retryAfterSeconds}s (attempt ${attempt}/${retries}) — ${isTimeout || isMalformed ? error.message : formatGeminiError(error.message)}`
         );
         onRetry?.({ message: userMessage });
-        await sleep(delay);
+        try {
+          await sleep(delay, signal);
+        } catch (abortErr) {
+          onRetry?.(null);
+          throw abortErr;
+        }
         onRetry?.(null);
       } else {
         error.geminiError = parseGeminiError(error.message);
@@ -145,27 +173,53 @@ export const setPendingProgress = (sellerId, translateFields = []) =>
       completed: 0,
       status: 'pending',
       cancelRequested: false,
+      pauseRequested: false,
       abortController: null,
     })),
   });
 
-export const initProgress = (sellerId, operations, { totalProducts = 0 } = {}) => {
+export const initProgress = (sellerId, operations, { totalProducts = 0, preserveCompleted = false } = {}) => {
   const prior = progressStore.get(key(sellerId));
-  const priorFlag = (field, lang) =>
-    prior?.operations?.find((o) => o.field === field && o.lang === lang)?.cancelRequested === true;
+
+  if (preserveCompleted && prior?.operations) {
+    const incomingByKey = new Map(operations.map((o) => [`${o.field}:${o.lang}`, o]));
+    prior.status = 'running';
+    if (typeof totalProducts === 'number') prior.totalProducts = totalProducts;
+    prior.operations = prior.operations.map((op) => {
+      const incoming = incomingByKey.get(`${op.field}:${op.lang}`);
+      if (!incoming) return op; // not being resumed — leave it
+      const priorCompleted = op.completed ?? 0;
+      const wasCancelled = op.cancelRequested === true;
+      return {
+        ...op,
+        total: op.total,
+        completed: priorCompleted,
+        status: wasCancelled ? 'cancelled' : 'pending',
+        cancelRequested: wasCancelled,
+        pauseRequested: false,
+        abortController: null,
+      };
+    });
+    return;
+  }
+
+  const priorOp = (field, lang) => prior?.operations?.find((o) => o.field === field && o.lang === lang);
   progressStore.set(key(sellerId), {
     status: 'running',
     totalProducts,
-    updatedProducts: 0,
-    operations: operations.map(({ field, lang, total }) => {
-      const wasCancelled = priorFlag(field, lang);
+    updatedProducts: prior?.updatedProducts ?? 0,
+    operations: operations.map(({ field, lang }) => {
+      const prev = priorOp(field, lang);
+      const wasCancelled = prev?.cancelRequested === true;
+      const wasPaused = prev?.pauseRequested === true;
       return {
         field,
         lang,
-        total,
+        total: totalProducts,
         completed: 0,
         status: wasCancelled ? 'cancelled' : 'pending',
         cancelRequested: wasCancelled,
+        pauseRequested: wasPaused,
         abortController: null,
       };
     }),
@@ -182,14 +236,16 @@ const findOp = (p, field, lang) => p?.operations.find((o) => o.field === field &
 export const startOperation = (sellerId, field, lang) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   if (!op) return;
-  // Don't flip a cancelled op back to running — the user already pulled the plug.
+  // Don't flip a cancelled/paused op back to running — the user already issued an explicit stop.
   if (op.cancelRequested || op.status === 'cancelled') return;
+  if (op.pauseRequested || op.status === 'paused') return;
   op.status = 'running';
 };
 
 export const addProgress = (sellerId, field, lang, count) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
-  if (op) op.completed += count;
+  if (!op) return;
+  op.completed = Math.min((op.completed ?? 0) + count, op.total ?? Infinity);
 };
 
 export const finishOperation = (sellerId, field, lang) => {
@@ -203,9 +259,10 @@ export const finishOperation = (sellerId, field, lang) => {
 export const failOperation = (sellerId, field, lang, error) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   if (!op) return;
-  // If the user already cancelled this op, don't downgrade it to error —
-  // an in-flight chunk failing after cancel is expected, not a real failure.
+  // If the user already cancelled or paused this op, don't downgrade to error —
+  // an in-flight chunk failing after stop is expected, not a real failure.
   if (op.status === 'cancelled' || op.cancelRequested) return;
+  if (op.status === 'paused' || op.pauseRequested) return;
   op.status = 'error';
   op.abortController = null;
   const g = error?.geminiError;
@@ -222,14 +279,30 @@ export const isOperationCancelled = (sellerId, field, lang) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   return op?.cancelRequested === true;
 };
+export const isOperationStopped = (sellerId, field, lang) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  return op?.cancelRequested === true || op?.pauseRequested === true;
+};
 
 const TERMINAL_STATUSES = ['done', 'error', 'cancelled'];
+const NOT_PAUSABLE = [...TERMINAL_STATUSES, 'paused'];
 
 const applyCancelToOp = (op) => {
   op.cancelRequested = true;
   op.status = 'cancelled';
   delete op.error;
   delete op.retryInfo;
+  try {
+    op.abortController?.abort();
+  } catch {
+    /* ignore */
+  }
+  op.abortController = null;
+};
+
+const applyPauseToOp = (op) => {
+  op.pauseRequested = true;
+  op.status = 'paused';
   try {
     op.abortController?.abort();
   } catch {
@@ -258,10 +331,59 @@ export const cancelAllOperations = (sellerId) => {
   return cancelled;
 };
 
+export const pauseOperation = (sellerId, field, lang) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (!op || NOT_PAUSABLE.includes(op.status)) return null;
+  const previous = op.status;
+  applyPauseToOp(op);
+  return previous;
+};
+
+export const pauseAllOperations = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return [];
+  const paused = [];
+  for (const op of p.operations) {
+    if (NOT_PAUSABLE.includes(op.status)) continue;
+    paused.push({ field: op.field, lang: op.lang, previous: op.status });
+    applyPauseToOp(op);
+  }
+  return paused;
+};
+
+export const resumeOperation = (sellerId, field, lang) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (!op || op.status !== 'paused') return null;
+  op.pauseRequested = false;
+  op.status = 'pending';
+  return 'paused';
+};
+
+// Resume every op currently paused.
+export const resumeAllPausedOperations = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return [];
+  const resumed = [];
+  for (const op of p.operations) {
+    if (op.status !== 'paused') continue;
+    resumed.push({ field: op.field, lang: op.lang, completed: op.completed ?? 0 });
+    op.pauseRequested = false;
+    op.status = 'pending';
+  }
+  return resumed;
+};
+
+export const listOperationStatuses = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return [];
+  return p.operations.map((o) => ({ field: o.field, lang: o.lang, status: o.status, completed: o.completed ?? 0 }));
+};
+
 export const setOperationRetry = (sellerId, field, lang, retryInfo) => {
   const op = findOp(progressStore.get(key(sellerId)), field, lang);
   if (!op) return;
   if (op.cancelRequested || op.status === 'cancelled') return;
+  if (op.pauseRequested || op.status === 'paused') return;
   if (retryInfo) {
     op.retryInfo = retryInfo;
   } else {
@@ -273,9 +395,11 @@ export const finishProgress = (sellerId) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
   const hasError = p.operations.some((o) => o.status === 'error');
+  const hasPaused = p.operations.some((o) => o.status === 'paused');
   const hasDone = p.operations.some((o) => o.status === 'done');
   const hasCancelled = p.operations.some((o) => o.status === 'cancelled');
   if (hasError) p.status = 'error';
+  else if (hasPaused) p.status = 'paused';
   else if (hasDone) p.status = 'done';
   else if (hasCancelled) p.status = 'cancelled';
   else p.status = 'done';
@@ -370,7 +494,8 @@ const translateChunk = async (texts, targetLanguage, onRetry, abortSignal) => {
     },
     6,
     onRetry,
-    PROVIDER_LABEL
+    PROVIDER_LABEL,
+    abortSignal
   );
 };
 
