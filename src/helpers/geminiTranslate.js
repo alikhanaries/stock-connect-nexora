@@ -178,7 +178,11 @@ export const setPendingProgress = (sellerId, translateFields = []) =>
     })),
   });
 
-export const initProgress = (sellerId, operations, { totalProducts = 0, preserveCompleted = false } = {}) => {
+export const initProgress = (
+  sellerId,
+  operations,
+  { totalProducts = 0, preserveCompleted = false, retryMode = false } = {}
+) => {
   const prior = progressStore.get(key(sellerId));
 
   if (preserveCompleted && prior?.operations) {
@@ -187,7 +191,7 @@ export const initProgress = (sellerId, operations, { totalProducts = 0, preserve
     if (typeof totalProducts === 'number') prior.totalProducts = totalProducts;
     prior.operations = prior.operations.map((op) => {
       const incoming = incomingByKey.get(`${op.field}:${op.lang}`);
-      if (!incoming) return op; // not being resumed — leave it
+      if (!incoming) return op;
       const priorCompleted = op.completed ?? 0;
       const wasCancelled = op.cancelRequested === true;
       return {
@@ -196,6 +200,28 @@ export const initProgress = (sellerId, operations, { totalProducts = 0, preserve
         completed: priorCompleted,
         status: wasCancelled ? 'cancelled' : 'pending',
         cancelRequested: wasCancelled,
+        pauseRequested: false,
+        abortController: null,
+      };
+    });
+    return;
+  }
+
+  if (retryMode && prior?.operations) {
+    const incomingByKey = new Map(operations.map((o) => [`${o.field}:${o.lang}`, o]));
+    prior.status = 'running';
+    if (typeof totalProducts === 'number') prior.totalProducts = totalProducts;
+    prior.operations = prior.operations.map((op) => {
+      const incoming = incomingByKey.get(`${op.field}:${op.lang}`);
+      if (!incoming) return op;
+      return {
+        ...op,
+        total: totalProducts,
+        completed: 0,
+        error: null,
+        retryInfo: null,
+        status: 'pending',
+        cancelRequested: false,
         pauseRequested: false,
         abortController: null,
       };
@@ -371,6 +397,39 @@ export const resumeAllPausedOperations = (sellerId) => {
     op.status = 'pending';
   }
   return resumed;
+};
+
+const RETRIABLE_STATUSES = new Set(['error', 'cancelled', 'paused', 'done']);
+
+const applyRetryToOp = (op) => {
+  op.completed = 0;
+  op.cancelRequested = false;
+  op.pauseRequested = false;
+  delete op.error;
+  delete op.retryInfo;
+  op.status = 'pending';
+  op.abortController = null;
+};
+
+export const retryOperation = (sellerId, field, lang) => {
+  const op = findOp(progressStore.get(key(sellerId)), field, lang);
+  if (!op || !RETRIABLE_STATUSES.has(op.status)) return null;
+  const previous = op.status;
+  applyRetryToOp(op);
+  return previous;
+};
+
+// Retry every op in a retriable terminal state. Returns the list of {field,lang,previous}.
+export const retryAllOperations = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return [];
+  const retried = [];
+  for (const op of p.operations) {
+    if (!RETRIABLE_STATUSES.has(op.status)) continue;
+    retried.push({ field: op.field, lang: op.lang, previous: op.status });
+    applyRetryToOp(op);
+  }
+  return retried;
 };
 
 export const listOperationStatuses = (sellerId) => {

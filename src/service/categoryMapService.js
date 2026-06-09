@@ -17,10 +17,18 @@ import { buildCondition } from '#helpers/productFilters.js';
 
 const SCOPE_BATCH_SIZE = 200;
 
-export const mapCategoryTrail = async ({ sellerId, productId, filters = [], search, resumeMode = false }) => {
+export const mapCategoryTrail = async ({
+  sellerId,
+  productId,
+  filters = [],
+  search,
+  resumeMode = false,
+  retryMode = false,
+}) => {
+  const modeLabel = resumeMode ? ' [resume]' : retryMode ? ' [retry]' : '';
   console.log(
     `[CategoryMapService] Starting — sellerId: ${sellerId}${productId ? `, productId: ${productId}` : ''}` +
-      `${filters?.length ? `, filters: ${JSON.stringify(filters)}` : ''}${search ? `, search: "${search}"` : ''}${resumeMode ? ' [resume]' : ''}`
+      `${filters?.length ? `, filters: ${JSON.stringify(filters)}` : ''}${search ? `, search: "${search}"` : ''}${modeLabel}`
   );
 
   const { paths: allowedPaths, pathSet } = await loadChannelCategories();
@@ -30,7 +38,8 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
   const scopeFilter = buildFilter({ rawFilters: filters, sellerId, search, buildCondition });
   if (productId) scopeFilter._id = new mongoose.Types.ObjectId(productId);
 
-  // Only classify products with at least a name.
+  // Only classify products with at least a name. Resume additionally skips
+  // already-categorised rows; retry re-classifies everything in scope.
   const baseRequirements = [{ name: { $exists: true, $nin: [null, ''] } }];
   if (resumeMode) {
     baseRequirements.push({
@@ -42,18 +51,19 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
     ? { $and: [scopeFilter, requirementClause] }
     : { ...scopeFilter, ...requirementClause };
 
+  initCategoryMapProgress(sellerId, 0);
   const remainingCount = await Product.countDocuments(finalFilter);
   if (!remainingCount) {
     if (resumeMode) {
       finishCategoryMapProgress(sellerId);
       return { total: 0, updated: 0, skipped: 0 };
     }
-    initCategoryMapProgress(sellerId, 0);
+    initCategoryMapProgress(sellerId, 0, { retryMode });
     finishCategoryMapProgress(sellerId);
     return { total: 0, updated: 0, skipped: 0 };
   }
 
-  initCategoryMapProgress(sellerId, remainingCount, { preserveCompleted: resumeMode });
+  initCategoryMapProgress(sellerId, remainingCount, { preserveCompleted: resumeMode, retryMode });
   const totalProducts = remainingCount;
 
   // One AbortController for the whole category-map pass so cancel aborts the

@@ -4,6 +4,7 @@ import { buildTranslateLabel, CATEGORY_MAP_LABEL } from '#helpers/operationLabel
 
 export const PROGRESS_TYPES = ['ai-enrich'];
 const PAUSABLE_STATUSES = new Set(['pending', 'running', 'initializing']);
+const RETRIABLE_STATUSES = new Set(['error', 'cancelled', 'paused', 'done']);
 
 const decorateTranslateOps = (translate) =>
   (translate?.operations || []).map((o) => {
@@ -17,6 +18,7 @@ const decorateTranslateOps = (translate) =>
       label: buildTranslateLabel(o.field, o.lang),
       canPause: PAUSABLE_STATUSES.has(o.status),
       canResume: o.status === 'paused',
+      canRetry: RETRIABLE_STATUSES.has(o.status),
     };
     if (o.retryInfo) out.retryInfo = o.retryInfo;
     if (o.error) out.error = o.error;
@@ -36,6 +38,7 @@ const decorateCategoryMapOp = (categoryMap) => {
     percentage: categoryMap.percentage,
     canPause: PAUSABLE_STATUSES.has(status),
     canResume: status === 'paused',
+    canRetry: RETRIABLE_STATUSES.has(status),
   };
   if (categoryMap.retryInfo) out.retryInfo = categoryMap.retryInfo;
   if (categoryMap.error) out.error = categoryMap.error;

@@ -21,6 +21,8 @@ import {
   pauseAllOperations,
   resumeOperation,
   resumeAllPausedOperations,
+  retryOperation,
+  retryAllOperations,
   listOperationStatuses,
 } from '#helpers/geminiTranslate.js';
 import { mapCategoryTrail as mapCategoryTrailService } from '#service/categoryMapService.js';
@@ -31,6 +33,7 @@ import {
   cancelCategoryMap,
   pauseCategoryMap,
   resumeCategoryMap,
+  retryCategoryMap,
   getCategoryMapProgress,
 } from '#helpers/geminiCategoryMap.js';
 import { PROGRESS_TYPES, BLOCK_BUILDERS, aggregateStatus, aggregateMessage } from '#helpers/enrichProgress.js';
@@ -812,6 +815,111 @@ const handleResumeAction = async (
   })();
 };
 
+const handleRetryAction = async (
+  req,
+  res,
+  { sellerId, translateFields, mapCategories, filters, search, productId }
+) => {
+  if (enrichInProgress.has(sellerId)) {
+    return failResponse(res, req.locale.ENRICHMENT_ALREADY_RUNNING, 409);
+  }
+  if (!hasProgressEntry(sellerId) && !hasCategoryMapEntry(sellerId)) {
+    return failResponse(res, req.locale.NO_ACTIVE_ENRICHMENT, 404);
+  }
+
+  const wholeJob = (!Array.isArray(translateFields) || translateFields.length === 0) && mapCategories !== true;
+
+  const affected = [];
+  const skipped = [];
+  const retryTranslateOps = [];
+  let retryCategory = false;
+
+  if (wholeJob) {
+    for (const r of retryAllOperations(sellerId)) {
+      affected.push({ kind: 'translate', field: r.field, lang: r.lang, previous: r.previous });
+      retryTranslateOps.push({ field: r.field, lang: r.lang });
+    }
+    const prev = retryCategoryMap(sellerId);
+    if (prev) {
+      affected.push({ kind: 'categoryMap', previous: prev });
+      retryCategory = true;
+    }
+  } else {
+    for (const { field, lang } of translateFields ?? []) {
+      if (!hasProgressEntry(sellerId)) {
+        skipped.push({ kind: 'translate', field, lang, reason: 'not_in_job' });
+        continue;
+      }
+      const prev = retryOperation(sellerId, field, lang);
+      if (prev) {
+        affected.push({ kind: 'translate', field, lang, previous: prev });
+        retryTranslateOps.push({ field, lang });
+      } else {
+        skipped.push({ kind: 'translate', field, lang, reason: 'not_retriable' });
+      }
+    }
+    if (mapCategories === true) {
+      if (!hasCategoryMapEntry(sellerId)) {
+        skipped.push({ kind: 'categoryMap', reason: 'not_in_job' });
+      } else {
+        const prev = retryCategoryMap(sellerId);
+        if (prev) {
+          affected.push({ kind: 'categoryMap', previous: prev });
+          retryCategory = true;
+        } else {
+          skipped.push({ kind: 'categoryMap', reason: 'not_retriable' });
+        }
+      }
+    }
+  }
+
+  if (!affected.length) {
+    return failResponse(res, req.locale.NO_RETRIABLE_OPS, 409, { action: 'retry', affected, skipped });
+  }
+
+  enrichInProgress.add(sellerId);
+  successResponse(res, req.locale.ENRICHMENT_RETRY_STARTED, 200, { action: 'retry', affected, skipped });
+
+  (async () => {
+    try {
+      if (retryTranslateOps.length) {
+        console.log(`[Enrich] retry translate → ${retryTranslateOps.length} op(s) for seller ${sellerId}`);
+        await translateProductFieldService({
+          translate: retryTranslateOps,
+          sellerId,
+          filters,
+          search,
+          productId,
+          emptyValuesMessage: req.locale.EMPTY_VALUES_NOT_TRANSLATABLE,
+          retryMode: true,
+        });
+      }
+      if (retryCategory) {
+        console.log(`[Enrich] retry mapCategories → seller ${sellerId}`);
+        await mapCategoryTrailService({ sellerId, productId, filters, search, retryMode: true });
+      }
+    } catch (error) {
+      errorLog(error);
+    } finally {
+      enrichInProgress.delete(sellerId);
+      const translateHasPause =
+        retryTranslateOps.length && listOperationStatuses(sellerId).some((o) => o.status === 'paused');
+      const categoryHasPause = retryCategory && getCategoryMapProgress(sellerId)?.status === 'paused';
+      const cleanupDelayMs = translateHasPause || categoryHasPause ? 30 * 60_000 : 60_000;
+      setTimeout(() => {
+        if (retryTranslateOps.length && !enrichInProgress.has(sellerId)) {
+          const stillPaused = listOperationStatuses(sellerId).some((o) => o.status === 'paused');
+          if (!stillPaused) clearProgress(sellerId);
+        }
+        if (retryCategory && !enrichInProgress.has(sellerId)) {
+          const stillPausedCat = getCategoryMapProgress(sellerId)?.status === 'paused';
+          if (!stillPausedCat) clearCategoryMapProgress(sellerId);
+        }
+      }, cleanupDelayMs);
+    }
+  })();
+};
+
 export const translateProductField = async (req, res) => {
   try {
     const sellerId = req.sellerId;
@@ -821,6 +929,9 @@ export const translateProductField = async (req, res) => {
 
     if (action === 'cancel') {
       return handleCancelAction(req, res, { sellerId, translateFields, mapCategories });
+    }
+    if (action === 'retry') {
+      return handleRetryAction(req, res, { sellerId, translateFields, mapCategories, filters, search, productId });
     }
     if (action === 'pause') {
       return handlePauseAction(req, res, { sellerId, translateFields, mapCategories });

@@ -42,6 +42,10 @@ export const translateProductField = async ({
   productId,
   emptyValuesMessage,
   resumeMode = false,
+  // retryMode = "start from beginning" for the listed ops. Doesn't apply the
+  // already-translated skip filter (so every in-scope product re-translates),
+  // and merges into the existing operations[] without wiping sibling ops.
+  retryMode = false,
 }) => {
   const fields = [...new Set(translate.map((t) => t.field))];
   const sourceFields = [...new Set(fields.map(getSourceField))];
@@ -120,7 +124,7 @@ export const translateProductField = async ({
       lang,
       total: tasksByOperation[`${field}:${lang}`]?.tasks.length ?? 0,
     })),
-    { totalProducts, preserveCompleted: resumeMode }
+    { totalProducts, preserveCompleted: resumeMode, retryMode }
   );
 
   const updateMap = {};
