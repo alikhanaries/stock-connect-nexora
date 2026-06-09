@@ -40,7 +40,7 @@ const getOrderFlowStatus = async (sellerId, period = null, { startDate, endDate,
     // Calculate previous range
     const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
 
-    const channelIds = pickChannelIdsFromChannel(channel);
+    const channelIds = await pickChannelIdsFromChannel(channel);
     const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
 
     const buildAgg = (range) => [
@@ -100,8 +100,8 @@ const getorderOverviewStatus = async (sellerId, period, { startDate, endDate, mo
 
   const comparable = period !== 'all' && (isComparablePeriod(period) || currentRange.kind === 'custom');
   const previousRange = comparable ? getPreviousRange(period, currentRange) : currentRange;
-  const channelNames = pickSelectedGlobalNames(channel);
-  const channelFilter = channelNames.length > 0 ? { channelName: { $in: channelNames } } : {};
+  const channelIds = await pickChannelIdsFromChannel(channel);
+  const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
 
   const aggregateMetrics = async ({ start, end }) => {
     const [data] = await SellerOrder.aggregate([
@@ -288,7 +288,7 @@ const getAnalyticsTimeSeries = async (sellerId, period, { startDate, endDate, mo
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range) throw new Error(`Invalid period "${period}"`);
 
-  const channelIds = pickChannelIdsFromChannel(channel);
+  const channelIds = await pickChannelIdsFromChannel(channel);
   const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
 
   const salesPipeline = buildAggregationPipeline({ sellerObjectIds, period, metric: 'sales', range, channelFilter });
@@ -401,7 +401,7 @@ const getInventoryStatus = async (sellerId, period, { startDate, endDate, month,
   const range = period === 'all' ? null : getDateRange({ period, startDate, endDate, month });
   if (period !== 'all' && !range) throw new Error(`Invalid period "${period}"`);
 
-  const channelIds = pickChannelIdsFromChannel(channel);
+  const channelIds = await pickChannelIdsFromChannel(channel);
   const match = {
     sellerId: { $in: sellerObjectIds },
     ...(range ? { updatedAt: { $gte: range.start, $lte: range.end } } : {}),
@@ -559,7 +559,7 @@ const getOrdersByChannel = async (sellerId, period = null, { startDate, endDate,
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}".`);
 
-  const channelIds = pickChannelIdsFromChannel(channel);
+  const channelIds = await pickChannelIdsFromChannel(channel);
   const channelFilter = channelIds.length ? { channelId: { $in: channelIds } } : {};
 
   const pipeline = [
@@ -605,7 +605,7 @@ export const getChannelStatus = async (sellerId, period, { startDate, endDate, m
     }
   }
 
-  const channelIds = pickChannelIdsFromChannel(channel);
+  const channelIds = await pickChannelIdsFromChannel(channel);
   const pipeline = buildChannelStatusPipeline(sellerObjectIds, range, channelIds);
 
   const result = await UserChannelProducts.aggregate(pipeline).allowDiskUse(true);
@@ -635,7 +635,7 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
   const range = getDateRange({ period, startDate, endDate, month });
   if (!range?.start || !range?.end) throw new Error(`Invalid period "${period}"`);
 
-  const channelIds = pickChannelIdsFromChannel(channel);
+  const channelIds = await pickChannelIdsFromChannel(channel);
 
   const pipeline = buildReturnsStatusPipeline(sellerObjectIds, range, channelIds);
 
@@ -655,6 +655,7 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
 
   return { total, reasons, statusSummary };
 };
+
 export const getCancelOrdersOverview = async (sellerId, period, { startDate, endDate, month, channel } = {}) => {
   const ids = Array.isArray(sellerId) ? sellerId : [sellerId];
 
@@ -668,7 +669,7 @@ export const getCancelOrdersOverview = async (sellerId, period, { startDate, end
     throw new Error(`Invalid period "${period}"`);
   }
 
-  const channelIds = pickChannelIdsFromChannel(channel);
+  const channelIds = await pickChannelIdsFromChannel(channel);
   const buildCancelOrdersPipeline = (sellerIds, range, channelIds) => {
     const matchStage = {
       sellerId: { $in: sellerIds },
@@ -752,6 +753,7 @@ export const getCancelOrdersOverview = async (sellerId, period, { startDate, end
 
   return { total, reasons, statusSummary };
 };
+
 export default {
   getOrderFlowStatus,
   getorderOverviewStatus,

@@ -1,4 +1,5 @@
 export const ORDER_FLOW_STATUS_CONFIG = [
+  { key: 'all', label: 'All Orders', statuses: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'CLOSED', 'CANCELED', 'CANCELLED'] },
   { key: 'placed', label: 'New Orders', statuses: ['NEW'] },
   { key: 'inProgress', label: 'In Progress', statuses: ['IN_PROGRESS'] },
   // commented for now as per current order status behaviour , might need to change after order status development
@@ -19,14 +20,6 @@ export const CHANNEL_TO_GLOBAL_NAMES = Object.freeze({
   noon: ['Noon V2'],
   namshi: ['Namshi'],
   ocp: ['OCP'],
-});
-
-export const CHANNEL_KEY_TO_IDS = Object.freeze({
-  noon: [1],
-  amazon: [3],
-  namshi: [4],
-  ocp: [6],
-  trendyol: [5],
 });
 
 export const CHANNEL_STATUS_CONFIG = [

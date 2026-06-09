@@ -149,7 +149,19 @@ const updateSeller = async (id, payload) => {
   const updateData = {};
 
   if (name !== undefined && name.trim() !== seller.name) {
-    updateData.name = name.trim();
+    const trimmedName = name.trim();
+
+    const duplicateSeller = await Seller.findOne({
+      _id: { $ne: id },
+      isDeleted: false,
+      name: { $regex: `^${trimmedName}$`, $options: 'i' },
+    });
+
+    if (duplicateSeller) {
+      return { isExist: true };
+    }
+
+    updateData.name = trimmedName;
     isUpdated = true;
     nameChanged = true;
   }

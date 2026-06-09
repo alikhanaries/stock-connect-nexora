@@ -5,6 +5,7 @@ import { mapOrderToEntegra } from '../helpers/orderMapper.js';
 const BATCH_SIZE = 10;
 
 export const createEntegraOrder = async (orders = []) => {
+  console.log('orders', orders);
   if (!orders.length) return;
 
   const authToken = await getAccessToken();
@@ -43,6 +44,7 @@ export const createEntegraOrder = async (orders = []) => {
 
         successCount += batch.length;
         console.log(`[Entegra] SUCCESS batch [${batchIds}] | attempt=${attempt}`);
+        console.log(`[Entegra] Raw response data:`, JSON.stringify(data));
         lastError = null;
         break;
       } catch (err) {

@@ -21,7 +21,7 @@ const getSourceField = (field) => SOURCE_FIELD_MAP[field] ?? field;
 const reportEmptyValues = (sellerId, translate, totalProducts, message) => {
   initProgress(
     sellerId,
-    translate.map(({ field, lang }) => ({ field, lang, total: totalProducts })),
+    translate.map(({ field, lang }) => ({ field, lang, total: 0 })),
     { totalProducts }
   );
   for (const { field, lang } of translate) {
@@ -99,7 +99,11 @@ export const translateProductField = async ({
 
   initProgress(
     sellerId,
-    translate.map(({ field, lang }) => ({ field, lang, total: totalProducts })),
+    translate.map(({ field, lang }) => ({
+      field,
+      lang,
+      total: tasksByOperation[`${field}:${lang}`]?.tasks.length ?? 0,
+    })),
     { totalProducts }
   );
 

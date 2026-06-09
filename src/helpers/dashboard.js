@@ -1,4 +1,8 @@
-import { CHANNEL_TO_GLOBAL_NAMES, CHANNEL_KEY_TO_IDS } from '#constants/dashboard.js';
+import { CHANNEL_TO_GLOBAL_NAMES } from '#constants/dashboard.js';
+import Channel from '../models/Channel.js';
+
+const escapeRegexForChannel = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -350,14 +354,24 @@ export const normalizeSeries = (period, raw = [], range) => {
   }));
 };
 
-export const pickChannelIdsFromChannel = (channel) => {
-  const keys = String(channel ?? '')
-    .split(',')
-    .map((v) => v.trim().toLowerCase())
+export const pickChannelIdsFromChannel = async (channel) => {
+  if (!channel) return [];
+
+  const arr = Array.isArray(channel) ? channel : [channel];
+  const names = arr
+    .flatMap((val) => (typeof val === 'string' ? val.split(',') : val))
+    .map((c) => String(c ?? '').trim())
     .filter(Boolean);
 
-  const ids = keys.flatMap((k) => CHANNEL_KEY_TO_IDS[k] ?? []);
-  return [...new Set(ids)].filter((n) => Number.isFinite(n));
+  if (!names.length) return [];
+
+  const matched = await Channel.find({
+    $or: names.map((name) => ({ channelName: { $regex: escapeRegexForChannel(name), $options: 'i' } })),
+  })
+    .select('channelId')
+    .lean();
+
+  return [...new Set(matched.map((c) => c.channelId).filter((n) => Number.isFinite(n)))];
 };
 
 export const buildInventorySkuStatusPipeline = () => [

@@ -188,12 +188,12 @@
   "PRICE_MISSING": "Price missing for",
   "INVALID_ROW_DATA": "Invalid row data",
   "INVALID_PRICE": "Invalid price for",
-  "TRANSLATION_STARTED": "Translation started in background",
-  "NO_PRODUCTS_TO_TRANSLATE": "No products found for translation",
-  "NO_ACTIVE_TRANSLATION": "No active translation found for this seller",
-  "TRANSLATION_ALREADY_RUNNING": "Translation already running for this seller",
+  "ENRICHMENT_STARTED": "AI Enrichment started in background",
+  "NO_PRODUCTS_TO_ENRICH": "No products found for AI Enrichment",
+  "NO_ACTIVE_ENRICHMENT": "No active AI Enrichment found for this seller",
+  "ENRICHMENT_ALREADY_RUNNING": "AI Enrichment already running for this seller",
+  "NO_ENRICHMENT_JOB_REQUESTED": "At least one AI Enrichment job must be requested",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "Operation is not possible for empty values",
-  "TRANSLATION_FAILED": "Translation failed",
-  "TRANSLATION_COMPLETED": "Translation completed. Review changes in the catalog.",
-  "TRANSLATION_IN_PROGRESS": "Translation in progress"
+  "ENRICHMENT_FAILED": "AI Enrichment failed",
+  "ENRICHMENT_COMPLETED": "Finished. Review changes in the catalogue."
 }
