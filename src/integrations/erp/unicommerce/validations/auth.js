@@ -35,12 +35,19 @@ const passwordSchema = z
 
 export const headerSchema = z
   .object({
+    apikey: z
+      .string({
+        invalid_type_error: 'apiKey must be a string',
+      })
+      .nonempty('apiKey header cannot be empty')
+      .optional(),
+
     authorization: z
       .string({
-        required_error: 'Authorization header is required',
         invalid_type_error: 'Authorization must be a string',
       })
-      .nonempty('Authorization header cannot be empty'),
+      .nonempty('Authorization header cannot be empty')
+      .optional(),
 
     'accept-language': z
       .string({
@@ -57,7 +64,11 @@ export const headerSchema = z
         }
       }),
   })
-  .passthrough();
+  .passthrough()
+  .refine((headers) => headers.apikey || headers.authorization, {
+    message: 'apiKey header is required',
+    path: ['apikey'],
+  });
 
 export const loginValidator = validate(async (req) => {
   const bodySchema = z
