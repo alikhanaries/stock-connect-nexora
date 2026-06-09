@@ -1842,14 +1842,11 @@ const getAnalyticsOrders = async (query) => {
     // -------------------------
     // DATE FILTER (post-merge on orderDate from channelengineorders)
     // -------------------------
-    const { start, end, appliedPeriod } = resolveDateRange(query);
+    const { start, end } = resolveDateRange(query);
     let dateMatchStage = null;
 
     if (start && end) {
       dateMatchStage = { $match: { orderDate: { $gte: start, $lte: end } } };
-      appliedFilters.period = appliedPeriod;
-      appliedFilters.fromDate = start.toISOString();
-      appliedFilters.toDate = end.toISOString();
     }
 
     // -------------------------
