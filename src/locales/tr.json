@@ -193,5 +193,6 @@
   "NO_ENRICHMENT_JOB_REQUESTED": "En az bir Yapay Zekâ Zenginleştirme işi talep edilmelidir",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "Boş değerler için işlem mümkün değil",
   "ENRICHMENT_FAILED": "Yapay Zekâ Zenginleştirme başarısız oldu",
-  "ENRICHMENT_COMPLETED": "Tamamlandı. Değişiklikleri katalogda inceleyin."
+  "ENRICHMENT_COMPLETED": "Tamamlandı. Değişiklikleri katalogda inceleyin.",
+  "RETURNED_PRODUCTS_SYNC_PROCESSING": "İade edilen ürünlerin senkronizasyonu devam ediyor"
 }
