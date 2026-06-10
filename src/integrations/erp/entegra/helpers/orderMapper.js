@@ -1,6 +1,7 @@
-import { formatEntegraDate } from './commonHelper.js';
+import { formatEntegraDate, formatEntegraProductCode } from './commonHelper.js';
+import { convertSarToTry } from '#root/src/integrations/common/helpers/currencyConverter.js';
 
-export const mapOrderToEntegra = (order) => {
+export const mapOrderToEntegra = async (order) => {
   const billing = order.BillingAddress || {};
   const shipping = order.ShippingAddress || {};
 
@@ -13,11 +14,13 @@ export const mapOrderToEntegra = (order) => {
   const billingPhone = toPhone(billing.Phone || phone);
   const shippingPhone = toPhone(shipping.Phone || phone);
 
-  const orderDetails = (order.Lines || []).map((line) => ({
-    product_code: line.MerchantProductNo,
-    price: line.UnitPriceInclVat ?? 0,
-    quantity: line.Quantity ?? 1,
-  }));
+  const orderDetails = await Promise.all(
+    (order.Lines || []).map(async (line) => ({
+      product_code: formatEntegraProductCode(line.MerchantProductNo),
+      price: await convertSarToTry(line.UnitPriceInclVat ?? 0),
+      quantity: line.Quantity ?? 1,
+    }))
+  );
 
   return {
     supplier: 'Manual',

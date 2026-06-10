@@ -5,23 +5,20 @@ import { mapOrderToEntegra } from '../helpers/orderMapper.js';
 const BATCH_SIZE = 10;
 
 export const createEntegraOrder = async (orders = []) => {
-  console.log('orders', orders);
   if (!orders.length) return;
 
   const authToken = await getAccessToken();
   const url = `${entegraConfig.ENTEGRA_BASE_URL}order/`;
-
-  let successCount = 0;
-  let failCount = 0;
 
   const MAX_RETRIES = 5;
 
   for (let i = 0; i < orders.length; i += BATCH_SIZE) {
     const batch = orders.slice(i, i + BATCH_SIZE);
     const batchIds = batch.map((o) => o.Id).join(', ');
-    const mappedBatch = batch.map(mapOrderToEntegra);
+    const mappedBatch = await Promise.all(batch.map(mapOrderToEntegra));
 
     let lastError = null;
+    const payloadBody = JSON.stringify({ list: mappedBatch });
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -31,7 +28,7 @@ export const createEntegraOrder = async (orders = []) => {
             Authorization: authToken,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ list: mappedBatch }),
+          body: payloadBody,
         });
 
         const data = await response.json();
@@ -42,9 +39,6 @@ export const createEntegraOrder = async (orders = []) => {
           continue;
         }
 
-        successCount += batch.length;
-        console.log(`[Entegra] SUCCESS batch [${batchIds}] | attempt=${attempt}`);
-        console.log(`[Entegra] Raw response data:`, JSON.stringify(data));
         lastError = null;
         break;
       } catch (err) {
@@ -58,16 +52,7 @@ export const createEntegraOrder = async (orders = []) => {
         await new Promise((r) => setTimeout(r, 2000));
       }
     }
-
-    if (lastError) {
-      failCount += batch.length;
-      console.error(`[Entegra] GAVE UP batch [${batchIds}] after ${MAX_RETRIES} attempts | last error: ${lastError}`);
-    }
   }
-
-  console.log(
-    `[Entegra] Order push complete — success: ${successCount}, failed: ${failCount}, total: ${orders.length}`
-  );
 };
 
 export const pushEntegraOrders = (orders) => {

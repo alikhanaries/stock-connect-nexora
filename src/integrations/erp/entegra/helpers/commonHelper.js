@@ -104,6 +104,14 @@ export const convertCodeFormat = (value = '') => {
   return value.replace(/[.\-_]+/g, '_');
 };
 
+// MNJ_195_02_001 → MNJ.195.02-001
+export const formatEntegraProductCode = (value = '') => {
+  if (!value) return value;
+  const parts = value.split('_');
+  if (parts.length < 2) return value;
+  return parts.slice(0, -1).join('.') + '-' + parts[parts.length - 1];
+};
+
 export const formatEntegraDate = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
