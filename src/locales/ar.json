@@ -195,5 +195,7 @@
   "EMPTY_VALUES_NOT_TRANSLATABLE": "العملية غير ممكنة للقيم الفارغة",
   "ENRICHMENT_FAILED": "فشل تحسين الذكاء الاصطناعي",
   "ENRICHMENT_COMPLETED": "اكتمل. راجع التغييرات في الكتالوج.",
+  "ENRICHMENT_CANCELLED": "تم إلغاء تحسين الذكاء الاصطناعي",
+  "NO_CANCELLABLE_OPS": "لا توجد عمليات نشطة لتحسين الذكاء الاصطناعي لإلغائها",
   "RETURNED_PRODUCTS_SYNC_PROCESSING": "جاري مزامنة المنتجات المرتجعة"
 }

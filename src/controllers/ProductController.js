@@ -12,9 +12,20 @@ import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 import expressWarehouseService from '../service/expressWarehouseService.js';
 import { translateProductField as translateProductFieldService } from '#service/translateService.js';
-import { setPendingProgress, clearProgress } from '#helpers/geminiTranslate.js';
+import {
+  setPendingProgress,
+  clearProgress,
+  hasProgressEntry,
+  cancelOperation,
+  cancelAllOperations,
+} from '#helpers/geminiTranslate.js';
 import { mapCategoryTrail as mapCategoryTrailService } from '#service/categoryMapService.js';
-import { setPendingCategoryMapProgress, clearCategoryMapProgress } from '#helpers/geminiCategoryMap.js';
+import {
+  setPendingCategoryMapProgress,
+  clearCategoryMapProgress,
+  hasCategoryMapEntry,
+  cancelCategoryMap,
+} from '#helpers/geminiCategoryMap.js';
 import { PROGRESS_TYPES, BLOCK_BUILDERS, aggregateStatus, aggregateMessage } from '#helpers/enrichProgress.js';
 
 export const getProducts = async (req, res) => {
@@ -596,12 +607,68 @@ export const getExpressWareHouseProducts = async (req, res) => {
 };
 const enrichInProgress = new Set();
 
+const handleCancelAction = (req, res, { sellerId, translateFields, mapCategories }) => {
+  const hasTranslate = hasProgressEntry(sellerId);
+  const hasCategoryMap = hasCategoryMapEntry(sellerId);
+  if (!hasTranslate && !hasCategoryMap) {
+    return failResponse(res, req.locale.NO_ACTIVE_ENRICHMENT, 404);
+  }
+
+  const fields = Array.isArray(translateFields) ? translateFields : [];
+  const wholeJob = fields.length === 0 && mapCategories !== true;
+
+  const affected = [];
+  const skipped = [];
+
+  if (wholeJob) {
+    if (hasTranslate) {
+      for (const c of cancelAllOperations(sellerId)) {
+        affected.push({ kind: 'translate', field: c.field, lang: c.lang, previous: c.previous });
+      }
+    }
+    if (hasCategoryMap) {
+      const prev = cancelCategoryMap(sellerId);
+      if (prev) affected.push({ kind: 'categoryMap', previous: prev });
+      else skipped.push({ kind: 'categoryMap', reason: 'not_cancellable' });
+    }
+  } else {
+    for (const { field, lang } of fields) {
+      if (!hasTranslate) {
+        skipped.push({ kind: 'translate', field, lang, reason: 'not_in_job' });
+        continue;
+      }
+      const prev = cancelOperation(sellerId, field, lang);
+      if (prev) affected.push({ kind: 'translate', field, lang, previous: prev });
+      else skipped.push({ kind: 'translate', field, lang, reason: 'not_cancellable' });
+    }
+    if (mapCategories === true) {
+      if (!hasCategoryMap) {
+        skipped.push({ kind: 'categoryMap', reason: 'not_in_job' });
+      } else {
+        const prev = cancelCategoryMap(sellerId);
+        if (prev) affected.push({ kind: 'categoryMap', previous: prev });
+        else skipped.push({ kind: 'categoryMap', reason: 'not_cancellable' });
+      }
+    }
+  }
+
+  if (!affected.length) {
+    return failResponse(res, req.locale.NO_CANCELLABLE_OPS, 409, { action: 'cancel', affected, skipped });
+  }
+
+  return successResponse(res, req.locale.ENRICHMENT_CANCELLED, 200, { action: 'cancel', affected, skipped });
+};
+
 export const translateProductField = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const { search, productId } = req.query;
     const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
-    const { translateFields = [], enhanceImages = false, mapCategories = false } = req.body ?? {};
+    const { action = 'start', translateFields = [], enhanceImages = false, mapCategories = false } = req.body ?? {};
+
+    if (action === 'cancel') {
+      return handleCancelAction(req, res, { sellerId, translateFields, mapCategories });
+    }
 
     const wantTranslate = Array.isArray(translateFields) && translateFields.length > 0;
     const wantMapCategories = mapCategories === true;
@@ -624,8 +691,11 @@ export const translateProductField = async (req, res) => {
       return failResponse(res, req.locale.NO_PRODUCTS_TO_ENRICH, 404);
     }
 
+    // Clear stale progress from a previous run before new one
     if (wantTranslate) setPendingProgress(sellerId, translateFields);
+    else clearProgress(sellerId);
     if (wantMapCategories) setPendingCategoryMapProgress(sellerId);
+    else clearCategoryMapProgress(sellerId);
 
     enrichInProgress.add(sellerId);
     successResponse(res, req.locale.ENRICHMENT_STARTED, 200, {

@@ -63,11 +63,14 @@ const withTimeout = (promise, ms = 120000) =>
     new Promise((_, rej) => setTimeout(() => rej(new Error(`[AI] Request timed out after ${ms}ms`)), ms)),
   ]);
 
+const isAbortError = (error) => error?.name === 'AbortError' || error?.message?.toLowerCase().includes('aborted');
+
 const callWithRetry = async (fn, retries = MAX_RETRIES, onRetry, label = PROVIDER_LABEL) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       return await withTimeout(fn());
     } catch (error) {
+      if (isAbortError(error)) throw error;
       const is429 = error.message?.includes('429');
       const is503 = error.message?.includes('503') || error.message?.includes('UNAVAILABLE');
       const isTimeout = error.message?.includes('timed out');
@@ -113,20 +116,63 @@ export const clearCategoryMapProgress = (sellerId) => {
   progressStore.delete(key(sellerId));
 };
 
+export const hasCategoryMapEntry = (sellerId) => progressStore.has(key(sellerId));
+
 // "pending" mirrors translate-op semantics so the UI renders "Queued" for the
 // category-map row while it waits for the translate phase to finish.
 export const setPendingCategoryMapProgress = (sellerId) =>
-  progressStore.set(key(sellerId), { status: 'pending', total: 0, completed: 0, updated: 0 });
-
-export const initCategoryMapProgress = (sellerId, total) =>
   progressStore.set(key(sellerId), {
-    status: 'running',
+    status: 'pending',
+    total: 0,
+    completed: 0,
+    updated: 0,
+    cancelRequested: false,
+    abortController: null,
+  });
+
+export const initCategoryMapProgress = (sellerId, total) => {
+  const prior = progressStore.get(key(sellerId));
+  const wasCancelled = prior?.cancelRequested === true;
+  progressStore.set(key(sellerId), {
+    status: wasCancelled ? 'cancelled' : 'running',
     total,
     completed: 0,
     updated: 0,
     retryInfo: null,
     error: null,
+    cancelRequested: wasCancelled,
+    abortController: null,
   });
+};
+
+export const setCategoryMapAbortController = (sellerId, ac) => {
+  const p = progressStore.get(key(sellerId));
+  if (p) p.abortController = ac ?? null;
+};
+
+export const isCategoryMapCancelled = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  return p?.cancelRequested === true;
+};
+
+// Returns the previous status if a cancel actually happened, else null.
+export const cancelCategoryMap = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return null;
+  if (['done', 'error', 'cancelled'].includes(p.status)) return null;
+  const previous = p.status;
+  p.cancelRequested = true;
+  p.status = 'cancelled';
+  p.retryInfo = null;
+  p.error = null;
+  try {
+    p.abortController?.abort();
+  } catch {
+    /* ignore */
+  }
+  p.abortController = null;
+  return previous;
+};
 
 export const addCategoryMapProgress = (sellerId, completedDelta, updatedDelta = 0) => {
   const p = progressStore.get(key(sellerId));
@@ -138,13 +184,16 @@ export const addCategoryMapProgress = (sellerId, completedDelta, updatedDelta = 
 export const setCategoryMapRetry = (sellerId, retryInfo) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
+  if (p.cancelRequested || p.status === 'cancelled') return;
   p.retryInfo = retryInfo || null;
 };
 
 export const failCategoryMapProgress = (sellerId, error) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
+  if (p.status === 'cancelled' || p.cancelRequested) return;
   p.status = 'error';
+  p.abortController = null;
   const g = error?.geminiError;
   const raw = g?.message ?? error?.message ?? 'Unknown error';
   p.error = { message: raw.split('\n')[0].split('. ')[0].trim() };
@@ -153,7 +202,8 @@ export const failCategoryMapProgress = (sellerId, error) => {
 export const finishCategoryMapProgress = (sellerId) => {
   const p = progressStore.get(key(sellerId));
   if (!p) return;
-  if (p.status !== 'error') p.status = 'done';
+  if (p.status !== 'error' && p.status !== 'cancelled') p.status = 'done';
+  p.abortController = null;
 };
 
 export const getCategoryMapProgress = (sellerId) => {
@@ -171,7 +221,7 @@ export const getCategoryMapProgress = (sellerId) => {
 };
 
 // ---------------- Gemini call ----------------
-const classifyChunk = async (chunk, allowedPaths, pathSet, onRetry) => {
+const classifyChunk = async (chunk, allowedPaths, pathSet, onRetry, abortSignal) => {
   const prompt = buildCategoryMapPrompt(chunk, allowedPaths);
   const client = getAIClient();
 
@@ -183,6 +233,7 @@ const classifyChunk = async (chunk, allowedPaths, pathSet, onRetry) => {
         config: {
           maxOutputTokens: 16384,
           systemInstruction: CATEGORY_MAP_SYSTEM_INSTRUCTION,
+          ...(abortSignal ? { abortSignal } : {}),
         },
       });
       const raw = (response.text ?? '').trim();
@@ -244,7 +295,15 @@ const classifyChunk = async (chunk, allowedPaths, pathSet, onRetry) => {
   );
 };
 
-export const classifyProductsBatch = async (products, allowedPaths, pathSet, onChunk, onRetry) => {
+export const classifyProductsBatch = async (
+  products,
+  allowedPaths,
+  pathSet,
+  onChunk,
+  onRetry,
+  isCancelled,
+  abortSignal
+) => {
   const chunks = [];
   for (let i = 0; i < products.length; i += CATEGORY_BATCH_SIZE) {
     chunks.push(products.slice(i, i + CATEGORY_BATCH_SIZE));
@@ -257,12 +316,20 @@ export const classifyProductsBatch = async (products, allowedPaths, pathSet, onC
   let cursor = 0;
   const worker = async () => {
     while (cursor < chunks.length) {
+      if (isCancelled?.()) return;
       // cursor++ is a synchronous read-then-increment so each worker claims
       // a unique chunk index before yielding at the first await below.
       const i = cursor++;
       const startIndex = i * CATEGORY_BATCH_SIZE;
       console.log(`[AI] Sending category chunk ${i + 1}/${chunks.length} (${chunks[i].length} products)`);
-      const result = await classifyChunk(chunks[i], allowedPaths, pathSet, onRetry);
+      let result;
+      try {
+        result = await classifyChunk(chunks[i], allowedPaths, pathSet, onRetry, abortSignal);
+      } catch (err) {
+        if (isCancelled?.() || isAbortError(err)) return;
+        throw err;
+      }
+      if (isCancelled?.()) return;
       await onChunk?.(result, startIndex, chunks[i]);
     }
   };
