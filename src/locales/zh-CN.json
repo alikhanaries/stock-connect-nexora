@@ -201,5 +201,6 @@
   "ENRICHMENT_FAILED": "智能增强失败",
   "ENRICHMENT_COMPLETED": "已完成。请在目录中检查更改。",
   "ENRICHMENT_CANCELLED": "智能增强已取消",
-  "NO_CANCELLABLE_OPS": "没有可取消的活动智能增强任务"
+  "NO_CANCELLABLE_OPS": "没有可取消的活动智能增强任务",
+  "RETURNED_PRODUCTS_SYNC_PROCESSING": "退货商品同步处理中"
 }

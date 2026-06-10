@@ -2270,11 +2270,18 @@ export const createManualShipmentService = async (shipmentData) => {
       await Order.findByIdAndUpdate(orderId, { status: 'IN_PROGRESS' });
     }
 
+    // Only touch SKUs that are part of this shipment — leave all others unchanged
+    const shippedLineIds = new Set(validatedProducts.map((p) => String(p.orderLineId)));
+
     const updatedSkuList = updatedOrder.orderSkuList.skuList.map((sku) => {
+      const lookupKey = String(sku.id);
+
+      if (!shippedLineIds.has(lookupKey)) {
+        return sku;
+      }
+
       const availableQty = (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0);
-
-      const shippedQty = totalShippedMap[String(sku.id)] || 0;
-
+      const shippedQty = totalShippedMap[lookupKey] || 0;
       const confirmedQty = Math.max(availableQty - shippedQty, 0);
 
       return {
