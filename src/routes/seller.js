@@ -69,6 +69,10 @@ seller.get(
  *                 properties:
  *                   name:
  *                     type: string
+ *                   taxIdentificationNumber:
+ *                     type: string
+ *                     maxLength: 64
+ *                     example: GSTIN-29ABCDE1234F1Z5
  *                 required:
  *                   - name
  *
@@ -77,6 +81,10 @@ seller.get(
  *                 properties:
  *                   name:
  *                     type: string
+ *                   taxIdentificationNumber:
+ *                     type: string
+ *                     maxLength: 64
+ *                     example: GSTIN-29ABCDE1234F1Z5
  *                   shopifyStoreUrl:
  *                     type: string
  *                     format: uri

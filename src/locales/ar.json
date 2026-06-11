@@ -126,6 +126,7 @@
   "SELLER_DEACTIVATED_SUCCESSFULLY": "تم إلغاء تفعيل البائع بنجاح",
   "FAILED_TO_CREATE_SELLER": "فشل في إنشاء البائع.",
   "SELLER_NAME_EXISTS": "بائع بهذا الاسم موجود بالفعل.",
+  "TAX_ID_EXISTS": "يوجد بائع بنفس الرقم الضريبي بالفعل.",
   "SELLER_CREATED_SUCCESSFULLY": "تم إنشاء البائع بنجاح",
   "SELLER_FETCHED_SUCCESSFULLY": "تم جلب البائع بنجاح",
   "NO_SELLER_FIND": "لم يتم العثور على أي بائع",
