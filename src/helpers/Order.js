@@ -2,6 +2,8 @@ import Order from '#models/Orders.js';
 import Product from '../models/Product.js';
 import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
+import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderService.js';
+import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
 
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
@@ -392,12 +394,22 @@ export const sanitizeOrdersData = async (orders) => {
   const [existingOrdersDb, productsDb] = await Promise.all([
     Order.find({ orderId: { $in: orderIds } }).lean(),
     Product.find({ productSkuCode: { $in: Array.from(skuSet) } })
-      .select('productSkuCode sellerId')
+      .select('productSkuCode sellerId brand')
       .lean(),
   ]);
 
   const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
   const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
+
+  const entegraBrands = ENTEGRA_BRAND_MAP.map((b) => b.erpBrand.toLowerCase());
+
+  const entegraSkuSet = new Set(
+    productsDb.filter((p) => entegraBrands.includes(p.brand?.toLowerCase())).map((p) => p.productSkuCode)
+  );
+
+  const entegraOrders = orders.filter(
+    (order) => Array.isArray(order.Lines) && order.Lines.some((line) => entegraSkuSet.has(line.MerchantProductNo))
+  );
 
   //  final outputs
   const bulkOps = [];
@@ -679,7 +691,7 @@ export const sanitizeOrdersData = async (orders) => {
       },
     });
   }
-
+  pushEntegraOrders(entegraOrders);
   return {
     bulkOps,
     sellerOrderPayloads,
