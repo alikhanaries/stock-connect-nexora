@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { getReturns } from '#service/returnService.js';
 import { getReportToken } from '#service/forwardShipmentService.js';
+import { runInventorySync } from './services/inventorySyncService.js';
+import { runPriceSync } from './services/priceSyncService.js';
 
 const scheduledCronJobs = () => {
   try {
@@ -9,6 +11,8 @@ const scheduledCronJobs = () => {
       try {
         await getReportToken();
         await getReturns();
+        await runInventorySync();
+        await runPriceSync();
       } catch (err) {
         console.error('Error executing scheduled cron job:', err.message);
       }
