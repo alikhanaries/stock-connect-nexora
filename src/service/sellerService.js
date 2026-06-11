@@ -18,8 +18,25 @@ const createSeller = async (sellerData) => {
       return { isExist: true, data: null };
     }
 
+    const trimmedTaxId =
+      typeof taxIdentificationNumber === 'string' && taxIdentificationNumber.trim()
+        ? taxIdentificationNumber.trim()
+        : '';
+    if (trimmedTaxId) {
+      const taxIdClash = await Seller.findOne({
+        isDeleted: false,
+        taxIdentificationNumber: trimmedTaxId,
+        ...(existingSeller?._id ? { _id: { $ne: existingSeller._id } } : {}),
+      })
+        .select('_id')
+        .lean();
+      if (taxIdClash) return { isTaxIdExist: true, data: null };
+    }
+
     if (existingSeller && existingSeller.isDeleted === true) {
-      const restored = await Seller.findByIdAndUpdate(existingSeller._id, { isDeleted: false, status: 'active' });
+      const restoreUpdate = { isDeleted: false, status: 'active' };
+      if (trimmedTaxId) restoreUpdate.taxIdentificationNumber = trimmedTaxId;
+      const restored = await Seller.findByIdAndUpdate(existingSeller._id, restoreUpdate, { new: true });
       return { isExist: false, data: restored };
     }
 
@@ -35,8 +52,8 @@ const createSeller = async (sellerData) => {
           .replace(/\s+/g, '_'),
     };
 
-    if (typeof taxIdentificationNumber === 'string' && taxIdentificationNumber.trim()) {
-      sellerPayload.taxIdentificationNumber = taxIdentificationNumber.trim();
+    if (trimmedTaxId) {
+      sellerPayload.taxIdentificationNumber = trimmedTaxId;
     }
 
     // Attach Shopify config only when fully present
@@ -183,6 +200,16 @@ const updateSeller = async (id, payload) => {
   if (taxIdentificationNumber !== undefined) {
     const trimmed = typeof taxIdentificationNumber === 'string' ? taxIdentificationNumber.trim() : '';
     if (trimmed !== (seller.taxIdentificationNumber ?? '')) {
+      if (trimmed) {
+        const clash = await Seller.findOne({
+          _id: { $ne: id },
+          isDeleted: false,
+          taxIdentificationNumber: trimmed,
+        })
+          .select('_id')
+          .lean();
+        if (clash) return { isTaxIdExist: true };
+      }
       updateData.taxIdentificationNumber = trimmed;
       isUpdated = true;
     }

@@ -125,6 +125,7 @@
   "SELLER_DEACTIVATED_SUCCESSFULLY": "Satıcı başarıyla devre dışı bırakıldı",
   "FAILED_TO_CREATE_SELLER": "Satıcı oluşturulamadı.",
   "SELLER_NAME_EXISTS": "Bu isimde bir satıcı zaten mevcut.",
+  "TAX_ID_EXISTS": "Bu vergi kimlik numarasına sahip bir satıcı zaten mevcut.",
   "SELLER_CREATED_SUCCESSFULLY": "Satıcı başarıyla oluşturuldu",
   "SELLER_FETCHED_SUCCESSFULLY": "Satıcı başarıyla getirildi",
   "NO_SELLER_FIND": "Satıcı bulunamadı",

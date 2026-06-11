@@ -59,6 +59,10 @@ export const updateSeller = async (req, res) => {
       return response.failResponse(res, req.locale.SELLER_NAME_EXISTS, 409);
     }
 
+    if (updatedSeller.isTaxIdExist) {
+      return response.failResponse(res, req.locale.TAX_ID_EXISTS, 409);
+    }
+
     if (!updatedSeller.isUpdated) {
       return response.failResponse(res, req.locale.NOTHING_TO_UPDATE || 'No changes detected', 400);
     }
@@ -141,6 +145,9 @@ export const createSeller = async (req, res) => {
 
     if (newSeller.isExist) {
       return response.failResponse(res, req.locale.SELLER_NAME_EXISTS, 409);
+    }
+    if (newSeller.isTaxIdExist) {
+      return response.failResponse(res, req.locale.TAX_ID_EXISTS, 409);
     }
     if (!newSeller.data) {
       return response.failResponse(res, req?.locale?.FAILED_TO_CREATE_SELLER, 500);
