@@ -200,5 +200,7 @@
   "ENRICHMENT_RESUMED": "Yapay Zekâ Zenginleştirme devam ettirildi",
   "NO_PAUSABLE_OPS": "Duraklatılacak aktif işlem yok",
   "NO_RESUMABLE_OPS": "Devam ettirilecek duraklatılmış işlem yok",
-  "INVALID_ACTION": "Geçersiz işlem. İzin verilen: start, cancel, pause, resume"
+  "ENRICHMENT_RETRY_STARTED": "Yapay Zekâ Zenginleştirme yeniden denemesi başlatıldı",
+  "NO_RETRIABLE_OPS": "Yeniden denenebilecek işlem yok",
+  "INVALID_ACTION": "Geçersiz işlem. İzin verilen: start, cancel, pause, resume, retry"
 }

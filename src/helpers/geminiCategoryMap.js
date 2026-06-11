@@ -159,8 +159,22 @@ export const setPendingCategoryMapProgress = (sellerId) =>
     abortController: null,
   });
 
-export const initCategoryMapProgress = (sellerId, total, { preserveCompleted = false } = {}) => {
+export const initCategoryMapProgress = (sellerId, total, { preserveCompleted = false, retryMode = false } = {}) => {
   const prior = progressStore.get(key(sellerId));
+  if (retryMode) {
+    progressStore.set(key(sellerId), {
+      status: 'running',
+      total,
+      completed: 0,
+      updated: 0,
+      retryInfo: null,
+      error: null,
+      cancelRequested: false,
+      pauseRequested: false,
+      abortController: null,
+    });
+    return;
+  }
   const wasCancelled = prior?.cancelRequested === true;
   const priorCompleted = prior?.completed ?? 0;
   const priorUpdated = prior?.updated ?? 0;
@@ -235,6 +249,22 @@ export const resumeCategoryMap = (sellerId) => {
   p.pauseRequested = false;
   p.status = 'pending';
   return 'paused';
+};
+const RETRIABLE_CAT_STATUSES = new Set(['error', 'cancelled', 'paused', 'done']);
+export const retryCategoryMap = (sellerId) => {
+  const p = progressStore.get(key(sellerId));
+  if (!p) return null;
+  if (!RETRIABLE_CAT_STATUSES.has(p.status)) return null;
+  const previous = p.status;
+  p.completed = 0;
+  p.updated = 0;
+  p.cancelRequested = false;
+  p.pauseRequested = false;
+  p.retryInfo = null;
+  p.error = null;
+  p.status = 'pending';
+  p.abortController = null;
+  return previous;
 };
 
 export const addCategoryMapProgress = (sellerId, completedDelta, updatedDelta = 0) => {
