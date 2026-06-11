@@ -21,7 +21,8 @@ export const updateSeller = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { name, status, ocpSlugId, shopifyStoreUrl, shopifyApiVersion, shopifyAccessToken } = req.body;
+    const { name, status, ocpSlugId, shopifyStoreUrl, shopifyApiVersion, shopifyAccessToken, taxIdentificationNumber } =
+      req.body;
 
     // Validate status only if provided
     let statusValue;
@@ -40,6 +41,7 @@ export const updateSeller = async (req, res) => {
       name,
       status: statusValue,
       ocpSlugId,
+      taxIdentificationNumber,
       shopifyConfig: {
         url: shopifyStoreUrl,
         apiVersion: shopifyApiVersion,
