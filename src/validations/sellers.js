@@ -40,7 +40,7 @@ export const createSellerValidator = validate(async (req) => {
 
       taxIdentificationNumber: z.preprocess(
         emptyToUndefined,
-        z.string().max(64, { message: 'taxIdentificationNumber must be at most 64 characters' }).optional()
+        z.string({ required_error: 'taxIdentificationNumber is required' })
       ),
     })
     .refine(
@@ -105,10 +105,7 @@ export const updateSellerValidator = validate(async (req) => {
         z.string().min(1, { message: 'accessToken is required' }).optional()
       ),
 
-      taxIdentificationNumber: z.preprocess(
-        emptyToUndefined,
-        z.string().max(64, { message: 'taxIdentificationNumber must be at most 64 characters' }).optional()
-      ),
+      taxIdentificationNumber: z.preprocess(emptyToUndefined, z.string().optional()),
     })
     .refine(
       (data) =>
