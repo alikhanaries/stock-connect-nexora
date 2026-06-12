@@ -32,6 +32,11 @@ const sellerSchema = new Schema(
       trim: true,
       index: true,
     },
+    taxIdentificationNumber: {
+      type: String,
+      required: [true, 'Tax identification number is required.'],
+      trim: true,
+    },
     slug: {
       type: String,
       required: [true, 'A unique slug is required.'],

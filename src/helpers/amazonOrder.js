@@ -316,7 +316,16 @@ export const sanitizeAmazonOrdersData = async (orders) => {
     });
 
     if (hasUnknownSku) {
-      console.log(`Skipping order ${orderId}: one or more SKUs not found in product collection`);
+      const unknownSkus = items.filter((i) => !productSellerMap.has(i.sku?.trim())).map((i) => i.sku);
+      console.warn(`[sanitizeAmazonOrdersData] Skipping order ${orderId} — unknown SKU(s): ${unknownSkus.join(', ')}`);
+      continue;
+    }
+
+    const brandName = orderInfo.brandName?.toLowerCase().trim();
+    if (!brandName || !brandSellerMap.has(brandName)) {
+      console.warn(
+        `[sanitizeAmazonOrdersData] Skipping order ${orderId} — brandName "${orderInfo.brandName}" not found in seller collection`
+      );
       continue;
     }
 
@@ -504,7 +513,6 @@ export const sanitizeAmazonOrdersData = async (orders) => {
     });
   }
 
-  console.log('Total operations to execute:', operations.length);
   return { bulkOps: operations, sellerOrderPayloads };
 };
 

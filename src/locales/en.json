@@ -89,7 +89,7 @@
   "CATEGORY_PROCESSED_SUCCESS": "Categories processed successfully",
   "CATEGORY_NOT_SAVED": "Categories could not be saved",
   "PRODUCT_IMPORTED_PROCESSING": "Product import is processing",
-
+  "RETURNED_PRODUCTS_SYNC_PROCESSING": "Returned Products sync is processing",
   "CATEGORY_IMPORTED_PROCESSING": "Category importing is under processed",
   "WRONG_CATEGORYTRAIL": "Wrong category trails",
   "FAILED_TO_UPLOAD": "Failed to download invoice",
@@ -127,6 +127,7 @@
   "SELLER_DEACTIVATED_SUCCESSFULLY": "Seller deactivated successfully",
   "FAILED_TO_CREATE_SELLER": "Failed to create seller.",
   "SELLER_NAME_EXISTS": "A seller with this name already exists.",
+  "TAX_ID_EXISTS": "A seller with this tax identification number already exists.",
   "SELLER_CREATED_SUCCESSFULLY": "Seller created successfully",
   "SELLER_FETCHED_SUCCESSFULLY": "Seller fetched successfully",
   "NO_SELLER_FIND": "No seller found",
@@ -188,12 +189,14 @@
   "PRICE_MISSING": "Price missing for",
   "INVALID_ROW_DATA": "Invalid row data",
   "INVALID_PRICE": "Invalid price for",
-  "TRANSLATION_STARTED": "Translation started in background",
-  "NO_PRODUCTS_TO_TRANSLATE": "No products found for translation",
-  "NO_ACTIVE_TRANSLATION": "No active translation found for this seller",
-  "TRANSLATION_ALREADY_RUNNING": "Translation already running for this seller",
+  "ENRICHMENT_STARTED": "AI Enrichment started in background",
+  "NO_PRODUCTS_TO_ENRICH": "No products found for AI Enrichment",
+  "NO_ACTIVE_ENRICHMENT": "No active AI Enrichment found for this seller",
+  "ENRICHMENT_ALREADY_RUNNING": "AI Enrichment already running for this seller",
+  "NO_ENRICHMENT_JOB_REQUESTED": "At least one AI Enrichment job must be requested",
   "EMPTY_VALUES_NOT_TRANSLATABLE": "Operation is not possible for empty values",
-  "TRANSLATION_FAILED": "Translation failed",
-  "TRANSLATION_COMPLETED": "Translation completed. Review changes in the catalog.",
-  "TRANSLATION_IN_PROGRESS": "Translation in progress"
+  "ENRICHMENT_FAILED": "AI Enrichment failed",
+  "ENRICHMENT_COMPLETED": "Finished. Review changes in the catalogue.",
+  "ENRICHMENT_CANCELLED": "AI Enrichment cancelled",
+  "NO_CANCELLABLE_OPS": "No active AI Enrichment operations to cancel"
 }

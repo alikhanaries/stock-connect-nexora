@@ -12,7 +12,21 @@ import Seller from '#models/Seller.js';
 import { exportUserChannelProductsToCSV, exportUserUnassignedProductsToCSV } from '../service/exportProductService.js';
 import expressWarehouseService from '../service/expressWarehouseService.js';
 import { translateProductField as translateProductFieldService } from '#service/translateService.js';
-import { getProgress, setPendingProgress, clearProgress } from '#helpers/geminiTranslate.js';
+import {
+  setPendingProgress,
+  clearProgress,
+  hasProgressEntry,
+  cancelOperation,
+  cancelAllOperations,
+} from '#helpers/geminiTranslate.js';
+import { mapCategoryTrail as mapCategoryTrailService } from '#service/categoryMapService.js';
+import {
+  setPendingCategoryMapProgress,
+  clearCategoryMapProgress,
+  hasCategoryMapEntry,
+  cancelCategoryMap,
+} from '#helpers/geminiCategoryMap.js';
+import { PROGRESS_TYPES, BLOCK_BUILDERS, aggregateStatus, aggregateMessage } from '#helpers/enrichProgress.js';
 
 export const getProducts = async (req, res) => {
   try {
@@ -591,77 +605,184 @@ export const getExpressWareHouseProducts = async (req, res) => {
     return errorResponse(res, error, 500);
   }
 };
-const translationInProgress = new Set();
+const enrichInProgress = new Set();
+
+const handleCancelAction = (req, res, { sellerId, translateFields, mapCategories }) => {
+  const hasTranslate = hasProgressEntry(sellerId);
+  const hasCategoryMap = hasCategoryMapEntry(sellerId);
+  if (!hasTranslate && !hasCategoryMap) {
+    return failResponse(res, req.locale.NO_ACTIVE_ENRICHMENT, 404);
+  }
+
+  const fields = Array.isArray(translateFields) ? translateFields : [];
+  const wholeJob = fields.length === 0 && mapCategories !== true;
+
+  const affected = [];
+  const skipped = [];
+
+  if (wholeJob) {
+    if (hasTranslate) {
+      for (const c of cancelAllOperations(sellerId)) {
+        affected.push({ kind: 'translate', field: c.field, lang: c.lang, previous: c.previous });
+      }
+    }
+    if (hasCategoryMap) {
+      const prev = cancelCategoryMap(sellerId);
+      if (prev) affected.push({ kind: 'categoryMap', previous: prev });
+      else skipped.push({ kind: 'categoryMap', reason: 'not_cancellable' });
+    }
+  } else {
+    for (const { field, lang } of fields) {
+      if (!hasTranslate) {
+        skipped.push({ kind: 'translate', field, lang, reason: 'not_in_job' });
+        continue;
+      }
+      const prev = cancelOperation(sellerId, field, lang);
+      if (prev) affected.push({ kind: 'translate', field, lang, previous: prev });
+      else skipped.push({ kind: 'translate', field, lang, reason: 'not_cancellable' });
+    }
+    if (mapCategories === true) {
+      if (!hasCategoryMap) {
+        skipped.push({ kind: 'categoryMap', reason: 'not_in_job' });
+      } else {
+        const prev = cancelCategoryMap(sellerId);
+        if (prev) affected.push({ kind: 'categoryMap', previous: prev });
+        else skipped.push({ kind: 'categoryMap', reason: 'not_cancellable' });
+      }
+    }
+  }
+
+  if (!affected.length) {
+    return failResponse(res, req.locale.NO_CANCELLABLE_OPS, 409, { action: 'cancel', affected, skipped });
+  }
+
+  return successResponse(res, req.locale.ENRICHMENT_CANCELLED, 200, { action: 'cancel', affected, skipped });
+};
 
 export const translateProductField = async (req, res) => {
   try {
-    const translate = req.body;
     const sellerId = req.sellerId;
     const { search, productId } = req.query;
     const filters = req.query.filter ? (Array.isArray(req.query.filter) ? req.query.filter : [req.query.filter]) : [];
+    const { action = 'start', translateFields = [], enhanceImages = false, mapCategories = false } = req.body ?? {};
 
-    if (translationInProgress.has(sellerId)) {
-      return failResponse(res, req.locale.TRANSLATION_ALREADY_RUNNING, 409);
+    if (action === 'cancel') {
+      return handleCancelAction(req, res, { sellerId, translateFields, mapCategories });
+    }
+
+    const wantTranslate = Array.isArray(translateFields) && translateFields.length > 0;
+    const wantMapCategories = mapCategories === true;
+    const wantEnhanceImages = enhanceImages === true;
+
+    if (!wantTranslate && !wantMapCategories && !wantEnhanceImages) {
+      return failResponse(res, req.locale.NO_ENRICHMENT_JOB_REQUESTED, 400);
+    }
+
+    if (enrichInProgress.has(sellerId)) {
+      return failResponse(res, req.locale.ENRICHMENT_ALREADY_RUNNING, 409);
     }
 
     const exists = await Product.exists({
       sellerId: new mongoose.Types.ObjectId(sellerId),
+      status: { $ne: 'removed' },
       ...(productId && { _id: new mongoose.Types.ObjectId(productId) }),
     });
-
     if (!exists) {
-      return failResponse(res, req.locale.NO_PRODUCTS_TO_TRANSLATE, 404);
+      return failResponse(res, req.locale.NO_PRODUCTS_TO_ENRICH, 404);
     }
 
-    setPendingProgress(sellerId);
-    translationInProgress.add(sellerId);
-    successResponse(res, req.locale.TRANSLATION_STARTED, 200);
+    // Clear stale progress from a previous run before new one
+    if (wantTranslate) setPendingProgress(sellerId, translateFields);
+    else clearProgress(sellerId);
+    if (wantMapCategories) setPendingCategoryMapProgress(sellerId);
+    else clearCategoryMapProgress(sellerId);
 
-    translateProductFieldService({
-      translate,
-      sellerId,
-      filters,
-      search,
-      productId,
-      emptyValuesMessage: req.locale.EMPTY_VALUES_NOT_TRANSLATABLE,
-    })
-      .then((result) => console.log(`Translation complete: ${JSON.stringify(result)}`))
-      .catch((error) => errorLog(error))
-      .finally(() => {
-        translationInProgress.delete(sellerId);
-        // Delay cleanup so clients can poll the final status (done or error) before it disappears
-        setTimeout(() => clearProgress(sellerId), 60_000);
-      });
+    enrichInProgress.add(sellerId);
+    successResponse(res, req.locale.ENRICHMENT_STARTED, 200, {
+      jobs: {
+        translate: wantTranslate,
+        mapCategories: wantMapCategories,
+        enhanceImages: wantEnhanceImages,
+      },
+    });
+    (async () => {
+      try {
+        if (wantTranslate) {
+          console.log(`[Enrich] translate → ${translateFields.length} field/lang op(s) for seller ${sellerId}`);
+          await translateProductFieldService({
+            translate: translateFields,
+            sellerId,
+            filters,
+            search,
+            productId,
+            emptyValuesMessage: req.locale.EMPTY_VALUES_NOT_TRANSLATABLE,
+          });
+        }
+
+        if (wantMapCategories) {
+          console.log(`[Enrich] mapCategories → seller ${sellerId}`);
+          await mapCategoryTrailService({ sellerId, productId, filters, search });
+        }
+
+        if (wantEnhanceImages) {
+          console.log(`[Enrich] enhanceImages requested for seller ${sellerId} — not yet implemented; skipping`);
+        }
+      } catch (error) {
+        errorLog(error);
+      } finally {
+        enrichInProgress.delete(sellerId);
+        // Delay cleanup so clients can poll the final status before it disappears
+        setTimeout(() => {
+          if (wantTranslate) clearProgress(sellerId);
+          if (wantMapCategories) clearCategoryMapProgress(sellerId);
+        }, 60_000);
+      }
+    })();
   } catch (error) {
     errorLog(error);
     return errorResponse(res, error.message, 500);
   }
 };
 
-const PROGRESS_TYPES = ['translate'];
-
 export const getProgressStatus = (req, res) => {
   try {
     const { type } = req.query;
-
-    if (!type || !PROGRESS_TYPES.includes(type)) {
-      return failResponse(res, `Invalid type. Allowed: ${PROGRESS_TYPES.join(', ')}`, 400);
+    if (!type) {
+      return failResponse(res, `type query param is required. Allowed: ${PROGRESS_TYPES.join(', ')}`, 400);
     }
 
-    const progress = getProgress(req.sellerId);
-
-    if (!progress) {
-      return failResponse(res, req.locale.NO_ACTIVE_TRANSLATION, 404);
+    // Parse comma-separated, trim, dedupe, preserve caller order.
+    const requested = [
+      ...new Set(
+        type
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      ),
+    ];
+    const invalid = requested.filter((t) => !PROGRESS_TYPES.includes(t));
+    if (invalid.length) {
+      return failResponse(res, `Invalid type: ${invalid.join(', ')}. Allowed: ${PROGRESS_TYPES.join(', ')}`, 400);
     }
 
-    const hasError = progress.operations.some((o) => o.status === 'error');
-    const message = hasError
-      ? req.locale.TRANSLATION_FAILED
-      : progress.status === 'done'
-        ? req.locale.TRANSLATION_COMPLETED
-        : req.locale.TRANSLATION_IN_PROGRESS;
+    const blocks = requested.map((t) => BLOCK_BUILDERS[t](req.sellerId));
 
-    return successResponse(res, message, 200, { type, ...progress });
+    // 404 only when none of the requested types have any progress
+    const anyHasData = blocks.some((b) => b && Object.keys(b).length > 0);
+    if (!anyHasData) {
+      return failResponse(res, req.locale.NO_ACTIVE_ENRICHMENT, 404);
+    }
+
+    // Always return the grouped shape — same structure for single and multi-type requests.
+    const results = Object.fromEntries(requested.map((t, i) => [t, blocks[i] ?? {}]));
+    const status = aggregateStatus(blocks);
+    const message = aggregateMessage(blocks, req.locale);
+
+    return successResponse(res, message, 200, {
+      types: requested,
+      status,
+      results,
+    });
   } catch (error) {
     errorLog(error);
     return errorResponse(res, error.message, 500);
