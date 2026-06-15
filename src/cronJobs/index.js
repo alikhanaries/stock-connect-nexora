@@ -3,8 +3,12 @@ import { getReturns } from '#service/returnService.js';
 import { getReportToken } from '#service/forwardShipmentService.js';
 import { runInventorySync } from './services/inventorySyncService.js';
 import { runPriceSync } from './services/priceSyncService.js';
+import { config } from '../config/config.js';
 
 const scheduledCronJobs = () => {
+  if (config.NODE_ENV !== 'production') {
+    return;
+  }
   try {
     // Runs every day at 12:00 AM
     cron.schedule('0 0 * * *', async () => {

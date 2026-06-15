@@ -21,7 +21,8 @@ export const updateSeller = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { name, status, ocpSlugId, shopifyStoreUrl, shopifyApiVersion, shopifyAccessToken } = req.body;
+    const { name, status, ocpSlugId, shopifyStoreUrl, shopifyApiVersion, shopifyAccessToken, taxIdentificationNumber } =
+      req.body;
 
     // Validate status only if provided
     let statusValue;
@@ -40,6 +41,7 @@ export const updateSeller = async (req, res) => {
       name,
       status: statusValue,
       ocpSlugId,
+      taxIdentificationNumber,
       shopifyConfig: {
         url: shopifyStoreUrl,
         apiVersion: shopifyApiVersion,
@@ -55,6 +57,10 @@ export const updateSeller = async (req, res) => {
 
     if (updatedSeller.isExist) {
       return response.failResponse(res, req.locale.SELLER_NAME_EXISTS, 409);
+    }
+
+    if (updatedSeller.isTaxIdExist) {
+      return response.failResponse(res, req.locale.TAX_ID_EXISTS, 409);
     }
 
     if (!updatedSeller.isUpdated) {
@@ -139,6 +145,9 @@ export const createSeller = async (req, res) => {
 
     if (newSeller.isExist) {
       return response.failResponse(res, req.locale.SELLER_NAME_EXISTS, 409);
+    }
+    if (newSeller.isTaxIdExist) {
+      return response.failResponse(res, req.locale.TAX_ID_EXISTS, 409);
     }
     if (!newSeller.data) {
       return response.failResponse(res, req?.locale?.FAILED_TO_CREATE_SELLER, 500);

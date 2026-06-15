@@ -103,3 +103,21 @@ export const convertCodeFormat = (value = '') => {
   if (!value) return value;
   return value.replace(/[.\-_]+/g, '_');
 };
+
+// MNJ_195_02_001 → MNJ.195.02-001
+export const formatEntegraProductCode = (value = '') => {
+  if (!value) return value;
+  const parts = value.split('_');
+  if (parts.length < 2) return value;
+  return parts.slice(0, -1).join('.') + '-' + parts[parts.length - 1];
+};
+
+export const formatEntegraDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}.${month}.${year}`;
+};

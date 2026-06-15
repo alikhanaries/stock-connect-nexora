@@ -55,3 +55,30 @@ export const convertFromSar = async (targetCurrency = 'USD', sarValue = 0) => {
 
   return Number((sarValue / rate).toFixed(2));
 };
+
+const getRateToTRL = async () => {
+  const cacheKey = 'SAR_TRY';
+  if (rateCache[cacheKey]) return rateCache[cacheKey];
+
+  try {
+    const url = `https://api.exchangerate.host/latest?base=SAR&symbols=TRY`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const rate = data?.rates?.TRY;
+    if (!rate) throw new Error('Invalid rate');
+    rateCache[cacheKey] = rate;
+    return rate;
+  } catch (err) {
+    console.log(err);
+    console.error('SAR→TRY rate fetch failed, using fallback');
+    // Fallback as of June 2026: 1 SAR ≈ 12.29 TRY
+    rateCache[cacheKey] = 12.29;
+    return 12.29;
+  }
+};
+
+export const convertSarToTry = async (sarValue = 0) => {
+  if (!sarValue || sarValue <= 0) return 0;
+  const rate = await getRateToTRL();
+  return Number((Number(sarValue) * rate).toFixed(2));
+};

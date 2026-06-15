@@ -233,4 +233,5 @@ export const ERP_SYNC_BRAND_SLUGS = {
   kip: ['kip'],
   ramsey: ['ramsey'],
   exquise: ['exquise'],
+  catch: ['catch'],
 };
