@@ -213,4 +213,25 @@ export const MAX_PRICE = 1145;
 
 export const AYMAKAN_VAT_DIVISOR = 1.15;
 export const AYMAKAN_PRICE_CURRENCY = 'USD';
-export const INVENTORY_SYNC_CRON_SELLERS = ['exquise'];
+
+export const ERP_SYNC_BRAND_SLUGS = {
+  entegra: ['krahe', 'manijero'],
+  xokids: [
+    'xokids',
+    'hapshoe_kids',
+    'moonstar',
+    'hype',
+    'bravokids',
+    'rakerplus',
+    'nk_kids',
+    'top_teens',
+    'grata',
+    'top_girl',
+    'bella_donna',
+    'hamada_tex',
+  ],
+  kip: ['kip'],
+  ramsey: ['ramsey'],
+  exquise: ['exquise'],
+  catch: ['catch'],
+};
