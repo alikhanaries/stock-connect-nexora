@@ -17,14 +17,7 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
     }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    const imageToJpgUsingBuffer = await sharp(buffer)
-      // Fill transparency with pure white.
-      .flatten({ background: '#ffffff' })
-      // Convert near-white pixels to pure white.
-      .linear(255 / 244, 0)
-      // Export as JPEG.
-      .jpeg({ quality: 90 })
-      .toBuffer();
+    const imageToJpgUsingBuffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
 
     await s3Client.send(
       new PutObjectCommand({
