@@ -126,6 +126,7 @@
   "SELLER_DEACTIVATED_SUCCESSFULLY": "تم إلغاء تفعيل البائع بنجاح",
   "FAILED_TO_CREATE_SELLER": "فشل في إنشاء البائع.",
   "SELLER_NAME_EXISTS": "بائع بهذا الاسم موجود بالفعل.",
+  "TAX_ID_EXISTS": "يوجد بائع بنفس الرقم الضريبي بالفعل.",
   "SELLER_CREATED_SUCCESSFULLY": "تم إنشاء البائع بنجاح",
   "SELLER_FETCHED_SUCCESSFULLY": "تم جلب البائع بنجاح",
   "NO_SELLER_FIND": "لم يتم العثور على أي بائع",
@@ -203,5 +204,6 @@
   "NO_RESUMABLE_OPS": "لا توجد عمليات متوقفة لاستئنافها",
   "ENRICHMENT_RETRY_STARTED": "بدأت إعادة محاولة تحسين الذكاء الاصطناعي",
   "NO_RETRIABLE_OPS": "لا توجد عمليات قابلة لإعادة المحاولة",
-  "INVALID_ACTION": "إجراء غير صالح. المسموح: start, cancel, pause, resume, retry"
+  "INVALID_ACTION": "إجراء غير صالح. المسموح: start, cancel, pause, resume, retry",
+  "RETURNED_PRODUCTS_SYNC_PROCESSING": "جاري مزامنة المنتجات المرتجعة"
 }

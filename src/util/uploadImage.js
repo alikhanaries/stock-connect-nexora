@@ -17,7 +17,6 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
     }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
     const imageToJpgUsingBuffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
 
     await s3Client.send(

@@ -125,6 +125,7 @@
   "SELLER_DEACTIVATED_SUCCESSFULLY": "Satıcı başarıyla devre dışı bırakıldı",
   "FAILED_TO_CREATE_SELLER": "Satıcı oluşturulamadı.",
   "SELLER_NAME_EXISTS": "Bu isimde bir satıcı zaten mevcut.",
+  "TAX_ID_EXISTS": "Bu vergi kimlik numarasına sahip bir satıcı zaten mevcut.",
   "SELLER_CREATED_SUCCESSFULLY": "Satıcı başarıyla oluşturuldu",
   "SELLER_FETCHED_SUCCESSFULLY": "Satıcı başarıyla getirildi",
   "NO_SELLER_FIND": "Satıcı bulunamadı",
@@ -202,5 +203,6 @@
   "NO_RESUMABLE_OPS": "Devam ettirilecek duraklatılmış işlem yok",
   "ENRICHMENT_RETRY_STARTED": "Yapay Zekâ Zenginleştirme yeniden denemesi başlatıldı",
   "NO_RETRIABLE_OPS": "Yeniden denenebilecek işlem yok",
-  "INVALID_ACTION": "Geçersiz işlem. İzin verilen: start, cancel, pause, resume, retry"
+  "INVALID_ACTION": "Geçersiz işlem. İzin verilen: start, cancel, pause, resume, retry",
+  "RETURNED_PRODUCTS_SYNC_PROCESSING": "İade edilen ürünlerin senkronizasyonu devam ediyor"
 }

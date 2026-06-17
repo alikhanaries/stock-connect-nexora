@@ -8,7 +8,7 @@ import { formatSellerResponse } from '#helpers/formatSellerResponse.js';
 import { autoAssignAllChannelsToSeller } from './channelService.js';
 const createSeller = async (sellerData) => {
   try {
-    const { name, ocpSlugId, shopifyConfig } = sellerData;
+    const { name, ocpSlugId, shopifyConfig, taxIdentificationNumber } = sellerData;
 
     const existingSeller = await Seller.findOne({
       name: { $regex: `^${name.trim()}$`, $options: 'i' },
@@ -18,14 +18,29 @@ const createSeller = async (sellerData) => {
       return { isExist: true, data: null };
     }
 
+    const trimmedTaxId = taxIdentificationNumber.trim();
+    const taxIdClash = await Seller.findOne({
+      isDeleted: false,
+      taxIdentificationNumber: trimmedTaxId,
+      ...(existingSeller?._id ? { _id: { $ne: existingSeller._id } } : {}),
+    })
+      .select('_id')
+      .lean();
+    if (taxIdClash) return { isTaxIdExist: true, data: null };
+
     if (existingSeller && existingSeller.isDeleted === true) {
-      const restored = await Seller.findByIdAndUpdate(existingSeller._id, { isDeleted: false, status: 'active' });
+      const restored = await Seller.findByIdAndUpdate(
+        existingSeller._id,
+        { isDeleted: false, status: 'active', taxIdentificationNumber: trimmedTaxId },
+        { new: true }
+      );
       return { isExist: false, data: restored };
     }
 
     const sellerPayload = {
       isDeleted: false,
       name: name.trim(),
+      taxIdentificationNumber: trimmedTaxId,
       ocpSlugId:
         ocpSlugId?.trim() ||
         name
@@ -138,7 +153,7 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
 };
 
 const updateSeller = async (id, payload) => {
-  const { name, status, ocpSlugId, shopifyConfig } = payload;
+  const { name, status, ocpSlugId, shopifyConfig, taxIdentificationNumber } = payload;
 
   // 1️ Find seller first
   const seller = await Seller.findOne({ _id: id, isDeleted: false });
@@ -174,6 +189,22 @@ const updateSeller = async (id, payload) => {
   if (ocpSlugId !== undefined && ocpSlugId.trim() !== seller.ocpSlugId) {
     updateData.ocpSlugId = ocpSlugId.trim();
     isUpdated = true;
+  }
+
+  if (taxIdentificationNumber !== undefined) {
+    const trimmed = taxIdentificationNumber.trim();
+    if (trimmed !== (seller.taxIdentificationNumber ?? '')) {
+      const clash = await Seller.findOne({
+        _id: { $ne: id },
+        isDeleted: false,
+        taxIdentificationNumber: trimmed,
+      })
+        .select('_id')
+        .lean();
+      if (clash) return { isTaxIdExist: true };
+      updateData.taxIdentificationNumber = trimmed;
+      isUpdated = true;
+    }
   }
 
   if (shopifyConfig) {

@@ -14,10 +14,12 @@ export const getAllReturns = async (req, res) => {
       return Responses.failResponse(res, 'Invalid seller ID format', 400);
     }
 
-    const { status, channel, search, dateFrom, dateTo, sortOrder } = req.query;
+    const { status, channel, search, dateFrom, dateTo, sortOrder, page, size } = req.query;
 
     const filters = Object.fromEntries(
-      Object.entries({ status, channel, search, dateFrom, dateTo, sortOrder }).filter(([, v]) => v != null && v !== '')
+      Object.entries({ status, channel, search, dateFrom, dateTo, sortOrder, page, size }).filter(
+        ([, v]) => v != null && v !== ''
+      )
     );
 
     // Remove undefined values
