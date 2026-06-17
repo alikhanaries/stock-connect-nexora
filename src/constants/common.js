@@ -155,6 +155,7 @@ export const PRODUCT_EXPORT_HEADERS = [
   'volumetricWeightCm',
   'noonPrice',
   'namshiPrice',
+  'amazonPrice',
   // Amazon marketplace listing attributes
   'variationThemeName',
   'modelNumber',

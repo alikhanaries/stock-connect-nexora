@@ -77,6 +77,7 @@ export const exportUserChannelProductsToCSV = async (filters, sellerId, channelI
         product.volumetricWeightCm || 0,
         product.noonPrice || 0,
         product.namshiPrice || 0,
+        product.amazonPrice || 0,
         // Amazon marketplace listing attributes
         product.amazon?.variationThemeName || '',
         product.amazon?.modelNumber || '',
@@ -176,6 +177,7 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
         product.volumetricWeightCm || 0,
         product.noonPrice || 0,
         product.namshiPrice || 0,
+        product.amazonPrice || 0,
         // Amazon marketplace listing attributes
         product.amazon?.variationThemeName || '',
         product.amazon?.modelNumber || '',
