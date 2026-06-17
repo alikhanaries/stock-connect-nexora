@@ -670,7 +670,14 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         // requests an image update, force the newly uploaded image URLs into the
         // update so existing products actually get their images refreshed.
         if (isImageUpdate) {
-          const IMAGE_FIELDS = ['primaryImageUrl', 'imageUrl'];
+          const IMAGE_FIELDS = [
+            'primaryImageUrl',
+            'imageUrl',
+            'extraImageUrl1',
+            'extraImageUrl2',
+            'extraImageUrl3',
+            'images',
+          ];
           for (const field of IMAGE_FIELDS) {
             if (product[field] !== undefined && product[field] !== null && product[field] !== '') {
               updateFields[field] = product[field];
