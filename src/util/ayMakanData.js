@@ -20,8 +20,8 @@ export const AYMAKAN_STATUS = {
     description: 'Shipment is out for its final destination.',
   },
   'AY-0005': {
-    status: 'DELIVERED',
-    description: 'Shipment is delivered to customer',
+    status: 'HUB_RECIEVED',
+    description: 'Shipment is received at hub',
   },
   'AY-0006': {
     status: 'NOT_DELIVERED',
