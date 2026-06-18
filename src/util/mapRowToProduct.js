@@ -31,9 +31,6 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
 
   //  IMAGE HANDLING ONLY WHEN isImageUpdate === TRUE AND NEW SKU COME
   const shouldUploadImages = isNewSku || isImageUpdate === true;
-  console.log(
-    `[mapRowToProduct] sku=${r.productskucode} isImageUpdate=${isImageUpdate} isNewSku=${isNewSku} shouldUploadImages=${shouldUploadImages}`
-  );
   if (shouldUploadImages) {
     const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
       .filter(Boolean)
