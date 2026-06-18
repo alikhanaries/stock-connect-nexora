@@ -79,10 +79,10 @@ export const formatMeneviskidsProduct = async (
     const categoryTrail = buildCategoryTrail(product);
     if (categoryTrail) categoryTrails.add(categoryTrail);
 
-    // Filter variants that have both color and size specs
+    // Filter variants that have both color and size specs and stock > 0
     const variants = toArray(product?.variants?.variant).filter((v) => {
       const { color, size } = extractSpecs(v.spec);
-      return color && size;
+      return color && size && Number(v.quantity || 0) > 0;
     });
 
     if (!variants.length) continue;
