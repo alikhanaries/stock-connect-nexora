@@ -1,4 +1,7 @@
-const mapOrderToUniware = (order) => {
+import { config } from '#root/src/config/config.js';
+
+const { STOCK_LOCATION } = config;
+const mapOrderToUniware = (order, productIdBySku = new Map()) => {
   const currency = order?.orderPaymentDetails?.currencyCode?.toUpperCase() || 'INR';
 
   return {
@@ -23,7 +26,7 @@ const mapOrderToUniware = (order) => {
     orderItems: (order.orderSkuList?.skuList || []).map((item, index) => ({
       orderItemId: String(item.id),
       status: item.status === 'CREATED' ? 'CREATED' : 'PENDING_VERIFICATION',
-      productId: item.channelProductNo || '',
+      productId: String(productIdBySku.get(item.merchantProductNo) || item.channelProductNo || ''),
       variantId: item.merchantProductNo || '',
       sku: item.merchantProductNo || '',
       returnReason: '',
@@ -51,7 +54,7 @@ const mapOrderToUniware = (order) => {
 
       onHold: false,
       packetNumber: index + 1,
-      facilityCode: item.stockLocation?.name || '',
+      facilityCode: STOCK_LOCATION,
     })),
 
     taxExempted: false,

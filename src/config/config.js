@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export const config = {
+  NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || 3000,
   DB_URL: process.env.DB_URL,
   JWT_SECRET: process.env.JWT_SECRET,
@@ -53,4 +54,6 @@ export const config = {
   AYMAKAN_DELIVERY_SHORT_CODE: process.env.AYMAKAN_DELIVERY_SHORT_CODE,
   AYMAKAN_DELIVERY_LAT: process.env.AYMAKAN_DELIVERY_LAT,
   AYMAKAN_DELIVERY_LONG: process.env.AYMAKAN_DELIVERY_LONG,
+  CHANNEL_CATEGORIES_CSV: process.env.CHANNEL_CATEGORIES_CSV,
+  STOCK_LOCATION: process.env.STOCK_LOCATION,
 };
