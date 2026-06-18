@@ -178,6 +178,9 @@ const saveUserChannels = async (sellerId, channelIds) => {
 /** FUNC - GET USER CHANNEL LIST */
 export const getAllUserChannels = async (sellerId, query) => {
   try {
+    // before listing (adds missing channels, ignores already-assigned ones)
+    await autoAssignAllChannelsToSeller(sellerId);
+
     const { page = 1, limit = 10, status, search, sortBy = 'createdAt', sortOrder = 'asc' } = query;
     const skip = (page - 1) * limit;
     const parsedLimit = parseInt(limit);
@@ -186,7 +189,6 @@ export const getAllUserChannels = async (sellerId, query) => {
     if (query?.status) {
       appliedFilters.status = query?.status;
     }
-    console.log(sellerId, query);
 
     const baseMatch = {
       sellerId: new ObjectId(sellerId),
