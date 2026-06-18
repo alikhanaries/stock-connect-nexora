@@ -8,6 +8,7 @@ import {
   failCategoryMapProgress,
   finishCategoryMapProgress,
   isCategoryMapCancelled,
+  isCategoryMapStopped,
   setCategoryMapAbortController,
 } from '#helpers/geminiCategoryMap.js';
 import { loadChannelCategories, humanizeCategoryPath } from '#utils/channelCategoriesLoader.js';
@@ -16,10 +17,18 @@ import { buildCondition } from '#helpers/productFilters.js';
 
 const SCOPE_BATCH_SIZE = 200;
 
-export const mapCategoryTrail = async ({ sellerId, productId, filters = [], search }) => {
+export const mapCategoryTrail = async ({
+  sellerId,
+  productId,
+  filters = [],
+  search,
+  resumeMode = false,
+  retryMode = false,
+}) => {
+  const modeLabel = resumeMode ? ' [resume]' : retryMode ? ' [retry]' : '';
   console.log(
     `[CategoryMapService] Starting — sellerId: ${sellerId}${productId ? `, productId: ${productId}` : ''}` +
-      `${filters?.length ? `, filters: ${JSON.stringify(filters)}` : ''}${search ? `, search: "${search}"` : ''}`
+      `${filters?.length ? `, filters: ${JSON.stringify(filters)}` : ''}${search ? `, search: "${search}"` : ''}${modeLabel}`
   );
 
   const { paths: allowedPaths, pathSet } = await loadChannelCategories();
@@ -29,20 +38,33 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
   const scopeFilter = buildFilter({ rawFilters: filters, sellerId, search, buildCondition });
   if (productId) scopeFilter._id = new mongoose.Types.ObjectId(productId);
 
-  // Only classify products with at least a name
-  const nameRequirement = { name: { $exists: true, $nin: [null, ''] } };
+  // Only classify products with at least a name. Resume additionally skips
+  // already-categorised rows; retry re-classifies everything in scope.
+  const baseRequirements = [{ name: { $exists: true, $nin: [null, ''] } }];
+  if (resumeMode) {
+    baseRequirements.push({
+      $or: [{ categoryTrail: { $exists: false } }, { categoryTrail: null }, { categoryTrail: '' }],
+    });
+  }
+  const requirementClause = baseRequirements.length === 1 ? baseRequirements[0] : { $and: baseRequirements };
   const finalFilter = scopeFilter.$or
-    ? { $and: [scopeFilter, nameRequirement] }
-    : { ...scopeFilter, ...nameRequirement };
+    ? { $and: [scopeFilter, requirementClause] }
+    : { ...scopeFilter, ...requirementClause };
 
-  const totalProducts = await Product.countDocuments(finalFilter);
-  if (!totalProducts) {
-    initCategoryMapProgress(sellerId, 0);
+  initCategoryMapProgress(sellerId, 0);
+  const remainingCount = await Product.countDocuments(finalFilter);
+  if (!remainingCount) {
+    if (resumeMode) {
+      finishCategoryMapProgress(sellerId);
+      return { total: 0, updated: 0, skipped: 0 };
+    }
+    initCategoryMapProgress(sellerId, 0, { retryMode });
     finishCategoryMapProgress(sellerId);
     return { total: 0, updated: 0, skipped: 0 };
   }
 
-  initCategoryMapProgress(sellerId, totalProducts);
+  initCategoryMapProgress(sellerId, remainingCount, { preserveCompleted: resumeMode, retryMode });
+  const totalProducts = remainingCount;
 
   // One AbortController for the whole category-map pass so cancel aborts the
   // in-flight Gemini call immediately instead of waiting for the natural timeout.
@@ -56,7 +78,7 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
 
   const flushBuffer = async () => {
     if (!buffer.length) return;
-    if (isCategoryMapCancelled(sellerId)) return;
+    if (isCategoryMapStopped(sellerId)) return;
     const work = buffer;
     buffer = [];
 
@@ -93,11 +115,11 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
         pathSet,
         persistChunk,
         (retryInfo) => setCategoryMapRetry(sellerId, retryInfo),
-        () => isCategoryMapCancelled(sellerId),
+        () => isCategoryMapStopped(sellerId),
         ac.signal
       );
     } catch (error) {
-      if (isCategoryMapCancelled(sellerId)) return;
+      if (isCategoryMapStopped(sellerId)) return;
       const detail = (error.geminiError?.message ?? error.message ?? 'Unknown error').split('\n')[0].trim();
       console.error(`[CategoryMapService] Batch failed: ${detail}`);
       failCategoryMapProgress(sellerId, error);
@@ -107,33 +129,35 @@ export const mapCategoryTrail = async ({ sellerId, productId, filters = [], sear
 
   try {
     for await (const doc of cursor) {
-      if (isCategoryMapCancelled(sellerId)) break;
+      if (isCategoryMapStopped(sellerId)) break;
       buffer.push(doc);
       if (buffer.length >= SCOPE_BATCH_SIZE) {
         await flushBuffer();
-        if (isCategoryMapCancelled(sellerId)) break;
+        if (isCategoryMapStopped(sellerId)) break;
       }
     }
-    if (!isCategoryMapCancelled(sellerId)) await flushBuffer();
+    if (!isCategoryMapStopped(sellerId)) await flushBuffer();
   } catch (error) {
     try {
       cursor.close?.();
     } catch {
       // ignore cursor close failure; original error is more relevant
     }
-    if (isCategoryMapCancelled(sellerId)) {
-      console.log('[CategoryMapService] Cancelled by user');
-      return { total: totalProducts, updated: updatedCount, cancelled: true };
+    if (isCategoryMapStopped(sellerId)) {
+      const verb = isCategoryMapCancelled(sellerId) ? 'Cancelled' : 'Paused';
+      console.log(`[CategoryMapService] ${verb} by user`);
+      return { total: totalProducts, updated: updatedCount, stopped: verb.toLowerCase() };
     }
     console.error('[CategoryMapService] Aborted due to error:', error.message);
     return { total: totalProducts, updated: updatedCount, error: true };
   }
 
-  // finishCategoryMapProgress preserves the 'cancelled' status set by the helper.
+  // finishCategoryMapProgress preserves the 'cancelled'/'paused' status set by the helper.
   finishCategoryMapProgress(sellerId);
-  if (isCategoryMapCancelled(sellerId)) {
-    console.log(`[CategoryMapService] Cancelled — updated: ${updatedCount}/${totalProducts}`);
-    return { total: totalProducts, updated: updatedCount, cancelled: true };
+  if (isCategoryMapStopped(sellerId)) {
+    const verb = isCategoryMapCancelled(sellerId) ? 'Cancelled' : 'Paused';
+    console.log(`[CategoryMapService] ${verb} — updated: ${updatedCount}/${totalProducts}`);
+    return { total: totalProducts, updated: updatedCount, stopped: verb.toLowerCase() };
   }
   console.log(`[CategoryMapService] Done — total: ${totalProducts}, updated: ${updatedCount}`);
   return { total: totalProducts, updated: updatedCount };

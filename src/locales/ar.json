@@ -198,5 +198,12 @@
   "ENRICHMENT_COMPLETED": "اكتمل. راجع التغييرات في الكتالوج.",
   "ENRICHMENT_CANCELLED": "تم إلغاء تحسين الذكاء الاصطناعي",
   "NO_CANCELLABLE_OPS": "لا توجد عمليات نشطة لتحسين الذكاء الاصطناعي لإلغائها",
+  "ENRICHMENT_PAUSED": "تم إيقاف تحسين الذكاء الاصطناعي مؤقتًا",
+  "ENRICHMENT_RESUMED": "تم استئناف تحسين الذكاء الاصطناعي",
+  "NO_PAUSABLE_OPS": "لا توجد عمليات نشطة لإيقافها مؤقتًا",
+  "NO_RESUMABLE_OPS": "لا توجد عمليات متوقفة لاستئنافها",
+  "ENRICHMENT_RETRY_STARTED": "بدأت إعادة محاولة تحسين الذكاء الاصطناعي",
+  "NO_RETRIABLE_OPS": "لا توجد عمليات قابلة لإعادة المحاولة",
+  "INVALID_ACTION": "إجراء غير صالح. المسموح: start, cancel, pause, resume, retry",
   "RETURNED_PRODUCTS_SYNC_PROCESSING": "جاري مزامنة المنتجات المرتجعة"
 }

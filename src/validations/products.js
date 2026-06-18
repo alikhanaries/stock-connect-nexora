@@ -897,15 +897,15 @@ export const translateProductFieldValidator = validate(async (req) => {
 
   const bodySchema = z
     .object({
-      action: z.enum(['start', 'cancel']).optional(),
+      action: z.enum(['start', 'cancel', 'pause', 'resume', 'retry']).optional(),
       translateFields: translateFieldsSchema,
       enhanceImages: z.boolean().optional(),
       mapCategories: z.boolean().optional(),
     })
     .strict()
     .refine((b) => {
-      // For cancel, scope is optional — omitting both means "cancel the whole job".
-      if (b.action === 'cancel') return true;
+      // For cancel / pause / resume / retry, scope is optional — omitting both means "whole job".
+      if (['cancel', 'pause', 'resume', 'retry'].includes(b.action)) return true;
       return (
         (Array.isArray(b.translateFields) && b.translateFields.length > 0) ||
         b.enhanceImages === true ||

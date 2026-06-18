@@ -203,5 +203,12 @@
   "ENRICHMENT_COMPLETED": "已完成。请在目录中检查更改。",
   "ENRICHMENT_CANCELLED": "智能增强已取消",
   "NO_CANCELLABLE_OPS": "没有可取消的活动智能增强任务",
+  "ENRICHMENT_PAUSED": "智能增强已暂停",
+  "ENRICHMENT_RESUMED": "智能增强已恢复",
+  "NO_PAUSABLE_OPS": "没有可暂停的活动智能增强任务",
+  "NO_RESUMABLE_OPS": "没有可恢复的暂停任务",
+  "ENRICHMENT_RETRY_STARTED": "智能增强重试已启动",
+  "NO_RETRIABLE_OPS": "没有可重试的任务",
+  "INVALID_ACTION": "无效操作。允许的值：start, cancel, pause, resume, retry",
   "RETURNED_PRODUCTS_SYNC_PROCESSING": "退货商品同步处理中"
 }
