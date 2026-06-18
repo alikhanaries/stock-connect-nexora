@@ -7,25 +7,9 @@ import Product from '#root/src/models/Product.js';
 import Seller from '#root/src/models/Seller.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { createMeneviskidsAdapter } from '../meneviskidsAdapter.js';
-import { formatMeneviskidsProduct } from '../helpers/formatter.js';
+import { formatMeneviskidsProduct, toArray, extractSpecs } from '../helpers/formatter.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
-
-const toArray = (value) => {
-  if (value === null || value === undefined) return [];
-  if (Array.isArray(value)) return value;
-  return [value];
-};
-
-const extractSpecs = (specs) => {
-  const specArray = toArray(specs);
-  const colorSpec = specArray.find((s) => s?.['$']?.name === 'renk');
-  const sizeSpec = specArray.find((s) => s?.['$']?.name === 'beden');
-  return {
-    color: (colorSpec?.['_'] || '').trim(),
-    size: (sizeSpec?.['_'] || '').trim(),
-  };
-};
 
 export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
   try {
@@ -39,19 +23,29 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
     const brandRegex = new RegExp(seller.name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     const fetched = allProducts.filter((p) => brandRegex.test((p.Brand || '').trim()));
 
+    console.log(`[Menevis Kids Sync] Seller: "${seller.name}" — Total products in feed: ${allProducts.length}`);
+    console.log(`[Menevis Kids Sync] Matched products for brand "${seller.name}": ${fetched.length}`);
+    console.log(`[Menevis Kids Sync] Batch Size: ${MAX_BATCH_SIZE}, Concurrency: ${BATCH_CONCURRENCY}`);
+
     if (!fetched.length) {
+      console.log(`[Menevis Kids Sync] No products found for brand "${seller.name}".`);
       return { message: `No products found matching brand "${seller.name}".` };
     }
 
     let upsertCount = 0;
+    let totalProducts = 0;
+    let totalGrandparents = 0;
+    let totalParents = 0;
 
     await processInBatches(
       fetched,
       MAX_BATCH_SIZE,
       async (batch, batchIndex) => {
         const batchId = batchIndex + 1;
-
+        const startTime = Date.now();
         const incomingSkus = new Set();
+
+        console.log(`\n[Batch ${batchId}] Started — Items: ${batch.length}`);
 
         try {
           for (const p of batch) {
@@ -94,6 +88,16 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
 
           const canonical = products.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
 
+          totalProducts += canonical.length;
+          totalGrandparents += canonical.filter(
+            (p) => p.productType === 'configurable' && !p.grandParentProductSkuCode
+          ).length;
+          totalParents += canonical.filter(
+            (p) => p.productType === 'configurable' && !!p.grandParentProductSkuCode
+          ).length;
+
+          console.log(`[Batch ${batchId}] Canonical Products: ${canonical.length}`);
+
           if (canonical.length) {
             const bulkOps = canonical.map((product) => ({
               updateOne: {
@@ -111,6 +115,7 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
               upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
             } catch (bulkErr) {
               if (bulkErr?.writeErrors?.length) {
+                console.error(`[Batch ${batchId}] bulkWrite had ${bulkErr.writeErrors.length} write errors. First 5:`);
                 bulkErr.writeErrors.slice(0, 5).forEach((we) => {
                   const failedSku = bulkOps[we.index]?.updateOne?.filter?.productSkuCode;
                   console.error(`  SKU="${failedSku}" code=${we.code} msg=${we.errmsg}`);
@@ -130,6 +135,9 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
             );
           }
 
+          const endTime = Date.now();
+          console.log(`[Batch ${batchId}] Complete — Duration: ${(endTime - startTime) / 1000}s`);
+
           return canonical;
         } catch (err) {
           console.error(`[Batch ${batchId}] ERROR:`, err);
@@ -140,6 +148,10 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
     );
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
+    console.log('\n[Menevis Kids Sync] ALL BATCHES COMPLETED SUCCESSFULLY');
+    console.log(
+      `[Menevis Kids Sync] Total Products: ${totalProducts} | Grandparents: ${totalGrandparents} | Parents: ${totalParents} | Variants: ${totalProducts - totalGrandparents - totalParents}`
+    );
   } catch (error) {
     console.error('Failed to sync Menevis Kids products:', error);
     throw error;
