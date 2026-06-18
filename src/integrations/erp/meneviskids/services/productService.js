@@ -15,7 +15,7 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
   try {
     const seller = await Seller.findById(sellerId, { name: 1 }).lean();
     if (!seller?.name) throw new Error(`Seller ${sellerId} not found or missing name`);
-
+    const sellerName = seller.name;
     const adapter = createMeneviskidsAdapter();
     const allProducts = await adapter.fetchProducts();
 
@@ -79,11 +79,13 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
             )
           );
 
-          const { products, categoryTrails } = await formatMeneviskidsProduct(
+         const { products, categoryTrails } = await formatMeneviskidsProduct(
             batch,
             sellerId,
             isImageUpdate,
-            existingSkus
+            existingSkus,
+            false,
+            sellerName
           );
 
           const canonical = products.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
