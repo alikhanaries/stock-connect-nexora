@@ -21,7 +21,7 @@ const stripHtml = (html = '') => {
     .trim();
 };
 
-const toArray = (value) => {
+export const toArray = (value) => {
   if (value === null || value === undefined) return [];
   if (Array.isArray(value)) return value;
   return [value];
@@ -40,7 +40,7 @@ const cleanImages = (...imgGroups) => {
  * Extracts color (renk) and size (beden) from the <spec> attribute nodes.
  * xml2js parses <spec name="renk">siyah</spec> as { '$': { name: 'renk' }, '_': 'siyah' }
  */
-const extractSpecs = (specs) => {
+export const extractSpecs = (specs) => {
   const specArray = toArray(specs);
   const colorSpec = specArray.find((s) => s?.['$']?.name === 'renk');
   const sizeSpec = specArray.find((s) => s?.['$']?.name === 'beden');
