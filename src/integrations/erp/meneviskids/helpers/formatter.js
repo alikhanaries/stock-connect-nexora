@@ -64,7 +64,8 @@ export const formatMeneviskidsProduct = async (
   sellerId,
   isImageUpdate = false,
   existingSkus = new Set(),
-  skipImages = false
+  skipImages = false,
+  sellerName
 ) => {
   if (!raw.length) return { products: [], categoryTrails: [] };
 
@@ -75,7 +76,7 @@ export const formatMeneviskidsProduct = async (
     const grandParentSku = (product.Product_code || '').trim();
     if (!grandParentSku) continue;
 
-    const brandName = (product.Brand || '').trim();
+    const brandName = sellerName || (product.Brand || '').trim();
     const categoryTrail = buildCategoryTrail(product);
     if (categoryTrail) categoryTrails.add(categoryTrail);
 
