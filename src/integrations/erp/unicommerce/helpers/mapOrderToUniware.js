@@ -1,3 +1,6 @@
+import { config } from '#root/src/config/config.js';
+
+const { STOCK_LOCATION } = config;
 const mapOrderToUniware = (order, productIdBySku = new Map()) => {
   const currency = order?.orderPaymentDetails?.currencyCode?.toUpperCase() || 'INR';
 
@@ -51,7 +54,7 @@ const mapOrderToUniware = (order, productIdBySku = new Map()) => {
 
       onHold: false,
       packetNumber: index + 1,
-      facilityCode: item.stockLocation?.name || '',
+      facilityCode: STOCK_LOCATION,
     })),
 
     taxExempted: false,
