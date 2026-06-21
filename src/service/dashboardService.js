@@ -651,6 +651,11 @@ export const getReturnsOverview = async (sellerId, period, { startDate, endDate,
     key: s.key ? formatLabel(s.key) : null,
   }));
 
+  const inProgressLabel = formatLabel('IN_PROGRESS');
+  if (!statusSummary.some((s) => s.key === inProgressLabel)) {
+    statusSummary.push({ key: inProgressLabel, value: 0 });
+  }
+
   const total = statusSummary.reduce((sum, s) => sum + (s.value || 0), 0);
 
   return { total, reasons, statusSummary };
