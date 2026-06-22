@@ -54,7 +54,12 @@ const mapOrderToUniware = (order, productIdBySku = new Map()) => {
         title: item.description || '',
         shippingMethodCode: 'STD',
         orderItemPrice: {
+          cashOnDeliveryCharges: 0,
           sellingPrice: item.unitPriceInclVat || 0,
+          shippingCharges: 0,
+          discount: 0,
+          totalPrice: item.lineTotalInclVat || 0,
+          transferPrice: item.unitPriceExclVat || 0,
           currency,
         },
 
@@ -96,7 +101,7 @@ const mapOrderToUniware = (order, productIdBySku = new Map()) => {
       gstin: '',
       additionalInfo: '',
     },
-    ['phone', 'pincode', 'state']
+    ['phone', 'pincode', 'state', 'returnReason', 'returnDate', 'returnAWB', 'returnShippingProvider']
   );
 };
 
