@@ -2427,7 +2427,7 @@ async function handleShipmentReturnStatusUpdate({ shipment, shipmentStatus, trac
 }
 export const getChannelEngineShipmentDetailsService = async (userId) => {
   const pageSize = 100; // ChannelEngine hard limit
-  const MAX_PAGES_PER_RUN = 7; // rate-limit safe
+  const MAX_PAGES_PER_RUN = 5; // rate-limit safe
   const DELAY_MS = 300;
 
   const baseUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`;
@@ -2488,8 +2488,8 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
   const totalPages = Math.ceil(totalCount / pageSize);
   const startPage = Math.max(1, totalPages - MAX_PAGES_PER_RUN + 1);
 
-  // ---- 2️ Fetch ONLY last N pages
-  for (let page = startPage; page <= totalPages; page++) {
+  // ---- 2️ Fetch pages from last to first
+  for (let page = totalPages; page >= startPage; page--) {
     const result = await safeFetch(`${baseUrl}&page=${page}&pageSize=${pageSize}`);
 
     if (!result) {
@@ -2505,7 +2505,7 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
 
     if (shipments.length) {
       try {
-        await createShipmentsFromChannelEngine(shipments, userId);
+        await createShipmentsFromChannelEngine(shipments, userId, page);
       } catch (err) {
         console.error(`Shipment creation failed on page ${page} (ignored):`, err.message);
       }
@@ -2517,7 +2517,7 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
   return { success: true };
 };
 
-export const createShipmentsFromChannelEngine = async (channelEngineShipments, userId) => {
+export const createShipmentsFromChannelEngine = async (channelEngineShipments, userId, page = '?') => {
   if (!Array.isArray(channelEngineShipments) || !channelEngineShipments.length) {
     console.log('No channel engine shipments found');
     return true;
@@ -2702,6 +2702,13 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
         }
       }
 
+      if (sellerLineMap.size === 0) {
+        console.log(
+          `[SKIP] No sellers resolved — MerchantShipmentNo=${ceShipment?.MerchantShipmentNo}, order.sellerIds=${JSON.stringify(order?.sellerIds)}`
+        );
+        continue;
+      }
+
       // ---- create shipment per seller
       for (const [sellerIdStr, sellerLines] of sellerLineMap.entries()) {
         const sellerId = new mongoose.Types.ObjectId(sellerIdStr);
@@ -2809,7 +2816,7 @@ export const createShipmentsFromChannelEngine = async (channelEngineShipments, u
       ordered: false,
     });
 
-    console.log('Bulk result:', {
+    console.log(`Bulk result (page ${page}):`, {
       inserted: result.upsertedCount,
       modified: result.modifiedCount,
     });

@@ -830,11 +830,22 @@ export const processOrders = async (orders, sellerId) => {
         const orderObjectId = orderIdMap.get(String(log.orderId));
         if (!orderObjectId) continue;
 
+        // ensure the OrderLog doc exists
+        orderLogsBulkOps.push({
+          updateOne: {
+            filter: { orderId: orderObjectId, sellerId: log.sellerId },
+            update: { $setOnInsert: { orderId: orderObjectId, sellerId: log.sellerId, details: [] } },
+            upsert: true,
+          },
+        });
+
+        // push detail only if this exact status+description combo isn't already recorded
         orderLogsBulkOps.push({
           updateOne: {
             filter: {
               orderId: orderObjectId,
               sellerId: log.sellerId,
+              details: { $not: { $elemMatch: { status: log.status, description: log.description } } },
             },
             update: {
               $push: {
@@ -844,12 +855,7 @@ export const processOrders = async (orders, sellerId) => {
                   createdAt: log.createdAt,
                 },
               },
-              $setOnInsert: {
-                orderId: orderObjectId,
-                sellerId: log.sellerId,
-              },
             },
-            upsert: true,
           },
         });
       }
