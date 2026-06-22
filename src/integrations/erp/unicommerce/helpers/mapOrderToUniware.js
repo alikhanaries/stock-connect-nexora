@@ -26,7 +26,7 @@ const mapOrderToUniware = (order, productIdBySku = new Map()) => {
       id: String(order._id),
       code: order.channelOrderNumber || String(order.orderId),
       orderDate: order.orderDate,
-      orderStatus: order.status === 'CREATED' ? 'CREATED' : 'PENDING_VERIFICATION',
+      orderStatus: 'CREATED',
       sla: new Date(new Date(order.orderDate).getTime() + 2 * 24 * 60 * 60 * 1000),
       priority: 0,
       paymentType: 'PREPAID',
@@ -43,7 +43,7 @@ const mapOrderToUniware = (order, productIdBySku = new Map()) => {
 
       orderItems: (order.orderSkuList?.skuList || []).map((item, index) => ({
         orderItemId: String(item.id),
-        status: item.status === 'CREATED' ? 'CREATED' : 'PENDING_VERIFICATION',
+        status: 'CREATED',
         productId: String(productIdBySku.get(item.merchantProductNo) || item.channelProductNo || ''),
         variantId: item.merchantProductNo || '',
         sku: item.merchantProductNo || '',
