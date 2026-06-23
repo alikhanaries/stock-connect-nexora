@@ -901,6 +901,8 @@ export const translateProductFieldValidator = validate(async (req) => {
       translateFields: translateFieldsSchema,
       enhanceImages: z.boolean().optional(),
       mapCategories: z.boolean().optional(),
+      validateColor: z.boolean().optional(),
+      validateGender: z.boolean().optional(),
     })
     .strict()
     .refine((b) => {
@@ -909,9 +911,11 @@ export const translateProductFieldValidator = validate(async (req) => {
       return (
         (Array.isArray(b.translateFields) && b.translateFields.length > 0) ||
         b.enhanceImages === true ||
-        b.mapCategories === true
+        b.mapCategories === true ||
+        b.validateColor === true ||
+        b.validateGender === true
       );
-    }, 'at least one of translateFields (non-empty), enhanceImages=true, or mapCategories=true must be provided');
+    }, 'at least one of translateFields (non-empty), enhanceImages=true, mapCategories=true, validateColor=true, or validateGender=true must be provided');
 
   bodySchema.parse(req.body);
 });

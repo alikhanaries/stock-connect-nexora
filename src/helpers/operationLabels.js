@@ -1,4 +1,5 @@
 import { SOURCE_FIELD_MAP, LANG_CODE_TO_NAME } from '#constants/translate.js';
+import { VALIDATE_FIELD_LABELS } from '#constants/validateField.js';
 
 const FIELD_LABELS = {
   name: 'Name',
@@ -27,3 +28,5 @@ export const buildTranslateLabel = (field, lang) => {
 
 export const CATEGORY_MAP_LABEL = 'Map Uncategorised SKUs';
 export const ENHANCE_IMAGES_LABEL = 'Upscale Images';
+export const buildValidateFieldLabel = (field) =>
+  VALIDATE_FIELD_LABELS[field] ?? `Validate ${humanizeFieldName(field)}`;

@@ -309,7 +309,7 @@ export const getCategoryMapProgress = (sellerId) => {
     total: p.total ?? 0,
     completed: p.completed ?? 0,
     updated: p.updated ?? 0,
-    percentage: p.total > 0 ? Math.round((p.completed / p.total) * 100) : 0,
+    percentage: p.status === 'done' ? 100 : p.total > 0 ? Math.round((p.completed / p.total) * 100) : 0,
     retryInfo: p.retryInfo ?? null,
     error: p.error ?? null,
   };
