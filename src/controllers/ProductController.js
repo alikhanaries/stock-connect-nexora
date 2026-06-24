@@ -888,19 +888,15 @@ const handleResumeAction = async (
       );
       const cleanupDelayMs = translateHasPause || categoryHasPause || validateHasPause ? 30 * 60_000 : 60_000;
       setTimeout(() => {
-        if (resumeTranslateOps.length && !enrichInProgress.has(sellerId)) {
-          const stillPaused = listOperationStatuses(sellerId).some((o) => o.status === 'paused');
-          if (!stillPaused) clearProgress(sellerId);
-        }
-        if (resumeCategory && !enrichInProgress.has(sellerId)) {
-          const stillPausedCat = getCategoryMapProgress(sellerId)?.status === 'paused';
-          if (!stillPausedCat) clearCategoryMapProgress(sellerId);
-        }
-        if (!enrichInProgress.has(sellerId)) {
-          for (const f of resumeValidateFields) {
-            if (getValidateFieldProgress(sellerId, f)?.status !== 'paused') clearValidateFieldProgress(sellerId, f);
-          }
-        }
+        if (enrichInProgress.has(sellerId)) return;
+        const jobStillPaused =
+          (resumeTranslateOps.length && listOperationStatuses(sellerId).some((o) => o.status === 'paused')) ||
+          (resumeCategory && getCategoryMapProgress(sellerId)?.status === 'paused') ||
+          resumeValidateFields.some((f) => getValidateFieldProgress(sellerId, f)?.status === 'paused');
+        if (jobStillPaused) return;
+        if (resumeTranslateOps.length) clearProgress(sellerId);
+        if (resumeCategory) clearCategoryMapProgress(sellerId);
+        for (const f of resumeValidateFields) clearValidateFieldProgress(sellerId, f);
       }, cleanupDelayMs);
     }
   })();
@@ -1120,6 +1116,10 @@ export const translateProductField = async (req, res) => {
       return failResponse(res, req.locale.NO_PRODUCTS_TO_ENRICH, 404);
     }
 
+    clearProgress(sellerId);
+    clearCategoryMapProgress(sellerId);
+    for (const field of VALIDATE_FIELDS) clearValidateFieldProgress(sellerId, field);
+
     if (wantTranslate) setPendingProgress(sellerId, translateFields);
     if (wantMapCategories) setPendingCategoryMapProgress(sellerId);
     for (const field of wantValidateFields) setPendingValidateFieldProgress(sellerId, field);
@@ -1173,19 +1173,15 @@ export const translateProductField = async (req, res) => {
         );
         const cleanupDelayMs = translateHasPause || categoryHasPause || validateHasPause ? 30 * 60_000 : 60_000;
         setTimeout(() => {
-          if (wantTranslate && !enrichInProgress.has(sellerId)) {
-            const stillPaused = listOperationStatuses(sellerId).some((o) => o.status === 'paused');
-            if (!stillPaused) clearProgress(sellerId);
-          }
-          if (wantMapCategories && !enrichInProgress.has(sellerId)) {
-            const stillPausedCat = getCategoryMapProgress(sellerId)?.status === 'paused';
-            if (!stillPausedCat) clearCategoryMapProgress(sellerId);
-          }
-          if (!enrichInProgress.has(sellerId)) {
-            for (const f of wantValidateFields) {
-              if (getValidateFieldProgress(sellerId, f)?.status !== 'paused') clearValidateFieldProgress(sellerId, f);
-            }
-          }
+          if (enrichInProgress.has(sellerId)) return;
+          const jobStillPaused =
+            (wantTranslate && listOperationStatuses(sellerId).some((o) => o.status === 'paused')) ||
+            (wantMapCategories && getCategoryMapProgress(sellerId)?.status === 'paused') ||
+            wantValidateFields.some((f) => getValidateFieldProgress(sellerId, f)?.status === 'paused');
+          if (jobStillPaused) return;
+          if (wantTranslate) clearProgress(sellerId);
+          if (wantMapCategories) clearCategoryMapProgress(sellerId);
+          for (const f of wantValidateFields) clearValidateFieldProgress(sellerId, f);
         }, cleanupDelayMs);
       }
     })();
