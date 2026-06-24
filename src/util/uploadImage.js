@@ -29,8 +29,8 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
     );
     return true;
   } catch (error) {
-    console.error(`[ERROR] upload failed for: ${imageUrl}`);
-    console.error(error.message);
+    console.error(`[ERROR] upload failed url=${imageUrl} key=${fileKey}`);
+    console.error(error.stack || error.message);
     return null;
   }
 };

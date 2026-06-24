@@ -12,7 +12,9 @@ import {
   setOperationRetry,
   setUpdatedProducts,
   isOperationCancelled,
+  isOperationStopped,
   setOperationAbortController,
+  getProgress,
 } from '#helpers/geminiTranslate.js';
 import { SOURCE_FIELD_MAP } from '#constants/translate.js';
 import { buildFilter } from '#util/buildFilter.js';
@@ -39,11 +41,20 @@ export const translateProductField = async ({
   search,
   productId,
   emptyValuesMessage,
+  resumeMode = false,
+  // retryMode = "start from beginning" for the listed ops. Doesn't apply the
+  // already-translated skip filter (so every in-scope product re-translates),
+  // and merges into the existing operations[] without wiping sibling ops.
+  retryMode = false,
 }) => {
   const fields = [...new Set(translate.map((t) => t.field))];
   const sourceFields = [...new Set(fields.map(getSourceField))];
+  const selectFields = resumeMode ? [...new Set([...sourceFields, ...fields])] : sourceFields;
+  const priorUpdatedBaseline = resumeMode ? (getProgress(sellerId)?.updatedProducts ?? 0) : 0;
 
-  console.log(`[TranslateService] Starting — sellerId: ${sellerId}, fields: ${fields.join(', ')}`);
+  console.log(
+    `[TranslateService] Starting — sellerId: ${sellerId}, fields: ${fields.join(', ')}${resumeMode ? ' [resume]' : ''}`
+  );
 
   const scopeFilter = buildFilter({ rawFilters: filters, sellerId, search, buildCondition });
   if (productId) scopeFilter._id = new mongoose.Types.ObjectId(productId);
@@ -59,7 +70,7 @@ export const translateProductField = async ({
 
   // Query using source fields so nameAr queries on name, descriptionAr queries on description
   const products = await Product.find(finalFilter)
-    .select(['_id', ...sourceFields].join(' '))
+    .select(['_id', ...selectFields].join(' '))
     .lean();
 
   console.log(`[TranslateService] Found ${products.length}/${totalProducts} products with source values`);
@@ -81,6 +92,13 @@ export const translateProductField = async ({
 
       // Skip numeric values — no translation needed
       if (/^\d+(\.\d+)?$/.test(text.trim())) continue;
+      if (resumeMode) {
+        const targetValue = product[field];
+        if (typeof targetValue === 'string' && targetValue.trim() && isAlreadyInLang(targetValue, lang)) {
+          skipped++;
+          continue;
+        }
+      }
 
       if (isAlreadyInLang(text, lang)) {
         console.log(
@@ -106,36 +124,41 @@ export const translateProductField = async ({
       lang,
       total: tasksByOperation[`${field}:${lang}`]?.tasks.length ?? 0,
     })),
-    { totalProducts }
+    { totalProducts, preserveCompleted: resumeMode, retryMode }
   );
 
   const updateMap = {};
 
   for (const { field, lang } of translate) {
-    // Skip ops the user cancelled while the prior op was running (or before this op started).
-    if (isOperationCancelled(sellerId, field, lang)) {
-      console.log(`[TranslateService] Skipping cancelled op — field: "${field}", lang: "${lang}"`);
+    // Skip ops the user already stopped (cancel or pause) before we reached them in this loop.
+    if (isOperationStopped(sellerId, field, lang)) {
+      const reason = isOperationCancelled(sellerId, field, lang) ? 'cancelled' : 'paused';
+      console.log(`[TranslateService] Skipping ${reason} op — field: "${field}", lang: "${lang}"`);
       continue;
     }
 
     const tasks = tasksByOperation[`${field}:${lang}`]?.tasks ?? [];
 
     if (!tasks.length) {
-      failOperation(sellerId, field, lang, new Error(emptyValuesMessage));
+      if (resumeMode) {
+        finishOperation(sellerId, field, lang);
+      } else {
+        failOperation(sellerId, field, lang, new Error(emptyValuesMessage));
+      }
       continue;
     }
 
     console.log(`[TranslateService] Translating ${tasks.length} texts — field: "${field}", lang: "${lang}"`);
     startOperation(sellerId, field, lang);
 
-    // One AbortController per op so cancel can interrupt the in-flight Gemini call
+    // One AbortController per op so cancel/pause can interrupt the in-flight Gemini
     // immediately instead of waiting up to ~90s for the request to time out.
     const ac = new AbortController();
     setOperationAbortController(sellerId, field, lang, ac);
 
     const persistChunk = async (chunkTexts, startIndex) => {
-      // Discard chunk writes if cancel arrived between the Gemini call and the DB write —
-      // we don't want a cancelled op to keep producing translated rows.
+      // Discard chunk writes only for CANCEL — for pause we want the in-flight chunk
+      // to be persisted so resume can skip those products via the target-populated
       if (isOperationCancelled(sellerId, field, lang)) return;
       const chunkOps = [];
       chunkTexts.forEach((translated, i) => {
@@ -153,24 +176,25 @@ export const translateProductField = async ({
         });
       });
       if (chunkOps.length) await Product.bulkWrite(chunkOps);
-      setUpdatedProducts(sellerId, Object.keys(updateMap).length);
+      if (chunkOps.length) addProgress(sellerId, field, lang, chunkOps.length);
+      setUpdatedProducts(sellerId, priorUpdatedBaseline + Object.keys(updateMap).length);
     };
 
     try {
       await translateBatch(
         tasks.map((t) => t.text),
         lang,
-        (count) => addProgress(sellerId, field, lang, count),
+        () => {},
         (retryInfo) => setOperationRetry(sellerId, field, lang, retryInfo),
         persistChunk,
-        () => isOperationCancelled(sellerId, field, lang),
+        () => isOperationStopped(sellerId, field, lang),
         ac.signal
       );
       // If the loop exited because of cancel, leave the helper's 'cancelled' status alone.
-      if (isOperationCancelled(sellerId, field, lang)) continue;
+      if (isOperationStopped(sellerId, field, lang)) continue;
       finishOperation(sellerId, field, lang);
     } catch (error) {
-      if (isOperationCancelled(sellerId, field, lang)) continue;
+      if (isOperationStopped(sellerId, field, lang)) continue;
       const detail = (error.geminiError?.message ?? error.message ?? 'Unknown error').split('\n')[0].trim();
       console.error(`[TranslateService] Batch failed — field: "${field}", lang: "${lang}": ${detail}`);
       failOperation(sellerId, field, lang, error);
@@ -180,7 +204,7 @@ export const translateProductField = async ({
   }
 
   const updatedCount = Object.keys(updateMap).length;
-  setUpdatedProducts(sellerId, updatedCount);
+  setUpdatedProducts(sellerId, priorUpdatedBaseline + updatedCount);
 
   console.log(`[TranslateService] Done — updated: ${updatedCount}, skipped: ${skipped}, failed: ${failedTasks}`);
   const result = {

@@ -186,7 +186,6 @@ export const getAllUserChannels = async (sellerId, query) => {
     if (query?.status) {
       appliedFilters.status = query?.status;
     }
-    console.log(sellerId, query);
 
     const baseMatch = {
       sellerId: new ObjectId(sellerId),
