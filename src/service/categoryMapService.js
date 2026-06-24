@@ -10,6 +10,7 @@ import {
   isCategoryMapCancelled,
   isCategoryMapStopped,
   setCategoryMapAbortController,
+  getCategoryMapProgress,
 } from '#helpers/geminiCategoryMap.js';
 import { loadChannelCategories, humanizeCategoryPath } from '#utils/channelCategoriesLoader.js';
 import { buildFilter } from '#util/buildFilter.js';
@@ -51,12 +52,12 @@ export const mapCategoryTrail = async ({
     ? { $and: [scopeFilter, requirementClause] }
     : { ...scopeFilter, ...requirementClause };
 
-  initCategoryMapProgress(sellerId, 0);
+  const priorState = resumeMode ? getCategoryMapProgress(sellerId) : null;
   const remainingCount = await Product.countDocuments(finalFilter);
   if (!remainingCount) {
     if (resumeMode) {
       finishCategoryMapProgress(sellerId);
-      return { total: 0, updated: 0, skipped: 0 };
+      return { total: priorState?.total ?? 0, updated: priorState?.updated ?? 0, skipped: 0 };
     }
     initCategoryMapProgress(sellerId, 0, { retryMode });
     finishCategoryMapProgress(sellerId);

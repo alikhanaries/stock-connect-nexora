@@ -690,16 +690,20 @@ productsRouter.patch(
  *         target language.
  *       - `mapCategories: true` → classify products against the channel categories CSV
  *         (CHANNEL_CATEGORIES_CSV env) using Gemini and write the humanized path to `categoryTrail`.
+ *       - `validateColor: true` → use the product image + name/description/seller-provided color to
+ *         pick a canonical color name and write it to `color`.
+ *       - `validateGender: true` → use the product image + name/description to pick one of
+ *         `Male` / `Female` / `Unisex` and write it to `gender`.
  *       - `enhanceImages: true` → reserved; not yet implemented; silently skipped.
  *
- *       At least one of the three must be provided. Runs in the background — poll
+ *       At least one of the above must be provided. Runs in the background — poll
  *       `/products/progress-status?type=ai-enrich` for status.
  *
  *       **action: "cancel"**
  *       - Stops in-flight ops cooperatively (workers check between chunks; an in-flight chunk may
  *         finish its current Gemini call before the check fires).
- *       - Scope the cancel via `translateFields` (per-op) and/or `mapCategories: true`. Omit both
- *         to cancel the whole job.
+ *       - Scope the cancel via `translateFields` (per-op), `mapCategories: true`, `validateColor: true`,
+ *         and/or `validateGender: true`. Omit all to cancel the whole job.
  *       - Returns `{ action: "cancel", affected: [...], skipped: [...] }`. Ops that were already
  *         terminal (`done`/`error`/`cancelled`) appear under `skipped` with `reason: not_cancellable`.
  *         Requested ops that aren't part of the current job appear under `skipped` with `reason: not_in_job`.
@@ -728,13 +732,14 @@ productsRouter.patch(
  *             properties:
  *               action:
  *                 type: string
- *                 enum: [start, cancel, pause, resume]
+ *                 enum: [start, cancel, pause, resume, retry]
  *                 default: start
  *                 description: |
  *                   `start` (default) — kick off enrichment.
- *                   `cancel` — terminal stop. Status → cancelled, in-flight chunks discarded. Scope via translateFields/mapCategories, omit both for whole job.
+ *                   `cancel` — terminal stop. Status → cancelled, in-flight chunks discarded. Scope via translateFields/mapCategories/validateColor/validateGender, omit all for whole job.
  *                   `pause`  — non-terminal stop. Status → paused, completed count + in-flight chunks preserved. Same scoping rules.
  *                   `resume` — re-runs paused ops, skipping products whose target field is already populated. Same scoping rules. 409 if a job is still draining.
+ *                   `retry`  — re-run errored/cancelled/done/paused ops from scratch. Same scoping rules.
  *               translateFields:
  *                 type: array
  *                 items:
@@ -745,6 +750,14 @@ productsRouter.patch(
  *                     lang:  { type: string, example: ar }
  *               enhanceImages: { type: boolean, example: true }
  *               mapCategories: { type: boolean, example: true }
+ *               validateColor:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Validate and assign the `color` field by analysing the product image + color/description text.
+ *               validateGender:
+ *                 type: boolean
+ *                 example: true
+ *                 description: Validate and assign the `gender` field (Male/Female/Unisex) by analysing the product image + description.
  *           examples:
  *             startTranslateAndMap:
  *               summary: Start translate + map categories
@@ -753,6 +766,11 @@ productsRouter.patch(
  *                   - { field: nameAr, lang: ar }
  *                   - { field: descriptionAr, lang: ar }
  *                 mapCategories: true
+ *             startValidateColorAndGender:
+ *               summary: Validate color + gender from product image
+ *               value:
+ *                 validateColor: true
+ *                 validateGender: true
  *             cancelTwoOpsAndCategoryMap:
  *               summary: Cancel two translate ops and the category-map op
  *               value:
