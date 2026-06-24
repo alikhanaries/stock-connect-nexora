@@ -1,8 +1,6 @@
 import { ERP_SYNC_BRAND_SLUGS } from '#constants/common.js';
 import Seller from '#models/Seller.js';
 import { entegraPriceSync } from '#root/src/integrations/erp/entegra/service/priceService.js';
-import { kipPriceSync } from '#root/src/integrations/erp/gurmenKip/services/priceService.js';
-import { ramseyPriceSync } from '#root/src/integrations/erp/gurmenRamsey/services/priceService.js';
 import { syncShopifyExquisePrice } from '#root/src/integrations/erp/shopify/exquise/service/priceService.js';
 import { getShopifyConfig as getExquiseShopifyConfig } from '#root/src/integrations/erp/shopify/exquise/service/shopifyService.js';
 import { syncShopifyCatchPrice } from '#root/src/integrations/erp/shopify/catch/service/priceService.js';
@@ -11,8 +9,9 @@ import { syncPriceToChannelEngine } from '#service/priceService.js';
 
 const ERP_PRICE_SYNCS = [
   { name: 'entegra', slugs: ERP_SYNC_BRAND_SLUGS.entegra, sync: entegraPriceSync },
-  { name: 'gurmen_kip', slugs: ERP_SYNC_BRAND_SLUGS.kip, sync: kipPriceSync },
-  { name: 'gurmen_ramsey', slugs: ERP_SYNC_BRAND_SLUGS.ramsey, sync: ramseyPriceSync },
+  // Temporarily disabled from the cron sweep
+  // { name: 'gurmen_kip', slugs: ERP_SYNC_BRAND_SLUGS.kip, sync: kipPriceSync },
+  // { name: 'gurmen_ramsey', slugs: ERP_SYNC_BRAND_SLUGS.ramsey, sync: ramseyPriceSync },
   {
     name: 'exquise',
     slugs: ERP_SYNC_BRAND_SLUGS.exquise,
