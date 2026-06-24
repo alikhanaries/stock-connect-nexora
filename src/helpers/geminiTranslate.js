@@ -482,7 +482,7 @@ export const getProgress = (sellerId) => {
       status: o.status,
       error: o.error ?? null,
       retryInfo: o.retryInfo ?? null,
-      percentage: o.total > 0 ? Math.round((o.completed / o.total) * 100) : 0,
+      percentage: o.status === 'done' ? 100 : o.total > 0 ? Math.round((o.completed / o.total) * 100) : 0,
     })),
   };
 };
