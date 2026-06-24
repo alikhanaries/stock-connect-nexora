@@ -114,7 +114,7 @@ export const fetchOrders = async (sellerId, query = {}) => {
 export const cancelOrders = async (sellerId, body) => {
   try {
     const { orderId, orderItems } = body;
-    const order = await Order.findOne({ orderId });
+    const order = ObjectId.isValid(orderId) ? await Order.findOne({ _id: orderId, sellerId }) : null;
     if (!order) {
       return {
         status: 'FAILED',
