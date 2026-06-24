@@ -1493,8 +1493,8 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.size || '',
         product.vatRateType || '',
         product.volumetricWeightCm || 0,
-        product.namshiPrice || 0,
         product.noonPrice || 0,
+        product.namshiPrice || 0,
         product.amazonPrice || 0,
         // Amazon marketplace listing attributes
         product.amazon?.variationThemeName || '',
