@@ -102,6 +102,21 @@ export const exportUserChannelProductsToCSV = async (filters, sellerId, channelI
         product.amazon?.listPriceCurrency || '',
         product.amazon?.dangerousGoodsRegulations || '',
         product.amazon?.outerMaterial || '',
+        product.amazon?.departmentName || '',
+        product.amazon?.sizeSystem || '',
+        product.amazon?.sizeClass || '',
+        product.amazon?.bodyType || '',
+        product.amazon?.heightType || '',
+        product.amazon?.fabricType || '',
+        product.amazon?.specialSize || '',
+        product.amazon?.weaveType || '',
+        product.amazon?.careInstructions || '',
+        product.amazon?.shippingTemplateSA || '',
+        product.amazon?.fitType || '',
+        product.amazon?.riseStyle || '',
+        product.amazon?.closureType || '',
+        product.amazon?.occasion || '',
+        product.amazon?.subtype || '',
       ];
 
       if (!res.write(escapeCsv(row) + '\n')) {
@@ -202,6 +217,21 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
         product.amazon?.listPriceCurrency || '',
         product.amazon?.dangerousGoodsRegulations || '',
         product.amazon?.outerMaterial || '',
+        product.amazon?.departmentName || '',
+        product.amazon?.sizeSystem || '',
+        product.amazon?.sizeClass || '',
+        product.amazon?.bodyType || '',
+        product.amazon?.heightType || '',
+        product.amazon?.fabricType || '',
+        product.amazon?.specialSize || '',
+        product.amazon?.weaveType || '',
+        product.amazon?.careInstructions || '',
+        product.amazon?.shippingTemplateSA || '',
+        product.amazon?.fitType || '',
+        product.amazon?.riseStyle || '',
+        product.amazon?.closureType || '',
+        product.amazon?.occasion || '',
+        product.amazon?.subtype || '',
       ];
 
       if (!res.write(escapeCsv(row) + '\n')) {

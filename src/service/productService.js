@@ -1493,8 +1493,8 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.size || '',
         product.vatRateType || '',
         product.volumetricWeightCm || 0,
-        product.namshiPrice || 0,
         product.noonPrice || 0,
+        product.namshiPrice || 0,
         product.amazonPrice || 0,
         // Amazon marketplace listing attributes
         product.amazon?.variationThemeName || '',
@@ -1520,6 +1520,21 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.amazon?.listPriceCurrency || '',
         product.amazon?.dangerousGoodsRegulations || '',
         product.amazon?.outerMaterial || '',
+        product.amazon?.departmentName || '',
+        product.amazon?.sizeSystem || '',
+        product.amazon?.sizeClass || '',
+        product.amazon?.bodyType || '',
+        product.amazon?.heightType || '',
+        product.amazon?.fabricType || '',
+        product.amazon?.specialSize || '',
+        product.amazon?.weaveType || '',
+        product.amazon?.careInstructions || '',
+        product.amazon?.shippingTemplateSA || '',
+        product.amazon?.fitType || '',
+        product.amazon?.riseStyle || '',
+        product.amazon?.closureType || '',
+        product.amazon?.occasion || '',
+        product.amazon?.subtype || '',
       ];
 
       // Handle backpressure: if buffer is full, wait for drain event

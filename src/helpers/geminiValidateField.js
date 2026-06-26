@@ -1,17 +1,23 @@
 import { GoogleGenAI } from '@google/genai';
 import { config } from '#config/config.js';
 import {
-  buildCategoryMapPrompt,
-  CATEGORY_MAP_SYSTEM_INSTRUCTION,
-} from '#helpers/geminiPromptBuilders/categoryMapPrompt.js';
+  buildValidateFieldPrompt,
+  VALIDATE_FIELD_SYSTEM_INSTRUCTION,
+} from '#helpers/geminiPromptBuilders/validateFieldPrompt.js';
+import {
+  VALIDATE_BATCH_SIZE,
+  VALIDATE_CHUNK_CONCURRENCY,
+  VALIDATE_MAX_RETRIES,
+  VALIDATE_REQUEST_TIMEOUT_MS,
+  VALIDATE_MAX_OUTPUT_TOKENS,
+  MAX_IMAGE_BYTES,
+  DEFAULT_IMAGE_MIME,
+  IMAGE_MIME_BY_EXTENSION,
+} from '#constants/validateField.js';
 
 const PROVIDER = (config.GEMINI_PROVIDER || 'gemini').toLowerCase();
 const isVertex = PROVIDER === 'vertex';
 const PROVIDER_LABEL = isVertex ? 'Vertex' : 'Gemini';
-
-const CATEGORY_BATCH_SIZE = 20;
-const CHUNK_CONCURRENCY = 3;
-const MAX_RETRIES = 6;
 
 let _client = null;
 
@@ -75,7 +81,7 @@ const formatGeminiError = (raw) => {
   return parts.length ? parts.join(' | ') : raw;
 };
 
-const withTimeout = (promise, ms = 120000) =>
+const withTimeout = (promise, ms = VALIDATE_REQUEST_TIMEOUT_MS) =>
   Promise.race([
     promise,
     new Promise((_, rej) => setTimeout(() => rej(new Error(`[AI] Request timed out after ${ms}ms`)), ms)),
@@ -83,7 +89,7 @@ const withTimeout = (promise, ms = 120000) =>
 
 const isAbortError = (error) => error?.name === 'AbortError' || error?.message?.toLowerCase().includes('aborted');
 
-const callWithRetry = async (fn, retries = MAX_RETRIES, onRetry, label = PROVIDER_LABEL, signal) => {
+const callWithRetry = async (fn, retries = VALIDATE_MAX_RETRIES, onRetry, label = PROVIDER_LABEL, signal) => {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       if (signal?.aborted) {
@@ -136,20 +142,18 @@ const callWithRetry = async (fn, retries = MAX_RETRIES, onRetry, label = PROVIDE
   }
 };
 
-// ---------------- Progress store ----------------
 const progressStore = new Map();
-const key = (sellerId) => String(sellerId);
+const key = (sellerId, field) => `${sellerId}:${field}`;
 
-export const clearCategoryMapProgress = (sellerId) => {
-  progressStore.delete(key(sellerId));
+export const clearValidateFieldProgress = (sellerId, field) => {
+  progressStore.delete(key(sellerId, field));
 };
 
-export const hasCategoryMapEntry = (sellerId) => progressStore.has(key(sellerId));
+export const hasValidateFieldEntry = (sellerId, field) => progressStore.has(key(sellerId, field));
 
-// "pending" mirrors translate-op semantics so the UI renders "Queued" for the
-// category-map row while it waits for the translate phase to finish.
-export const setPendingCategoryMapProgress = (sellerId) =>
-  progressStore.set(key(sellerId), {
+export const setPendingValidateFieldProgress = (sellerId, field) =>
+  progressStore.set(key(sellerId, field), {
+    field,
     status: 'pending',
     total: 0,
     completed: 0,
@@ -159,10 +163,16 @@ export const setPendingCategoryMapProgress = (sellerId) =>
     abortController: null,
   });
 
-export const initCategoryMapProgress = (sellerId, total, { preserveCompleted = false, retryMode = false } = {}) => {
-  const prior = progressStore.get(key(sellerId));
+export const initValidateFieldProgress = (
+  sellerId,
+  field,
+  total,
+  { preserveCompleted = false, retryMode = false } = {}
+) => {
+  const prior = progressStore.get(key(sellerId, field));
   if (retryMode) {
-    progressStore.set(key(sellerId), {
+    progressStore.set(key(sellerId, field), {
+      field,
       status: 'running',
       total,
       completed: 0,
@@ -179,7 +189,8 @@ export const initCategoryMapProgress = (sellerId, total, { preserveCompleted = f
   const priorCompleted = prior?.completed ?? 0;
   const priorUpdated = prior?.updated ?? 0;
   const priorTotal = prior?.total ?? 0;
-  progressStore.set(key(sellerId), {
+  progressStore.set(key(sellerId, field), {
+    field,
     status: wasCancelled ? 'cancelled' : 'running',
     total: preserveCompleted ? priorTotal : total,
     completed: preserveCompleted ? priorCompleted : 0,
@@ -192,24 +203,23 @@ export const initCategoryMapProgress = (sellerId, total, { preserveCompleted = f
   });
 };
 
-export const setCategoryMapAbortController = (sellerId, ac) => {
-  const p = progressStore.get(key(sellerId));
+export const setValidateFieldAbortController = (sellerId, field, ac) => {
+  const p = progressStore.get(key(sellerId, field));
   if (p) p.abortController = ac ?? null;
 };
 
-export const isCategoryMapCancelled = (sellerId) => {
-  const p = progressStore.get(key(sellerId));
+export const isValidateFieldCancelled = (sellerId, field) => {
+  const p = progressStore.get(key(sellerId, field));
   return p?.cancelRequested === true;
 };
 
-export const isCategoryMapStopped = (sellerId) => {
-  const p = progressStore.get(key(sellerId));
+export const isValidateFieldStopped = (sellerId, field) => {
+  const p = progressStore.get(key(sellerId, field));
   return p?.cancelRequested === true || p?.pauseRequested === true;
 };
 
-// Returns the previous status if a cancel actually happened, else null.
-export const cancelCategoryMap = (sellerId) => {
-  const p = progressStore.get(key(sellerId));
+export const cancelValidateField = (sellerId, field) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return null;
   if (['done', 'error', 'cancelled'].includes(p.status)) return null;
   const previous = p.status;
@@ -226,8 +236,8 @@ export const cancelCategoryMap = (sellerId) => {
   return previous;
 };
 
-export const pauseCategoryMap = (sellerId) => {
-  const p = progressStore.get(key(sellerId));
+export const pauseValidateField = (sellerId, field) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return null;
   if (['done', 'error', 'cancelled', 'paused'].includes(p.status)) return null;
   const previous = p.status;
@@ -242,19 +252,20 @@ export const pauseCategoryMap = (sellerId) => {
   return previous;
 };
 
-export const resumeCategoryMap = (sellerId) => {
-  const p = progressStore.get(key(sellerId));
+export const resumeValidateField = (sellerId, field) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return null;
   if (p.status !== 'paused') return null;
   p.pauseRequested = false;
   p.status = 'pending';
   return 'paused';
 };
-const RETRIABLE_CAT_STATUSES = new Set(['error', 'cancelled', 'paused', 'done']);
-export const retryCategoryMap = (sellerId) => {
-  const p = progressStore.get(key(sellerId));
+
+const RETRIABLE_STATUSES = new Set(['error', 'cancelled', 'paused', 'done']);
+export const retryValidateField = (sellerId, field) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return null;
-  if (!RETRIABLE_CAT_STATUSES.has(p.status)) return null;
+  if (!RETRIABLE_STATUSES.has(p.status)) return null;
   const previous = p.status;
   p.completed = 0;
   p.updated = 0;
@@ -267,23 +278,23 @@ export const retryCategoryMap = (sellerId) => {
   return previous;
 };
 
-export const addCategoryMapProgress = (sellerId, completedDelta, updatedDelta = 0) => {
-  const p = progressStore.get(key(sellerId));
+export const addValidateFieldProgress = (sellerId, field, completedDelta, updatedDelta = 0) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return;
   p.completed += completedDelta;
   p.updated += updatedDelta;
 };
 
-export const setCategoryMapRetry = (sellerId, retryInfo) => {
-  const p = progressStore.get(key(sellerId));
+export const setValidateFieldRetry = (sellerId, field, retryInfo) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return;
   if (p.cancelRequested || p.status === 'cancelled') return;
   if (p.pauseRequested || p.status === 'paused') return;
   p.retryInfo = retryInfo || null;
 };
 
-export const failCategoryMapProgress = (sellerId, error) => {
-  const p = progressStore.get(key(sellerId));
+export const failValidateFieldProgress = (sellerId, field, error) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return;
   if (p.status === 'cancelled' || p.cancelRequested) return;
   if (p.status === 'paused' || p.pauseRequested) return;
@@ -294,17 +305,18 @@ export const failCategoryMapProgress = (sellerId, error) => {
   p.error = { message: raw.split('\n')[0].split('. ')[0].trim() };
 };
 
-export const finishCategoryMapProgress = (sellerId) => {
-  const p = progressStore.get(key(sellerId));
+export const finishValidateFieldProgress = (sellerId, field) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return;
   if (!['error', 'cancelled', 'paused'].includes(p.status)) p.status = 'done';
   p.abortController = null;
 };
 
-export const getCategoryMapProgress = (sellerId) => {
-  const p = progressStore.get(key(sellerId));
+export const getValidateFieldProgress = (sellerId, field) => {
+  const p = progressStore.get(key(sellerId, field));
   if (!p) return null;
   return {
+    field: p.field,
     status: p.status,
     total: p.total ?? 0,
     completed: p.completed ?? 0,
@@ -315,19 +327,54 @@ export const getCategoryMapProgress = (sellerId) => {
   };
 };
 
-// ---------------- Gemini call ----------------
-const classifyChunk = async (chunk, allowedPaths, pathSet, onRetry, abortSignal) => {
-  const prompt = buildCategoryMapPrompt(chunk, allowedPaths);
+const guessMimeFromUrl = (url) => {
+  const path = url.split('?')[0].toLowerCase();
+  const dot = path.lastIndexOf('.');
+  if (dot === -1) return DEFAULT_IMAGE_MIME;
+  return IMAGE_MIME_BY_EXTENSION[path.slice(dot)] ?? DEFAULT_IMAGE_MIME;
+};
+
+const fetchImageAsInlinePart = async (url, signal) => {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') || '';
+    const mimeType = contentType.startsWith('image/') ? contentType.split(';')[0].trim() : guessMimeFromUrl(url);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length || buf.length > MAX_IMAGE_BYTES) return null;
+    return { inlineData: { mimeType, data: buf.toString('base64') } };
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+    return null;
+  }
+};
+
+const validateChunk = async (chunk, field, fieldConfig, onRetry, abortSignal) => {
   const client = getAIClient();
+
+  const imageParts = await Promise.all(
+    chunk.map((p) => (p.imageUrl ? fetchImageAsInlinePart(p.imageUrl, abortSignal) : Promise.resolve(null)))
+  );
+
+  const enriched = chunk.map((p, i) => ({ ...p, hasImage: Boolean(imageParts[i]) }));
+  const promptText = buildValidateFieldPrompt(enriched, field, fieldConfig);
+
+  const parts = [{ text: promptText }];
+  imageParts.forEach((part, i) => {
+    if (!part) return;
+    parts.push({ text: `[image ${i}]` });
+    parts.push(part);
+  });
 
   return callWithRetry(
     async () => {
       const response = await client.models.generateContent({
         model: config.GEMINI_MODEL,
-        contents: prompt,
+        contents: [{ role: 'user', parts }],
         config: {
-          maxOutputTokens: 16384,
-          systemInstruction: CATEGORY_MAP_SYSTEM_INSTRUCTION,
+          maxOutputTokens: VALIDATE_MAX_OUTPUT_TOKENS,
+          systemInstruction: VALIDATE_FIELD_SYSTEM_INSTRUCTION,
           ...(abortSignal ? { abortSignal } : {}),
         },
       });
@@ -368,59 +415,58 @@ const classifyChunk = async (chunk, allowedPaths, pathSet, onRetry, abortSignal)
         if (typeof v !== 'string') return null;
         const trimmed = v.trim();
         if (!trimmed) return null;
-        // enforce that AI returned a value from the allowed list
-        if (!pathSet.has(trimmed)) return null;
-        return trimmed;
+        const normalized = fieldConfig.normalize ? fieldConfig.normalize(trimmed) : trimmed;
+        if (!normalized) return null;
+        if (fieldConfig.allowedSet && !fieldConfig.allowedSet.has(normalized)) return null;
+        return normalized;
       });
 
       const got = result.filter((v) => v !== null).length;
       if (got === 0) {
-        const err = new Error(`AI response had no usable category matches (expected ${chunk.length})${reasonHint}`);
+        const err = new Error(`AI response had no usable ${field} values (expected ${chunk.length})${reasonHint}`);
         err.retryable = true;
         throw err;
       }
       if (got < chunk.length) {
-        console.warn(`[AI] Partial response: ${got}/${chunk.length} products classified${reasonHint}`);
+        console.warn(`[AI] Partial response: ${got}/${chunk.length} ${field} values returned${reasonHint}`);
       }
       return result;
     },
-    MAX_RETRIES,
+    VALIDATE_MAX_RETRIES,
     onRetry,
     PROVIDER_LABEL,
     abortSignal
   );
 };
 
-export const classifyProductsBatch = async (
+export const classifyValidateBatch = async (
   products,
-  allowedPaths,
-  pathSet,
+  field,
+  fieldConfig,
   onChunk,
   onRetry,
   isCancelled,
   abortSignal
 ) => {
   const chunks = [];
-  for (let i = 0; i < products.length; i += CATEGORY_BATCH_SIZE) {
-    chunks.push(products.slice(i, i + CATEGORY_BATCH_SIZE));
+  for (let i = 0; i < products.length; i += VALIDATE_BATCH_SIZE) {
+    chunks.push(products.slice(i, i + VALIDATE_BATCH_SIZE));
   }
 
   console.log(
-    `[AI] Provider: ${PROVIDER_LABEL} | Classifying ${products.length} products against ${allowedPaths.length} categories in ${chunks.length} chunk(s), concurrency: ${CHUNK_CONCURRENCY}`
+    `[AI] Provider: ${PROVIDER_LABEL} | Validating ${field} for ${products.length} products in ${chunks.length} chunk(s), concurrency: ${VALIDATE_CHUNK_CONCURRENCY}`
   );
 
   let cursor = 0;
   const worker = async () => {
     while (cursor < chunks.length) {
       if (isCancelled?.()) return;
-      // cursor++ is a synchronous read-then-increment so each worker claims
-      // a unique chunk index before yielding at the first await below.
       const i = cursor++;
-      const startIndex = i * CATEGORY_BATCH_SIZE;
-      console.log(`[AI] Sending category chunk ${i + 1}/${chunks.length} (${chunks[i].length} products)`);
+      const startIndex = i * VALIDATE_BATCH_SIZE;
+      console.log(`[AI] Sending ${field}-validate chunk ${i + 1}/${chunks.length} (${chunks[i].length} products)`);
       let result;
       try {
-        result = await classifyChunk(chunks[i], allowedPaths, pathSet, onRetry, abortSignal);
+        result = await validateChunk(chunks[i], field, fieldConfig, onRetry, abortSignal);
       } catch (err) {
         if (isCancelled?.() || isAbortError(err)) return;
         throw err;
@@ -430,5 +476,5 @@ export const classifyProductsBatch = async (
     }
   };
 
-  await Promise.all(Array.from({ length: Math.min(CHUNK_CONCURRENCY, chunks.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(VALIDATE_CHUNK_CONCURRENCY, chunks.length) }, worker));
 };

@@ -1,6 +1,8 @@
 import { getProgress } from '#helpers/geminiTranslate.js';
 import { getCategoryMapProgress } from '#helpers/geminiCategoryMap.js';
-import { buildTranslateLabel, CATEGORY_MAP_LABEL } from '#helpers/operationLabels.js';
+import { getValidateFieldProgress } from '#helpers/geminiValidateField.js';
+import { buildTranslateLabel, CATEGORY_MAP_LABEL, buildValidateFieldLabel } from '#helpers/operationLabels.js';
+import { VALIDATE_FIELDS } from '#constants/validateField.js';
 
 export const PROGRESS_TYPES = ['ai-enrich'];
 const PAUSABLE_STATUSES = new Set(['pending', 'running', 'initializing']);
@@ -45,6 +47,26 @@ const decorateCategoryMapOp = (categoryMap) => {
   return out;
 };
 
+const decorateValidateFieldOp = (validate) => {
+  if (!validate) return null;
+  const status = validate.status === 'initializing' ? 'pending' : validate.status;
+  const out = {
+    label: buildValidateFieldLabel(validate.field),
+    field: validate.field,
+    status,
+    total: validate.total,
+    completed: validate.completed,
+    updated: validate.updated,
+    percentage: validate.percentage,
+    canPause: PAUSABLE_STATUSES.has(status),
+    canResume: status === 'paused',
+    canRetry: RETRIABLE_STATUSES.has(status),
+  };
+  if (validate.retryInfo) out.retryInfo = validate.retryInfo;
+  if (validate.error) out.error = validate.error;
+  return out;
+};
+
 const pickActiveMessage = (operations, { doneMessage, errorMessage, cancelledMessage, pausedMessage }) => {
   if (!operations.length) return doneMessage;
 
@@ -63,11 +85,14 @@ const pickActiveMessage = (operations, { doneMessage, errorMessage, cancelledMes
 const buildAiEnrichBlock = (sellerId) => {
   const translate = getProgress(sellerId);
   const categoryMap = getCategoryMapProgress(sellerId);
-  if (!translate && !categoryMap) return null;
+  const validateOps = VALIDATE_FIELDS.map((f) => decorateValidateFieldOp(getValidateFieldProgress(sellerId, f))).filter(
+    Boolean
+  );
+  if (!translate && !categoryMap && !validateOps.length) return null;
 
   const translateOps = decorateTranslateOps(translate);
   const categoryMapOp = decorateCategoryMapOp(categoryMap);
-  const operations = [...translateOps, ...(categoryMapOp ? [categoryMapOp] : [])];
+  const operations = [...translateOps, ...(categoryMapOp ? [categoryMapOp] : []), ...validateOps];
 
   const hasError = operations.some((o) => o.status === 'error');
   const anyRunning = operations.some((o) => o.status === 'running');
@@ -87,7 +112,7 @@ const buildAiEnrichBlock = (sellerId) => {
             ? 'cancelled'
             : 'initializing';
 
-  const totalProducts = translate?.totalProducts ?? categoryMap?.total ?? 0;
+  const totalProducts = translate?.totalProducts ?? categoryMap?.total ?? validateOps.find((o) => o.total)?.total ?? 0;
   const updatedProducts = operations.reduce((max, o) => Math.max(max, o.completed ?? 0), 0);
   const totalOperations = operations.length;
   const completedOperations = operations.filter((o) => o.status === 'done').length;
