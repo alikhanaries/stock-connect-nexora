@@ -12,6 +12,7 @@ import shopifyExquiseRoutes from './integrations/erp/shopify/exquise/routes/api.
 import shopifyCatchRoutes from './integrations/erp/shopify/catch/routes/api.js';
 import unicommerceRoutes from './integrations/erp/unicommerce/routes/api.js';
 import xokidsRoutes from './integrations/erp/xokids/routes/api.js';
+import meneviskidsRoutes from './integrations/erp/meneviskids/routes/api.js';
 import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
@@ -58,6 +59,7 @@ app.use('/api/erp/shopify/exquise', shopifyExquiseRoutes);
 app.use('/api/erp/shopify/catch', shopifyCatchRoutes);
 app.use('/api/erp/unicommerce', unicommerceRoutes);
 app.use('/api/erp/xokids', xokidsRoutes);
+app.use('/api/erp/meneviskids', meneviskidsRoutes);
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
