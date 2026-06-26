@@ -119,6 +119,21 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     amazonPrice: cleanNumber(r.amazonprice),
     dangerousGoodsRegulations: r.dangerousgoodsregulations,
     outerMaterial: r.outermaterial,
+    departmentName: r.departmentname,
+    sizeSystem: r.sizesystem,
+    sizeClass: r.sizeclass,
+    bodyType: r.bodytype,
+    heightType: r.heighttype,
+    fabricType: r.fabrictype,
+    specialSize: r.specialsize,
+    weaveType: r.weavetype,
+    careInstructions: r.careinstructions,
+    shippingTemplateSA: r.shippingtemplatesa,
+    fitType: r.fittype,
+    riseStyle: r.risestyle,
+    closureType: r.closuretype,
+    occasion: r.occasion,
+    subtype: r.subtype,
   };
   const amazon = Object.fromEntries(Object.entries(amazonFieldMap).filter(([, v]) => v));
   if (Object.keys(amazon).length) product.amazon = amazon;

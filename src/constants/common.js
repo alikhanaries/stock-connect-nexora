@@ -180,6 +180,21 @@ export const PRODUCT_EXPORT_HEADERS = [
   'listPriceCurrency',
   'dangerousGoodsRegulations',
   'outerMaterial',
+  'departmentName',
+  'sizeSystem',
+  'sizeClass',
+  'bodyType',
+  'heightType',
+  'fabricType',
+  'specialSize',
+  'weaveType',
+  'careInstructions',
+  'shippingTemplateSA',
+  'fitType',
+  'riseStyle',
+  'closureType',
+  'occasion',
+  'subtype',
 ];
 
 export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
