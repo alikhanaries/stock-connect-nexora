@@ -34,7 +34,6 @@ const sellerSchema = new Schema(
     },
     taxIdentificationNumber: {
       type: String,
-      required: [true, 'Tax identification number is required.'],
       trim: true,
     },
     slug: {
