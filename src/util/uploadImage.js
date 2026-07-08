@@ -17,7 +17,6 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
     }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-
     const imageToJpgUsingBuffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
 
     await s3Client.send(
@@ -30,8 +29,8 @@ export const uploadImageFromUrl = async (imageUrl, fileKey) => {
     );
     return true;
   } catch (error) {
-    console.error(`[ERROR] upload failed for: ${imageUrl}`);
-    console.error(error.message);
+    console.error(`[ERROR] upload failed url=${imageUrl} key=${fileKey}`);
+    console.error(error.stack || error.message);
     return null;
   }
 };

@@ -145,7 +145,7 @@ export const importProductsFromExpressWarehouseGoogleSheet = async (req, res) =>
       return failResponse(res, req?.locale?.INVALID_URL, 500);
     }
     // Send immediate response to client
-    successResponse(res, req?.locale?.PRODUCT_IMPORTED_PROCESSING, 200);
+    successResponse(res, req?.locale?.RETURNED_PRODUCTS_SYNC_PROCESSING, 200);
     // Process file in background (async, no await here)
     inventoryService
       .importExpressWarehouseProductsFromGoogleSheet(exportUrl, req.locale)

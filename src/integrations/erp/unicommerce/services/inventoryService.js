@@ -1,6 +1,5 @@
 import Product from '#models/Product.js';
 import Inventory from '#models/Inventory.js';
-import { ObjectId } from 'mongodb';
 import { getProductStatus, getSellerNameById } from '#root/src/util/mapRowToInventory.js';
 const CHUNK_SIZE = 500;
 const CONCURRENCY_LIMIT = 10;
@@ -36,14 +35,14 @@ export const updateInventory = async (sellerId, inventoryList = [], locale) => {
                 throw new Error('Invalid inventory value');
               }
 
-              // ObjectId validation
-              if (!ObjectId.isValid(productId)) {
-                throw new Error('Invalid productId');
+              if (!variantId || typeof variantId !== 'string') {
+                throw new Error('Invalid variantId');
               }
 
-              const productObjectId = new ObjectId(productId);
-
-              const product = await Product.findOne({ _id: productObjectId }, { _id: 1, productSkuCode: 1 }).lean();
+              const product = await Product.findOne(
+                { sellerId, productSkuCode: variantId },
+                { _id: 1, productSkuCode: 1 }
+              ).lean();
 
               if (!product) {
                 throw new Error(locale?.NOT_FOUND || 'Product not found');
@@ -51,7 +50,7 @@ export const updateInventory = async (sellerId, inventoryList = [], locale) => {
 
               // inventory upsert
               await Inventory.findOneAndUpdate(
-                { sellerId, productId: productObjectId },
+                { sellerId, productId: product._id },
                 {
                   $set: {
                     currentStockCount: stock,
@@ -59,7 +58,7 @@ export const updateInventory = async (sellerId, inventoryList = [], locale) => {
                   },
                   $setOnInsert: {
                     sellerId,
-                    productId: productObjectId,
+                    productId: product._id,
                     productSkuCode: product.productSkuCode,
                     createdAt: now,
                   },
@@ -71,7 +70,7 @@ export const updateInventory = async (sellerId, inventoryList = [], locale) => {
               const prodStatus = getProductStatus(sellerName, stock);
 
               await Product.updateOne(
-                { _id: productObjectId },
+                { _id: product._id },
                 {
                   $set: {
                     currentStockCount: stock,

@@ -832,11 +832,22 @@ export const processOrders = async (orders, sellerId) => {
         const orderObjectId = orderIdMap.get(String(log.orderId));
         if (!orderObjectId) continue;
 
+        // ensure the OrderLog doc exists
+        orderLogsBulkOps.push({
+          updateOne: {
+            filter: { orderId: orderObjectId, sellerId: log.sellerId },
+            update: { $setOnInsert: { orderId: orderObjectId, sellerId: log.sellerId, details: [] } },
+            upsert: true,
+          },
+        });
+
+        // push detail only if this exact status+description combo isn't already recorded
         orderLogsBulkOps.push({
           updateOne: {
             filter: {
               orderId: orderObjectId,
               sellerId: log.sellerId,
+              details: { $not: { $elemMatch: { status: log.status, description: log.description } } },
             },
             update: {
               $push: {
@@ -846,12 +857,7 @@ export const processOrders = async (orders, sellerId) => {
                   createdAt: log.createdAt,
                 },
               },
-              $setOnInsert: {
-                orderId: orderObjectId,
-                sellerId: log.sellerId,
-              },
             },
-            upsert: true,
           },
         });
       }
@@ -1100,6 +1106,7 @@ const transformOrderResponse = (response, allOrderSkus = [], sellerOrderStatus) 
   return {
     _id: data?._id,
     merchantOrderNo: data?.merchantOrderNo || '',
+    orderDate: data?.orderDate || null,
     channelId: data?.channelId,
     channelName: data?.channelName,
     orderId: data?.orderId,
@@ -1849,14 +1856,11 @@ const getAnalyticsOrders = async (query) => {
     // -------------------------
     // DATE FILTER (post-merge on orderDate from channelengineorders)
     // -------------------------
-    const { start, end, appliedPeriod } = resolveDateRange(query);
+    const { start, end } = resolveDateRange(query);
     let dateMatchStage = null;
 
     if (start && end) {
       dateMatchStage = { $match: { orderDate: { $gte: start, $lte: end } } };
-      appliedFilters.period = appliedPeriod;
-      appliedFilters.fromDate = start.toISOString();
-      appliedFilters.toDate = end.toISOString();
     }
 
     // -------------------------

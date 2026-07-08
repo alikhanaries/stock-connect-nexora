@@ -117,6 +117,13 @@ UniCommerceRouter.post('/authToken', parseJsonAnyContentType, loginValidator, ch
  *           enum: [en, ar, zh-CN, tr]
  *         description: Language preference
  *
+ *       - in: header
+ *         name: apiKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
+ *
  *       - in: query
  *         name: publishedStatus
  *         required: true
@@ -169,6 +176,13 @@ UniCommerceRouter.get(
  *           type: string
  *           enum: [en, ar, zh-CN, tr]
  *         description: Language preference
+ *
+ *       - in: header
+ *         name: apiKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
  *
  *       - in: query
  *         name: pageNumber
@@ -243,11 +257,11 @@ UniCommerceRouter.get(
  *         description: Language preference
  *
  *       - in: header
- *         name: Authorization
+ *         name: apiKey
  *         required: true
  *         schema:
  *           type: string
- *         description: Bearer access token obtained from Get Authentication API
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
  *
  *     requestBody:
  *       required: true
@@ -388,11 +402,11 @@ UniCommerceRouter.post(
  *         description: Language preference
  *
  *       - in: header
- *         name: Authorization
+ *         name: apiKey
  *         required: true
  *         schema:
  *           type: string
- *         description: Authorization header in the format "Bearer <access token>"
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
  *
  *       - in: query
  *         name: pageNumber
@@ -496,11 +510,11 @@ UniCommerceRouter.get(
  *         description: Language preference
  *
  *       - in: header
- *         name: accessToken
+ *         name: apiKey
  *         required: true
  *         schema:
  *           type: string
- *         description: Access token received from authentication API
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
  *
  *     requestBody:
  *       required: true
@@ -628,11 +642,11 @@ UniCommerceRouter.post(
  *         description: Language preference
  *
  *       - in: header
- *         name: Authorization
+ *         name: apiKey
  *         required: true
  *         schema:
  *           type: string
- *         description: "Bearer access token (Authorization: Bearer token)"
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
  *
  *     requestBody:
  *       required: true
@@ -738,11 +752,11 @@ UniCommerceRouter.post(
  *           type: string
  *           enum: [en, ar, zh-CN, tr]
  *       - in: header
- *         name: Authorization
+ *         name: apiKey
  *         required: true
  *         schema:
  *           type: string
- *         description: Bearer access token obtained from Get Authentication API
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
  *       - in: query
  *         name: orderItemIds
  *         required: true
@@ -790,11 +804,11 @@ UniCommerceRouter.get(
  *           enum: [en, ar, zh-CN, tr]
  *         description: Preferred response language
  *       - in: header
- *         name: Authorization
+ *         name: apiKey
  *         required: true
  *         schema:
  *           type: string
- *         description: Bearer access token obtained from Get Authentication API
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
  *       - in: query
  *         name: orderItemIds
  *         required: true
@@ -868,11 +882,11 @@ UniCommerceRouter.get(
  *         description: Preferred response language
  *
  *       - in: header
- *         name: Authorization
+ *         name: apiKey
  *         required: true
  *         schema:
  *           type: string
- *         description: Bearer access token obtained from Get Authentication API
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
  *
  *     requestBody:
  *       required: true

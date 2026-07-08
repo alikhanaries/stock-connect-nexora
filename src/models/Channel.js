@@ -25,6 +25,7 @@ const channelsSchema = new mongoose.Schema(
     channelId: {
       type: Number,
       required: true,
+      index: true,
     },
     isEnabled: {
       type: Boolean,

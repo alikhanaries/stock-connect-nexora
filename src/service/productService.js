@@ -677,6 +677,25 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         // Pick only changed fields
         updateFields = getChangedFields(comparableProduct, existingComparable);
 
+        // URLs vs converted S3 URLs on normal imports). When the caller explicitly
+        // requests an image update, force the newly uploaded image URLs into the
+        // update so existing products actually get their images refreshed.
+        if (isImageUpdate) {
+          const IMAGE_FIELDS = [
+            'primaryImageUrl',
+            'imageUrl',
+            'extraImageUrl1',
+            'extraImageUrl2',
+            'extraImageUrl3',
+            'images',
+          ];
+          for (const field of IMAGE_FIELDS) {
+            if (product[field] !== undefined && product[field] !== null && product[field] !== '') {
+              updateFields[field] = product[field];
+            }
+          }
+        }
+
         if (!Object.keys(updateFields).length) {
           // Nothing changed → skip update
           return null;
@@ -1485,8 +1504,48 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.size || '',
         product.vatRateType || '',
         product.volumetricWeightCm || 0,
-        product.namshiPrice || 0,
         product.noonPrice || 0,
+        product.namshiPrice || 0,
+        product.amazonPrice || 0,
+        // Amazon marketplace listing attributes
+        product.amazon?.variationThemeName || '',
+        product.amazon?.modelNumber || '',
+        product.amazon?.modelName || '',
+        product.amazon?.style || '',
+        product.amazon?.bulletPoint || '',
+        product.amazon?.footwearSizeSystem || '',
+        product.amazon?.footwearAgeGroup || '',
+        product.amazon?.footwearSizeClass || '',
+        product.amazon?.footwearWidth || '',
+        product.amazon?.footwearSize || '',
+        product.amazon?.soleMaterial || '',
+        product.amazon?.toeStyle || '',
+        product.amazon?.heightMap || '',
+        product.amazon?.heelType || '',
+        product.amazon?.waterResistanceLevel || '',
+        product.amazon?.closure || '',
+        product.amazon?.shaftCircumference || '',
+        product.amazon?.shaftHeight || '',
+        product.amazon?.skipOffer || '',
+        product.amazon?.itemCondition || '',
+        product.amazon?.listPriceCurrency || '',
+        product.amazon?.dangerousGoodsRegulations || '',
+        product.amazon?.outerMaterial || '',
+        product.amazon?.departmentName || '',
+        product.amazon?.sizeSystem || '',
+        product.amazon?.sizeClass || '',
+        product.amazon?.bodyType || '',
+        product.amazon?.heightType || '',
+        product.amazon?.fabricType || '',
+        product.amazon?.specialSize || '',
+        product.amazon?.weaveType || '',
+        product.amazon?.careInstructions || '',
+        product.amazon?.shippingTemplateSA || '',
+        product.amazon?.fitType || '',
+        product.amazon?.riseStyle || '',
+        product.amazon?.closureType || '',
+        product.amazon?.occasion || '',
+        product.amazon?.subtype || '',
       ];
 
       // Handle backpressure: if buffer is full, wait for drain event

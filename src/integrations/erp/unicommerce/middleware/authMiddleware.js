@@ -5,9 +5,9 @@ import { failResponse, errorResponse } from '#root/src/integrations/erp/unicomme
 
 export const unicommerceAuthMiddleware = async (req, res, next) => {
   try {
-    let token;
+    let token = req.get('apiKey');
 
-    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
     }
     if (!token) {

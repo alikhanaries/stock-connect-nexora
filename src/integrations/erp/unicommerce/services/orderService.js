@@ -1,4 +1,5 @@
 import Order from '#root/src/models/Orders.js';
+import Product from '#root/src/models/Product.js';
 import { mapOrderStatus } from '../helpers/mapOrderStatus.js';
 import { ObjectId } from 'mongodb';
 import mapOrderToUniware from '../helpers/mapOrderToUniware.js';
@@ -42,6 +43,38 @@ export const fetchOrderStatus = async (sellerId, pageNumber, pageSize, orderIds)
   }
 };
 
+const buildProductIdBySku = async (sellerId, orders) => {
+  const skus = [
+    ...new Set(orders.flatMap((o) => (o.orderSkuList?.skuList || []).map((i) => i.merchantProductNo).filter(Boolean))),
+  ];
+  const map = new Map();
+  if (!skus.length) return map;
+  const sellerObjectId = new ObjectId(sellerId);
+  const skuProducts = await Product.find({
+    sellerId: sellerObjectId,
+    productSkuCode: { $in: skus },
+  })
+    .select('productSkuCode parentProductSkuCode grandParentProductSkuCode')
+    .lean();
+  if (!skuProducts.length) return map;
+  const parentSkus = [
+    ...new Set(skuProducts.map((p) => p.parentProductSkuCode || p.grandParentProductSkuCode || p.productSkuCode)),
+  ];
+  const parents = await Product.find({
+    sellerId: sellerObjectId,
+    productSkuCode: { $in: parentSkus },
+  })
+    .select('productSkuCode')
+    .lean();
+  const parentIdBySku = new Map(parents.map((p) => [p.productSkuCode, p._id]));
+  for (const p of skuProducts) {
+    const parentSku = p.parentProductSkuCode || p.grandParentProductSkuCode || p.productSkuCode;
+    const parentId = parentIdBySku.get(parentSku);
+    if (parentId) map.set(p.productSkuCode, parentId);
+  }
+  return map;
+};
+
 export const fetchOrders = async (sellerId, query = {}) => {
   try {
     const { pageNumber = 1, pageSize = 50, orderDateFrom, orderDateTo } = query;
@@ -67,9 +100,10 @@ export const fetchOrders = async (sellerId, query = {}) => {
       }
     }
     const orders = await Order.find(filter).sort({ orderDate: 1 }).skip(skip).limit(limit).lean();
+    const productIdBySku = await buildProductIdBySku(sellerId, orders);
 
     //  map to Uniware format
-    const formattedOrders = orders.map(mapOrderToUniware);
+    const formattedOrders = orders.map((order) => mapOrderToUniware(order, productIdBySku));
 
     return {
       orders: formattedOrders,
@@ -82,7 +116,7 @@ export const fetchOrders = async (sellerId, query = {}) => {
 export const cancelOrders = async (sellerId, body) => {
   try {
     const { orderId, orderItems } = body;
-    const order = await Order.findOne({ orderId });
+    const order = ObjectId.isValid(orderId) ? await Order.findOne({ _id: orderId, sellerId }) : null;
     if (!order) {
       return {
         status: 'FAILED',

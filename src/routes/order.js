@@ -145,7 +145,7 @@ router.get('/', getAllOrdersValidator, checkLanguage, authMiddleware, verifySell
  *       - in: query
  *         name: sortBy
  *         schema: { type: string }
- *         description: Field to sort by (default: orderId)
+ *         description: "Field to sort by (default: orderId)"
  *       - in: query
  *         name: sortOrder
  *         schema:

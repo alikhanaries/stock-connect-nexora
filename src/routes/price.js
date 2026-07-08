@@ -90,7 +90,6 @@ priceRouter.post(
  *                 type: number
  *                 minimum: 0
  *                 example: 120
- *             required: [productId, price]
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }

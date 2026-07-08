@@ -56,6 +56,8 @@ export const saveUserChannels = async (req, res) => {
 export const getAllUserChannels = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    // before listing (adds missing channels, ignores already-assigned ones)
+    await channelService.autoAssignAllChannelsToSeller(sellerId);
     const { channelData, pagination, appliedFilters, success } = await channelService.getAllUserChannels(
       sellerId,
       req.query
