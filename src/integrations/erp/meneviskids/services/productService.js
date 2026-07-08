@@ -79,7 +79,7 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
             )
           );
 
-         const { products, categoryTrails } = await formatMeneviskidsProduct(
+          const { products, categoryTrails } = await formatMeneviskidsProduct(
             batch,
             sellerId,
             isImageUpdate,

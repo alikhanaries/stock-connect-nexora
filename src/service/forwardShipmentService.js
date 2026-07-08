@@ -10,6 +10,8 @@ import { config } from '../config/config.js';
 import Product from '#models/Product.js';
 import Order from '#models/Orders.js';
 import Token from '../models/Token.js';
+import { channelEnginePush } from '#service/channelEngineClient.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 export const getToken = async () => {
   return await Token.findOne({ name: 'omniful' });
 };
@@ -236,10 +238,13 @@ export const createShipmentwithCE = async (shipmentData) => {
   };
 
   const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
-  await fetch(ceUrl, {
+  await channelEnginePush({
+    operationType: CE_QUEUE_OPERATIONS.SHIPMENT_CREATE,
     method: 'POST',
+    url: ceUrl,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(CEPayload),
+    body: CEPayload,
+    awaitResult: false,
   });
 };
 

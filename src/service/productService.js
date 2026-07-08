@@ -35,6 +35,8 @@ import {
   buildExtraDataPayload,
   syncProductExtraDataToMarketplace,
 } from './channel/ceService.js';
+import { channelEnginePush } from '#service/channelEngineClient.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 
 const {
   CHANNEL_ENGINE_BASE_URL,
@@ -231,20 +233,22 @@ export const syncFreezeOrUnfreezeToChannelEngine = async ({ skuCodes, isFrozen }
   }));
 
   try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/freeze`, {
+    const response = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.PRODUCTS_FREEZE,
       method: 'POST',
+      url: `${CHANNEL_ENGINE_BASE_URL}products/freeze`,
       headers: {
         'Content-Type': 'application/json',
         'X-CE-KEY': CHANNEL_ENGINE_API_KEY,
       },
-      body: JSON.stringify(payload),
+      body: payload,
     });
 
     let result = null;
     try {
-      result = await response.json();
+      result = response.data;
     } catch {
-      // Ignore ChannelEngine errors; Stock Connect update already succeeded
+      return;
     }
     if (!response.ok) {
       return;
@@ -295,17 +299,19 @@ const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
 };
 
 // Push a single batch to CE
-export const pushBatch = async (batch, index) => {
-  return withRetry(async () => {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(batch),
-    });
-    if (!response.ok) throw new Error(`CE API error (Batch ${index + 1}): ${response.status}`);
-    const data = await response.json();
-    return data.Content;
+export const pushBatch = async (batch, index, sellerId = null, batchId = null) => {
+  const response = await channelEnginePush({
+    operationType: CE_QUEUE_OPERATIONS.PRODUCTS_PUSH,
+    method: 'POST',
+    url: `${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}`,
+    headers: { 'Content-Type': 'application/json' },
+    body: batch,
+    sellerId,
+    batchId,
+    metadata: { batchIndex: index },
   });
+  if (!response.ok) throw new Error(`CE API error (Batch ${index + 1}): ${response.status}`);
+  return response.data?.Content;
 };
 
 export const pushBatchToOCP = async (batch, index, sellerId) => {
@@ -428,7 +434,12 @@ export const pushActiveProductsToChannel = async (products, channelId, sellerId)
           if (channel.channelName === 'OCP') {
             result = await pushBatchToOCP(uploadProducts(batch), idx, sellerId);
           } else {
-            result = await pushBatch(batch.map(mapProductToChannelEngine), idx);
+            result = await pushBatch(
+              batch.map(mapProductToChannelEngine),
+              idx,
+              sellerId,
+              `products-${sellerId}-${channelId}`
+            );
           }
 
           // ---- UPDATE SYNC DATE ONLY IF SUCCESSFUL ----

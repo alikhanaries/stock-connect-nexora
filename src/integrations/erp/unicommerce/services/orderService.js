@@ -10,6 +10,8 @@ import { BLOCKED_STATUSES, ORDER_STATUS_MAP } from '#root/src/constants/common.j
 import Shipment from '#root/src/models/Shipment/Shipment.js';
 import OrderLogs from '#root/src/models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#root/src/helpers/channelEngineErrorMessage.js';
+import { channelEnginePush } from '#service/channelEngineClient.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 export const fetchOrderStatus = async (sellerId, pageNumber, pageSize, orderIds) => {
@@ -228,14 +230,17 @@ export const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') =
     }
 
     // Call ChannelEngine
-    const res = await fetch(`${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${CHANNEL_ENGINE_API_KEY}`, {
+    const res = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.ORDER_CANCELLATION,
       method: 'POST',
+      url: `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${CHANNEL_ENGINE_API_KEY}`,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cancelPayload),
+      body: cancelPayload,
+      sellerId,
     });
 
     if (!res.ok) {
-      const json = await res.json();
+      const json = res.data || {};
       const customMsg = cancelChanelEngineCustomErrorMessage(
         json?.Message || json?.errorMessage || 'ChannelEngine cancellation failed'
       );

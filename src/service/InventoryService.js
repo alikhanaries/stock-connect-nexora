@@ -12,6 +12,8 @@ import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { pushBatch, pushInActiveProductsToChannel } from './productService.js';
 import { mapProductToChannelEngine } from '../helpers/ProductMapper.js';
 import { chunkArray, getExistingProductsBySkuFromCE } from './channel/ceService.js';
+import { channelEnginePush } from '#service/channelEngineClient.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 import Seller from '#models/Seller.js';
 import ExpressWarehouseInventory from '#models/ExpressWarehouseInventory.js';
 
@@ -331,17 +333,20 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
   }
 };
 
-export async function sendStockBatch(stockUpdates, retries = MAX_RETRIES) {
+export async function sendStockBatch(stockUpdates, retries = MAX_RETRIES, sellerId = null, batchId = null) {
   try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}offer/stock?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
+    const response = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.OFFER_STOCK,
       method: 'PUT',
+      url: `${CHANNEL_ENGINE_BASE_URL}offer/stock?apiKey=${CHANNEL_ENGINE_API_KEY}`,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(stockUpdates),
+      body: stockUpdates,
+      sellerId,
+      batchId,
     });
 
-    const rawText = await response.text();
+    const rawText = response.rawText;
 
-    // Do not retry client errors
     if (!response.ok) {
       if (response.status >= 400 && response.status < 500) {
         throw new Error(`Non-retryable HTTP ${response.status}: ${rawText}`);
@@ -354,12 +359,12 @@ export async function sendStockBatch(stockUpdates, retries = MAX_RETRIES) {
     try {
       return JSON.parse(rawText);
     } catch {
-      return { success: true };
+      return response.data || { success: true };
     }
   } catch (err) {
     if (retries > 0) {
       await new Promise((r) => setTimeout(r, (MAX_RETRIES - retries + 1) * 1000));
-      return sendStockBatch(stockUpdates, retries - 1);
+      return sendStockBatch(stockUpdates, retries - 1, sellerId, batchId);
     }
     throw err;
   }
