@@ -34,6 +34,8 @@ import { sendStockBatch } from '../service/InventoryService.js';
 import Seller from '#models/Seller.js';
 import forwardShipmentService from './forwardShipmentService.js';
 import Product from '#models/Product.js';
+import { channelEnginePush } from '#service/channelEngineClient.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
@@ -178,34 +180,27 @@ export const createShipmentWithChannelEngine = async ({
 
     const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
 
-    // Add one retry for transient network errors
-    let response;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      response = await fetch(ceUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) break;
-
-      if (attempt === 1) await new Promise((r) => setTimeout(r, 1000));
-    }
+    const response = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.SHIPMENT_CREATE,
+      method: 'POST',
+      url: ceUrl,
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+    });
 
     // Handle failed response
     if (!response.ok) {
       let message = `Failed to create shipment for ${merchantShipmentNo} (${response.status})`;
       try {
-        const errorData = await response.json();
+        const errorData = response.data || {};
         message = errorData?.Message || message;
         console.log(message);
       } catch {
-        // ignore parse errors
+        // response body may not be JSON
       }
-      //throw new Error(message);
     }
 
-    const result = await response.json();
+    const result = response.data;
 
     return { success: true, message: 'Shipment created successfully', data: result };
   } catch (error) {
@@ -232,31 +227,23 @@ export const updateShipmentDeliveryStateChannelEngine = async (status, deliveryD
 
     const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/${merchantShipmentNo}/delivery-state?apikey=${CHANNEL_ENGINE_API_KEY}`;
 
-    // Attempt request with one retry if transient failure
-    let response;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      response = await fetch(ceUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+    const response = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.SHIPMENT_DELIVERY_STATE,
+      method: 'PUT',
+      url: ceUrl,
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+    });
 
-      if (response.ok) break;
-
-      // Delay before retry (only for first attempt)
-      if (attempt === 1) await new Promise((res) => setTimeout(res, 1000));
-    }
-
-    // Handle non-OK responses safely
     if (!response.ok) {
       let errorMessage = `Failed to update delivery state for ${merchantShipmentNo} (${response.status})`;
 
       try {
-        const errorData = await response.json();
+        const errorData = response.data || {};
 
         errorMessage = errorData?.Message || errorMessage;
       } catch {
-        // JSON parse failed, leave as default
+        // response body may not be JSON
       }
 
       throw new Error(errorMessage);
@@ -1974,13 +1961,16 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
 
     // Step 11: Acknowledge Channel Engine
     const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
-    await fetch(ceUrl, {
+    await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.RETURN_MERCHANT_ACKNOWLEDGE,
       method: 'POST',
+      url: ceUrl,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         ReturnId: returnData?.returnId,
         MerchantReturnNo: returnData?.merchantReturnNo,
-      }),
+      },
+      sellerId,
     });
 
     // UPDATE RETURN STATUS AS APPROVED

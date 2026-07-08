@@ -143,10 +143,12 @@ priceRouter.post(
 /* SYNC PRICE TO CHANNEL */
 /**
  * @openapi
- * /sync/channel:
+ * /price/sync/pricing:
  *   get:
  *     tags: [Price]
  *     summary: Sync price to channel engine
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -158,7 +160,7 @@ priceRouter.post(
  *         required: true
  *         schema:
  *           type: string
- *         description: Seller ID for which stock should be synced to channel
+ *         description: Seller ID for which price should be synced to channel
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }

@@ -26,8 +26,13 @@ export function loadSwagger() {
         { name: 'Returns', description: 'Return management' },
         { name: 'Shipments', description: 'Shipment management' },
         { name: 'Invoices', description: 'Invoice management' },
+        { name: 'ChannelEngineQueue', description: 'Channel Engine push queue monitoring' },
       ],
-      servers: [{ url: `${config.BASE_URL}api` }, { url: 'http://localhost:8000/api' }],
+      servers: [
+        { url: `${config.BASE_URL || 'http://localhost:3000/'}api` },
+        { url: 'http://localhost:3000/api' },
+        { url: 'http://localhost:8000/api' },
+      ],
       components: {
         securitySchemes: {
           bearerAuth: {
@@ -65,6 +70,85 @@ export function loadSwagger() {
               message: { type: 'string', example: 'Internal error' },
               statusCode: { type: 'integer', example: 500 },
               data: { type: 'object', nullable: true },
+            },
+          },
+          PaginationMeta: {
+            type: 'object',
+            properties: {
+              totalElements: { type: 'integer', example: 42 },
+              totalPages: { type: 'integer', example: 3 },
+              page: { type: 'integer', example: 1 },
+              size: { type: 'integer', example: 20 },
+            },
+          },
+          ChannelEngineQueueJob: {
+            type: 'object',
+            properties: {
+              _id: { type: 'string', example: '6a43a19ef80408a41d166b4c' },
+              bullJobId: { type: 'string', example: '6a43a19ef80408a41d166b4c' },
+              operationType: {
+                type: 'string',
+                enum: [
+                  'PRODUCTS_PUSH',
+                  'PRODUCTS_FREEZE',
+                  'PRODUCTS_BULK_DELETE',
+                  'PRODUCTS_EXTRA_DATA',
+                  'OFFER_STOCK',
+                  'OFFER_PRICE',
+                  'ORDER_ACKNOWLEDGE',
+                  'ORDER_CANCELLATION',
+                  'SHIPMENT_CREATE',
+                  'SHIPMENT_DELIVERY_STATE',
+                  'RETURN_MERCHANT_CREATE',
+                  'RETURN_MERCHANT_ACKNOWLEDGE',
+                  'RETURN_ACCEPT_REJECT',
+                ],
+              },
+              method: { type: 'string', example: 'PUT' },
+              url: { type: 'string' },
+              sellerId: { type: 'string', nullable: true },
+              status: {
+                type: 'string',
+                enum: ['queued', 'active', 'retrying', 'completed', 'failed'],
+              },
+              requestBody: { type: 'object', nullable: true },
+              responseBody: { type: 'object', nullable: true },
+              rawResponse: { type: 'string', nullable: true },
+              httpStatus: { type: 'integer', nullable: true },
+              errorMessage: { type: 'string', nullable: true },
+              errorDetails: { type: 'object', nullable: true },
+              attemptCount: { type: 'integer' },
+              maxAttempts: { type: 'integer' },
+              metadata: { type: 'object' },
+              batchId: { type: 'string', nullable: true },
+              processedAt: { type: 'string', format: 'date-time', nullable: true },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          ChannelEngineQueueStats: {
+            type: 'object',
+            properties: {
+              persisted: { type: 'object', additionalProperties: { type: 'integer' } },
+              byOperation: { type: 'object', additionalProperties: { type: 'integer' } },
+              liveQueue: { type: 'object' },
+              rateLimit: {
+                type: 'object',
+                properties: {
+                  maxRequests: { type: 'integer', example: 15 },
+                  windowMinutes: { type: 'integer', example: 15 },
+                },
+              },
+            },
+          },
+          ChannelEngineQueueListData: {
+            type: 'object',
+            properties: {
+              content: {
+                type: 'array',
+                items: { $ref: '#/components/schemas/ChannelEngineQueueJob' },
+              },
+              pagination: { $ref: '#/components/schemas/PaginationMeta' },
             },
           },
         },
