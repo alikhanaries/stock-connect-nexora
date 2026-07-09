@@ -31,6 +31,15 @@ import {
   generateDocumentIdValidator,
 } from '#validations/orders.js';
 import upload from '#helpers/FileHandler.js';
+
+// Multer parses multipart body before verifySellerAccess; copy sellerId into query for that middleware.
+const attachSellerIdFromBody = (req, _res, next) => {
+  if (!req.query.sellerId && req.body?.sellerId) {
+    req.query.sellerId = req.body.sellerId;
+  }
+  next();
+};
+
 const router = express.Router();
 
 // GET ALL ANALYTICS ORDERS
@@ -453,8 +462,9 @@ router.post(
   '/generate-documentId',
   checkLanguage,
   authMiddleware,
-  verifySellerAccess,
   upload.single('file'),
+  attachSellerIdFromBody,
+  verifySellerAccess,
   generateDocumentIdValidator,
   generateDocumentId
 );
