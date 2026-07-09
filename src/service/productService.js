@@ -132,7 +132,7 @@ const fetchProducts = async (query, sellerId) => {
       .skip((currentPage - 1) * limit)
       .limit(limit)
       .select(
-        '_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId noonPrice namshiPrice'
+        '_id name status productSkuCode price msrp primaryImageUrl isFrozen currentStockCount createdAt sellerId noonPrice namshiPrice amazonPrice'
       )
       .lean(),
 
