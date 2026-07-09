@@ -8,10 +8,11 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
     };
   }
 
-  // Normalize keys safely (lowercase + trim)
+  // Normalize keys (lowercase, trim, remove spaces — handles "Amazon Price" / "amazonPrice")
   const normalized = {};
   for (const [key, value] of Object.entries(row)) {
-    normalized[key.toLowerCase().trim()] = value === undefined || value === null ? '' : String(value).trim();
+    normalized[key.toLowerCase().trim().replace(/\s+/g, '')] =
+      value === undefined || value === null ? '' : String(value).trim();
   }
 
   const errors = [];
@@ -73,6 +74,9 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
   const purchasePrice =
     'purchaseprice' in normalized ? parseOptionalNumber(normalized.purchaseprice, 'purchasePrice') : undefined;
 
+  const amazonPrice =
+    'amazonprice' in normalized ? parseOptionalNumber(normalized.amazonprice, 'amazonPrice') : undefined;
+
   if (errors.length) {
     return { rowNumber, errorData: errors };
   }
@@ -90,6 +94,7 @@ export const mapRowToPrice = (row, rowNumber, locale) => {
   if (maxPrice !== undefined) priceData.maxPrice = maxPrice;
   if (msrp !== undefined) priceData.msrp = msrp;
   if (purchasePrice !== undefined) priceData.purchasePrice = purchasePrice;
+  if (amazonPrice !== undefined) priceData.amazonPrice = amazonPrice;
 
   return priceData;
 };
