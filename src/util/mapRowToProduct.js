@@ -9,10 +9,10 @@ const limit = pLimit(IMAGE_CONCURRENCY);
 export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdate = false, isNewSku = false, brand) => {
   if (!row || typeof row !== 'object') return null;
 
-  // Normalize keys
+  // Normalize keys (lowercase, trim, remove spaces — handles "Amazon Price" / "amazonPrice")
   const r = {};
   for (const [key, value] of Object.entries(row)) {
-    r[key.toLowerCase().trim()] = value ? String(value).trim() : '';
+    r[key.toLowerCase().trim().replace(/\s+/g, '')] = value ? String(value).trim() : '';
   }
 
   // Required validations
@@ -62,6 +62,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     price: cleanNumber(r.price),
     noonPrice: cleanNumber(r.noonprice),
     namshiPrice: cleanNumber(r.namshiprice),
+    amazonPrice: cleanNumber(r.amazonprice),
     minPrice: cleanNumber(r.minprice) || null,
     maxPrice: cleanNumber(r.maxprice) || null,
     msrp: cleanNumber(r.msrp),
@@ -116,7 +117,6 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     skipOffer: r.skipoffer,
     itemCondition: r.itemcondition,
     listPriceCurrency: r.listpricecurrency,
-    amazonPrice: cleanNumber(r.amazonprice),
     dangerousGoodsRegulations: r.dangerousgoodsregulations,
     outerMaterial: r.outermaterial,
     departmentName: r.departmentname,

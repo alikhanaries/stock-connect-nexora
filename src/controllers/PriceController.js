@@ -48,7 +48,7 @@ export const importPriceFromGoogleSheet = async (req, res) => {
 export const updateSingleProductPrice = async (req, res) => {
   try {
     const sellerId = req.sellerId; // from auth middleware
-    const { productId, price, namshiPrice, noonPrice, minPrice, maxPrice, msrp, purchasePrice } = req.body;
+    const { productId, price, namshiPrice, noonPrice, amazonPrice, minPrice, maxPrice, msrp, purchasePrice } = req.body;
 
     // ---- Build payload with optional fields ----
     const pricePayload = {
@@ -57,6 +57,7 @@ export const updateSingleProductPrice = async (req, res) => {
     if (price !== undefined) pricePayload.price = price;
     if (noonPrice !== undefined) pricePayload.noonPrice = noonPrice;
     if (namshiPrice !== undefined) pricePayload.namshiPrice = namshiPrice;
+    if (amazonPrice !== undefined) pricePayload.amazonPrice = amazonPrice;
     if (minPrice !== undefined) pricePayload.minPrice = minPrice;
     if (maxPrice !== undefined) pricePayload.maxPrice = maxPrice;
     if (msrp !== undefined) pricePayload.msrp = msrp;

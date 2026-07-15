@@ -158,6 +158,7 @@ export const processImportStream = async (stream, { deleteAfter = false, filePat
       if (data.maxPrice !== undefined) set.maxPrice = data.maxPrice;
       if (data.msrp !== undefined) set.msrp = data.msrp;
       if (data.purchasePrice !== undefined) set.purchasePrice = data.purchasePrice;
+      if (data.amazonPrice !== undefined) set.amazonPrice = data.amazonPrice;
 
       return set;
     };
@@ -304,6 +305,7 @@ export const updateSingleProductPrice = async (pricePayload, locale, sellerId) =
     addOptionalNumber('maxPrice');
     addOptionalNumber('msrp');
     addOptionalNumber('purchasePrice');
+    addOptionalNumber('amazonPrice');
 
     // 3. Upsert price document
     const priceDoc = await Price.findOneAndUpdate(
@@ -336,6 +338,7 @@ export const updateSingleProductPrice = async (pricePayload, locale, sellerId) =
     if (maxPrice !== undefined) productSet.maxPrice = maxPrice;
     if (msrp !== undefined) productSet.msrp = msrp;
     if (purchasePrice !== undefined) productSet.purchasePrice = purchasePrice;
+    if (pricePayload.amazonPrice !== undefined) productSet.amazonPrice = pricePayload.amazonPrice;
 
     // Re-evaluate status: use the incoming price if provided, otherwise fall back to the current DB price
     const sellerName = await getSellerNameById(sellerId);
@@ -357,6 +360,7 @@ export const updateSingleProductPrice = async (pricePayload, locale, sellerId) =
     if (maxPrice !== undefined) sendData.maxPrice = maxPrice;
     if (msrp !== undefined) sendData.msrp = msrp;
     if (purchasePrice !== undefined) sendData.purchasePrice = purchasePrice;
+    if (pricePayload.amazonPrice !== undefined) sendData.amazonPrice = pricePayload.amazonPrice;
 
     return {
       ...sendData,
