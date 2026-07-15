@@ -900,9 +900,7 @@ export async function getNewOrders() {
         break;
       }
 
-      const orderData = data.Content.filter((order) => order.GlobalChannelId !== 1635);
-
-      allOrders.push(...orderData);
+      allOrders.push(...data.Content);
 
       const fetchedCount = page * pageSize;
       hasMore = fetchedCount < data.TotalCount;
