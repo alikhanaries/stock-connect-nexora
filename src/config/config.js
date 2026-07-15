@@ -32,7 +32,6 @@ export const config = {
   OCP_URL: process.env.OCP_URL,
   OCP_API_KEY: process.env.OCP_API_KEY,
   BASE_URL: process.env.BASE_URL,
-  AMAZON_ORDER_SHEET_URL: process.env.AMAZON_ORDER_SHEET_URL,
   GEMINI_PROVIDER: process.env.GEMINI_PROVIDER || 'gemini',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_MODEL: process.env.GEMINI_MODEL,
