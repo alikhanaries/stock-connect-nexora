@@ -1767,10 +1767,20 @@ export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
   skuList.forEach((skuItem) => {
     if (normalizedSkuCodes.includes(skuItem.merchantProductNo)) {
       skuItem.documentId = documentId;
+      // Invoice upload starts fulfillment at SKU level
+      if ((skuItem.status || '').toUpperCase() === 'NEW' || !skuItem.status) {
+        skuItem.status = 'IN_PROGRESS';
+      }
     }
   });
 
+  // Invoice upload starts fulfillment → NEW becomes IN_PROGRESS
+  if (order.status === 'NEW') {
+    order.status = 'IN_PROGRESS';
+  }
+
   await order.save();
+  await syncSellerOrdersFromOrder(order._id);
   return documentId;
 };
 const getAnalyticsOrders = async (query) => {

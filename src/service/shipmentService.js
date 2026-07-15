@@ -1384,6 +1384,13 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     await Shipment.findByIdAndUpdate(shipmentId, { status: 'CANCELED', cancelReason });
 
+    // Revert to NEW when no active (non-canceled) shipments remain
+    const hasActiveShipment = await Shipment.exists({
+      orderId,
+      status: { $ne: 'CANCELED' },
+    });
+    const orderStatus = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
+
     const stockPayloads = [];
     for (const product of products || []) {
       const sku = order?.orderSkuList?.skuList.find((s) => String(s.id) === String(product.orderLineId));
@@ -1411,7 +1418,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       sku.statusBreakdown.confirmed += qty;
 
       // SKU status correction
-      sku.status = 'IN_PROGRESS';
+      sku.status = orderStatus;
 
       const stockResult = await increaseStock(product.merchantProductNo, qty, shipment.sellerId, sellerName, 'CE');
       if (!stockResult?.success) {
@@ -1423,7 +1430,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }
 
-    order.status = 'IN_PROGRESS';
+    order.status = orderStatus;
     await order.save();
 
     // Order logs
@@ -1452,6 +1459,8 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     if (stockPayloads.length > 0) {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
     }
+
+    await syncSellerOrdersFromOrder(orderId);
 
     return {
       success: true,
