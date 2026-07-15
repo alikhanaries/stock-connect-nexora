@@ -64,10 +64,12 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       width,
       height,
       weight,
-      tax_identification_number,
-      invoice_number,
-      invoice_date,
+      tax_identification_number = shipmentData.taxData?.tax_identification_number,
+      invoice_number = shipmentData.taxData?.invoice_number,
+      invoice_date = shipmentData.taxData?.invoice_date,
     } = shipmentData;
+
+    const hasInternationalMetadata = documentId && tax_identification_number && invoice_number && invoice_date;
 
     // ---  Build final payload for Aymakan ---
     const payload = {
@@ -100,14 +102,16 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       ...(height != null && { height }),
       ...(weight != null && { weight }),
       ...(productsData?.length && { products: productsData }),
-      international_metadata: {
-        document_id: documentId,
-        tax_identification_number: tax_identification_number,
-        invoice_number: invoice_number,
-        invoice_date: invoice_date,
-        is_commercial_shipment: '0',
-        shipment_type: shipmentData?.shipment_type,
-      },
+      ...(hasInternationalMetadata && {
+        international_metadata: {
+          document_id: documentId,
+          tax_identification_number,
+          invoice_number,
+          invoice_date,
+          is_commercial_shipment: '0',
+          shipment_type: shipmentData?.shipment_type,
+        },
+      }),
     };
     console.log('createShipmentWithAymakan payload:', JSON.stringify(payload, null, 2));
     // ---  Call Aymakan API ---
@@ -461,14 +465,21 @@ export const createFullShipmentService = async (shipmentData) => {
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
 
+    const documentId =
+      shipmentData.documentId ||
+      validProducts
+        .map((p) => orderSkuList.skuList.find((s) => String(s.id) === String(p.orderLineId))?.documentId)
+        .find(Boolean);
+
     // Step 10: Create shipment via Aymakan (external, before transaction)
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
+      ...(taxData || {}),
+      documentId,
       deliveryData,
       orderCustomer: order.orderCustomer,
       collectionData,
       pieces,
-      taxData,
       productsData,
     });
 
@@ -551,7 +562,7 @@ export const createFullShipmentService = async (shipmentData) => {
       },
       pieces,
       type: 'FORWARD',
-      invoiceDocumentId: shipmentData.documentId || null,
+      invoiceDocumentId: documentId || shipmentData.documentId || null,
     });
 
     await shipmentDocument.save();
