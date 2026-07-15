@@ -17,6 +17,7 @@ import { parseInvoiceDataForGenerateSellerInvoice } from '../helpers/ParseInvoic
 import { config } from '../config/config.js';
 import { generateSellerInvoicePDF } from '#utils/generateInvoicePdf.js';
 import omnifullService from '../service/omnifullService.js';
+import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -466,6 +467,23 @@ export const generateSellerInvoice = async (req, res) => {
     if (!result.success) {
       return Responses.failResponse(res, result.message || req.locale?.NO_ORDERS_FOUND || 'No orders found', 404);
     }
+
+    // Invoice generation starts fulfillment → NEW becomes IN_PROGRESS
+    const order = await Order.findOne({ orderId: String(orderId) });
+    if (order?.status === 'NEW') {
+      order.status = 'IN_PROGRESS';
+      const skuList = order.orderSkuList?.skuList || [];
+      skuList.forEach((sku) => {
+        if (String(sku.sellerId) === String(sellerId)) {
+          if ((sku.status || '').toUpperCase() === 'NEW' || !sku.status) {
+            sku.status = 'IN_PROGRESS';
+          }
+        }
+      });
+      await order.save();
+      await syncSellerOrdersFromOrder(order._id);
+    }
+
     //  Generate PDF (UTIL CALL)
     return generateSellerInvoicePDF(res, result);
   } catch (error) {

@@ -109,7 +109,8 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
         else if (returned === qty) skuStatus = STATUS.RETURNED;
         else if (delivered === qty) skuStatus = STATUS.DELIVERED;
         // IN_PROGRESS must come before SHIPPED
-        else if (shipmentCreated > 0 || confirmed > 0) skuStatus = STATUS.IN_PROGRESS;
+        // confirmed === qty means nothing processed yet → stay NEW
+        else if (shipmentCreated > 0 || (confirmed > 0 && confirmed < qty)) skuStatus = STATUS.IN_PROGRESS;
         else if (shipped > 0) skuStatus = STATUS.SHIPPED;
         else skuStatus = STATUS.NEW;
       }
@@ -271,7 +272,8 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
         skuStatus = STATUS.DELIVERED;
       }
       //  PARTIAL vs FULL SHIPPED HANDLING
-      else if (shipmentCreated > 0 || confirmed > 0) {
+      // confirmed === qty means nothing processed yet → stay NEW
+      else if (shipmentCreated > 0 || (confirmed > 0 && confirmed < qty)) {
         if (shipped === qty) {
           skuStatus = STATUS.SHIPPED; // fully shipped
         } else {
@@ -279,6 +281,9 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
         }
       } else if (shipped > 0) {
         skuStatus = STATUS.SHIPPED;
+      } else if ((sku.status || '').toUpperCase() === 'IN_PROGRESS') {
+        // SKU marked IN_PROGRESS by invoice upload/generate (no shipment activity yet)
+        skuStatus = STATUS.IN_PROGRESS;
       } else {
         skuStatus = STATUS.NEW;
       }
@@ -380,6 +385,7 @@ const deriveSellerStatus = (counts, total) => {
   // -----------------------------
   if (IN_PROGRESS > 0) return STATUS.IN_PROGRESS;
 
+  // NEW + SHIPPED/DELIVERED is not a valid business flow (shipments are created for the order as a whole)
   if (SHIPPED > 0) return STATUS.SHIPPED;
 
   // -----------------------------
