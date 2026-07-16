@@ -7,7 +7,6 @@ import { fetchXokidsShopifyProducts } from '../utils/fetch.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
 import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
-import { XOKIDS_BRAND_MAP } from '#root/src/integrations/erp/xokids/constants/common.js';
 import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
 
 const { MAX_BATCH_SIZE } = erpCommonConfig;
@@ -20,18 +19,10 @@ export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig
 
     console.log(`[Xokids Shopify Sync] Started sync for seller: ${seller.slug} (${sellerId})`);
 
-    // Dynamically build the search query for Shopify's API based on seller properties and mapping
-    const searchTerms = new Set([seller.name, seller.slug.replace(/_/g, ' ')]);
+    // Query Shopify directly by the seller's name
+    const shopifySearchQuery = `status:active AND vendor:'${seller.name}'`;
 
-    const brandMapEntry = XOKIDS_BRAND_MAP.find((entry) => entry.sellerSlug === seller.slug);
-    if (brandMapEntry?.erpBrand) {
-      searchTerms.add(brandMapEntry.erpBrand);
-    }
-
-    const vendorFilter = [...searchTerms].map((term) => `vendor:'${term}'`).join(' OR ');
-    const shopifySearchQuery = `status:active AND (${vendorFilter})`;
-
-    console.log(`[Xokids Shopify Sync] Querying Shopify for vendor terms: ${[...searchTerms].join(', ')}`);
+    console.log(`[Xokids Shopify Sync] Querying Shopify for vendor: "${seller.name}"`);
 
     const rawResponse = await fetchXokidsShopifyProducts(shopifyConfig, shopifySearchQuery);
     console.log(`[Xokids Shopify Sync] Fetched ${rawResponse.length} total raw products from Shopify`);
