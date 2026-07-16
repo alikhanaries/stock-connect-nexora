@@ -145,8 +145,9 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
     ).lean();
     const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
 
+    // Filter for all products (exclude removed only)
     const filter = {
-      status: { $nin: ['removed', 'inactive'] },
+      status: { $ne: 'removed' },
       sellerId: new mongoose.Types.ObjectId(sellerId),
     };
 
