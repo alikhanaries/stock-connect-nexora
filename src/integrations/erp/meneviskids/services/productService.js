@@ -11,25 +11,115 @@ import { formatMeneviskidsProduct, toArray, extractSpecs } from '../helpers/form
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
+const buildBulkOps = (products) =>
+  products.map((product) => ({
+    updateOne: {
+      filter: { productSkuCode: product.productSkuCode, sellerId: product.sellerId },
+      update: {
+        $set: { ...product, updatedAt: new Date() },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      upsert: true,
+    },
+  }));
+
+const runBulkWrite = async (bulkOps, batchId, label) => {
+  if (!bulkOps.length) return { upsertedCount: 0, writtenSkus: new Set() };
+
+  try {
+    const data = await Product.bulkWrite(bulkOps, { ordered: false });
+    return {
+      upsertedCount: data.upsertedCount || 0,
+      writtenSkus: new Set(bulkOps.map((op) => op.updateOne.filter.productSkuCode)),
+    };
+  } catch (bulkErr) {
+    if (bulkErr?.writeErrors?.length) {
+      console.error(`[Batch ${batchId}] ${label} bulkWrite had ${bulkErr.writeErrors.length} write errors. First 5:`);
+      bulkErr.writeErrors.slice(0, 5).forEach((we) => {
+        const failedSku = bulkOps[we.index]?.updateOne?.filter?.productSkuCode;
+        console.error(`  SKU="${failedSku}" code=${we.code} msg=${we.errmsg}`);
+      });
+    } else {
+      console.error(`[Batch ${batchId}] ${label} bulkWrite failed:`, bulkErr);
+    }
+
+    const failedIndexes = new Set((bulkErr?.writeErrors || []).map((we) => we.index));
+    const writtenSkus = new Set(
+      bulkOps.filter((_, index) => !failedIndexes.has(index)).map((op) => op.updateOne.filter.productSkuCode)
+    );
+
+    return {
+      upsertedCount: bulkErr?.result?.upsertedCount || 0,
+      writtenSkus,
+    };
+  }
+};
+
+const upsertHierarchyProducts = async (products, batchId, sellerId) => {
+  const skuList = products.map((p) => p.productSkuCode);
+  const conflicts = await Product.find(
+    { productSkuCode: { $in: skuList }, sellerId: { $ne: sellerId } },
+    { productSkuCode: 1 }
+  ).lean();
+  const conflictSkus = new Set(conflicts.map((p) => p.productSkuCode));
+
+  if (conflictSkus.size) {
+    console.warn(
+      `[Batch ${batchId}] ${conflictSkus.size} SKU(s) already owned by another seller (global SKU index). First 5:`,
+      [...conflictSkus].slice(0, 5)
+    );
+  }
+
+  const grandparents = products.filter((p) => !p.parentProductSkuCode && !p.grandParentProductSkuCode);
+  const parents = products.filter((p) => p.grandParentProductSkuCode && !p.parentProductSkuCode);
+  const children = products.filter((p) => p.parentProductSkuCode);
+
+  let upsertedCount = 0;
+
+  const gpResult = await runBulkWrite(buildBulkOps(grandparents), batchId, 'grandparent');
+  upsertedCount += gpResult.upsertedCount;
+
+  const parentResult = await runBulkWrite(buildBulkOps(parents), batchId, 'parent');
+  upsertedCount += parentResult.upsertedCount;
+
+  const savedParents = new Set(
+    (
+      await Product.find(
+        { sellerId, productSkuCode: { $in: parents.map((p) => p.productSkuCode) } },
+        { productSkuCode: 1 }
+      ).lean()
+    ).map((p) => p.productSkuCode)
+  );
+
+  const validChildren = children.filter((p) => savedParents.has(p.parentProductSkuCode));
+  const skippedChildren = children.length - validChildren.length;
+  if (skippedChildren) {
+    console.warn(
+      `[Batch ${batchId}] Skipped ${skippedChildren} variant(s) because parent row is missing for this seller (often a global SKU conflict).`
+    );
+  }
+
+  const childResult = await runBulkWrite(buildBulkOps(validChildren), batchId, 'child');
+  upsertedCount += childResult.upsertedCount;
+
+  return upsertedCount;
+};
+
 export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
   try {
     const seller = await Seller.findById(sellerId, { name: 1 }).lean();
     if (!seller?.name) throw new Error(`Seller ${sellerId} not found or missing name`);
-    const sellerName = seller.name;
     const adapter = createMeneviskidsAdapter();
     const allProducts = await adapter.fetchProducts();
-
-    // Filter products whose Brand matches the seller name (case-insensitive)
-    const brandRegex = new RegExp(seller.name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    const fetched = allProducts.filter((p) => brandRegex.test((p.Brand || '').trim()));
+    const fetched = allProducts;
 
     console.log(`[Menevis Kids Sync] Seller: "${seller.name}" — Total products in feed: ${allProducts.length}`);
-    console.log(`[Menevis Kids Sync] Matched products for brand "${seller.name}": ${fetched.length}`);
+    console.log(`[Menevis Kids Sync] Products queued for import: ${fetched.length}`);
     console.log(`[Menevis Kids Sync] Batch Size: ${MAX_BATCH_SIZE}, Concurrency: ${BATCH_CONCURRENCY}`);
 
     if (!fetched.length) {
-      console.log(`[Menevis Kids Sync] No products found for brand "${seller.name}".`);
-      return { message: `No products found matching brand "${seller.name}".` };
+      console.log(`[Menevis Kids Sync] No products found in XML feed.`);
+      return { message: 'No products found in Menevis Kids XML feed.' };
     }
 
     let upsertCount = 0;
@@ -63,11 +153,11 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
             incomingSkus.add(gp);
 
             for (const v of validVariants) {
-              const { color } = extractSpecs(v.spec);
+              const { color, size } = extractSpecs(v.spec);
               const safeColor = color.replace(/\s+/g, '_').toUpperCase();
-              incomingSkus.add(`${gp}-${safeColor}`);
-              const childSku = (v.productCode || '').trim();
-              if (childSku) incomingSkus.add(childSku);
+              const parentSku = `${gp}-${safeColor}`;
+              incomingSkus.add(parentSku);
+              if (size) incomingSkus.add(`${parentSku}-${size.trim()}`);
             }
           }
 
@@ -84,8 +174,8 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
             sellerId,
             isImageUpdate,
             existingSkus,
-            false,
-            sellerName
+            true,
+            seller.name
           );
 
           const canonical = products.map((p) => canonicalProductMapper(p, sellerId)).filter(Boolean);
@@ -101,34 +191,10 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
           console.log(`[Batch ${batchId}] Canonical Products: ${canonical.length}`);
 
           if (canonical.length) {
-            const bulkOps = canonical.map((product) => ({
-              updateOne: {
-                filter: { productSkuCode: product.productSkuCode, sellerId: product.sellerId },
-                update: {
-                  $set: { ...product, updatedAt: new Date() },
-                  $setOnInsert: { createdAt: new Date() },
-                },
-                upsert: true,
-              },
-            }));
-
-            try {
-              const data = await Product.bulkWrite(bulkOps, { ordered: false });
-              upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
-            } catch (bulkErr) {
-              if (bulkErr?.writeErrors?.length) {
-                console.error(`[Batch ${batchId}] bulkWrite had ${bulkErr.writeErrors.length} write errors. First 5:`);
-                bulkErr.writeErrors.slice(0, 5).forEach((we) => {
-                  const failedSku = bulkOps[we.index]?.updateOne?.filter?.productSkuCode;
-                  console.error(`  SKU="${failedSku}" code=${we.code} msg=${we.errmsg}`);
-                });
-              } else {
-                console.error(`[Batch ${batchId}] bulkWrite failed:`, bulkErr);
-              }
-              if (bulkErr?.result?.upsertedCount) {
-                upsertCount = calculateUpsertCount(upsertCount, bulkErr.result.upsertedCount);
-              }
-            }
+            upsertCount = calculateUpsertCount(
+              upsertCount,
+              await upsertHierarchyProducts(canonical, batchId, sellerId)
+            );
           }
 
           if (categoryTrails?.length > 0) {
