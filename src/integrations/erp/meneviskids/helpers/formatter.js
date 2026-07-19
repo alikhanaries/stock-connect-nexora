@@ -1,5 +1,6 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 import { MIN_STOCK } from '../constants/common.js';
 
 const stripHtml = (html = '') => {
@@ -36,10 +37,6 @@ const cleanImages = (...imgGroups) => {
   return [...new Set(merged)];
 };
 
-/**
- * Extracts color (renk) and size (beden) from the <spec> attribute nodes.
- * xml2js parses <spec name="renk">siyah</spec> as { '$': { name: 'renk' }, '_': 'siyah' }
- */
 export const extractSpecs = (specs) => {
   const specArray = toArray(specs);
   const colorSpec = specArray.find((s) => s?.['$']?.name === 'renk');
@@ -55,6 +52,17 @@ const buildCategoryTrail = (product) => {
   const cat = (product.category || '').trim();
   const sub = (product.subCategory || '').trim();
   return [main, cat, sub].filter(Boolean).join(' > ');
+};
+
+const resolveVariantPrice = (product, variant) => {
+  const direct = parseFloat(variant.price || 0);
+  if (direct > 0) return direct;
+
+  const fallbacks = [product.price2, product.price3, product.price4, product.price5, product.price6]
+    .map((value) => parseFloat(value || 0))
+    .filter((value) => value > 0);
+
+  return fallbacks.length ? Math.max(...fallbacks) : 0;
 };
 
 const shouldUploadImages = (sku, existingSkus, isImageUpdate) => !existingSkus.has(sku) || isImageUpdate === true;
@@ -76,7 +84,7 @@ export const formatMeneviskidsProduct = async (
     const grandParentSku = (product.Product_code || '').trim();
     if (!grandParentSku) continue;
 
-    const brandName = sellerName || (product.Brand || '').trim();
+    const brandName = (product.Brand || '').trim() || sellerName || '';
     const categoryTrail = buildCategoryTrail(product);
     if (categoryTrail) categoryTrails.add(categoryTrail);
 
@@ -118,7 +126,10 @@ export const formatMeneviskidsProduct = async (
     }
 
     const totalStock = variants.reduce((s, v) => s + Number(v.quantity || 0), 0);
-    const grandParentPrice = await priceConverter('TRL', Math.max(0, ...variants.map((v) => parseFloat(v.price || 0))));
+    const grandParentPrice = await priceConverter(
+      'TRL',
+      Math.max(0, ...variants.map((v) => resolveVariantPrice(product, v)))
+    );
 
     const base = {
       sellerId,
@@ -164,7 +175,7 @@ export const formatMeneviskidsProduct = async (
       const parentStock = colorVariants.reduce((s, v) => s + Number(v.quantity || 0), 0);
       const parentPrice = await priceConverter(
         'TRL',
-        Math.max(0, ...colorVariants.map((v) => parseFloat(v.price || 0)))
+        Math.max(0, ...colorVariants.map((v) => resolveVariantPrice(product, v)))
       );
 
       // Parent (configurable, color only)
@@ -188,9 +199,9 @@ export const formatMeneviskidsProduct = async (
 
       for (const variant of colorVariants) {
         const { size } = extractSpecs(variant.spec);
-        const childSku = (variant.productCode || '').trim();
+        const childSku = `${parentSku}-${(size || '').trim()}`;
         const variantStock = Number(variant.quantity || 0);
-        const variantPrice = await priceConverter('TRL', parseFloat(variant.price || 0));
+        const variantPrice = await priceConverter('TRL', resolveVariantPrice(product, variant));
 
         const uploadChildImages = !skipImages && shouldUploadImages(childSku, existingSkus, isImageUpdate);
         let childProcessed = {};
@@ -245,5 +256,8 @@ export const formatMeneviskidsProduct = async (
     }
   }
 
-  return { products: formatted, categoryTrails: [...categoryTrails] };
+  return {
+    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true }),
+    categoryTrails: [...categoryTrails],
+  };
 };
