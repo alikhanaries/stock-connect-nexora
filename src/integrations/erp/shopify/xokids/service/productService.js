@@ -11,18 +11,21 @@ import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
 
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
-export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig) => {
+export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig, requestedBrand) => {
   try {
     const seller = await Seller.findById(sellerId, { slug: 1, name: 1 }).lean();
     if (!seller?.slug) throw new Error(`Seller ${sellerId} not found or missing slug`);
     if (!seller?.name) throw new Error(`Seller ${sellerId} not found or missing name`);
 
-    console.log(`[Xokids Shopify Sync] Started sync for seller: ${seller.slug} (${sellerId})`);
+    const targetBrand = requestedBrand || seller.name;
+    console.log(
+      `[Xokids Shopify Sync] Started sync for seller: ${seller.slug} (${sellerId}), targetBrand: ${targetBrand}`
+    );
 
-    // Query Shopify directly by the seller's name
-    const shopifySearchQuery = `status:active AND vendor:'${seller.name}'`;
+    // Query Shopify directly by the target brand name
+    const shopifySearchQuery = `status:active AND vendor:'${targetBrand}'`;
 
-    console.log(`[Xokids Shopify Sync] Querying Shopify for vendor: "${seller.name}"`);
+    console.log(`[Xokids Shopify Sync] Querying Shopify for vendor: "${targetBrand}"`);
 
     const rawResponse = await fetchXokidsShopifyProducts(shopifyConfig, shopifySearchQuery);
     console.log(`[Xokids Shopify Sync] Fetched ${rawResponse.length} total raw products from Shopify`);
@@ -33,15 +36,15 @@ export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig
       return name.toLowerCase().replace(/[^a-z0-9]/g, '');
     };
 
-    const normalizedSellerName = normalizeName(seller.name);
+    const normalizedTargetBrand = normalizeName(targetBrand);
 
-    // Filter products based on Shopify response vendor matching the seller's approved name normalized
+    // Filter products based on Shopify response vendor matching the target brand normalized
     const rawResponseFiltered = rawResponse.filter((product) => {
       const normalizedVendor = normalizeName(product.vendor);
-      return normalizedVendor === normalizedSellerName;
+      return normalizedVendor === normalizedTargetBrand;
     });
     console.log(
-      `[Xokids Shopify Sync] Brand Filter: Kept ${rawResponseFiltered.length} of ${rawResponse.length} products matching seller name "${seller.name}".`
+      `[Xokids Shopify Sync] Brand Filter: Kept ${rawResponseFiltered.length} of ${rawResponse.length} products matching brand name "${targetBrand}".`
     );
 
     let upsertCount = 0;
