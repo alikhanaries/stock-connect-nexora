@@ -1,5 +1,3 @@
-import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
-
 // ─── GraphQL Queries for Bulk Operations ──────────────────────────────
 
 const getBulkProductsQuery = (searchQuery) => `
@@ -87,8 +85,6 @@ const getBulkProductsQuery = (searchQuery) => `
   }
 }
 `;
-
-const SHOP_QUERY = `{ shop { currencyCode } }`;
 
 const BULK_MUTATION = `
 mutation bulkOperationRunQuery($query: String!) {
@@ -203,10 +199,6 @@ export const fetchXokidsShopifyProducts = async (shopifyConfig, searchQuery = 's
   try {
     const { url, apiVersion, accessToken } = shopifyConfig;
 
-    console.log('[Xokids Shopify API] Fetching shop currency...');
-    const shopData = await shopifyGraphQL(url, apiVersion, accessToken, SHOP_QUERY);
-    const currencyCode = shopData.shop.currencyCode;
-
     console.log(`[Xokids Shopify API] Starting Shopify Bulk Operation with query: ${searchQuery}`);
     const bulkData = await shopifyGraphQL(url, apiVersion, accessToken, BULK_MUTATION, {
       query: getBulkProductsQuery(searchQuery),
@@ -308,7 +300,7 @@ export const fetchXokidsShopifyProducts = async (shopifyConfig, searchQuery = 's
             return null;
           }
 
-          const finalPrice = await priceConverter(currencyCode, Number(variant.price));
+          const finalPrice = Number(variant.price);
 
           return {
             id: variant.id.split('/').pop(),
