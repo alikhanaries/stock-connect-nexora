@@ -1,3 +1,5 @@
+import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
+
 export const extractImages = (product, variant) => {
   // Use variant images if available, otherwise fallback to product images
   const allImages = variant?.images?.length ? variant.images : product?.images || [];
@@ -8,12 +10,11 @@ export const extractImages = (product, variant) => {
   // Extract URLs of all images
   const imagesArray = allImages.map((img) => img.url || '').filter(Boolean);
 
-  return {
-    primaryImageUrl: primary,
-    imageUrl: primary,
-    images: imagesArray,
-    extraImageUrl1: allImages[1]?.url || '',
-    extraImageUrl2: allImages[2]?.url || '',
-    extraImageUrl3: allImages[3]?.url || '',
-  };
+  // Prefer explicit primary when set; still populate extras from full list
+  const mapped = mapErpStyleImageFields(imagesArray.length ? imagesArray : primary ? [primary] : []);
+  if (primary) {
+    mapped.primaryImageUrl = primary;
+    mapped.imageUrl = primary;
+  }
+  return mapped;
 };

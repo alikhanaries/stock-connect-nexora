@@ -4,6 +4,7 @@ import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParse
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
 import { normalizeAndTranslateVariants } from '#root/src/integrations/erp/entegra/helpers/commonHelper.js';
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
+import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
 export const collectedColors = new Map();
 
 // MAIN MAPPER
@@ -34,16 +35,7 @@ const safeProcessImages = async (images = [], sellerId) => {
 const attachImages = (target, images) => {
   if (!Array.isArray(images) || images.length === 0) return;
 
-  const cloned = [...images];
-
-  Object.assign(target, {
-    primaryImageUrl: cloned[0],
-    imageUrl: cloned[0],
-    extraImageUrl1: cloned[1] || null,
-    extraImageUrl2: cloned[2] || null,
-    extraImageUrl3: cloned[3] || null,
-    images: cloned,
-  });
+  Object.assign(target, mapErpStyleImageFields(images));
 };
 
 export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = false) => {

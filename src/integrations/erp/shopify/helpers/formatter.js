@@ -2,6 +2,7 @@ import { processInBatches } from '#root/src/integrations/common/helpers/batchHel
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
 import { extractImages } from '#root/src/integrations/erp/shopify/helpers/common.js';
+import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
 
 export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500) => {
   if (!Array.isArray(rawProducts) || rawProducts.length === 0) return [];
@@ -51,12 +52,9 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           hsCodeSA: '1111111',
           vatRateType: 'STANDARD',
           productType: 'configurable',
+          ...mapErpStyleImageFields(productImages.images || []),
           primaryImageUrl: productImages.primaryImageUrl || '',
-          imageUrl: productImages.imageUrl || '',
-          images: productImages.images || [],
-          extraImageUrl1: productImages.extraImageUrl1 || '',
-          extraImageUrl2: productImages.extraImageUrl2 || '',
-          extraImageUrl3: productImages.extraImageUrl3 || '',
+          imageUrl: productImages.imageUrl || productImages.primaryImageUrl || '',
           source: 'SHOPIFY',
           status,
         },
@@ -112,12 +110,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
             hsCodeSA: '1111111',
             vatRateType: 'STANDARD',
             productType: 'configurable',
-            primaryImageUrl: variantImage,
-            imageUrl: variantImage,
-            images: variantImage ? [variantImage] : [],
-            extraImageUrl1: variantImage,
-            extraImageUrl2: '',
-            extraImageUrl3: '',
+            ...mapErpStyleImageFields(variantImage ? [variantImage] : []),
             source: 'SHOPIFY',
             status,
           },
@@ -163,12 +156,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
               hsCodeSA: '1111111',
               vatRateType: 'STANDARD',
               productType: 'simple',
-              primaryImageUrl: variantImage,
-              imageUrl: variantImage,
-              images: variantImage ? [variantImage] : [],
-              extraImageUrl1: variantImage,
-              extraImageUrl2: '',
-              extraImageUrl3: '',
+              ...mapErpStyleImageFields(variantImage ? [variantImage] : []),
               source: 'SHOPIFY',
               status,
             },

@@ -27,6 +27,7 @@ import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
 import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
+import { NAMED_IMAGE_URL_KEYS, exportExtraImageUrlValues } from '#helpers/productImageFields.js';
 import { upsertPricesForProducts } from '../service/priceService.js';
 import {
   chunkArray,
@@ -670,14 +671,7 @@ export const processImportStream = async (stream, { deleteAfter, filePath, local
         // requests an image update, force the newly uploaded image URLs into the
         // update so existing products actually get their images refreshed.
         if (isImageUpdate) {
-          const IMAGE_FIELDS = [
-            'primaryImageUrl',
-            'imageUrl',
-            'extraImageUrl1',
-            'extraImageUrl2',
-            'extraImageUrl3',
-            'images',
-          ];
+          const IMAGE_FIELDS = [...NAMED_IMAGE_URL_KEYS, 'images'];
           for (const field of IMAGE_FIELDS) {
             if (product[field] !== undefined && product[field] !== null && product[field] !== '') {
               updateFields[field] = product[field];
@@ -1473,9 +1467,7 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.description || '',
         product.descriptionAr || '',
         product.ean || '',
-        product.extraImageUrl1 || '',
-        product.extraImageUrl2 || '',
-        product.extraImageUrl3 || '',
+        ...exportExtraImageUrlValues(product),
         product.gender || '',
         product.hsCodeSA || '',
         product.hsCodeAE || '',
