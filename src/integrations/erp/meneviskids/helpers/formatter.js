@@ -1,4 +1,5 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
+import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
 import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 import { MIN_STOCK } from '../constants/common.js';
@@ -105,24 +106,10 @@ export const formatMeneviskidsProduct = async (
     if (uploadBaseImages && productImages.length > 0) {
       const cdnImages = await processProductImages(productImages, sellerId);
       if (cdnImages.length > 0) {
-        baseProcessed = {
-          primaryImageUrl: cdnImages[0],
-          imageUrl: cdnImages[0],
-          extraImageUrl1: cdnImages[1] || null,
-          extraImageUrl2: cdnImages[2] || null,
-          extraImageUrl3: cdnImages[3] || null,
-          images: cdnImages,
-        };
+        baseProcessed = mapErpStyleImageFields(cdnImages);
       }
     } else if (skipImages && productImages.length > 0) {
-      baseProcessed = {
-        primaryImageUrl: productImages[0],
-        imageUrl: productImages[0],
-        extraImageUrl1: productImages[1] || null,
-        extraImageUrl2: productImages[2] || null,
-        extraImageUrl3: productImages[3] || null,
-        images: productImages,
-      };
+      baseProcessed = mapErpStyleImageFields(productImages);
     }
 
     const totalStock = variants.reduce((s, v) => s + Number(v.quantity || 0), 0);
@@ -212,24 +199,10 @@ export const formatMeneviskidsProduct = async (
         if (uploadChildImages && mergedChildImages.length > 0) {
           const cdnChildImages = await processProductImages(mergedChildImages, sellerId);
           if (cdnChildImages.length > 0) {
-            childProcessed = {
-              primaryImageUrl: cdnChildImages[0],
-              imageUrl: cdnChildImages[0],
-              extraImageUrl1: cdnChildImages[1] || null,
-              extraImageUrl2: cdnChildImages[2] || null,
-              extraImageUrl3: cdnChildImages[3] || null,
-              images: cdnChildImages,
-            };
+            childProcessed = mapErpStyleImageFields(cdnChildImages);
           }
         } else if (skipImages && mergedChildImages.length > 0) {
-          childProcessed = {
-            primaryImageUrl: mergedChildImages[0],
-            imageUrl: mergedChildImages[0],
-            extraImageUrl1: mergedChildImages[1] || null,
-            extraImageUrl2: mergedChildImages[2] || null,
-            extraImageUrl3: mergedChildImages[3] || null,
-            images: mergedChildImages,
-          };
+          childProcessed = mapErpStyleImageFields(mergedChildImages);
         }
 
         formatted.push({

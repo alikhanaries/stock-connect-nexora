@@ -31,9 +31,7 @@ const IGNORED_FIELDS = new Set([
   'images',
   'primaryImageUrl',
   'imageUrl',
-  'extraImageUrl1',
-  'extraImageUrl2',
-  'extraImageUrl3',
+  ...Array.from({ length: 14 }, (_, i) => `extraImageUrl${i + 1}`),
 
   // system fields
   'createdAt',

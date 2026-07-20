@@ -4,6 +4,7 @@ import { generateS3Key } from '../util/generateS3Key.js';
 import { getPublicImageUrl } from '../util/getPublicImageUrl.js';
 import pLimit from 'p-limit';
 import { cleanNumber } from '../helpers/Common.js';
+import { collectCsvImageSlotsFromRow, mapCsvStyleImageFields } from '../helpers/productImageFields.js';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
 export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdate = false, isNewSku = false, brand) => {
@@ -22,29 +23,30 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
   if (isNewSku) {
     if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
     if (!r.primaryimageurl) errorData.push('Primary image url is missing');
-    if (!r.imageurl) errorData.push('Image url is missing');
   }
 
   if (errorData.length) return { rowNumber: index, errorData };
 
-  let publicUrls = [];
+  let imageFields = null;
 
   //  IMAGE HANDLING ONLY WHEN isImageUpdate === TRUE AND NEW SKU COME
   const shouldUploadImages = isNewSku || isImageUpdate === true;
   if (shouldUploadImages) {
-    const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
-      .filter(Boolean)
-      .map(normalizeImageUrl);
+    // Fixed-length slots so empty middle CSV columns keep exact positions
+    const imageSlots = collectCsvImageSlotsFromRow(r).map((url) => (url ? normalizeImageUrl(url) : ''));
 
-    const generatedKeys = allImageUrls.map((img) => generateS3Key(img, sellerId, r.productskucode));
-
-    generatedKeys.forEach((key, i) => {
-      limit(() => uploadImageFromUrl(allImageUrls[i], key)).catch((err) =>
-        console.error(`Image upload failed (${allImageUrls[i]}): ${err.message}`)
+    const publicSlots = imageSlots.map((url) => {
+      if (!url) return '';
+      const key = generateS3Key(url, sellerId, r.productskucode);
+      limit(() => uploadImageFromUrl(url, key)).catch((err) =>
+        console.error(`Image upload failed (${url}): ${err.message}`)
       );
+      return getPublicImageUrl(key);
     });
 
-    publicUrls = generatedKeys.map(getPublicImageUrl);
+    if (publicSlots.some(Boolean)) {
+      imageFields = mapCsvStyleImageFields(publicSlots);
+    }
   }
 
   // Build product (ALL fields preserved)
@@ -70,14 +72,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     vatRateType: r.vatratetype ? r.vatratetype.toUpperCase() : 'STANDARD',
     shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : null,
     shippingTime: r.shippingtime || null,
-    ...(publicUrls.length > 0 && {
-      primaryImageUrl: publicUrls[0],
-      imageUrl: publicUrls[1],
-      extraImageUrl1: publicUrls[2],
-      extraImageUrl2: publicUrls[3],
-      extraImageUrl3: publicUrls[4],
-      images: publicUrls,
-    }),
+    ...(imageFields || {}),
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
     categories: [],

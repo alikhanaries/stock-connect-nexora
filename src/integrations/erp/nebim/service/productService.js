@@ -5,6 +5,7 @@ import { createERPAdapter } from '#root/src/integrations/erp/base/ERPFactory.js'
 import { formatNebimProducts } from '#root/src/integrations/erp/nebim/helpers/formatter.js';
 import { handleNebimError } from '#root/src/integrations/erp/nebim/util/handleError.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
+import { NAMED_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 const adapter = createERPAdapter('nebim');
 export const fetchAndStoreNebimProducts = async (sellerId) => {
@@ -45,11 +46,8 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
       //  Fields allowed to update for existing products
       const updateFields = {
         // Images
-        extraImageUrl1: product.extraImageUrl1,
-        extraImageUrl2: product.extraImageUrl2,
-        extraImageUrl3: product.extraImageUrl3,
-        imageUrl: product.imageUrl,
-        primaryImageUrl: product.primaryImageUrl,
+        ...Object.fromEntries(NAMED_IMAGE_URL_KEYS.map((key) => [key, product[key]])),
+        images: product.images,
 
         // Stock
         currentStockCount: product.currentStockCount,
@@ -64,11 +62,9 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
       //  Insert-only object (remove conflicting fields)
       const insertOnlyProduct = { ...product };
 
-      delete insertOnlyProduct.extraImageUrl1;
-      delete insertOnlyProduct.extraImageUrl2;
-      delete insertOnlyProduct.extraImageUrl3;
-      delete insertOnlyProduct.imageUrl;
-      delete insertOnlyProduct.primaryImageUrl;
+      for (const key of [...NAMED_IMAGE_URL_KEYS, 'images']) {
+        delete insertOnlyProduct[key];
+      }
       delete insertOnlyProduct.currentStockCount;
       delete insertOnlyProduct.description;
       delete insertOnlyProduct.descriptionAr;

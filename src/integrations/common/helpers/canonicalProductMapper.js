@@ -1,3 +1,5 @@
+import { pickNamedImageFields, NAMED_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
+
 export const canonicalProductMapper = (item = {}, sellerId) => {
   if (!item) return null;
 
@@ -31,12 +33,7 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     volumetricWeightCm: item.volumetricWeightCm || 0,
     hsCodeSA: item.hsCodeSA ?? item.productSkuCode,
     hsCodeAE: item.hsCodeAE ?? item.productSkuCode,
-    primaryImageUrl: item.primaryImageUrl,
-    imageUrl: item.imageUrl,
-    images: item.images,
-    extraImageUrl1: item.extraImageUrl1,
-    extraImageUrl2: item.extraImageUrl2,
-    extraImageUrl3: item.extraImageUrl3,
+    ...pickNamedImageFields(item),
     vatRateType: item.vatRateType || 'STANDARD',
     productType: item.productType || 'simple',
     source: item.source || 'MANUAL',
@@ -45,3 +42,6 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     updatedAt: item.updatedAt,
   };
 };
+
+// Re-export for callers that need field lists
+export { NAMED_IMAGE_URL_KEYS };

@@ -1,3 +1,5 @@
+import { mapErpStyleImageFields, EXTRA_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
+
 export const extractMainImage = (pictures) => {
   if (!Array.isArray(pictures)) return null;
 
@@ -88,13 +90,14 @@ export const normalizeAndTranslateVariants = async (variations = []) => {
   });
 };
 
-export const mapImageUrls = (images = []) => ({
-  primaryImageUrl: images[0] || '',
-  imageUrl: images[0] || '',
-  extraImageUrl1: images[1] || '',
-  extraImageUrl2: images[2] || '',
-  extraImageUrl3: images[3] || '',
-});
+export const mapImageUrls = (images = []) => {
+  const mapped = mapErpStyleImageFields(images);
+  return {
+    primaryImageUrl: mapped.primaryImageUrl || '',
+    imageUrl: mapped.imageUrl || '',
+    ...Object.fromEntries(EXTRA_IMAGE_URL_KEYS.map((key) => [key, mapped[key] || ''])),
+  };
+};
 export const resolveImages = (preferred = [], fallback = []) =>
   Array.isArray(preferred) && preferred.length > 0 ? preferred : fallback;
 // Normalize variant specs (deterministic)

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { pickNamedImageFields, EXTRA_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
 
 export const canonicalProductMapper = (item = {}, sellerId) => {
   if (!item) return null;
@@ -44,12 +45,15 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     isFrozen: Boolean(item.isFrozen),
 
     // Images
-    primaryImageUrl: item.primaryImageUrl || '',
-    imageUrl: item.imageUrl || '',
-    extraImageUrl1: item.extraImageUrl1 || '',
-    extraImageUrl2: item.extraImageUrl2 || '',
-    extraImageUrl3: item.extraImageUrl3 || '',
-    images: item.images || [],
+    ...(() => {
+      const imgs = pickNamedImageFields({ ...item, images: item.images || [] });
+      return {
+        primaryImageUrl: imgs.primaryImageUrl || '',
+        imageUrl: imgs.imageUrl || '',
+        images: imgs.images || [],
+        ...Object.fromEntries(EXTRA_IMAGE_URL_KEYS.map((key) => [key, imgs[key] || ''])),
+      };
+    })(),
 
     // Categories
     categoryTrail: item.categoryTrail || '',

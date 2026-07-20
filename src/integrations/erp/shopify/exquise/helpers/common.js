@@ -1,3 +1,5 @@
+import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
+
 export const extractImages = (product, variant, colorImages) => {
   // If color-specific images are provided, use them
   // Otherwise fall back to all product images (e.g. for grandparent)
@@ -5,16 +7,7 @@ export const extractImages = (product, variant, colorImages) => {
     ? colorImages.map((img) => img.url || '').filter(Boolean)
     : (product?.images || []).map((img) => img.url || '').filter(Boolean);
 
-  const primary = imagesArray[0] || '';
-
-  return {
-    primaryImageUrl: primary,
-    imageUrl: primary,
-    images: imagesArray,
-    extraImageUrl1: imagesArray[1] || '',
-    extraImageUrl2: imagesArray[2] || '',
-    extraImageUrl3: imagesArray[3] || '',
-  };
+  return mapErpStyleImageFields(imagesArray);
 };
 
 /**
