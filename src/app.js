@@ -10,6 +10,7 @@ import eliteStringLaIntimoApiRoutes from './integrations/erp/eliteStringLaIntimo
 import shopifyRoutes from './integrations/erp/shopify/routes/api.js';
 import shopifyExquiseRoutes from './integrations/erp/shopify/exquise/routes/api.js';
 import shopifyCatchRoutes from './integrations/erp/shopify/catch/routes/api.js';
+import shopifyXokidsRoutes from './integrations/erp/shopify/xokids/routes/api.js';
 import unicommerceRoutes from './integrations/erp/unicommerce/routes/api.js';
 import xokidsRoutes from './integrations/erp/xokids/routes/api.js';
 import meneviskidsRoutes from './integrations/erp/meneviskids/routes/api.js';
@@ -57,6 +58,7 @@ app.use('/api/erp/elite_string_la_intimo', eliteStringLaIntimoApiRoutes);
 app.use('/api/erp/shopify', shopifyRoutes);
 app.use('/api/erp/shopify/exquise', shopifyExquiseRoutes);
 app.use('/api/erp/shopify/catch', shopifyCatchRoutes);
+app.use('/api/erp/shopify/xokids', shopifyXokidsRoutes);
 app.use('/api/erp/unicommerce', unicommerceRoutes);
 app.use('/api/erp/xokids', xokidsRoutes);
 app.use('/api/erp/meneviskids', meneviskidsRoutes);
