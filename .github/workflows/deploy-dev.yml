@@ -2,59 +2,37 @@ name: Deploy to Dev Server
 
 on:
   push:
-    branches:
-      - develop # Triggers on push to develop branch
-      - 'test/deploy-ment' # Triggers on push to test branch
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
 
 jobs:
   deploy:
-    name: Deploy to Dev Server
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Deploy to Dev Server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DEV_SERVER_HOST }}
-          username: ${{ secrets.DEV_SERVER_USER }}
-          key: ${{ secrets.DEV_SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
-            echo "🚀 Starting deployment to DEV server..."
-            # Navigate to project directory
-            cd /home/opc/stock-connect-backend || exit 1
-            # Pull latest code
-            echo "📥 Pulling latest code from ${{ github.ref_name }}..."
-            git fetch origin ${{ github.ref_name }}
-            git checkout ${{ github.ref_name }}
-            git pull origin ${{ github.ref_name }}
-            # Install dependencies if package.json changed
-            echo "📦 Installing dependencies..."
-            yarn install
-            # Find and kill process on port 3000
-            echo "🔍 Finding process on port 3000..."
-            OLD_PID=$(lsof -ti:3000)
-            if [ ! -z "$OLD_PID" ]; then
-              echo "🛑 Killing old process (PID: $OLD_PID)..."
-              kill -9 $OLD_PID
-              sleep 2
-            else
-              echo "ℹ️  No process found on port 3000"
-            fi
-            # Start the application
-            echo "▶️  Starting application..."
-            nohup npm run start > /home/opc/stock-connect-backend/app.log 2>&1 &
-            # Wait a bit and verify the process started
-            sleep 3
-            NEW_PID=$(lsof -ti:3000)
-            if [ ! -z "$NEW_PID" ]; then
-              echo "✅ Application started successfully on DEV (PID: $NEW_PID)"
-            else
-              echo "❌ Failed to start application"
-              exit 1
-            fi
-            echo "🎉 Dev deployment completed!"
+      - name: Deploy
+        env:
+          HOST: ${{ secrets.DEV_SERVER_HOST }}
+          USER: ${{ secrets.DEV_SERVER_USER }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          rsync -az --delete \
+            --exclude '.git' --exclude node_modules --exclude '.env*' \
+            --exclude uploads --exclude src/log --exclude ecosystem.config.cjs \
+            -e "ssh -i ~/.ssh/key" \
+            ./ "$USER@$HOST:/home/ubuntu/stock-connect-backend/"
+
+          ssh -i ~/.ssh/key "$USER@$HOST" 'set -e
+            cd ~/stock-connect-backend
+            HUSKY=0 yarn install --immutable
+            pm2 reload stockconnect-backend --update-env
+            curl -sf --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/'
