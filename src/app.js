@@ -17,6 +17,7 @@ import meneviskidsRoutes from './integrations/erp/meneviskids/routes/api.js';
 import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
+import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 
 const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
@@ -26,6 +27,11 @@ const app = express();
 function setupSwagger(path, swaggerSpec, options = {}) {
   app.use(path, swaggerUi.serveFiles(swaggerSpec, {}), swaggerUi.setup(swaggerSpec, options));
 }
+
+app.get('/swagger.json', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.json(swaggerDocument);
+});
 
 setupSwagger('/api-docs', swaggerDocument, {
   requestInterceptor: (req) => {
@@ -48,6 +54,8 @@ app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.send('API is running!');
 });
+
+app.use('/api', apiLogMiddleware);
 
 app.use('/api', apiRoutes);
 app.use('/api/erp/nebim', nebimApiRoutes);
