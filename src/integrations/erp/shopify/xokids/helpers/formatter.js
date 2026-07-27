@@ -137,7 +137,7 @@ export const formatXokidsShopifyProducts = async (
 
   await processInBatches(rawProducts, batchSize, async (batch) => {
     for (const product of batch) {
-      const brandName = product.vendor || approvedBrandName;
+      const brandName = approvedBrandName;
       const { id, title, description, variants = [], category, status } = product;
 
       if (!variants.length) continue;
