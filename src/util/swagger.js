@@ -26,6 +26,7 @@ export function loadSwagger() {
         { name: 'Returns', description: 'Return management' },
         { name: 'Shipments', description: 'Shipment management' },
         { name: 'Invoices', description: 'Invoice management' },
+        { name: 'API Logs', description: 'Master-admin API call audit and performance logs' },
       ],
       servers: [{ url: `${config.BASE_URL}api` }, { url: 'http://localhost:8000/api' }],
       components: {
