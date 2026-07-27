@@ -27,7 +27,11 @@ import { Readable } from 'stream';
 import { insertCategoryTrail } from '../service/categoryService.js';
 import { buildCondition } from '../helpers/productFilters.js';
 import { makeComparableProductFromSchema, getChangedFields } from '#helpers/generateComparableProducts.js';
-import { NAMED_IMAGE_URL_KEYS, exportExtraImageUrlValues } from '#helpers/productImageFields.js';
+import {
+  NAMED_IMAGE_URL_KEYS,
+  exportExtraImageUrlValues,
+  exportAmazonExtraImageUrlValues,
+} from '#helpers/productImageFields.js';
 import { upsertPricesForProducts } from '../service/priceService.js';
 import {
   chunkArray,
@@ -1488,6 +1492,9 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.noonPrice || 0,
         product.namshiPrice || 0,
         product.amazonPrice || 0,
+        product.amazon?.amazonPrimaryImageUrl || product.amazonPrimaryImageUrl || product.amazon?.primaryImageUrl || '',
+        product.amazon?.amazonImageUrl || product.amazonImageUrl || product.amazon?.imageUrl || '',
+        ...exportAmazonExtraImageUrlValues(product),
         // Amazon marketplace listing attributes
         product.amazon?.variationThemeName || '',
         product.amazon?.modelNumber || '',
