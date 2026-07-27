@@ -30,5 +30,5 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/price', priceRoutes);
 router.use('/finance', financeRoutes);
-router.use('/admin/api-logs', apiCallLogRoutes);
+router.use('/api-logs', apiCallLogRoutes);
 export default router;

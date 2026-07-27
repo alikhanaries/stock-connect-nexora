@@ -23,7 +23,7 @@ const apiCallLogRoutes = express.Router();
 
 /**
  * @swagger
- * /admin/api-logs:
+ * /api-logs:
  *   get:
  *     tags: [API Logs]
  *     summary: List and filter API call logs
@@ -114,7 +114,7 @@ apiCallLogRoutes.get(
 
 /**
  * @swagger
- * /admin/api-logs/performance:
+ * /api-logs/performance:
  *   get:
  *     tags: [API Logs]
  *     summary: Get API call performance aggregates
@@ -186,7 +186,7 @@ apiCallLogRoutes.get(
 
 /**
  * @swagger
- * /admin/api-logs/{requestId}:
+ * /api-logs/{requestId}:
  *   get:
  *     tags: [API Logs]
  *     summary: Get a single API call log by requestId
