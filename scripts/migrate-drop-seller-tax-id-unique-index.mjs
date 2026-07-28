@@ -1,7 +1,7 @@
 /**
  * Drop unique MongoDB index on sellers.taxIdentificationNumber.
  *
- * Idempotent — safe to re-run. Matches docs/seller-tax-identification-number-index-migration.md
+ * Idempotent — safe to re-run.
  *
  * Usage:
  *   node scripts/migrate-drop-seller-tax-id-unique-index.mjs
