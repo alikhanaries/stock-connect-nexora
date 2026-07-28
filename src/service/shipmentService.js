@@ -892,7 +892,9 @@ export const ayMakanWebHookService = async (data) => {
       })),
 
       omniful: {
+        // omnifulId: OmniFul internal ID (POST response data.id) — use for GET /seller/orders/{id}
         omnifulId: omnifulResponse?.id,
+        // omnifulOrderId: external order_id we sent (shipment _id string) — matches GET response data.order_id
         omnifulOrderId: omnifulResponse?.orderId,
       },
     };
