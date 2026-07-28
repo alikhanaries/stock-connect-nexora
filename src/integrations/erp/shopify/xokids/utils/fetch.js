@@ -143,21 +143,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function safeParseMetafieldAmount(value) {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed === 'object') {
-      const amount = parseFloat(parsed?.amount);
-      return isNaN(amount) ? null : amount;
-    }
-  } catch {
-    // treat as plain number
-  }
-  const direct = parseFloat(value);
-  return isNaN(direct) ? null : direct;
-}
-
 function parseBulkJsonl(lines) {
   const productsMap = new Map();
   const variantsMap = new Map();
@@ -193,13 +178,125 @@ function parseBulkJsonl(lines) {
   return productsMap;
 }
 
+const normalizeKey = (key) => (key ? String(key).trim().toLowerCase() : '');
+
+async function fetchShopifyPriceListsAllPages(url, apiVersion, accessToken) {
+  const priceLists = [];
+  let hasNextPriceList = true;
+  let priceListCursor = null;
+
+  while (hasNextPriceList) {
+    const afterClause = priceListCursor ? `, after: "${priceListCursor}"` : '';
+    const query = `
+      query {
+        priceLists(first: 250${afterClause}) {
+          edges {
+            cursor
+            node {
+              id
+              name
+              currency
+            }
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    `;
+
+    try {
+      const data = await shopifyGraphQL(url, apiVersion, accessToken, query);
+      const edges = data?.priceLists?.edges || [];
+      const pageInfo = data?.priceLists?.pageInfo;
+
+      for (const edge of edges) {
+        const plNode = edge.node;
+        const allPrices = [];
+
+        let hasNextPrice = true;
+        let priceCursor = null;
+
+        while (hasNextPrice) {
+          const priceAfterClause = priceCursor ? `, after: "${priceCursor}"` : '';
+          const pricesQuery = `
+            query {
+              priceList(id: "${plNode.id}") {
+                prices(first: 250${priceAfterClause}) {
+                  edges {
+                    cursor
+                    node {
+                      price {
+                        amount
+                        currencyCode
+                      }
+                      compareAtPrice {
+                        amount
+                        currencyCode
+                      }
+                      variant {
+                        id
+                        sku
+                      }
+                    }
+                  }
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
+                }
+              }
+            }
+          `;
+
+          const priceData = await shopifyGraphQL(url, apiVersion, accessToken, pricesQuery);
+          const priceEdges = priceData?.priceList?.prices?.edges || [];
+          const pricePageInfo = priceData?.priceList?.prices?.pageInfo;
+
+          for (const pEdge of priceEdges) {
+            if (pEdge.node) {
+              allPrices.push(pEdge.node);
+            }
+          }
+
+          hasNextPrice = Boolean(pricePageInfo?.hasNextPage);
+          priceCursor = pricePageInfo?.endCursor || null;
+        }
+
+        priceLists.push({
+          id: plNode.id,
+          name: plNode.name,
+          currency: plNode.currency,
+          prices: { nodes: allPrices },
+        });
+      }
+
+      hasNextPriceList = Boolean(pageInfo?.hasNextPage);
+      priceListCursor = pageInfo?.endCursor || null;
+    } catch (err) {
+      console.error('[Xokids Shopify API] Error fetching paginated PriceLists:', err.message);
+      break;
+    }
+  }
+
+  return priceLists;
+}
+
 // ─── Main Bulk Fetch ─────────────────────────────────────────────────
 
 export const fetchXokidsShopifyProducts = async (shopifyConfig, searchQuery = 'status:active') => {
   try {
     const { url, apiVersion, accessToken } = shopifyConfig;
 
-    console.log(`[Xokids Shopify API] Starting Shopify Bulk Operation with query: ${searchQuery}`);
+    console.log('[Xokids Shopify API] Fetching ALL pages of PriceLists & Prices via GraphQL...');
+    const priceLists = await fetchShopifyPriceListsAllPages(url, apiVersion, accessToken);
+    const totalPricesCount = priceLists.reduce((sum, pl) => sum + (pl.prices?.nodes?.length || 0), 0);
+    console.log(
+      `[Xokids Shopify API] PriceLists fetched: ${priceLists.length} list(s), ${totalPricesCount} total price rules`
+    );
+
+    console.log(`[Xokids Shopify API] Starting Shopify Bulk Operation for products with query: ${searchQuery}`);
     const bulkData = await shopifyGraphQL(url, apiVersion, accessToken, BULK_MUTATION, {
       query: getBulkProductsQuery(searchQuery),
     });
@@ -253,25 +350,26 @@ export const fetchXokidsShopifyProducts = async (shopifyConfig, searchQuery = 's
     }
 
     const lines = trimmedText.split('\n').map((line) => JSON.parse(line));
-
     const productsMap = parseBulkJsonl(lines);
     const allProducts = [];
 
-    console.log('[Xokids Shopify API] Processing and parsing bulk records...');
+    const priceListPricesMap = new Map();
+    for (const pl of priceLists) {
+      if (pl.id !== 'gid://shopify/PriceList/34156019878' && !pl.id?.includes('34156019878')) continue;
+
+      const plName = pl.name || '';
+      for (const p of pl.prices?.nodes || []) {
+        const amount = parseFloat(p.price?.amount);
+        if (isNaN(amount)) continue;
+        const sku = p.variant?.sku;
+        const vId = p.variant?.id?.split('/').pop();
+        const priceInfo = { amount, currency: p.price?.currencyCode, priceListName: plName, priceListId: pl.id };
+        if (sku) priceListPricesMap.set(normalizeKey(sku), priceInfo);
+        if (vId) priceListPricesMap.set(normalizeKey(vId), priceInfo);
+      }
+    }
 
     for (const [, node] of productsMap) {
-      const findMetafield = (key) => {
-        const found = (node._metafields || []).find((m) => m.key === key);
-        return found ? safeParseMetafieldAmount(found.value) : null;
-      };
-
-      const sarPrices = findMetafield('sar_prices');
-      const sarPriceNamshi = findMetafield('sar_price_namshi');
-      const sarPriceNoon = findMetafield('sar_price_noon');
-      const sarPriceAmazon = findMetafield('sar_price_amazon');
-      const sarPriceStyli = findMetafield('sar_price_styli');
-      const sarPrice6thstreet = findMetafield('sar_price_6thstreet');
-
       const mappedVariants = await Promise.all(
         (node._variants || []).map(async (variant) => {
           const stock = variant._inventoryLevels?.[0]?.quantities?.find((q) => q.name === 'available')?.quantity ?? 0;
@@ -300,12 +398,24 @@ export const fetchXokidsShopifyProducts = async (shopifyConfig, searchQuery = 's
             return null;
           }
 
-          const finalPrice = Number(variant.price);
+          const variantNumericId = variant.id.split('/').pop();
+          const plPrice =
+            priceListPricesMap.get(normalizeKey(variant.sku)) ||
+            priceListPricesMap.get(normalizeKey(variantNumericId)) ||
+            null;
+
+          if (plPrice?.amount == null || isNaN(parseFloat(plPrice.amount))) {
+            return null;
+          }
+
+          const finalPrice = Number(plPrice.amount);
 
           return {
-            id: variant.id.split('/').pop(),
+            id: variantNumericId,
             title: variant.title,
             price: finalPrice,
+            namshiPrice: finalPrice,
+            priceListPrice: plPrice?.amount || null,
             compareAtPrice: variant.compareAtPrice ? Number(variant.compareAtPrice) : null,
             sku: variant.sku,
             taxable: variant.taxable,
@@ -341,12 +451,13 @@ export const fetchXokidsShopifyProducts = async (shopifyConfig, searchQuery = 's
         createdAt: node.createdAt,
         updatedAt: node.updatedAt,
         publishedAt: node.publishedAt,
-        sarPrices,
-        sarPriceNamshi,
-        sarPriceNoon,
-        sarPriceAmazon,
-        sarPriceStyli,
-        sarPrice6thstreet,
+        metafields: (node._metafields || []).map((m) => ({
+          id: m.id,
+          namespace: m.namespace,
+          key: m.key,
+          value: m.value,
+          type: m.type,
+        })),
         category: node.productCategory
           ? {
               id: node.productCategory.productTaxonomyNode.id,

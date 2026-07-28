@@ -138,20 +138,7 @@ export const formatXokidsShopifyProducts = async (
   await processInBatches(rawProducts, batchSize, async (batch) => {
     for (const product of batch) {
       const brandName = approvedBrandName;
-      const {
-        id,
-        title,
-        description,
-        variants = [],
-        category,
-        status,
-        sarPrices,
-        sarPriceNamshi,
-        sarPriceNoon,
-        sarPriceAmazon,
-        sarPriceStyli,
-        sarPrice6thstreet,
-      } = product;
+      const { id, title, description, variants = [], category, status } = product;
 
       if (!variants.length) continue;
 
@@ -195,12 +182,12 @@ export const formatXokidsShopifyProducts = async (
       }
 
       const grandParentStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
-      const basePrice = sarPrices ?? (Number(variants[0]?.price) || 0);
-      const noon = sarPriceNoon ?? basePrice;
-      const namshi = sarPriceNamshi ?? basePrice;
-      const amazon = sarPriceAmazon ?? basePrice;
-      const styli = sarPriceStyli ?? basePrice;
-      const sixthStreet = sarPrice6thstreet ?? basePrice;
+      const basePrice = Number(variants[0]?.price) || 0;
+      const noon = basePrice;
+      const namshi = basePrice;
+      const amazon = basePrice;
+      const styli = basePrice;
+      const sixthStreet = basePrice;
 
       const grandParentProduct = canonicalProductMapper(
         {
@@ -262,12 +249,12 @@ export const formatXokidsShopifyProducts = async (
         }
 
         const parentPrices = colorVariants.map((v) => Number(v.price) || 0);
-        const parentPrice = sarPrices ?? (parentPrices[0] || 0);
-        const pNoon = sarPriceNoon ?? parentPrice;
-        const pNamshi = sarPriceNamshi ?? parentPrice;
-        const pAmazon = sarPriceAmazon ?? parentPrice;
-        const pStyli = sarPriceStyli ?? parentPrice;
-        const pSixthStreet = sarPrice6thstreet ?? parentPrice;
+        const parentPrice = parentPrices[0] || 0;
+        const pNoon = parentPrice;
+        const pNamshi = parentPrice;
+        const pAmazon = parentPrice;
+        const pStyli = parentPrice;
+        const pSixthStreet = parentPrice;
 
         // Get color-specific images
         let colorImages = getColorImages(product.images, colorVariants, allVariantImageIds);
@@ -338,12 +325,12 @@ export const formatXokidsShopifyProducts = async (
             }
           }
 
-          const childPrice = sarPrices ?? (Number(variant.price) || 0);
-          const cNoon = sarPriceNoon ?? childPrice;
-          const cNamshi = sarPriceNamshi ?? childPrice;
-          const cAmazon = sarPriceAmazon ?? childPrice;
-          const cStyli = sarPriceStyli ?? childPrice;
-          const cSixthStreet = sarPrice6thstreet ?? childPrice;
+          const childPrice = Number(variant.price) || 0;
+          const cNoon = childPrice;
+          const cNamshi = childPrice;
+          const cAmazon = childPrice;
+          const cStyli = childPrice;
+          const cSixthStreet = childPrice;
 
           const childImages = parentImages;
 
