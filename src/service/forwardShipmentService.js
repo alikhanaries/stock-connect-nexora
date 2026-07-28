@@ -5,7 +5,7 @@ import { getOmnifulAccessToken, getReportToken, upsertToken, getToken } from '..
 import {
   omnifulApiRequest,
   OMNIFUL_GET_ORDER_PATH,
-  OmnifulApiError,
+  isOmnifulApiError,
   explainOmnifulAuthError,
 } from '../helpers/omnifulApiClient.js';
 
@@ -204,7 +204,7 @@ export const getOmnifulOrder = async (omnifulOrderId) => {
       orderId: omnifulOrderId,
     });
   } catch (err) {
-    if (err instanceof OmnifulApiError) {
+    if (isOmnifulApiError(err)) {
       const explanation = explainOmnifulAuthError(err);
       if (explanation) {
         console.error('[OmniFul API] Auth/permission guidance:', JSON.stringify(explanation, null, 2));

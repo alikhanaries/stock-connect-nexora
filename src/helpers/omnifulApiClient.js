@@ -13,20 +13,26 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  * @property {string} url
  */
 
-export class OmnifulApiError extends Error {
-  /**
-   * @param {OmnifulApiErrorDetails} details
-   */
-  constructor({ status, message, body, requestId, method, url }) {
-    super(message);
-    this.name = 'OmnifulApiError';
-    this.status = status;
-    this.body = body;
-    this.requestId = requestId;
-    this.method = method;
-    this.url = url;
-  }
-}
+/** @typedef {Error & OmnifulApiErrorDetails} OmnifulApiError */
+
+/**
+ * @param {OmnifulApiErrorDetails} details
+ * @returns {OmnifulApiError}
+ */
+export const createOmnifulApiError = ({ status, message, body, requestId, method, url }) => {
+  const error = new Error(message);
+  error.name = 'OmnifulApiError';
+  error.status = status;
+  error.body = body;
+  error.requestId = requestId;
+  error.method = method;
+  error.url = url;
+  return error;
+};
+
+/** @param {unknown} error */
+export const isOmnifulApiError = (error) =>
+  error instanceof Error && error.name === 'OmnifulApiError' && typeof error.status === 'number';
 
 const sanitizeHeaders = (headers) => {
   const copy = { ...headers };
@@ -119,7 +125,7 @@ export const omnifulApiRequest = async ({
         elapsedMs,
         error: err.message,
       });
-      throw new OmnifulApiError({
+      throw createOmnifulApiError({
         status: 0,
         message: `OmniFul network error: ${err.message}`,
         requestId,
@@ -165,7 +171,7 @@ export const omnifulApiRequest = async ({
   }
 
   const errorMessage = buildOmnifulErrorMessage(response.status, parsedBody);
-  throw new OmnifulApiError({
+  throw createOmnifulApiError({
     status: response.status,
     message: errorMessage,
     body: parsedBody,
@@ -204,7 +210,7 @@ const buildOmnifulErrorMessage = (status, body) => {
  * @param {OmnifulApiError} error
  */
 export const explainOmnifulAuthError = (error) => {
-  if (!(error instanceof OmnifulApiError)) return null;
+  if (!isOmnifulApiError(error)) return null;
 
   if (error.status === 401) {
     return {
