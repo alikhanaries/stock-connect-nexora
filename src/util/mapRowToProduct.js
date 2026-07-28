@@ -4,7 +4,12 @@ import { generateS3Key } from '../util/generateS3Key.js';
 import { getPublicImageUrl } from '../util/getPublicImageUrl.js';
 import pLimit from 'p-limit';
 import { cleanNumber } from '../helpers/Common.js';
-import { collectCsvImageSlotsFromRow, mapCsvStyleImageFields } from '../helpers/productImageFields.js';
+import {
+  collectCsvImageSlotsFromRow,
+  mapCsvStyleImageFields,
+  collectCsvAmazonImageSlotsFromRow,
+  mapCsvStyleAmazonImageFields,
+} from '../helpers/productImageFields.js';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
 export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdate = false, isNewSku = false, brand) => {
@@ -28,6 +33,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
   if (errorData.length) return { rowNumber: index, errorData };
 
   let imageFields = null;
+  let amazonImageFields = null;
 
   //  IMAGE HANDLING ONLY WHEN isImageUpdate === TRUE AND NEW SKU COME
   const shouldUploadImages = isNewSku || isImageUpdate === true;
@@ -46,6 +52,23 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
 
     if (publicSlots.some(Boolean)) {
       imageFields = mapCsvStyleImageFields(publicSlots);
+    }
+
+    // Handle Amazon Image slots
+    const amazonImageSlots = collectCsvAmazonImageSlotsFromRow(r).map((url) => (url ? normalizeImageUrl(url) : ''));
+    if (amazonImageSlots.some(Boolean)) {
+      const amazonPublicSlots = amazonImageSlots.map((url) => {
+        if (!url) return '';
+        const key = generateS3Key(url, sellerId, `amazon-${r.productskucode}`);
+        limit(() => uploadImageFromUrl(url, key)).catch((err) =>
+          console.error(`Amazon image upload failed (${url}): ${err.message}`)
+        );
+        return getPublicImageUrl(key);
+      });
+
+      if (amazonPublicSlots.some(Boolean)) {
+        amazonImageFields = mapCsvStyleAmazonImageFields(amazonPublicSlots);
+      }
     }
   }
 
@@ -73,6 +96,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : null,
     shippingTime: r.shippingtime || null,
     ...(imageFields || {}),
+    ...(amazonImageFields || {}),
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
     categories: [],
@@ -130,7 +154,10 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     occasion: r.occasion,
     subtype: r.subtype,
   };
-  const amazon = Object.fromEntries(Object.entries(amazonFieldMap).filter(([, v]) => v));
+  const amazon = {
+    ...Object.fromEntries(Object.entries(amazonFieldMap).filter(([, v]) => v)),
+    ...(amazonImageFields || {}),
+  };
   if (Object.keys(amazon).length) product.amazon = amazon;
 
   return Object.fromEntries(Object.entries(product).filter(([, v]) => v !== '' && v !== null && v !== undefined));

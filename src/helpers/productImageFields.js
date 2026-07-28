@@ -5,6 +5,13 @@ export const EXTRA_IMAGE_URL_KEYS = Array.from({ length: EXTRA_IMAGE_FIELD_COUNT
 
 export const NAMED_IMAGE_URL_KEYS = ['primaryImageUrl', 'imageUrl', ...EXTRA_IMAGE_URL_KEYS];
 
+export const AMAZON_EXTRA_IMAGE_URL_KEYS = Array.from(
+  { length: EXTRA_IMAGE_FIELD_COUNT },
+  (_, i) => `amazonExtraImageUrl${i + 1}`
+);
+
+export const AMAZON_NAMED_IMAGE_URL_KEYS = ['amazonPrimaryImageUrl', 'amazonImageUrl', ...AMAZON_EXTRA_IMAGE_URL_KEYS];
+
 export const CHANNEL_ENGINE_EXTRA_IMAGE_KEYS = Array.from(
   { length: EXTRA_IMAGE_FIELD_COUNT },
   (_, i) => `ExtraImageUrl${i + 1}`
@@ -24,6 +31,18 @@ export const mapErpStyleImageFields = (images = []) => {
     fields[`extraImageUrl${i}`] = list[i] || null;
   }
   return { ...fields, images: list };
+};
+
+export const mapErpStyleAmazonImageFields = (images = []) => {
+  const list = (Array.isArray(images) ? images : []).filter(Boolean);
+  const fields = {
+    amazonPrimaryImageUrl: list[0] || null,
+    amazonImageUrl: list[0] || null,
+  };
+  for (let i = 1; i <= EXTRA_IMAGE_FIELD_COUNT; i++) {
+    fields[`amazonExtraImageUrl${i}`] = list[i] || null;
+  }
+  return { ...fields, amazonImages: list };
 };
 
 /**
@@ -46,6 +65,21 @@ export const mapCsvStyleImageFields = (slots = []) => {
   };
 };
 
+export const mapCsvStyleAmazonImageFields = (slots = []) => {
+  const list = Array.isArray(slots) ? slots : [];
+  const fields = {
+    amazonPrimaryImageUrl: list[0] || null,
+    amazonImageUrl: list[1] || null,
+  };
+  for (let i = 1; i <= EXTRA_IMAGE_FIELD_COUNT; i++) {
+    fields[`amazonExtraImageUrl${i}`] = list[i + 1] || null;
+  }
+  return {
+    ...fields,
+    amazonImages: list.filter(Boolean),
+  };
+};
+
 /**
  * Collect CSV image columns as a fixed-length slot array (primary, imageUrl, extras 1–14).
  * Empty cells are kept as '' so later columns keep their exact positions.
@@ -54,6 +88,14 @@ export const collectCsvImageSlotsFromRow = (r = {}) => {
   const urls = [r.primaryimageurl || '', r.imageurl || ''];
   for (let i = 1; i <= EXTRA_IMAGE_FIELD_COUNT; i++) {
     urls.push(r[`extraimageurl${i}`] || '');
+  }
+  return urls;
+};
+
+export const collectCsvAmazonImageSlotsFromRow = (r = {}) => {
+  const urls = [r.amazonprimaryimageurl || r.amazonprimaryimage || '', r.amazonimageurl || r.amazonimage || ''];
+  for (let i = 1; i <= EXTRA_IMAGE_FIELD_COUNT; i++) {
+    urls.push(r[`amazonextraimageurl${i}`] || r[`amazonextraimage${i}`] || '');
   }
   return urls;
 };
@@ -76,8 +118,19 @@ export const pickNamedImageFields = (source = {}, { includeImages = true } = {})
   if (includeImages && source.images !== undefined) {
     fields.images = source.images;
   }
+  for (const key of AMAZON_NAMED_IMAGE_URL_KEYS) {
+    if (source[key] !== undefined) fields[key] = source[key];
+  }
+  if (includeImages && source.amazonImages !== undefined) {
+    fields.amazonImages = source.amazonImages;
+  }
   return fields;
 };
 
 /** CSV export values for extraImageUrl1…14 in header order. */
 export const exportExtraImageUrlValues = (product = {}) => EXTRA_IMAGE_URL_KEYS.map((key) => product[key] || '');
+
+export const exportAmazonExtraImageUrlValues = (product = {}) =>
+  AMAZON_EXTRA_IMAGE_URL_KEYS.map(
+    (key, idx) => product.amazon?.[key] || product.amazon?.[`extraImageUrl${idx + 1}`] || product[key] || ''
+  );

@@ -89,6 +89,30 @@ export const mapProductToChannelEngine = (product) => {
       LanguageIsoCode: 'en',
     },
     {
+      Key: 'amazonPrimaryImageUrl',
+      Value: product?.amazon?.amazonPrimaryImageUrl || product?.amazonPrimaryImageUrl || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'amazonImageUrl',
+      Value: product?.amazon?.amazonImageUrl || product?.amazonImageUrl || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    ...Array.from({ length: 14 }, (_, i) => {
+      const idx = i + 1;
+      return {
+        Key: `amazonExtraImageUrl${idx}`,
+        Value: product?.amazon?.[`amazonExtraImageUrl${idx}`] || product?.[`amazonExtraImageUrl${idx}`] || null,
+        Type: 'TEXT',
+        IsPublic: true,
+        LanguageIsoCode: 'en',
+      };
+    }),
+    {
       Key: 'sixthStreetPrice',
       Value: product?.sixthStreetPrice || product.price || 0,
       Type: 'TEXT',
