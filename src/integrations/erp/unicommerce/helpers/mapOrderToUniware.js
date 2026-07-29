@@ -72,7 +72,7 @@ const mapOrderToUniware = (order, productIdBySku = new Map()) => {
 
       taxExempted: false,
       cFormProvided: false,
-      thirdPartyShipping: false,
+      thirdPartyShipping: true,
 
       shippingAddress: {
         addressLine1: order.orderShippingAddress?.line1 || '',
