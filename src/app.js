@@ -21,6 +21,12 @@ import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 
 const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
+const swaggerUiOptions = {
+  requestInterceptor: (req) => {
+    req.headers['Accept-Language'] = 'en';
+    return req;
+  },
+};
 
 const app = express();
 
