@@ -135,10 +135,12 @@ inventoryRouter.patch(
 /* SYNC STOCK TO CHANNEL */
 /**
  * @openapi
- * /sync/channel:
+ * /inventory/sync/stock:
  *   get:
  *     tags: [Inventory]
  *     summary: Sync stock to channel engine
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: header
  *         name: Accept-Language

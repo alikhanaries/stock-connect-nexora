@@ -1,6 +1,16 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+/** Host-only base, e.g. https://api.staging.omniful.com (paths appended in services). */
+const resolveOmnifulApiUrl = () => {
+  if (process.env.OMNIFUL_API_URL) {
+    return process.env.OMNIFUL_API_URL.replace(/\/$/, '');
+  }
+  const legacyBase = (process.env.OMNIFUL_BASE_URL || '').replace(/\/$/, '');
+  if (!legacyBase) return undefined;
+  return legacyBase.replace(/\/sales-channel\/public\/v\d+$/, '');
+};
+
 export const config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || 3000,
@@ -38,7 +48,7 @@ export const config = {
   GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
   GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
   IS_OCP_ORDER_SYNC_ENABLED: process.env.OCP_ORDER_SYNC_FEATURE === 'true',
-  OMNIFUL_API_URL: process.env.OMNIFUL_API_URL,
+  OMNIFUL_API_URL: resolveOmnifulApiUrl(),
   OMNIFUL_HUB_CODE: process.env.OMNIFUL_HUB_CODE,
   OMNIFUL_CLIENT_ID: process.env.OMNIFUL_CLIENT_ID,
   OMNIFUL_CLIENT_SECRET: process.env.OMNIFUL_CLIENT_SECRET,
@@ -55,4 +65,10 @@ export const config = {
   AYMAKAN_DELIVERY_LONG: process.env.AYMAKAN_DELIVERY_LONG,
   CHANNEL_CATEGORIES_CSV: process.env.CHANNEL_CATEGORIES_CSV,
   STOCK_LOCATION: process.env.STOCK_LOCATION,
+  REDIS_URL: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
+  CE_QUEUE_RATE_LIMIT_MAX: parseInt(process.env.CE_QUEUE_RATE_LIMIT_MAX || '15', 10),
+  CE_QUEUE_RATE_LIMIT_DURATION_MS: parseInt(process.env.CE_QUEUE_RATE_LIMIT_WINDOW_MINUTES || '15', 10) * 60 * 1000,
+  CE_QUEUE_JOB_ATTEMPTS: parseInt(process.env.CE_QUEUE_JOB_ATTEMPTS || '3', 10),
+  CE_QUEUE_JOB_BACKOFF_MS: parseInt(process.env.CE_QUEUE_JOB_BACKOFF_MS || '5000', 10),
+  CE_QUEUE_JOB_TIMEOUT_MS: parseInt(process.env.CE_QUEUE_JOB_TIMEOUT_MS || '900000', 10),
 };

@@ -1,87 +1,20 @@
-const {
-  OMNIFUL_API_URL,
-  OMNIFUL_HUB_CODE,
-  CHANNEL_ENGINE_BASE_URL,
-  CHANNEL_ENGINE_API_KEY,
-  OMNIFUL_CLIENT_ID,
-  OMNIFUL_CLIENT_SECRET,
-} = config;
 import { config } from '../config/config.js';
 import Product from '#models/Product.js';
 import Order from '#models/Orders.js';
-import Token from '../models/Token.js';
-export const getToken = async () => {
-  return await Token.findOne({ name: 'omniful' });
-};
+import { getOmnifulAccessToken, getReportToken, upsertToken, getToken } from '../helpers/omnifulAuth.js';
+import {
+  omnifulApiRequest,
+  OMNIFUL_GET_ORDER_PATH,
+  isOmnifulApiError,
+  explainOmnifulAuthError,
+} from '../helpers/omnifulApiClient.js';
 
-export const upsertToken = async ({ accessToken, refreshToken }) => {
-  await Token.findOneAndUpdate(
-    { name: 'omniful' },
-    { accessToken, refreshToken, updatedAt: new Date() },
-    { upsert: true, new: true }
-  );
-};
+const { OMNIFUL_API_URL, OMNIFUL_HUB_CODE, CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
-const isOlderThan25Days = (updatedAt) => {
-  const age = Date.now() - new Date(updatedAt).getTime();
-  return age > 25 * 24 * 60 * 60 * 1000;
-};
-
-// Internal API call to refresh token
-const fetchNewTokens = async (refreshToken) => {
-  const response = await fetch(`${OMNIFUL_API_URL}/sales-channel/public/v1/token`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${refreshToken}`,
-    },
-    body: JSON.stringify({
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-      client_id: OMNIFUL_CLIENT_ID,
-      client_secret: OMNIFUL_CLIENT_SECRET,
-    }),
-  });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const omnifulMessage = data?.error?.message || data?.message;
-    throw new Error(omnifulMessage ? `Omniful token refresh failed: ${omnifulMessage}` : 'Token API failed');
-  }
-
-  return {
-    accessToken: data?.data?.access_token,
-    refreshToken: data?.data?.refresh_token,
-  };
-};
-
-export const getReportToken = async () => {
-  const tokenDoc = await getToken();
-
-  if (!tokenDoc) {
-    const refreshTokenToUse = process.env.OMNIFUL_REFRESH_TOKEN;
-    if (!refreshTokenToUse) {
-      throw new Error('Token not initialized in DB');
-    }
-    const newTokens = await fetchNewTokens(refreshTokenToUse);
-    await upsertToken(newTokens);
-    return newTokens.accessToken;
-  }
-
-  if (!isOlderThan25Days(tokenDoc.updatedAt)) {
-    return tokenDoc.accessToken;
-  }
-
-  const refreshTokenToUse = tokenDoc.refreshToken || process.env.OMNIFUL_REFRESH_TOKEN;
-  const newTokens = await fetchNewTokens(refreshTokenToUse);
-  await upsertToken(newTokens);
-
-  return newTokens.accessToken;
-};
+export { getReportToken, upsertToken, getToken };
 
 export const forwardAymakanShipment = async (shipmentData) => {
-  let omnifulAccessToken = await getReportToken();
+  let omnifulAccessToken = await getOmnifulAccessToken();
 
   if (!omnifulAccessToken) {
     throw new Error('Omniful access token not available');
@@ -143,18 +76,38 @@ export const forwardAymakanShipment = async (shipmentData) => {
         merchantOrderNo: shipmentData.merchantOrderNo,
       }).lean();
 
+      const orderSkuList = orderFromMerchantNo.orderSkuList?.skuList || [];
+
+      let itemsSubtotal = 0;
+      let itemsTax = 0;
+
+      const order_items = (shipmentData.products || []).map((item) => {
+        const orderSku =
+          orderSkuList.find((s) => String(s.id) === String(item.orderLineId)) ||
+          orderSkuList.find((s) => s.merchantProductNo === item.merchantProductNo);
+        const quantity = item.quantity || item.Quantity || 0;
+        const selling_price =
+          orderSku?.unitPriceInclVat || orderSku?.originalUnitPriceInclVat || item.originalLineTotalInclVat || 0;
+
+        itemsSubtotal += selling_price * quantity;
+        if (orderSku?.lineVat != null && orderSku.quantity) {
+          itemsTax += orderSku.lineVat * (quantity / orderSku.quantity);
+        }
+
+        return {
+          sku_code: item.merchantProductNo,
+          name: orderSku?.description || 'Unknown Product',
+          selling_price,
+          quantity,
+        };
+      });
+
       const createOrderPayload = {
+        // External order reference sent to OmniFul — our MongoDB shipment _id
         order_id: shipmentData._id.toString(),
         hub_code: OMNIFUL_HUB_CODE,
 
-        order_items: (shipmentData.products || []).map((item) => ({
-          sku_code: item.merchantProductNo,
-          name:
-            orderFromMerchantNo.orderSkuList?.skuList?.find((s) => s.merchantProductNo === item.merchantProductNo)
-              ?.description || 'Unknown Product',
-          selling_price: item.originalLineTotalInclVat || 0,
-          quantity: item.quantity || item.Quantity || 0,
-        })),
+        order_items,
 
         billing_address: {
           address1: orderFromMerchantNo.orderBillingAddress?.line1,
@@ -170,7 +123,12 @@ export const forwardAymakanShipment = async (shipmentData) => {
 
         invoice: {
           currency: orderFromMerchantNo.orderPaymentDetails?.currencyCode,
-          total: (shipmentData.products || []).reduce((sum, p) => sum + (p.lineTotalInclVat || 0), 0),
+          subtotal: itemsSubtotal,
+          tax: itemsTax,
+          discount: 0,
+          total: itemsSubtotal,
+          total_paid: itemsSubtotal,
+          total_due: 0,
         },
 
         customer: {
@@ -204,17 +162,60 @@ export const forwardAymakanShipment = async (shipmentData) => {
         throw new Error('Invalid response structure');
       }
 
+      /**
+       * POST /orders response ID mapping (stored on shipment.omniful):
+       * - id          → shipment.omniful.omnifulId       — OmniFul internal ID (omniful_order_id); use for GET
+       * - order_id    → shipment.omniful.omnifulOrderId — external ID we sent (shipment MongoDB _id)
+       */
       const result = {
         id: json.data.id,
         orderId: json.data.order_id,
+        createOrderPayload,
+        createOrderResponse: json,
       };
       return result;
     }
   }
 };
 
+/**
+ * Retrieve a single order from OmniFul by OmniFul internal order ID.
+ *
+ * Uses GET /sales-channel/public/v1/seller/orders/{omniful_order_id}
+ * (Seller Custom Integration — same auth as POST /sales-channel/public/v1/orders).
+ *
+ * Do NOT pass the external order_id (shipment _id) here — use shipment.omniful.omnifulId
+ * which equals POST response data.id / data.omniful_order_id.
+ *
+ * @param {string} omnifulOrderId - OmniFul internal ID (shipment.omniful.omnifulId)
+ * @returns {Promise<{ data: object, status: number, requestId: string }>}
+ */
+export const getOmnifulOrder = async (omnifulOrderId) => {
+  if (!omnifulOrderId || typeof omnifulOrderId !== 'string') {
+    throw new Error('omnifulOrderId is required (OmniFul internal ID from POST response data.id)');
+  }
+
+  const encodedId = encodeURIComponent(omnifulOrderId.trim());
+
+  try {
+    return await omnifulApiRequest({
+      method: 'GET',
+      path: `${OMNIFUL_GET_ORDER_PATH}/${encodedId}`,
+      orderId: omnifulOrderId,
+    });
+  } catch (err) {
+    if (isOmnifulApiError(err)) {
+      const explanation = explainOmnifulAuthError(err);
+      if (explanation) {
+        console.error('[OmniFul API] Auth/permission guidance:', JSON.stringify(explanation, null, 2));
+      }
+    }
+    throw err;
+  }
+};
+
 export const createShipmentwithCE = async (shipmentData) => {
-  const omnifulAccessToken = await getReportToken();
+  const omnifulAccessToken = await getOmnifulAccessToken();
   if (!omnifulAccessToken) {
     throw new Error('Access token not available');
   }
@@ -238,16 +239,20 @@ export const createShipmentwithCE = async (shipmentData) => {
   };
 
   const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
-  await fetch(ceUrl, {
+  await channelEnginePush({
+    operationType: CE_QUEUE_OPERATIONS.SHIPMENT_CREATE,
     method: 'POST',
+    url: ceUrl,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(CEPayload),
+    body: CEPayload,
+    awaitResult: false,
   });
 };
 
 export default {
   createShipmentwithCE,
   forwardAymakanShipment,
+  getOmnifulOrder,
   getReportToken,
   upsertToken,
 };

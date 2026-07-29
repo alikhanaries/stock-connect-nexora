@@ -1,4 +1,8 @@
-import { pickNamedImageFields, NAMED_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
+import {
+  pickNamedImageFields,
+  NAMED_IMAGE_URL_KEYS,
+  AMAZON_NAMED_IMAGE_URL_KEYS,
+} from '#helpers/productImageFields.js';
 
 export const canonicalProductMapper = (item = {}, sellerId) => {
   if (!item) return null;
@@ -21,6 +25,7 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     noonPrice: item.noonPrice || 0,
     namshiPrice: item.namshiPrice || 0,
     amazonPrice: item.amazonPrice || 0,
+    amazon: item.amazon || undefined,
     styliPrice: item.styliPrice || 0,
     sixthStreetPrice: item.sixthStreetPrice || 0,
     minPrice: item.minPrice || null,
@@ -44,4 +49,4 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
 };
 
 // Re-export for callers that need field lists
-export { NAMED_IMAGE_URL_KEYS };
+export { NAMED_IMAGE_URL_KEYS, AMAZON_NAMED_IMAGE_URL_KEYS };

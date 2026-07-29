@@ -17,15 +17,27 @@ import meneviskidsRoutes from './integrations/erp/meneviskids/routes/api.js';
 import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
+import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 
 const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
+const swaggerUiOptions = {
+  requestInterceptor: (req) => {
+    req.headers['Accept-Language'] = 'en';
+    return req;
+  },
+};
 
 const app = express();
 
 function setupSwagger(path, swaggerSpec, options = {}) {
   app.use(path, swaggerUi.serveFiles(swaggerSpec, {}), swaggerUi.setup(swaggerSpec, options));
 }
+
+app.get('/swagger.json', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.json(swaggerDocument);
+});
 
 setupSwagger('/api-docs', swaggerDocument, {
   requestInterceptor: (req) => {
@@ -34,12 +46,21 @@ setupSwagger('/api-docs', swaggerDocument, {
   },
 });
 
-setupSwagger('/unicommerce-docs', uniSwaggerDocument, {
-  requestInterceptor: (req) => {
-    req.headers['Accept-Language'] = 'en';
-    return req;
-  },
+app.get('/swagger.json', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.json(loadSwagger());
 });
+
+app.use('/api-docs', swaggerUi.serve, (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  swaggerUi.setup(loadSwagger(), swaggerUiOptions)(req, res, next);
+});
+
+app.use(
+  '/unicommerce-docs',
+  swaggerUi.serveFiles(uniSwaggerDocument, {}),
+  swaggerUi.setup(uniSwaggerDocument, swaggerUiOptions)
+);
 
 app.use(express.json());
 app.use(cors(corsOptions));
@@ -48,6 +69,8 @@ app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.send('API is running!');
 });
+
+app.use('/api', apiLogMiddleware);
 
 app.use('/api', apiRoutes);
 app.use('/api/erp/nebim', nebimApiRoutes);

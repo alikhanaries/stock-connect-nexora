@@ -19,14 +19,6 @@ const createSeller = async (sellerData) => {
     }
 
     const trimmedTaxId = taxIdentificationNumber.trim();
-    const taxIdClash = await Seller.findOne({
-      isDeleted: false,
-      taxIdentificationNumber: trimmedTaxId,
-      ...(existingSeller?._id ? { _id: { $ne: existingSeller._id } } : {}),
-    })
-      .select('_id')
-      .lean();
-    if (taxIdClash) return { isTaxIdExist: true, data: null };
 
     if (existingSeller && existingSeller.isDeleted === true) {
       const restored = await Seller.findByIdAndUpdate(
@@ -194,14 +186,6 @@ const updateSeller = async (id, payload) => {
   if (taxIdentificationNumber !== undefined) {
     const trimmed = taxIdentificationNumber.trim();
     if (trimmed !== (seller.taxIdentificationNumber ?? '')) {
-      const clash = await Seller.findOne({
-        _id: { $ne: id },
-        isDeleted: false,
-        taxIdentificationNumber: trimmed,
-      })
-        .select('_id')
-        .lean();
-      if (clash) return { isTaxIdExist: true };
       updateData.taxIdentificationNumber = trimmed;
       isUpdated = true;
     }

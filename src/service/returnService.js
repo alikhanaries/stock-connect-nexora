@@ -26,6 +26,8 @@ import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
 import { syncReturnShipmentStatus } from '#service/shipmentService.js';
 import Channel from '../models/Channel.js';
+import { channelEnginePush } from '#service/channelEngineClient.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
 //Fetches returns from ChannelEngine and saves them to the database.
@@ -481,16 +483,18 @@ export const getReturnStats = async (query = {}) => {
 //Creates a return in ChannelEngine.
 export const createReturn = async (returnData) => {
   try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`, {
+    const response = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.RETURN_MERCHANT_CREATE,
       method: 'POST',
+      url: `${CHANNEL_ENGINE_BASE_URL}returns/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`,
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(returnData),
+      body: returnData,
     });
 
-    const responseData = await response.json();
+    const responseData = response.data || {};
 
     if (response.status === 409) {
       return {
@@ -526,19 +530,18 @@ export const createReturn = async (returnData) => {
 //Sends an acknowledgement for a merchant return to ChannelEngine.
 export const acknowledgeReturn = async (ackData) => {
   try {
-    const response = await fetch(
-      `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(ackData),
-      }
-    );
+    const response = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.RETURN_MERCHANT_ACKNOWLEDGE,
+      method: 'POST',
+      url: `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`,
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: ackData,
+    });
 
-    const responseData = await response.json();
+    const responseData = response.data || {};
 
     if (!response.ok) {
       return {
@@ -561,16 +564,18 @@ export const acknowledgeReturn = async (ackData) => {
 
 export const acceptOrRejectReturn = async (returnData) => {
   try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?apikey=${CHANNEL_ENGINE_API_KEY}`, {
+    const response = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.RETURN_ACCEPT_REJECT,
       method: 'PUT',
+      url: `${CHANNEL_ENGINE_BASE_URL}returns?apikey=${CHANNEL_ENGINE_API_KEY}`,
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(returnData),
+      body: returnData,
     });
 
-    const responseData = await response.json();
+    const responseData = response.data || {};
 
     if (response.status === 409) {
       return {
