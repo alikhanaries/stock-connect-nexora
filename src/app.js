@@ -19,6 +19,7 @@ import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
 import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 
+const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
 
 const app = express();
