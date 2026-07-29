@@ -235,3 +235,69 @@ export async function resolveHierarchyStatus(sellerId, affectedSkus = []) {
     { $set: { status: 'inactive' } }
   );
 }
+
+/**
+ * Keeps sellable variants plus their parent / grandparent rows.
+ * Drops simple products whose parent row is not present in the batch.
+ */
+export function filterValidHierarchyProducts(products, { requirePriceAndImage = true } = {}) {
+  const skuSet = new Set(products.map((p) => p.productSkuCode));
+
+  const validSimple = products.filter((p) => {
+    if (p.productType !== 'simple') return false;
+    if (!requirePriceAndImage) return true;
+    return (p.price || 0) > 0 && String(p.primaryImageUrl || '').trim();
+  });
+
+  const parentSkus = new Set(validSimple.map((p) => p.parentProductSkuCode).filter((sku) => sku && skuSet.has(sku)));
+
+  const keptSimple = validSimple.filter((p) => !p.parentProductSkuCode || parentSkus.has(p.parentProductSkuCode));
+
+  const grandParentSkus = new Set(
+    products
+      .filter((p) => parentSkus.has(p.productSkuCode))
+      .map((p) => p.grandParentProductSkuCode)
+      .filter((sku) => sku && skuSet.has(sku))
+  );
+
+  return products.filter((p) => {
+    if (p.productType === 'simple') {
+      return keptSimple.some((s) => s.productSkuCode === p.productSkuCode);
+    }
+    if (p.grandParentProductSkuCode) {
+      return parentSkus.has(p.productSkuCode);
+    }
+    return grandParentSkus.has(p.productSkuCode);
+  });
+}
+
+/** Grandparent → parent (color) → child (size), grouped by product family */
+export function sortProductsByHierarchy(products) {
+  const level = (p) => {
+    if (p.parentProductSkuCode) return 2;
+    if (p.grandParentProductSkuCode) return 1;
+    return 0;
+  };
+
+  const rootSku = (p) => {
+    if (p.grandParentProductSkuCode) return p.grandParentProductSkuCode;
+    if (p.parentProductSkuCode) {
+      const dash = p.parentProductSkuCode.indexOf('-');
+      return dash > 0 ? p.parentProductSkuCode.slice(0, dash) : p.parentProductSkuCode;
+    }
+    return p.productSkuCode;
+  };
+
+  return [...products].sort((a, b) => {
+    const rootDiff = rootSku(a).localeCompare(rootSku(b));
+    if (rootDiff) return rootDiff;
+
+    const levelDiff = level(a) - level(b);
+    if (levelDiff) return levelDiff;
+
+    const parentDiff = (a.parentProductSkuCode || '').localeCompare(b.parentProductSkuCode || '');
+    if (parentDiff) return parentDiff;
+
+    return (a.productSkuCode || '').localeCompare(b.productSkuCode || '');
+  });
+}

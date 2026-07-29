@@ -1,0 +1,38 @@
+name: Deploy to Dev Server
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy
+        env:
+          HOST: ${{ secrets.DEV_SERVER_HOST }}
+          USER: ${{ secrets.DEV_SERVER_USER }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/key
+          chmod 600 ~/.ssh/key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          rsync -az --delete \
+            --exclude '.git' --exclude node_modules --exclude '.env*' \
+            --exclude uploads --exclude src/log --exclude ecosystem.config.cjs \
+            -e "ssh -i ~/.ssh/key" \
+            ./ "$USER@$HOST:/home/ubuntu/stock-connect-backend/"
+
+          ssh -i ~/.ssh/key "$USER@$HOST" 'set -e
+            cd ~/stock-connect-backend
+            HUSKY=0 yarn install --immutable
+            pm2 reload stockconnect-backend --update-env
+            curl -sf --retry 10 --retry-delay 2 --retry-connrefused http://localhost:3000/'

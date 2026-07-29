@@ -4,6 +4,7 @@ import Product from '../models/Product.js';
 import { escapeCsv } from '../helpers/export.js';
 import { buildFilter } from '../util/buildFilter.js';
 import { buildCondition } from '../helpers/productFilters.js';
+import { exportExtraImageUrlValues, exportAmazonExtraImageUrlValues } from '../helpers/productImageFields.js';
 
 const ALLOWED_SORT_FIELDS = ['_id', 'name', 'price', 'createdAt', 'status'];
 export const exportUserChannelProductsToCSV = async (filters, sellerId, channelId, query, res) => {
@@ -55,9 +56,7 @@ export const exportUserChannelProductsToCSV = async (filters, sellerId, channelI
         product.description || '',
         product.descriptionAr || '',
         product.ean || '',
-        product.extraImageUrl1 || '',
-        product.extraImageUrl2 || '',
-        product.extraImageUrl3 || '',
+        ...exportExtraImageUrlValues(product),
         product.gender || '',
         product.hsCodeSA || '',
         product.hsCodeAE || '',
@@ -78,6 +77,9 @@ export const exportUserChannelProductsToCSV = async (filters, sellerId, channelI
         product.noonPrice || 0,
         product.namshiPrice || 0,
         product.amazonPrice || 0,
+        product.amazon?.amazonPrimaryImageUrl || product.amazonPrimaryImageUrl || product.amazon?.primaryImageUrl || '',
+        product.amazon?.amazonImageUrl || product.amazonImageUrl || product.amazon?.imageUrl || '',
+        ...exportAmazonExtraImageUrlValues(product),
         // Amazon marketplace listing attributes
         product.amazon?.variationThemeName || '',
         product.amazon?.modelNumber || '',
@@ -145,8 +147,9 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
     ).lean();
     const assignedSkuCodes = assignedSku?.skuList?.map((s) => s.skuCode) || [];
 
+    // Filter for all products (exclude removed only)
     const filter = {
-      status: { $nin: ['removed', 'inactive'] },
+      status: { $ne: 'removed' },
       sellerId: new mongoose.Types.ObjectId(sellerId),
     };
 
@@ -170,9 +173,7 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
         product.description || '',
         product.descriptionAr || '',
         product.ean || '',
-        product.extraImageUrl1 || '',
-        product.extraImageUrl2 || '',
-        product.extraImageUrl3 || '',
+        ...exportExtraImageUrlValues(product),
         product.gender || '',
         product.hsCodeSA || '',
         product.hsCodeAE || '',
@@ -193,6 +194,9 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
         product.noonPrice || 0,
         product.namshiPrice || 0,
         product.amazonPrice || 0,
+        product.amazon?.amazonPrimaryImageUrl || product.amazonPrimaryImageUrl || product.amazon?.primaryImageUrl || '',
+        product.amazon?.amazonImageUrl || product.amazonImageUrl || product.amazon?.imageUrl || '',
+        ...exportAmazonExtraImageUrlValues(product),
         // Amazon marketplace listing attributes
         product.amazon?.variationThemeName || '',
         product.amazon?.modelNumber || '',

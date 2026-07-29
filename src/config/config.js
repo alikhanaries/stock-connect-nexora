@@ -1,6 +1,16 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+/** Host-only base, e.g. https://api.staging.omniful.com (paths appended in services). */
+const resolveOmnifulApiUrl = () => {
+  if (process.env.OMNIFUL_API_URL) {
+    return process.env.OMNIFUL_API_URL.replace(/\/$/, '');
+  }
+  const legacyBase = (process.env.OMNIFUL_BASE_URL || '').replace(/\/$/, '');
+  if (!legacyBase) return undefined;
+  return legacyBase.replace(/\/sales-channel\/public\/v\d+$/, '');
+};
+
 export const config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT || 3000,
@@ -32,14 +42,13 @@ export const config = {
   OCP_URL: process.env.OCP_URL,
   OCP_API_KEY: process.env.OCP_API_KEY,
   BASE_URL: process.env.BASE_URL,
-  AMAZON_ORDER_SHEET_URL: process.env.AMAZON_ORDER_SHEET_URL,
   GEMINI_PROVIDER: process.env.GEMINI_PROVIDER || 'gemini',
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_MODEL: process.env.GEMINI_MODEL,
   GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
   GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
   IS_OCP_ORDER_SYNC_ENABLED: process.env.OCP_ORDER_SYNC_FEATURE === 'true',
-  OMNIFUL_API_URL: process.env.OMNIFUL_API_URL,
+  OMNIFUL_API_URL: resolveOmnifulApiUrl(),
   OMNIFUL_HUB_CODE: process.env.OMNIFUL_HUB_CODE,
   OMNIFUL_CLIENT_ID: process.env.OMNIFUL_CLIENT_ID,
   OMNIFUL_CLIENT_SECRET: process.env.OMNIFUL_CLIENT_SECRET,

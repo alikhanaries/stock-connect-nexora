@@ -1,5 +1,6 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import { MIN_STOCK, MAX_PRICE } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
+import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
@@ -26,14 +27,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
   if (uploadImages) {
     const cdnImages = await processProductImages(rawImages, sellerId);
     if (cdnImages.length > 0) {
-      processed = {
-        primaryImageUrl: cdnImages[0],
-        imageUrl: cdnImages[0],
-        extraImageUrl1: cdnImages[1] || null,
-        extraImageUrl2: cdnImages[2] || null,
-        extraImageUrl3: cdnImages[3] || null,
-        images: cdnImages,
-      };
+      processed = mapErpStyleImageFields(cdnImages);
     } else {
       // S3 upload failed → do NOT update images
       processed = {};
@@ -134,14 +128,7 @@ export const formatGurmanProduct = async (raw = [], sellerId, isImageUpdate = fa
           const mergedChildImages = cleanImages(...(base.images || []), ...variantImgs);
 
           if (mergedChildImages.length > 0) {
-            processedChild = {
-              primaryImageUrl: mergedChildImages[0],
-              imageUrl: mergedChildImages[0],
-              extraImageUrl1: mergedChildImages[1] || null,
-              extraImageUrl2: mergedChildImages[2] || null,
-              extraImageUrl3: mergedChildImages[3] || null,
-              images: mergedChildImages,
-            };
+            processedChild = mapErpStyleImageFields(mergedChildImages);
           } else {
             processedChild = {};
           }

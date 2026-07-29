@@ -4,15 +4,21 @@ import { generateS3Key } from '../util/generateS3Key.js';
 import { getPublicImageUrl } from '../util/getPublicImageUrl.js';
 import pLimit from 'p-limit';
 import { cleanNumber } from '../helpers/Common.js';
+import {
+  collectCsvImageSlotsFromRow,
+  mapCsvStyleImageFields,
+  collectCsvAmazonImageSlotsFromRow,
+  mapCsvStyleAmazonImageFields,
+} from '../helpers/productImageFields.js';
 const IMAGE_CONCURRENCY = 10;
 const limit = pLimit(IMAGE_CONCURRENCY);
 export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdate = false, isNewSku = false, brand) => {
   if (!row || typeof row !== 'object') return null;
 
-  // Normalize keys
+  // Normalize keys (lowercase, trim, remove spaces — handles "Amazon Price" / "amazonPrice")
   const r = {};
   for (const [key, value] of Object.entries(row)) {
-    r[key.toLowerCase().trim()] = value ? String(value).trim() : '';
+    r[key.toLowerCase().trim().replace(/\s+/g, '')] = value ? String(value).trim() : '';
   }
 
   // Required validations
@@ -22,29 +28,48 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
   if (isNewSku) {
     if (!r.categorytrail) errorData.push(locale.PRODUCT_CATEGORYTRAIL_MISSING);
     if (!r.primaryimageurl) errorData.push('Primary image url is missing');
-    if (!r.imageurl) errorData.push('Image url is missing');
   }
 
   if (errorData.length) return { rowNumber: index, errorData };
 
-  let publicUrls = [];
+  let imageFields = null;
+  let amazonImageFields = null;
 
   //  IMAGE HANDLING ONLY WHEN isImageUpdate === TRUE AND NEW SKU COME
   const shouldUploadImages = isNewSku || isImageUpdate === true;
   if (shouldUploadImages) {
-    const allImageUrls = [r.primaryimageurl, r.imageurl, r.extraimageurl1, r.extraimageurl2, r.extraimageurl3]
-      .filter(Boolean)
-      .map(normalizeImageUrl);
+    // Fixed-length slots so empty middle CSV columns keep exact positions
+    const imageSlots = collectCsvImageSlotsFromRow(r).map((url) => (url ? normalizeImageUrl(url) : ''));
 
-    const generatedKeys = allImageUrls.map((img) => generateS3Key(img, sellerId, r.productskucode));
-
-    generatedKeys.forEach((key, i) => {
-      limit(() => uploadImageFromUrl(allImageUrls[i], key)).catch((err) =>
-        console.error(`Image upload failed (${allImageUrls[i]}): ${err.message}`)
+    const publicSlots = imageSlots.map((url) => {
+      if (!url) return '';
+      const key = generateS3Key(url, sellerId, r.productskucode);
+      limit(() => uploadImageFromUrl(url, key)).catch((err) =>
+        console.error(`Image upload failed (${url}): ${err.message}`)
       );
+      return getPublicImageUrl(key);
     });
 
-    publicUrls = generatedKeys.map(getPublicImageUrl);
+    if (publicSlots.some(Boolean)) {
+      imageFields = mapCsvStyleImageFields(publicSlots);
+    }
+
+    // Handle Amazon Image slots
+    const amazonImageSlots = collectCsvAmazonImageSlotsFromRow(r).map((url) => (url ? normalizeImageUrl(url) : ''));
+    if (amazonImageSlots.some(Boolean)) {
+      const amazonPublicSlots = amazonImageSlots.map((url) => {
+        if (!url) return '';
+        const key = generateS3Key(url, sellerId, `amazon-${r.productskucode}`);
+        limit(() => uploadImageFromUrl(url, key)).catch((err) =>
+          console.error(`Amazon image upload failed (${url}): ${err.message}`)
+        );
+        return getPublicImageUrl(key);
+      });
+
+      if (amazonPublicSlots.some(Boolean)) {
+        amazonImageFields = mapCsvStyleAmazonImageFields(amazonPublicSlots);
+      }
+    }
   }
 
   // Build product (ALL fields preserved)
@@ -62,6 +87,7 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     price: cleanNumber(r.price),
     noonPrice: cleanNumber(r.noonprice),
     namshiPrice: cleanNumber(r.namshiprice),
+    amazonPrice: cleanNumber(r.amazonprice),
     minPrice: cleanNumber(r.minprice) || null,
     maxPrice: cleanNumber(r.maxprice) || null,
     msrp: cleanNumber(r.msrp),
@@ -69,14 +95,8 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     vatRateType: r.vatratetype ? r.vatratetype.toUpperCase() : 'STANDARD',
     shippingCost: r.shippingcost ? parseFloat(r.shippingcost) : null,
     shippingTime: r.shippingtime || null,
-    ...(publicUrls.length > 0 && {
-      primaryImageUrl: publicUrls[0],
-      imageUrl: publicUrls[1],
-      extraImageUrl1: publicUrls[2],
-      extraImageUrl2: publicUrls[3],
-      extraImageUrl3: publicUrls[4],
-      images: publicUrls,
-    }),
+    ...(imageFields || {}),
+    ...(amazonImageFields || {}),
     isFrozen: r.isfrozen?.toLowerCase() === 'yes',
     categoryTrail: r.categorytrail || '',
     categories: [],
@@ -116,7 +136,6 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     skipOffer: r.skipoffer,
     itemCondition: r.itemcondition,
     listPriceCurrency: r.listpricecurrency,
-    amazonPrice: cleanNumber(r.amazonprice),
     dangerousGoodsRegulations: r.dangerousgoodsregulations,
     outerMaterial: r.outermaterial,
     departmentName: r.departmentname,
@@ -135,7 +154,10 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     occasion: r.occasion,
     subtype: r.subtype,
   };
-  const amazon = Object.fromEntries(Object.entries(amazonFieldMap).filter(([, v]) => v));
+  const amazon = {
+    ...Object.fromEntries(Object.entries(amazonFieldMap).filter(([, v]) => v)),
+    ...(amazonImageFields || {}),
+  };
   if (Object.keys(amazon).length) product.amazon = amazon;
 
   return Object.fromEntries(Object.entries(product).filter(([, v]) => v !== '' && v !== null && v !== undefined));

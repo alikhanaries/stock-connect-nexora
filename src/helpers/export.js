@@ -5,7 +5,14 @@ export const escapeCsv = (row) => {
     .map((field) => {
       if (field === null || field === undefined || field === '') return '';
       const str = String(field);
-      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      if (
+        str.includes(',') ||
+        str.includes('"') ||
+        str.includes('\n') ||
+        str.includes('\r') ||
+        str.includes('>') ||
+        /\d-\d/.test(str)
+      ) {
         return `"${str.replace(/"/g, '""')}"`;
       }
       return str;

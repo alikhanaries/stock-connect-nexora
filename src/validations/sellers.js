@@ -38,10 +38,7 @@ export const createSellerValidator = validate(async (req) => {
         z.string().min(1, { message: 'accessToken is required' }).optional()
       ),
 
-      taxIdentificationNumber: z.preprocess(
-        emptyToUndefined,
-        z.string({ required_error: 'taxIdentificationNumber is required' })
-      ),
+      taxIdentificationNumber: z.preprocess(emptyToUndefined, z.string().optional()),
     })
     .refine(
       (data) =>

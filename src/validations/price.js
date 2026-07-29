@@ -17,6 +17,7 @@ export const updateSingleProductPriceValidator = validate(async (req) => {
       price: z.number().min(0, 'price must be 0 or greater').optional(),
       namshiPrice: z.number().min(0, 'namshiPrice must be 0 or greater').optional(),
       noonPrice: z.number().min(0, 'noonPrice must be 0 or greater').optional(),
+      amazonPrice: z.number().min(0, 'amazonPrice must be 0 or greater').optional(),
       minPrice: z.number().min(0, 'minPrice must be 0 or greater').optional(),
       maxPrice: z.number().min(0, 'maxPrice must be 0 or greater').optional(),
       msrp: z.number().min(0, 'msrp must be 0 or greater').optional(),

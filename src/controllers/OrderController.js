@@ -12,11 +12,11 @@ import shipmentService from '../service/shipmentService.js';
 import Order from '../models/Orders.js';
 import Seller from '#models/Seller.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
-import { syncAmazonOrders } from '../service/amazonOrderService.js';
 import { parseInvoiceDataForGenerateSellerInvoice } from '../helpers/ParseInvoice.js';
 import { config } from '../config/config.js';
 import { generateSellerInvoicePDF } from '#utils/generateInvoicePdf.js';
 import omnifullService from '../service/omnifullService.js';
+import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -130,24 +130,21 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    const [dataSavedInDb, response, amazonResponse] = await Promise.allSettled([
+    const [dataSavedInDb, response] = await Promise.allSettled([
       orderService.processOrders(data, sellerId),
       config.IS_OCP_ORDER_SYNC_ENABLED
         ? getSyncedOrdersOcp(sellerId)
         : Promise.resolve({ success: true, message: 'OCP order sync is disabled' }),
-      syncAmazonOrders(sellerId, req.locale, req.user._id),
     ]);
 
     // Check for rejected promises or failed results
     const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
     const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
-    const isAmazonSuccess = amazonResponse.status === 'fulfilled' && amazonResponse.value?.success;
 
-    if (!isChannelEngineSuccess && !isOcpSuccess && !isAmazonSuccess) {
+    if (!isChannelEngineSuccess && !isOcpSuccess) {
       const errorMessages = [
         dataSavedInDb.status === 'rejected' ? dataSavedInDb.reason?.message : dataSavedInDb.value?.message,
         response.status === 'rejected' ? response.reason?.message : response.value?.message,
-        amazonResponse.status === 'rejected' ? amazonResponse.reason?.message : amazonResponse.value?.message,
       ]
         .filter(Boolean)
         .join('; ');
@@ -157,8 +154,7 @@ export const getSyncedOrders = async (req, res) => {
 
     const newUpdateCount =
       ((dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.data?.upsertedCount) || 0) +
-      ((response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0) +
-      ((amazonResponse.status === 'fulfilled' && amazonResponse.value?.data?.newUpdateCount) || 0);
+      ((response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0);
 
     await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
 
@@ -466,6 +462,23 @@ export const generateSellerInvoice = async (req, res) => {
     if (!result.success) {
       return Responses.failResponse(res, result.message || req.locale?.NO_ORDERS_FOUND || 'No orders found', 404);
     }
+
+    // Invoice generation starts fulfillment → NEW becomes IN_PROGRESS
+    const order = await Order.findOne({ orderId: String(orderId) });
+    if (order?.status === 'NEW') {
+      order.status = 'IN_PROGRESS';
+      const skuList = order.orderSkuList?.skuList || [];
+      skuList.forEach((sku) => {
+        if (String(sku.sellerId) === String(sellerId)) {
+          if ((sku.status || '').toUpperCase() === 'NEW' || !sku.status) {
+            sku.status = 'IN_PROGRESS';
+          }
+        }
+      });
+      await order.save();
+      await syncSellerOrdersFromOrder(order._id);
+    }
+
     //  Generate PDF (UTIL CALL)
     return generateSellerInvoicePDF(res, result);
   } catch (error) {

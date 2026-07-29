@@ -66,10 +66,12 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       width,
       height,
       weight,
-      tax_identification_number,
-      invoice_number,
-      invoice_date,
+      tax_identification_number = shipmentData.taxData?.tax_identification_number,
+      invoice_number = shipmentData.taxData?.invoice_number,
+      invoice_date = shipmentData.taxData?.invoice_date,
     } = shipmentData;
+
+    const hasInternationalMetadata = documentId && tax_identification_number && invoice_number && invoice_date;
 
     // ---  Build final payload for Aymakan ---
     const payload = {
@@ -102,14 +104,16 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       ...(height != null && { height }),
       ...(weight != null && { weight }),
       ...(productsData?.length && { products: productsData }),
-      international_metadata: {
-        document_id: documentId,
-        tax_identification_number: tax_identification_number,
-        invoice_number: invoice_number,
-        invoice_date: invoice_date,
-        is_commercial_shipment: '0',
-        shipment_type: shipmentData?.shipment_type,
-      },
+      ...(hasInternationalMetadata && {
+        international_metadata: {
+          document_id: documentId,
+          tax_identification_number,
+          invoice_number,
+          invoice_date,
+          is_commercial_shipment: '0',
+          shipment_type: shipmentData?.shipment_type,
+        },
+      }),
     };
     console.log('createShipmentWithAymakan payload:', JSON.stringify(payload, null, 2));
     // ---  Call Aymakan API ---
@@ -448,14 +452,21 @@ export const createFullShipmentService = async (shipmentData) => {
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
 
+    const documentId =
+      shipmentData.documentId ||
+      validProducts
+        .map((p) => orderSkuList.skuList.find((s) => String(s.id) === String(p.orderLineId))?.documentId)
+        .find(Boolean);
+
     // Step 10: Create shipment via Aymakan (external, before transaction)
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
+      ...(taxData || {}),
+      documentId,
       deliveryData,
       orderCustomer: order.orderCustomer,
       collectionData,
       pieces,
-      taxData,
       productsData,
     });
 
@@ -538,7 +549,7 @@ export const createFullShipmentService = async (shipmentData) => {
       },
       pieces,
       type: 'FORWARD',
-      invoiceDocumentId: shipmentData.documentId || null,
+      invoiceDocumentId: documentId || shipmentData.documentId || null,
     });
 
     await shipmentDocument.save();
@@ -868,7 +879,9 @@ export const ayMakanWebHookService = async (data) => {
       })),
 
       omniful: {
+        // omnifulId: OmniFul internal ID (POST response data.id) — use for GET /seller/orders/{id}
         omnifulId: omnifulResponse?.id,
+        // omnifulOrderId: external order_id we sent (shipment _id string) — matches GET response data.order_id
         omnifulOrderId: omnifulResponse?.orderId,
       },
     };
@@ -1371,6 +1384,13 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     await Shipment.findByIdAndUpdate(shipmentId, { status: 'CANCELED', cancelReason });
 
+    // Revert to NEW when no active (non-canceled) shipments remain
+    const hasActiveShipment = await Shipment.exists({
+      orderId,
+      status: { $ne: 'CANCELED' },
+    });
+    const orderStatus = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
+
     const stockPayloads = [];
     for (const product of products || []) {
       const sku = order?.orderSkuList?.skuList.find((s) => String(s.id) === String(product.orderLineId));
@@ -1398,7 +1418,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       sku.statusBreakdown.confirmed += qty;
 
       // SKU status correction
-      sku.status = 'IN_PROGRESS';
+      sku.status = orderStatus;
 
       const stockResult = await increaseStock(product.merchantProductNo, qty, shipment.sellerId, sellerName, 'CE');
       if (!stockResult?.success) {
@@ -1410,7 +1430,7 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
       if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
     }
 
-    order.status = 'IN_PROGRESS';
+    order.status = orderStatus;
     await order.save();
 
     // Order logs
@@ -1439,6 +1459,8 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
     if (stockPayloads.length > 0) {
       sendStockBatch(stockPayloads).catch((err) => console.error('CE stock sync failed:', err.message));
     }
+
+    await syncSellerOrdersFromOrder(orderId);
 
     return {
       success: true,

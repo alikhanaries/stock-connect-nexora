@@ -13,7 +13,7 @@ import dashboardRoutes from './dashboard.js';
 import inventoryRoutes from './inventory.js';
 import priceRoutes from './price.js';
 import financeRoutes from './finance.js';
-import channelEngineQueueRoutes from './channelEngineQueue.js';
+import apiCallLogRoutes from './apiCallLogs.js';
 const router = express.Router();
 
 router.use('/auth', authRoutes);
@@ -30,5 +30,5 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/inventory', inventoryRoutes);
 router.use('/price', priceRoutes);
 router.use('/finance', financeRoutes);
-router.use('/channel-engine-queue', channelEngineQueueRoutes);
+router.use('/api-logs', apiCallLogRoutes);
 export default router;

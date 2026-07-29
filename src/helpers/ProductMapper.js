@@ -1,3 +1,5 @@
+import { mapProductToChannelEngineImageFields } from '#helpers/productImageFields.js';
+
 export const mapProductToChannelEngine = (product) => {
   const customAttributes = [
     { Key: 'MarketPlace', Value: product.marketPlace || null, Type: 'TEXT', IsPublic: true, LanguageIsoCode: 'en' },
@@ -86,6 +88,30 @@ export const mapProductToChannelEngine = (product) => {
       IsPublic: true,
       LanguageIsoCode: 'en',
     },
+    {
+      Key: 'amazonPrimaryImageUrl',
+      Value: product?.amazon?.amazonPrimaryImageUrl || product?.amazonPrimaryImageUrl || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    {
+      Key: 'amazonImageUrl',
+      Value: product?.amazon?.amazonImageUrl || product?.amazonImageUrl || null,
+      Type: 'TEXT',
+      IsPublic: true,
+      LanguageIsoCode: 'en',
+    },
+    ...Array.from({ length: 14 }, (_, i) => {
+      const idx = i + 1;
+      return {
+        Key: `amazonExtraImageUrl${idx}`,
+        Value: product?.amazon?.[`amazonExtraImageUrl${idx}`] || product?.[`amazonExtraImageUrl${idx}`] || null,
+        Type: 'TEXT',
+        IsPublic: true,
+        LanguageIsoCode: 'en',
+      };
+    }),
     {
       Key: 'sixthStreetPrice',
       Value: product?.sixthStreetPrice || product.price || 0,
@@ -176,8 +202,6 @@ export const mapProductToChannelEngine = (product) => {
     ImageUrl: product.imageUrl || null,
     CategoryTrail: product.categoryTrail || null,
     IsFrozen: product.isFrozen || false,
-    ExtraImageUrl1: product.extraImageUrl1 || null,
-    ExtraImageUrl2: product.extraImageUrl2 || null,
-    ExtraImageUrl3: product.extraImageUrl3 || null,
+    ...mapProductToChannelEngineImageFields(product),
   };
 };
