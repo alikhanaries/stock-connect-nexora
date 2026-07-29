@@ -37,7 +37,7 @@ setupSwagger('/api-docs', swaggerDocument, {
     req.headers['Accept-Language'] = 'en';
     return req;
   },
-};
+});
 
 app.get('/swagger.json', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
