@@ -1,4 +1,6 @@
 import { config } from '#root/src/config/config.js';
+import { channelEnginePush } from '#service/channelEngineClient.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
@@ -40,14 +42,16 @@ export const removeProductsFromCE = async (skuCodes) => {
   if (!skuCodes?.length) return { success: true, message: 'No SKUs provided' };
 
   try {
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
+    const response = await channelEnginePush({
+      operationType: CE_QUEUE_OPERATIONS.PRODUCTS_BULK_DELETE,
       method: 'POST',
+      url: `${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_API_KEY}`,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(skuCodes),
+      body: skuCodes,
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = response.rawText || JSON.stringify(response.data);
       console.error('ChannelEngine bulkdelete failed:', errorText);
       return { success: false, message: errorText };
     }
@@ -61,15 +65,17 @@ export const removeProductsFromCE = async (skuCodes) => {
 
 export const syncProductExtraDataToMarketplace = async (bulkPayload = []) => {
   if (!bulkPayload.length) return [];
-  const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`, {
+  const response = await channelEnginePush({
+    operationType: CE_QUEUE_OPERATIONS.PRODUCTS_EXTRA_DATA,
     method: 'PATCH',
+    url: `${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(bulkPayload),
+    body: bulkPayload,
   });
   if (!response.ok) {
     throw new Error(`Marketplace PATCH failed: ${response.status}`);
   }
-  return response.json();
+  return response.data;
 };
 
 export const buildExtraDataPayload = (products = []) =>

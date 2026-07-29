@@ -1,8 +1,36 @@
+# Environment & secrets
 .env
+.env.*
+!.env.example
+
+# Dependencies
 node_modules/
 .yarn/*
 !.yarn/patches
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+
+# Documentation (entire folder — do not push)
+docs/
+
+# Postman (local testing package — collections, env credentials, guides)
+postman/
+
+# Generated / local documents
+*.pdf
+
+# User uploads & temp files (multer / file handler)
+uploads/
+
+# Redis local data (not application code)
+dump.rdb
+*.rdb
+
+# Logs
+logs/
+*.log
+
+# Local temp / asset files
 quick-asset-*.json
+scripts/tmp-*.js

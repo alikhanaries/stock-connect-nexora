@@ -19,7 +19,6 @@ import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
 import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 
-const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
 
 const app = express();
@@ -38,14 +37,23 @@ setupSwagger('/api-docs', swaggerDocument, {
     req.headers['Accept-Language'] = 'en';
     return req;
   },
+};
+
+app.get('/swagger.json', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.json(loadSwagger());
 });
 
-setupSwagger('/unicommerce-docs', uniSwaggerDocument, {
-  requestInterceptor: (req) => {
-    req.headers['Accept-Language'] = 'en';
-    return req;
-  },
+app.use('/api-docs', swaggerUi.serve, (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  swaggerUi.setup(loadSwagger(), swaggerUiOptions)(req, res, next);
 });
+
+app.use(
+  '/unicommerce-docs',
+  swaggerUi.serveFiles(uniSwaggerDocument, {}),
+  swaggerUi.setup(uniSwaggerDocument, swaggerUiOptions)
+);
 
 app.use(express.json());
 app.use(cors(corsOptions));

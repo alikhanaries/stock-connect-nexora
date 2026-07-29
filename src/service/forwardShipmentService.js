@@ -239,10 +239,13 @@ export const createShipmentwithCE = async (shipmentData) => {
   };
 
   const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
-  await fetch(ceUrl, {
+  await channelEnginePush({
+    operationType: CE_QUEUE_OPERATIONS.SHIPMENT_CREATE,
     method: 'POST',
+    url: ceUrl,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(CEPayload),
+    body: CEPayload,
+    awaitResult: false,
   });
 };
 
