@@ -22,6 +22,7 @@ import Seller from '../models/Seller.js';
 import fs from 'fs';
 import path from 'path';
 import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
+import { getWarehouseAvailabilityContext, buildWarehouseAvailabilityFields } from '#service/omnifulInventoryService.js';
 
 const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null) => {
   let sellerName = '';
@@ -662,25 +663,54 @@ export const getOrderById = async (id, sellerId) => {
     orderLogsDetails = await OrderLogs.findOne(filter).lean();
 
     const orderLogsData = orderLogsDetails?.details?.length ? formatOrderTrackingInf(orderLogsDetails.details) : [];
+
+    const pendingSkuCodes = allOrderSkus
+      .filter((sku) => (sku.statusBreakdown?.confirmed || 0) > 0)
+      .map((sku) => sku.merchantProductNo)
+      .filter(Boolean);
+
+    const { map: warehouseMap, lastSyncedAt: warehouseLastSyncedAt } =
+      await getWarehouseAvailabilityContext(pendingSkuCodes);
+
+    const attachWarehouseFields = (item, orderedQty) => ({
+      ...item,
+      ...buildWarehouseAvailabilityFields(item.merchantProductNo, orderedQty, warehouseMap, warehouseLastSyncedAt),
+    });
+
+    const enrichedUnshippedItems = unshippedItems.map((item) => attachWarehouseFields(item, item.quantity));
+
     const productsStatusDetails = allOrderSkus.map((sku) => {
       const b = sku.statusBreakdown || {};
       const dynamicSellerName = sellerName || sku.sellerName || '';
+      const pendingQty = b.confirmed || 0;
 
-      return {
-        id: sku.id,
-        skuOrderId: sku.orderId,
-        productCode: sku.merchantProductNo,
-        totalQty: sku.quantity,
-        confirmed: b.confirmed || 0,
-        shipmentCreated: b.shipmentCreated || 0,
-        shipped: b.shipped || 0,
-        delivered: b.delivered || 0,
-        returned: b.returned || 0,
-        canceled: b.canceled || 0,
-        sellerId: sku.sellerId,
-        sellerName: dynamicSellerName,
-      };
+      return attachWarehouseFields(
+        {
+          id: sku.id,
+          skuOrderId: sku.orderId,
+          productCode: sku.merchantProductNo,
+          merchantProductNo: sku.merchantProductNo,
+          totalQty: sku.quantity,
+          confirmed: pendingQty,
+          shipmentCreated: b.shipmentCreated || 0,
+          shipped: b.shipped || 0,
+          delivered: b.delivered || 0,
+          returned: b.returned || 0,
+          canceled: b.canceled || 0,
+          sellerId: sku.sellerId,
+          sellerName: dynamicSellerName,
+        },
+        pendingQty
+      );
     });
+
+    const warehouseFulfillmentSummary = {
+      totalPendingItems: enrichedUnshippedItems.length,
+      availableInWarehouseCount: enrichedUnshippedItems.filter((item) => item.availableInWarehouse).length,
+      canFullyFulfillFromWarehouse:
+        enrichedUnshippedItems.length > 0 && enrichedUnshippedItems.every((item) => item.availableInWarehouse),
+      inventoryLastSyncedAt: warehouseLastSyncedAt,
+    };
 
     let skuOrderId = null;
 
@@ -695,10 +725,11 @@ export const getOrderById = async (id, sellerId) => {
       skuOrderId,
       shippedItems,
       deliveredItems,
-      unshippedItems,
+      unshippedItems: enrichedUnshippedItems,
       cancelledItems,
       orderLogsData,
       productsStatusDetails,
+      warehouseFulfillmentSummary,
     };
   } catch (err) {
     console.error(err);

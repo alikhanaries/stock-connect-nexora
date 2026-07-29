@@ -65,6 +65,10 @@ router.get('/getAnalyticsOrders', getAnalyticsOrdersValidator, checkLanguage, au
  *           type: string
  *           enum: [en, ar, zh-CN, tr]
  *       - in: query
+ *         name: sellerId
+ *         schema: { type: string }
+ *         description: Seller MongoDB id (required for seller users; recommended for master-admin)
+ *       - in: query
  *         name: page
  *         schema: { type: integer }
  *       - in: query
@@ -94,7 +98,7 @@ router.get('/getAnalyticsOrders', getAnalyticsOrdersValidator, checkLanguage, au
  *           type: string
  *           enum: [asc, desc]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         $ref: "#/components/schemas/SuccessResponse"
@@ -163,7 +167,7 @@ router.get('/', getAllOrdersValidator, checkLanguage, authMiddleware, verifySell
  *           default: desc
  *         description: Sort order
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Orders fetched successfully
@@ -200,7 +204,7 @@ router.get('/admin/orders', getAllOrdersValidator, checkLanguage, authMiddleware
  *           type: string
  *           enum: [en, ar, zh-CN, tr]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         $ref: "#/components/schemas/SuccessResponse"
@@ -220,7 +224,7 @@ router.get('/stats', orderStatsValidator, checkLanguage, authMiddleware, verifyS
  *           type: string
  *           enum: [en, ar, zh-CN, tr]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         $ref: "#/components/schemas/SuccessResponse"
@@ -245,7 +249,7 @@ router.get('/sync-orders', syncOrdersValidator, checkLanguage, authMiddleware, v
  *           type: string
  *           enum: [day, week, month]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         $ref: "#/components/schemas/SuccessResponse"
@@ -283,7 +287,7 @@ router.get(
  *               specifics: { type: string }
  *             required: [orderId, reason]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
@@ -298,19 +302,40 @@ router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, veri
  *   get:
  *     tags: [Orders]
  *     summary: Get order by ID
+ *     description: >
+ *       Returns order details including warehouse fields on unshippedItems
+ *       (availableInWarehouse, expressWarehouseAvailableQty, fulfillmentType).
+ *       **id** must be the order MongoDB _id from channelengineorders (24-char hex),
+ *       NOT orderId (e.g. "1682"), channelOrderNumber, or sellerId.
+ *       Master-admin users must pass **sellerId** query param matching one of the order sellerIds.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
  *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         description: Bearer JWT token from POST /auth/login
+ *         schema: { type: string, example: "Bearer eyJhbGci..." }
+ *       - in: query
+ *         name: sellerId
+ *         required: false
+ *         description: >
+ *           Seller MongoDB id. Required in practice for master-admin when viewing a specific seller's order.
+ *           Must match one of the order's sellerIds.
+ *         schema: { type: string, example: "691ee02843f00a695364352f" }
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string }
+ *         description: Order MongoDB _id (24-char hex), e.g. from GET /orders response `_id`
+ *         schema: { type: string, example: "69d8a2bd86bcb6d1e16dbd0f" }
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
+ *       400: { $ref: "#/components/schemas/FailResponse" }
  *       404: { $ref: "#/components/schemas/FailResponse" }
+ *       500: { $ref: "#/components/schemas/ErrorResponse" }
  */
 router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, verifySellerAccess, getOrderById);
 // /* CANCEL ORDER (FULL CANCELLATION) */
@@ -335,7 +360,7 @@ router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, verifyS
  *               reason: { type: string }
  *             required: [orderId, reason]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
@@ -379,7 +404,7 @@ router.put(
  *                   required: [orderLineId, merchantProductNo, quantity]
  *             required: [orderId, reason, products]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  *       400: { $ref: "#/components/schemas/FailResponse" }
@@ -421,7 +446,7 @@ router.put(
  *                 example: 69bd24f86a31299529e7d778
  *             required: [orderId]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Invoice generated successfully

@@ -43,10 +43,12 @@ const fetchNewTokens = async (refreshToken) => {
     }),
   });
 
+  const data = await response.json().catch(() => ({}));
+
   if (!response.ok) {
-    throw new Error('Token API failed');
+    const omnifulMessage = data?.error?.message || data?.message;
+    throw new Error(omnifulMessage ? `Omniful token refresh failed: ${omnifulMessage}` : 'Token API failed');
   }
-  const data = await response.json();
 
   return {
     accessToken: data?.data?.access_token,
