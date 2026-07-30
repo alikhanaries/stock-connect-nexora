@@ -46,3 +46,25 @@ export const syncStockToChannelEngineValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+
+export const getOmnifulWarehouseInventoryValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z.object({
+    page: z.coerce.number().int().min(1).optional(),
+    size: z.coerce.number().int().min(1).max(100).optional(),
+    search: z.string().trim().optional(),
+  });
+
+  querySchema.parse(req.query);
+});
+
+export const getOmnifulInventorySyncLogsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const querySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  });
+
+  querySchema.parse(req.query);
+});
