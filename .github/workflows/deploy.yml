@@ -19,7 +19,6 @@ jobs:
           username: opc
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: GH_TOKEN
-          script_stop: true
           script: |
             set -euo pipefail
             cd /home/opc/stock-connect-backend
