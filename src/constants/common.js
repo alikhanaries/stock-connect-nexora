@@ -268,7 +268,9 @@ export const SHIPMENT_EXPORT_HEADERS = [
   'Tracking Status History',
 ];
 
-export const ALLOWEDMARKETPLACES = ['Amazon.sa (v3)', 'Noon V2', 'Trendyol.int SA', 'Namshi'];
+export const AMAZON_CHANNEL_NAME = 'Amazon.sa (v3)';
+
+export const ALLOWEDMARKETPLACES = [AMAZON_CHANNEL_NAME, 'Noon V2', 'Trendyol.int SA', 'Namshi'];
 
 export const LOW_STOCK_THRESHOLD_SELLERS = ['kip', 'ramsey'];
 
