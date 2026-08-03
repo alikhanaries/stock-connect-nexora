@@ -104,7 +104,7 @@ const getAllOrders = async (query, sellerId) => {
 
     // Base match stage
     const filter = {
-      sellerId,
+      sellerId: sellerObjectId,
     };
 
     // ---------------- CHANNEL FILTER ----------------
@@ -247,7 +247,7 @@ const getAllOrders = async (query, sellerId) => {
 
       {
         $lookup: {
-          from: 'orders',
+          from: 'channelengineorders',
           localField: 'orderId',
           foreignField: 'orderId',
           as: 'orderData',
