@@ -301,3 +301,35 @@ export function sortProductsByHierarchy(products) {
     return (a.productSkuCode || '').localeCompare(b.productSkuCode || '');
   });
 }
+
+
+export function sortProductsByInterleavedHierarchy(products) {
+  const bySku = (a, b) => (a.productSkuCode || '').localeCompare(b.productSkuCode || '');
+
+  const grandparents = products
+    .filter((p) => !p.parentProductSkuCode && !p.grandParentProductSkuCode)
+    .sort(bySku);
+
+  const result = [];
+
+  for (const gp of grandparents) {
+    result.push(gp);
+
+    const parents = products
+      .filter((p) => p.grandParentProductSkuCode === gp.productSkuCode && !p.parentProductSkuCode)
+      .sort(bySku);
+
+    for (const parent of parents) {
+      result.push(parent);
+
+      const children = products.filter((p) => p.parentProductSkuCode === parent.productSkuCode).sort(bySku);
+      result.push(...children);
+    }
+  }
+
+  const included = new Set(result.map((p) => p.productSkuCode));
+  const orphans = products.filter((p) => !included.has(p.productSkuCode)).sort(bySku);
+  if (orphans.length) result.push(...orphans);
+
+  return result;
+}
