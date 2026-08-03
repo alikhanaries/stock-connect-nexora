@@ -21,11 +21,30 @@ export const fetchOrderStatus = async (sellerId, pageNumber, pageSize, orderIds)
     const skip = (page - 1) * limit;
     const normalizedOrderId =
       typeof orderIds === 'string' ? orderIds.trim() : orderIds != null ? String(orderIds).trim() : null;
+
+    const sellerObjectId = ObjectId.isValid(sellerId) ? new ObjectId(sellerId) : sellerId;
     const query = {
-      sellerId: new ObjectId(sellerId),
+      $or: [{ sellerId: sellerObjectId }, { sellerIds: sellerObjectId }],
     };
+
     if (normalizedOrderId) {
-      query.orderId = normalizedOrderId;
+      const idList = normalizedOrderId
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const objectIdList = idList.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+
+      query.$and = [
+        {
+          $or: [
+            { orderId: { $in: idList } },
+            { channelOrderNumber: { $in: idList } },
+            { merchantOrderNo: { $in: idList } },
+            ...(objectIdList.length ? [{ _id: { $in: objectIdList } }] : []),
+          ],
+        },
+      ];
     }
 
     const orders = await Order.find(query).skip(skip).limit(limit).lean();
@@ -49,7 +68,7 @@ const buildProductIdBySku = async (sellerId, orders) => {
   ];
   const map = new Map();
   if (!skus.length) return map;
-  const sellerObjectId = new ObjectId(sellerId);
+  const sellerObjectId = ObjectId.isValid(sellerId) ? new ObjectId(sellerId) : sellerId;
   const skuProducts = await Product.find({
     sellerId: sellerObjectId,
     productSkuCode: { $in: skus },
@@ -77,26 +96,31 @@ const buildProductIdBySku = async (sellerId, orders) => {
 
 export const fetchOrders = async (sellerId, query = {}) => {
   try {
-    const { pageNumber = 1, pageSize = 50, orderDateFrom, orderDateTo } = query;
+    const { pageNumber = 1, pageSize = 50, orderDateFrom, orderDateTo, startDate, endDate } = query;
     const page = Math.max(parseInt(pageNumber) || 1, 1);
     const limit = parseInt(pageSize) || 50;
     const skip = (page - 1) * limit;
 
+    const sellerObjectId = ObjectId.isValid(sellerId) ? new ObjectId(sellerId) : sellerId;
+
     const filter = {
-      sellerId,
-      status: 'IN_PROGRESS',
+      $or: [{ sellerId: sellerObjectId }, { sellerIds: sellerObjectId }],
+      status: { $in: ['NEW', 'IN_PROGRESS'] },
     };
 
+    const dateFrom = orderDateFrom || startDate;
+    const dateTo = orderDateTo || endDate;
+
     // date range filter
-    if (orderDateFrom || orderDateTo) {
+    if (dateFrom || dateTo) {
       filter.orderDate = {};
 
-      if (orderDateFrom) {
-        filter.orderDate.$gte = normalizeUniwareDate(orderDateFrom);
+      if (dateFrom) {
+        filter.orderDate.$gte = normalizeUniwareDate(dateFrom);
       }
 
-      if (orderDateTo) {
-        filter.orderDate.$lte = normalizeUniwareDate(orderDateTo);
+      if (dateTo) {
+        filter.orderDate.$lte = normalizeUniwareDate(dateTo);
       }
     }
     const orders = await Order.find(filter).sort({ orderDate: 1 }).skip(skip).limit(limit).lean();

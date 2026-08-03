@@ -7,23 +7,22 @@ export const getOrdersValidator = validate(async (req) => {
   const querySchema = z
     .object({
       pageNumber: z
-        .string()
-        .regex(/^\d+$/, 'pageNumber must be a number string')
-        .transform((val) => parseInt(val, 10))
-        .refine((val) => val >= 1, {
+        .union([z.string(), z.number()])
+        .transform((val) => parseInt(String(val), 10))
+        .refine((val) => !isNaN(val) && val >= 1, {
           message: 'pageNumber must be at least 1',
         }),
 
       pageSize: z
-        .string()
-        .refine((val) => val === '50', {
-          message: 'pageSize must be 50',
-        })
-        .transform(() => 50),
+        .union([z.string(), z.number()])
+        .transform((val) => parseInt(String(val), 10))
+        .optional()
+        .default(50),
 
-      startDate: z.string().datetime({ message: 'startDate must be ISO datetime' }).optional(),
-
-      endDate: z.string().datetime({ message: 'endDate must be ISO datetime' }).optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+      orderDateFrom: z.string().optional(),
+      orderDateTo: z.string().optional(),
 
       sellerId: z
         .string()
@@ -31,19 +30,7 @@ export const getOrdersValidator = validate(async (req) => {
         .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
         .optional(),
     })
-    .passthrough()
-    .refine(
-      (data) => {
-        if (data.startDate && data.endDate) {
-          return new Date(data.startDate) <= new Date(data.endDate);
-        }
-        return true;
-      },
-      {
-        message: 'startDate must be less than or equal to endDate',
-        path: ['startDate'],
-      }
-    );
+    .passthrough();
 
   Object.assign(req.query, querySchema.parse(req.query));
 });
