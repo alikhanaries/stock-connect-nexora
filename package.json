@@ -23,6 +23,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "worker:ce": "node src/queues/channelEngineWorker.js",
+    "backfill:ce-order-status": "node scripts/backfill-ce-order-status.mjs",
+    "backfill:ce-order-status:execute": "node scripts/backfill-ce-order-status.mjs --execute",
     "lint": "eslint src --fix",
     "prettier": "prettier . --ignore-path .prettierignore",
     "format:check": "yarn run prettier --check",
