@@ -17,7 +17,14 @@ export const headerSchema = z
       })
       .optional()
       .superRefine((val, ctx) => {
-        if (val && !LANGUAGE_CODES.includes(val)) {
+        if (!val) return;
+
+        const primary = val.split(',')[0]?.trim();
+        const base = primary?.split('-')[0];
+        const isSupported =
+          LANGUAGE_CODES.includes(val) || LANGUAGE_CODES.includes(primary) || LANGUAGE_CODES.includes(base);
+
+        if (!isSupported) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Accept-Language '${val}' is not supported. Supported languages: ${LANGUAGE_CODES.join(', ')}`,

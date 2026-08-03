@@ -6,11 +6,22 @@ import {
   syncStockToChannelEngine,
   importProductsFromExpressWarehouseGoogleSheet,
 } from '#controllers/InventoryController.js';
+import {
+  syncOmnifulWarehouseInventory,
+  getOmnifulWarehouseInventory,
+  getOmnifulInventorySyncStatus,
+  getOmnifulInventorySyncLogs,
+} from '#controllers/OmnifulInventoryController.js';
 import { authMiddleware, checkLanguage, validateFile, verifySellerAccess } from '#middleware/index.js';
 
 import { importProductsFromGoogleSheetValidator, importProductsFromCsvFileValidator } from '#validations/products.js';
-import upload from '#helpers/FileHandler.js'; // the above multer setup
-import { updateSingleInventoryValidator, syncStockToChannelEngineValidator } from '#validations/inventory.js';
+import upload from '#helpers/FileHandler.js';
+import {
+  updateSingleInventoryValidator,
+  syncStockToChannelEngineValidator,
+  getOmnifulWarehouseInventoryValidator,
+  getOmnifulInventorySyncLogsValidator,
+} from '#validations/inventory.js';
 const inventoryRouter = express.Router();
 
 /* UPLOAD INVENTORIES FROM GOOGLE SHEET */
@@ -220,6 +231,90 @@ inventoryRouter.post(
   authMiddleware,
   verifySellerAccess,
   importProductsFromExpressWarehouseGoogleSheet
+);
+
+/**
+ * @openapi
+ * /inventory/omniful/sync:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Sync express warehouse inventory from Omniful
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Omniful warehouse inventory synced successfully
+ *       500:
+ *         description: Sync failed
+ */
+inventoryRouter.post('/omniful/sync', checkLanguage, authMiddleware, syncOmnifulWarehouseInventory);
+
+/**
+ * @openapi
+ * /inventory/omniful/warehouse:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: List express warehouse inventory synced from Omniful
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1 }
+ *       - in: query
+ *         name: size
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Warehouse inventory list
+ */
+inventoryRouter.get(
+  '/omniful/warehouse',
+  getOmnifulWarehouseInventoryValidator,
+  checkLanguage,
+  authMiddleware,
+  getOmnifulWarehouseInventory
+);
+
+/**
+ * @openapi
+ * /inventory/omniful/sync-status:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Get latest Omniful warehouse inventory sync status
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sync status
+ */
+inventoryRouter.get('/omniful/sync-status', checkLanguage, authMiddleware, getOmnifulInventorySyncStatus);
+
+/**
+ * @openapi
+ * /inventory/omniful/sync-logs:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Get Omniful warehouse inventory sync logs
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *     responses:
+ *       200:
+ *         description: Sync logs
+ */
+inventoryRouter.get(
+  '/omniful/sync-logs',
+  getOmnifulInventorySyncLogsValidator,
+  checkLanguage,
+  authMiddleware,
+  getOmnifulInventorySyncLogs
 );
 
 export default inventoryRouter;

@@ -4,6 +4,7 @@ import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
 import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderService.js';
 import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
+import { resolveStoredSkuStatus, deriveSellerOrderStatusFromSkus } from '#root/src/service/sellerOrderService.js';
 
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
@@ -299,6 +300,8 @@ export const getOrganizedOrderRowData = (flattenedOrder, organizedHeaders) => {
 export const normalizeSkuStatus = (skuStatus) => {
   switch (skuStatus) {
     case 'NEW':
+      return 'NEW';
+
     case 'IN_PROGRESS':
     case 'IN_COMBI':
     case 'SHIPMENT_CREATED':
@@ -446,10 +449,18 @@ export const sanitizeOrdersData = async (orders) => {
           const sellerOrderId = `${data.Id}_${sellerId}`;
           const extraStatus = getExtraStatus(line?.ExtraData);
           const normalizedExtraStatus = extraStatus?.toLowerCase();
-          const mainStatus = normalizedExtraStatus === 'delivered' ? 'DELIVERED' : normalizeSkuStatus(line.Status);
-          const skuStatus = ['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)
-            ? existingSku.status
-            : mainStatus;
+          const qty = line.Quantity || 0;
+          const statusBreakdown = buildStatusBreakdown({
+            line,
+            existingSku,
+          });
+
+          let skuStatus = resolveStoredSkuStatus({
+            breakdown: statusBreakdown,
+            qty,
+            existingSku,
+            extraDelivered: normalizedExtraStatus === 'delivered',
+          });
           //  DELIVERY DETECTION
 
           const alreadyDelivered = existingSku?.status === 'DELIVERED';
@@ -487,10 +498,7 @@ export const sanitizeOrdersData = async (orders) => {
             // ---------- STATUS ----------
             status: skuStatus,
 
-            statusBreakdown: buildStatusBreakdown({
-              line,
-              existingSku,
-            }),
+            statusBreakdown,
 
             cancellationRequestedQuantity:
               existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
@@ -671,10 +679,10 @@ export const sanitizeOrdersData = async (orders) => {
         countryIso: data?.BillingAddress?.CountryIso ?? 'NA',
       },
 
-      // status: normalizeOrderStatus(data?.Status),
+      // status derived from fulfillment-resolved SKU statuses (same rules for all channels)
       status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
         ? existingOrder.status
-        : normalizeOrderStatus(data?.Status),
+        : deriveSellerOrderStatusFromSkus(skuList),
     };
 
     //  Prepare SellerOrder payload (NO DB CALL HERE)

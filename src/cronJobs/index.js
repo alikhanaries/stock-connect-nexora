@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { getReturns } from '#service/returnService.js';
 import { getReportToken } from '#service/forwardShipmentService.js';
 import { runInventorySync } from './services/inventorySyncService.js';
+import { runOmnifulWarehouseInventorySync } from './services/omnifulInventorySyncService.js';
 import { runPriceSync } from './services/priceSyncService.js';
 import { config } from '../config/config.js';
 
@@ -15,6 +16,7 @@ const scheduledCronJobs = () => {
       try {
         await getReportToken();
         await getReturns();
+        await runOmnifulWarehouseInventorySync();
         await runInventorySync();
         await runPriceSync();
       } catch (err) {
