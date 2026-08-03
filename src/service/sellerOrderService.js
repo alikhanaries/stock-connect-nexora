@@ -1,5 +1,60 @@
 import SellerOrder from '#root/src/models/OrderSchema/SellerOrder.js';
 import Order from '#root/src/models/Orders.js';
+
+const STATUS = {
+  NEW: 'NEW',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SHIPPED: 'SHIPPED',
+  DELIVERED: 'DELIVERED',
+  CANCELED: 'CANCELED',
+  RETURNED: 'RETURNED',
+  CLOSED: 'CLOSED',
+};
+
+/** Derive StockConnect fulfillment status from activity — not raw CE marketplace status. */
+export const deriveSkuStatusFromFulfillment = ({
+  breakdown = {},
+  qty = 0,
+  honorInvoiceInProgress = false,
+  storedStatus = '',
+} = {}) => {
+  const confirmed = breakdown.confirmed || 0;
+  const shipped = breakdown.shipped || 0;
+  const delivered = breakdown.delivered || 0;
+  const canceled = breakdown.canceled || 0;
+  const returned = breakdown.returned || 0;
+  const shipmentCreated = breakdown.shipmentCreated || 0;
+  const stored = (storedStatus || '').toUpperCase();
+
+  if (canceled === qty) return STATUS.CANCELED;
+  if (returned === qty) return STATUS.RETURNED;
+  if (delivered === qty) return STATUS.DELIVERED;
+  if (shipmentCreated > 0 || (confirmed > 0 && confirmed < qty)) {
+    if (shipped === qty) return STATUS.SHIPPED;
+    return STATUS.IN_PROGRESS;
+  }
+  if (shipped > 0) return STATUS.SHIPPED;
+  if (honorInvoiceInProgress && stored === STATUS.IN_PROGRESS) return STATUS.IN_PROGRESS;
+  return STATUS.NEW;
+};
+
+/** Shared CE/OCP stored SKU status — fulfillment rules, not channel marketplace status. */
+export const resolveStoredSkuStatus = ({ breakdown, qty, existingSku, extraDelivered = false }) => {
+  if (extraDelivered) return STATUS.DELIVERED;
+  if (['SHIPPED', 'DELIVERED', 'RETURNED', 'CANCELED'].includes(existingSku?.status)) {
+    return existingSku.status;
+  }
+  if ((existingSku?.status || '').toUpperCase() === STATUS.IN_PROGRESS && existingSku?.documentId) {
+    return STATUS.IN_PROGRESS;
+  }
+  return deriveSkuStatusFromFulfillment({
+    breakdown,
+    qty,
+    honorInvoiceInProgress: Boolean(existingSku?.documentId),
+    storedStatus: existingSku?.status,
+  });
+};
+
 export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
   try {
     const { orderId, orderDate, channelId, channelName, orderSkuList } = orderPayload;
@@ -350,16 +405,6 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
   }
 };
 
-const STATUS = {
-  NEW: 'NEW',
-  IN_PROGRESS: 'IN_PROGRESS',
-  SHIPPED: 'SHIPPED',
-  DELIVERED: 'DELIVERED',
-  CANCELED: 'CANCELED',
-  RETURNED: 'RETURNED',
-  CLOSED: 'CLOSED',
-};
-
 // -----------------------------
 // MAIN HELPER
 // -----------------------------
@@ -399,4 +444,23 @@ const deriveSellerStatus = (counts, total) => {
   // 5. DEFAULT
   // -----------------------------
   return STATUS.IN_PROGRESS;
+};
+
+/** Derive seller-order row status from resolved SKU statuses (same rules for every brand/channel). */
+export const deriveSellerOrderStatusFromSkus = (skuList = []) => {
+  const counts = {
+    NEW: 0,
+    IN_PROGRESS: 0,
+    SHIPPED: 0,
+    DELIVERED: 0,
+    CANCELED: 0,
+    RETURNED: 0,
+  };
+
+  skuList.forEach((sku) => {
+    const st = (sku.status || STATUS.NEW).toUpperCase();
+    if (counts[st] !== undefined) counts[st]++;
+  });
+
+  return deriveSellerStatus(counts, skuList.length);
 };
