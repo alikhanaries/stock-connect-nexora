@@ -36,10 +36,26 @@ import forwardShipmentService from './forwardShipmentService.js';
 import Product from '#models/Product.js';
 import { channelEnginePush } from '#service/channelEngineClient.js';
 import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import { isAmazonChannelOrder, getAymakanWarehouseDeliveryAddress } from '#helpers/amazonFulfillment.js';
+
+const buildAymakanWarehouseDeliveryFields = (orderCustomer) => ({
+  delivery_name: [orderCustomer?.firstName, orderCustomer?.lastName].filter(Boolean).join(' '),
+  delivery_email: orderCustomer?.email,
+  delivery_city: config.AYMAKAN_DELIVERY_CITY,
+  delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
+  delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
+  delivery_postcode: config.AYMAKAN_DELIVERY_POSTCODE,
+  delivery_phone: config.AYMAKAN_DELIVERY_PHONE,
+  delivery_national_address: {
+    short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
+  },
+  lat: config.AYMAKAN_DELIVERY_LAT,
+  long: config.AYMAKAN_DELIVERY_LONG,
+});
 
 export const createShipmentWithAymakan = async (shipmentData) => {
   try {
-    const { userId, collectionData, pieces = 0, orderCustomer } = shipmentData;
+    const { userId, collectionData, pieces = 0, orderCustomer, deliveryData, isAmazonFulfillment } = shipmentData;
 
     // --- 1Resolve requested_by from userId ---
     let requestedBy = 'Unknown';
@@ -73,6 +89,11 @@ export const createShipmentWithAymakan = async (shipmentData) => {
 
     const hasInternationalMetadata = documentId && tax_identification_number && invoice_number && invoice_date;
 
+    const deliveryFields =
+      isAmazonFulfillment && deliveryData
+        ? buildDeliveryPayload(deliveryData)
+        : buildAymakanWarehouseDeliveryFields(orderCustomer);
+
     // ---  Build final payload for Aymakan ---
     const payload = {
       requested_by: requestedBy,
@@ -80,18 +101,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       items_count: (shipmentData.products || []).reduce((sum, p) => sum + (p.quantity || 0), 0),
       cod_amount: shipmentData.codAmount || 0,
       currency: AYMAKAN_PRICE_CURRENCY,
-      delivery_name: [orderCustomer?.firstName, orderCustomer?.lastName].filter(Boolean).join(' '),
-      delivery_email: orderCustomer?.email,
-      delivery_city: config.AYMAKAN_DELIVERY_CITY,
-      delivery_address: config.AYMAKAN_DELIVERY_ADDRESS,
-      delivery_country: config.AYMAKAN_DELIVERY_COUNTRY,
-      delivery_postcode: config.AYMAKAN_DELIVERY_POSTCODE,
-      delivery_phone: config.AYMAKAN_DELIVERY_PHONE,
-      delivery_national_address: {
-        short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
-      },
-      lat: config.AYMAKAN_DELIVERY_LAT,
-      long: config.AYMAKAN_DELIVERY_LONG,
+      ...deliveryFields,
       delivery_duty_type: 'DDP',
       delivery_description: (productsData || [])
         .map((p) => [p.description, p.sku].filter(Boolean).join(' | '))
@@ -433,21 +443,19 @@ export const createFullShipmentService = async (shipmentData) => {
     }
 
     // Step 9: Delivery & Pickup
-    const deliveryData = await formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
-    if (!deliveryData) throw new Error('Invalid delivery information');
-    const aymakanDeliveryAddress = {
-      name: config.AYMAKAN_DELIVERY_NAME,
-      email: config.AYMAKAN_DELIVERY_EMAIL,
-      city: config.AYMAKAN_DELIVERY_CITY,
-      address: config.AYMAKAN_DELIVERY_ADDRESS,
-      country: config.AYMAKAN_DELIVERY_COUNTRY,
-      phone: config.AYMAKAN_DELIVERY_PHONE,
-      postcode: config.AYMAKAN_DELIVERY_POSTCODE,
-      short_code: config.AYMAKAN_DELIVERY_SHORT_CODE,
-      lat: config.AYMAKAN_DELIVERY_LAT,
-      long: config.AYMAKAN_DELIVERY_LONG,
-    };
-    const deliveryDetails = await saveDeliveryAddress(aymakanDeliveryAddress);
+    const isAmazonFulfillment = isAmazonChannelOrder(order);
+
+    let customerDeliveryData = null;
+    if (isAmazonFulfillment) {
+      customerDeliveryData = formatShipmentDeliveryAddress(order.orderShippingAddress, order.orderCustomer);
+      if (!customerDeliveryData) {
+        throw new Error('Invalid delivery information');
+      }
+    }
+
+    const deliveryDetails = isAmazonFulfillment
+      ? await saveDeliveryAddress(customerDeliveryData)
+      : await saveDeliveryAddress(getAymakanWarehouseDeliveryAddress(config));
 
     const collectionData = await getPickUpAddress(pickUpId);
     if (!collectionData) throw new Error('Invalid pickup information');
@@ -463,7 +471,8 @@ export const createFullShipmentService = async (shipmentData) => {
       ...shipmentData,
       ...(taxData || {}),
       documentId,
-      deliveryData,
+      deliveryData: customerDeliveryData,
+      isAmazonFulfillment,
       orderCustomer: order.orderCustomer,
       collectionData,
       pieces,
@@ -490,6 +499,29 @@ export const createFullShipmentService = async (shipmentData) => {
           createdAt: info?.created_at ? new Date(info.created_at) : new Date(),
         }))
       : [];
+
+    if (isAmazonFulfillment) {
+      try {
+        const ceResult = await createShipmentWithChannelEngine({
+          merchantShipmentNo,
+          merchantOrderNo,
+          lines: validProducts,
+          trackTraceNo: trackingNumber,
+          trackTraceUrl: '',
+          method: 'Aymakan',
+          shippedFromCountryCode: aymakanTrackingResult?.collection_country || 'SA',
+          shipmentDate: aymakanTrackingResult?.pickup_date || new Date(),
+          isMerchantCreator: true,
+          airWaybillNo: trackingNumber,
+        });
+
+        if (!ceResult?.success) {
+          console.error(`ChannelEngine create shipment failed for Amazon order: ${ceResult?.message}`);
+        }
+      } catch (error) {
+        console.error(`CE create shipment failed for Amazon order: ${error.message}`);
+      }
+    }
 
     // Step 12: Decrease stock
     const stockPayloads = [];
@@ -864,7 +896,10 @@ export const ayMakanWebHookService = async (data) => {
       };
     }
 
-    if (shipmentStatus === 'HUB_RECIEVED') {
+    const orderForChannel = await Order.findById(shipmentData.orderId).select('channelName').lean();
+    const isAmazonFulfillment = isAmazonChannelOrder(orderForChannel);
+
+    if (shipmentStatus === 'HUB_RECIEVED' && !isAmazonFulfillment) {
       omnifulResponse = await forwardShipmentService.forwardAymakanShipment(shipmentData);
       await safeExecute(async () => {}, 'Updating delivery state in ChannelEngine');
     }
