@@ -2,9 +2,12 @@ export async function executeChannelEngineRequest({ method, url, body, headers =
   const fetchHeaders = { ...headers };
   let fetchBody = body;
 
-  if (body !== undefined && body !== null && !fetchHeaders['Content-Type']) {
-    fetchHeaders['Content-Type'] = 'application/json';
-    if (typeof body !== 'string') {
+  if (body !== undefined && body !== null) {
+    const contentType = fetchHeaders['Content-Type'] || fetchHeaders['content-type'] || 'application/json';
+    if (!fetchHeaders['Content-Type']) {
+      fetchHeaders['Content-Type'] = contentType;
+    }
+    if (typeof body !== 'string' && contentType.includes('application/json')) {
       fetchBody = JSON.stringify(body);
     }
   }
