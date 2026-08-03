@@ -8,6 +8,8 @@ import {
   isOmnifulApiError,
   explainOmnifulAuthError,
 } from '../helpers/omnifulApiClient.js';
+import { channelEnginePush } from '#service/channelEngineClient.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 
 const { OMNIFUL_API_URL, OMNIFUL_HUB_CODE, CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
