@@ -783,7 +783,7 @@ export const processOrders = async (orders, sellerId) => {
     const result = await Order.bulkWrite(bulkOps, { ordered: false });
 
     //  Now safe
-    await Promise.all(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
+    await Promise.allSettled(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
 
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
