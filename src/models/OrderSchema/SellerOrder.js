@@ -42,7 +42,7 @@ const SellerOrderSchema = new mongoose.Schema(
     // order status (for order flow)
     status: {
       type: String,
-      enum: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED'],
+      enum: ['NEW', 'IN_PROGRESS', 'SHIPPED', 'DELIVERED', 'CANCELED', 'RETURNED', 'CLOSED'],
       required: true,
       index: true,
     },
