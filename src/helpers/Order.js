@@ -439,7 +439,10 @@ export const sanitizeOrdersData = async (orders) => {
       ? data.Lines.map((line) => {
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
 
-          const sellerIdFromMap = productSellerMap.get(line.MerchantProductNo) || null;
+          const sellerIdFromMap =
+            productSellerMap.get(line.MerchantProductNo) ||
+            (line.MerchantProductNo ? productSellerMap.get(line.MerchantProductNo.trim()) : null) ||
+            null;
           const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
 
           if (!sellerId) return null;
