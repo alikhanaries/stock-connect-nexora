@@ -378,7 +378,7 @@ export const buildStatuses = ({ line, existingSku }) => {
   ];
 };
 
-export const sanitizeOrdersData = async (orders, fallbackSellerId = null) => {
+export const sanitizeOrdersData = async (orders) => {
   const orderIds = [];
   const skuSet = new Set();
 
@@ -443,7 +443,7 @@ export const sanitizeOrdersData = async (orders, fallbackSellerId = null) => {
             productSellerMap.get(line.MerchantProductNo) ||
             (line.MerchantProductNo ? productSellerMap.get(line.MerchantProductNo.trim()) : null) ||
             null;
-          const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId || fallbackSellerId;
+          const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
 
           if (!sellerId) return null;
 
