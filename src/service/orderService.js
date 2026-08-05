@@ -963,6 +963,7 @@ export const processOrders = async (orders, sellerId) => {
       data: {
         ...result,
         insertedOrderIds: upsertedOrderIds,
+        processedOrderIds: bulkOps.map((op) => String(op.updateOne.filter.orderId)),
         sellerOrdersBackfilled: backfill?.repaired || 0,
         sellerOrdersBackfilledForSeller: backfill?.repairedForSeller || 0,
         sellerOrdersSynced,
