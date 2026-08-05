@@ -7,7 +7,7 @@ import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderServ
 import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
 import { resolveStoredSkuStatus, deriveSellerOrderStatusFromSkus } from '#root/src/service/sellerOrderService.js';
 
-const normalizeOrderSku = (sku) => (sku ? String(sku).trim() : '');
+const normalizeOrderSku = (sku) => (sku ? String(sku).trim().toLowerCase() : '');
 
 /**
  * CE lines often include ExtraData.sellerId when Product catalog mapping is missing.
@@ -456,6 +456,7 @@ export const sanitizeOrdersData = async (orders) => {
       Order.find({ orderId: { $in: orderIds } }).lean(),
       Product.find({ productSkuCode: { $in: Array.from(skuSet) } })
         .select('productSkuCode sellerId brand')
+        .collation({ locale: 'en', strength: 2 })
         .lean(),
     ]);
 

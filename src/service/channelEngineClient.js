@@ -121,6 +121,13 @@ export async function channelEnginePush({
     return buildFetchLikeResponse(result, tracking._id.toString(), job.id);
   } catch (err) {
     const record = await ChannelEngineQueueJob.findById(tracking._id).lean();
+    console.error(
+      `❌ [ChannelEngine Queue Error] trackingId: ${tracking._id} | Error:`,
+      record?.errorMessage || err.message
+    );
+    if (record?.responseBody || record?.errorDetails) {
+      console.error(`   Details:`, JSON.stringify(record.errorDetails || record.responseBody, null, 2));
+    }
     const failedResult = {
       ok: false,
       status: record?.httpStatus || 500,
