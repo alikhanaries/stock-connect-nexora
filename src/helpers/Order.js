@@ -6,6 +6,8 @@ import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderServ
 import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
 import { resolveStoredSkuStatus, deriveSellerOrderStatusFromSkus } from '#root/src/service/sellerOrderService.js';
 
+const normalizeOrderSku = (sku) => (sku ? String(sku).trim() : '');
+
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -388,7 +390,8 @@ export const sanitizeOrdersData = async (orders) => {
 
     if (Array.isArray(order.Lines)) {
       order.Lines.forEach((line) => {
-        if (line.MerchantProductNo) skuSet.add(line.MerchantProductNo);
+        const sku = normalizeOrderSku(line.MerchantProductNo);
+        if (sku) skuSet.add(sku);
       });
     }
   });
@@ -402,16 +405,20 @@ export const sanitizeOrdersData = async (orders) => {
   ]);
 
   const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
-  const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
+  const productSellerMap = new Map(productsDb.map((p) => [normalizeOrderSku(p.productSkuCode), p.sellerId]));
 
   const entegraBrands = ENTEGRA_BRAND_MAP.map((b) => b.erpBrand.toLowerCase());
 
   const entegraSkuSet = new Set(
-    productsDb.filter((p) => entegraBrands.includes(p.brand?.toLowerCase())).map((p) => p.productSkuCode)
+    productsDb
+      .filter((p) => entegraBrands.includes(p.brand?.toLowerCase()))
+      .map((p) => normalizeOrderSku(p.productSkuCode))
   );
 
   const entegraOrders = orders.filter(
-    (order) => Array.isArray(order.Lines) && order.Lines.some((line) => entegraSkuSet.has(line.MerchantProductNo))
+    (order) =>
+      Array.isArray(order.Lines) &&
+      order.Lines.some((line) => entegraSkuSet.has(normalizeOrderSku(line.MerchantProductNo)))
   );
 
   //  final outputs
@@ -423,10 +430,10 @@ export const sanitizeOrdersData = async (orders) => {
   for (const data of orders) {
     const existingOrder = existingOrdersMap.get(String(data.Id));
 
-    // sellerId from first SKU
+    // sellerId from first SKU (product lookup only — CE sync fetches all sellers' orders)
     let finalSellerId = null;
     if (Array.isArray(data.Lines) && data.Lines.length > 0) {
-      const firstSku = data.Lines[0].MerchantProductNo;
+      const firstSku = normalizeOrderSku(data.Lines[0].MerchantProductNo);
       if (firstSku) {
         finalSellerId = productSellerMap.get(firstSku) || null;
       }
@@ -439,13 +446,14 @@ export const sanitizeOrdersData = async (orders) => {
       ? data.Lines.map((line) => {
           const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
 
-          const sellerIdFromMap =
-            productSellerMap.get(line.MerchantProductNo) ||
-            (line.MerchantProductNo ? productSellerMap.get(line.MerchantProductNo.trim()) : null) ||
-            null;
+          const normalizedSku = normalizeOrderSku(line.MerchantProductNo);
+          const sellerIdFromMap = productSellerMap.get(normalizedSku) || null;
           const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
 
-          if (!sellerId) return null;
+          if (!sellerId) {
+            console.warn(`[order-sync] SKU "${line.MerchantProductNo}" not matched to a seller for order ${data.Id}`);
+            return null;
+          }
 
           sellerIdSet.add(String(sellerId));
 
@@ -570,6 +578,7 @@ export const sanitizeOrdersData = async (orders) => {
       : [];
     // IGNORE ORDER IF SKU LIST IS EMPTY
     if (!skuList.length) {
+      console.warn(`[order-sync] Skipping order ${data.Id} — no SKUs resolved to a seller`);
       continue;
     }
     const orderSellerIds = Array.from(sellerIdSet);
