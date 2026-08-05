@@ -55,6 +55,46 @@ export const resolveStoredSkuStatus = ({ breakdown, qty, existingSku, extraDeliv
   });
 };
 
+const buildProductEntry = (sku, price, qty) => ({
+  productId: sku.id || null,
+  merchantProductNo: sku.merchantProductNo || null,
+  quantity: qty,
+  lineTotalInclVat: qty * price || 0,
+  lineVat: sku.lineVat || 0,
+  originalUnitPriceInclVat: sku.originalUnitPriceInclVat || price,
+  originalUnitVat: sku.originalUnitVat || 0,
+  vatRate: sku.vatRate || 0,
+});
+
+const createSellerMapEntry = (sellerId, orderId) => ({
+  totalAmount: 0,
+  deliveredAmount: 0,
+  canceledAmount: 0,
+  returnedAmount: 0,
+  netAmount: 0,
+  totalQuantity: 0,
+  totalSkus: 0,
+  sellerOrderId: `${orderId}_${sellerId}`,
+  products: [],
+  statusBreakdown: {
+    confirmed: 0,
+    shipped: 0,
+    delivered: 0,
+    canceled: 0,
+    returned: 0,
+    shipmentCreated: 0,
+  },
+  statusCounts: {
+    NEW: 0,
+    IN_PROGRESS: 0,
+    SHIPPED: 0,
+    DELIVERED: 0,
+    CANCELED: 0,
+    RETURNED: 0,
+    SHIPMENT_CREATED: 0,
+  },
+});
+
 export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
   try {
     const { orderId, orderDate, channelId, channelName, orderSkuList } = orderPayload;
@@ -71,38 +111,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
       if (!sellerId) return;
 
       if (!sellerMap[sellerId]) {
-        sellerMap[sellerId] = {
-          totalAmount: 0,
-          deliveredAmount: 0,
-          canceledAmount: 0,
-          returnedAmount: 0,
-          netAmount: 0,
-          totalQuantity: 0,
-          totalSkus: 0,
-
-          sellerOrderId: `${orderId}_${sellerId}`,
-
-          products: [],
-
-          statusBreakdown: {
-            confirmed: 0,
-            shipped: 0,
-            delivered: 0,
-            canceled: 0,
-            returned: 0,
-            shipmentCreated: 0,
-          },
-
-          statusCounts: {
-            NEW: 0,
-            IN_PROGRESS: 0,
-            SHIPPED: 0,
-            DELIVERED: 0,
-            CANCELED: 0,
-            RETURNED: 0,
-            SHIPMENT_CREATED: 0,
-          },
-        };
+        sellerMap[sellerId] = createSellerMapEntry(sellerId, orderId);
       }
 
       const data = sellerMap[sellerId];
@@ -119,19 +128,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
       const returned = breakdown.returned || 0;
       const shipmentCreated = breakdown.shipmentCreated || 0;
 
-      // -----------------------------
-      //  PRODUCTS ARRAY BUILD
-      // -----------------------------
-      data.products.push({
-        productId: sku.id || null,
-        merchantProductNo: sku.merchantProductNo || null,
-        quantity: qty,
-        lineTotalInclVat: qty * price || 0,
-        lineVat: sku.lineVat || 0,
-        originalUnitPriceInclVat: sku.originalUnitPriceInclVat || price,
-        originalUnitVat: sku.originalUnitVat || 0,
-        vatRate: sku.vatRate || 0,
-      });
+      data.products.push(buildProductEntry(sku, price, qty));
 
       // -----------------------------
       // TOTALS
@@ -250,34 +247,7 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
       if (!sellerId) return;
 
       if (!sellerMap[sellerId]) {
-        sellerMap[sellerId] = {
-          totalAmount: 0,
-          deliveredAmount: 0,
-          canceledAmount: 0,
-          returnedAmount: 0,
-          netAmount: 0,
-          totalQuantity: 0,
-          totalSkus: 0,
-
-          statusBreakdown: {
-            confirmed: 0,
-            shipped: 0,
-            delivered: 0,
-            canceled: 0,
-            returned: 0,
-            shipmentCreated: 0,
-          },
-
-          statusCounts: {
-            NEW: 0,
-            IN_PROGRESS: 0,
-            SHIPPED: 0,
-            DELIVERED: 0,
-            CANCELED: 0,
-            RETURNED: 0,
-            SHIPMENT_CREATED: 0,
-          },
-        };
+        sellerMap[sellerId] = createSellerMapEntry(sellerId, order.orderId);
       }
 
       const data = sellerMap[sellerId];
@@ -292,6 +262,8 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
       const canceled = breakdown.canceled || 0;
       const returned = breakdown.returned || 0;
       const shipmentCreated = breakdown.shipmentCreated || 0;
+
+      data.products.push(buildProductEntry(sku, price, qty));
 
       // -----------------------------
       // TOTALS
@@ -376,6 +348,8 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
               channelName,
 
               status: data.finalStatus,
+
+              products: data.products,
 
               totalAmount: +data.totalAmount.toFixed(2),
               deliveredAmount: +data.deliveredAmount.toFixed(2),
