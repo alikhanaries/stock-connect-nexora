@@ -954,7 +954,7 @@ export async function getNewOrders() {
     let hasMore = true;
     let pagesFetched = 0;
 
-    while (hasMore && page <= 55) {
+    while (hasMore) {
       const pageLabel = `${profilePrefix} CE page fetch page=${page}`;
       console.time(pageLabel);
       let data;
