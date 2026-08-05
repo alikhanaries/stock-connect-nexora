@@ -489,6 +489,7 @@ export const sanitizeOrdersData = async (orders) => {
               extraData: line?.ExtraData,
               ceProductSellerMap,
               finalSellerId,
+              sellerExistsCache,
             });
 
             const { sellerId, source } = resolution;

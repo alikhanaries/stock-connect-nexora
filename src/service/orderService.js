@@ -821,6 +821,13 @@ export const processOrders = async (orders, sellerId) => {
     const result = await Order.bulkWrite(bulkOps, { ordered: false });
     console.timeEnd(`${profilePrefix} Order.bulkWrite`);
 
+    const sellerIdStr = sellerId ? String(sellerId) : null;
+    const sellerOrdersSynced = sellerIdStr
+      ? sellerOrderPayloads.filter((p) =>
+          (p.orderPayload?.orderSkuList?.skuList || []).some((s) => s.sellerId && String(s.sellerId) === sellerIdStr)
+        ).length
+      : 0;
+
     console.time(`${profilePrefix} sellerOrder upserts`);
     await Promise.allSettled(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
     console.timeEnd(`${profilePrefix} sellerOrder upserts`);
@@ -941,14 +948,15 @@ export const processOrders = async (orders, sellerId) => {
 
     // Repair CE orders that exist in channelengineorders but never got sellerorders (UI source)
     console.time(`${profilePrefix} backfillMissingSellerOrders`);
-    const backfill = await backfillMissingSellerOrders();
+    const backfill = await backfillMissingSellerOrders(sellerId);
     console.timeEnd(`${profilePrefix} backfillMissingSellerOrders`);
     if (backfill?.repaired) {
       console.log(`backfillMissingSellerOrders: repaired ${backfill.repaired}/${backfill.scanned}`);
     }
     console.log(
-      `${profilePrefix} recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0})`
+      `${profilePrefix} recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0})`
     );
+    console.log(`${profilePrefix} sellerOrdersSynced for requesting seller: ${sellerOrdersSynced}`);
 
     return {
       success: true,
@@ -956,6 +964,8 @@ export const processOrders = async (orders, sellerId) => {
         ...result,
         insertedOrderIds: upsertedOrderIds,
         sellerOrdersBackfilled: backfill?.repaired || 0,
+        sellerOrdersBackfilledForSeller: backfill?.repairedForSeller || 0,
+        sellerOrdersSynced,
       },
     };
   } catch (error) {
