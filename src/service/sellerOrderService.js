@@ -429,6 +429,8 @@ export const backfillMissingSellerOrders = async () => {
       return { repaired: 0, scanned: 0 };
     }
 
+    const normalizeSku = (sku) => (sku ? String(sku).trim().toLowerCase() : '');
+
     const skuSet = new Set();
     for (const order of orphaned) {
       for (const sku of order.orderSkuList?.skuList || []) {
@@ -438,8 +440,9 @@ export const backfillMissingSellerOrders = async () => {
 
     const products = await Product.find({ productSkuCode: { $in: [...skuSet] } })
       .select('productSkuCode sellerId')
+      .collation({ locale: 'en', strength: 2 })
       .lean();
-    const productSellerMap = new Map(products.map((p) => [p.productSkuCode, p.sellerId]));
+    const productSellerMap = new Map(products.map((p) => [normalizeSku(p.productSkuCode), p.sellerId]));
 
     let repaired = 0;
 
@@ -451,7 +454,10 @@ export const backfillMissingSellerOrders = async () => {
       for (const sku of skuList) {
         let sellerId = sku.sellerId || null;
         if (!sellerId) {
-          sellerId = productSellerMap.get(sku.merchantProductNo) || getExtraSellerIdFromStored(sku.extraData) || null;
+          sellerId =
+            productSellerMap.get(normalizeSku(sku.merchantProductNo)) ||
+            getExtraSellerIdFromStored(sku.extraData) ||
+            null;
           if (sellerId) {
             sku.sellerId = sellerId;
             changed = true;
