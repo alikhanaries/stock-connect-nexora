@@ -37,6 +37,13 @@ export async function executeChannelEngineRequest({ method, url, body, headers =
       (typeof data === 'object' && data !== null && (data.Message || data.message || data.errorMessage)) ||
       rawText ||
       `HTTP ${response.status}`;
+
+    console.error(`❌ [ChannelEngine API Error] ${method} ${url}`);
+    console.error(`   Status Code: ${response.status}`);
+    console.error(`   Request Body:`, typeof body === 'object' ? JSON.stringify(body, null, 2) : body);
+    console.error(`   Error Response:`, typeof data === 'object' ? JSON.stringify(data, null, 2) : rawText);
+  } else {
+    console.log(`✅ [ChannelEngine API Success] ${method} ${url} (Status: ${response.status})`);
   }
 
   return {
