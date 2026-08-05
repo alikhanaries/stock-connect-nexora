@@ -1,6 +1,10 @@
 import Order from '#models/Orders.js';
 import mongoose from 'mongoose';
-import { upsertSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
+import {
+  upsertSellerOrdersFromOrder,
+  syncSellerOrdersFromOrder,
+  backfillMissingSellerOrders,
+} from '#root/src/service/sellerOrderService.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
 import orderhelper from '#helpers/Order.js';
@@ -23,7 +27,6 @@ import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
 import fs from 'fs';
 import path from 'path';
-import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 import { getWarehouseAvailabilityContext, buildWarehouseAvailabilityFields } from '#service/omnifulInventoryService.js';
 
 const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null) => {
@@ -898,11 +901,19 @@ export const processOrders = async (orders, sellerId) => {
         await OrderLogs.bulkWrite(orderLogsBulkOps);
       }
     }
+
+    // Repair CE orders that exist in channelengineorders but never got sellerorders (UI source)
+    const backfill = await backfillMissingSellerOrders();
+    if (backfill?.repaired) {
+      console.log(`backfillMissingSellerOrders: repaired ${backfill.repaired}/${backfill.scanned}`);
+    }
+
     return {
       success: true,
       data: {
         ...result,
         insertedOrderIds: upsertedOrderIds,
+        sellerOrdersBackfilled: backfill?.repaired || 0,
       },
     };
   } catch (error) {
