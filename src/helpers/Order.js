@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import Order from '#models/Orders.js';
 import Product from '../models/Product.js';
 import { formatValueForCSV } from './export.js';
@@ -6,58 +5,17 @@ import { formatDateTime } from './Common.js';
 import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderService.js';
 import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
 import { resolveStoredSkuStatus, deriveSellerOrderStatusFromSkus } from '#root/src/service/sellerOrderService.js';
+import {
+  fetchCeProductSellerMapForSkus,
+  resolveOrderLineSellerId,
+  getExtraSellerId,
+  normalizeOrderSku,
+  buildSellerExistenceCache,
+  validateResolvedSellerId,
+  logUnresolvedSellerLine,
+} from './orderSellerResolution.js';
 
-const normalizeOrderSku = (sku) => (sku ? String(sku).trim().toLowerCase() : '');
-
-/**
- * CE lines often include ExtraData.sellerId when Product catalog mapping is missing.
- * Used as fallback so orders still land in sellerorders (UI list source).
- */
-export const getExtraSellerId = (extraData = []) => {
-  if (!Array.isArray(extraData) || !extraData.length) return null;
-
-  const hit = extraData.find((e) => String(e?.Key ?? e?.key ?? '').toLowerCase() === 'sellerid');
-  const value = hit?.Value ?? hit?.value;
-  if (!value) return null;
-
-  const str = String(value).trim();
-  if (!mongoose.Types.ObjectId.isValid(str)) return null;
-
-  return new mongoose.Types.ObjectId(str);
-};
-
-/**
- * Resolve sellerId for a CE order line.
- * Order: Product map → existing stored SKU → CE ExtraData.sellerId → order-level finalSellerId.
- */
-export const resolveOrderLineSellerId = ({
-  merchantProductNo,
-  productSellerMap,
-  existingSku,
-  extraData,
-  finalSellerId,
-}) => {
-  const normalizedSku = normalizeOrderSku(merchantProductNo);
-  const sellerIdFromMap = (normalizedSku && productSellerMap?.get(normalizedSku)) || null;
-  const sellerIdFromExisting = existingSku?.sellerId || null;
-  const sellerIdFromExtra = getExtraSellerId(extraData);
-  const sellerIdFromFinal = finalSellerId || null;
-
-  const sellerId = sellerIdFromMap || sellerIdFromExisting || sellerIdFromExtra || sellerIdFromFinal || null;
-
-  let source = null;
-  if (sellerIdFromMap) source = 'productMap';
-  else if (sellerIdFromExisting) source = 'existingSku';
-  else if (sellerIdFromExtra) source = 'extraData';
-  else if (sellerIdFromFinal) source = 'finalSellerId';
-
-  return {
-    sellerId,
-    source,
-    sellerIdFromMap,
-    sellerIdFromExtra,
-  };
-};
+export { getExtraSellerId, resolveOrderLineSellerId, normalizeOrderSku } from './orderSellerResolution.js';
 
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
@@ -463,6 +421,24 @@ export const sanitizeOrdersData = async (orders) => {
     const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
     const productSellerMap = new Map(productsDb.map((p) => [normalizeOrderSku(p.productSkuCode), p.sellerId]));
 
+    const unresolvedSkus = [...skuSet].filter((sku) => !productSellerMap.has(sku));
+    const ceProductSellerMap = await fetchCeProductSellerMapForSkus(unresolvedSkus);
+
+    const extraSellerIds = [];
+    for (const order of orders) {
+      for (const line of order.Lines || []) {
+        const sid = getExtraSellerId(line?.ExtraData);
+        if (sid) extraSellerIds.push(String(sid));
+      }
+    }
+
+    const sellerExistsCache = await buildSellerExistenceCache({
+      productSellerMap,
+      ceProductSellerMap,
+      existingOrders: existingOrdersDb,
+      extraSellerIds,
+    });
+
     const entegraBrands = ENTEGRA_BRAND_MAP.map((b) => b.erpBrand.toLowerCase());
 
     const entegraSkuSet = new Set(
@@ -486,7 +462,7 @@ export const sanitizeOrdersData = async (orders) => {
     for (const data of orders) {
       const existingOrder = existingOrdersMap.get(String(data.Id));
 
-      // sellerId from first SKU (Product map), then CE ExtraData.sellerId
+      // sellerId from first SKU (Product map), then order line ExtraData only (CE catalog resolved per line)
       let finalSellerId = null;
       if (Array.isArray(data.Lines) && data.Lines.length > 0) {
         const firstLine = data.Lines[0];
@@ -506,30 +482,35 @@ export const sanitizeOrdersData = async (orders) => {
         ? data.Lines.map((line) => {
             const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
 
-            const { sellerId, source, sellerIdFromMap } = resolveOrderLineSellerId({
+            const resolution = resolveOrderLineSellerId({
               merchantProductNo: line.MerchantProductNo,
               productSellerMap,
               existingSku,
               extraData: line?.ExtraData,
+              ceProductSellerMap,
               finalSellerId,
             });
 
-            if (line.MerchantProductNo && !sellerIdFromMap) {
-              console.warn(
-                `[sanitizeOrdersData] Product lookup failed orderId=${data.Id} SKU=${line.MerchantProductNo}`
-              );
-            }
+            const { sellerId, source } = resolution;
+            const validation = validateResolvedSellerId(sellerId, sellerExistsCache);
 
-            if (!sellerId) {
-              console.warn(
-                `[sanitizeOrdersData] Skipping line — no sellerId from map/existing/ExtraData/final orderId=${data.Id} SKU=${line.MerchantProductNo}`
-              );
+            if (!validation.valid) {
+              logUnresolvedSellerLine({
+                orderId: data.Id,
+                merchantProductNo: line.MerchantProductNo,
+                resolution,
+                validationReason: validation.reason,
+              });
               return null;
             }
 
-            if (source === 'extraData') {
+            if (source === 'orderExtraData') {
               console.info(
                 `[sanitizeOrdersData] Using ExtraData sellerId fallback orderId=${data.Id} SKU=${line.MerchantProductNo} sellerId=${sellerId}`
+              );
+            } else if (source === 'ceProductExtraData') {
+              console.info(
+                `[sanitizeOrdersData] Using CE product catalog sellerId orderId=${data.Id} SKU=${line.MerchantProductNo} sellerId=${sellerId}`
               );
             }
 
@@ -656,7 +637,9 @@ export const sanitizeOrdersData = async (orders) => {
         : [];
       // IGNORE ORDER IF SKU LIST IS EMPTY
       if (!skuList.length) {
-        console.warn(`[order-sync] Skipping order ${data.Id} — no SKUs resolved to a seller`);
+        console.warn(
+          `[order-sync] Skipping order ${data.Id} — no SKUs resolved to a valid seller (see unresolved seller logs above)`
+        );
         continue;
       }
       const orderSellerIds = Array.from(sellerIdSet);
@@ -965,8 +948,6 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
 
 export default {
   sanitizeOrdersData,
-  getExtraSellerId,
-  resolveOrderLineSellerId,
   getPeriodDate,
   flattenAggregatedOrder,
   getAggregatedOrderHeaders,
