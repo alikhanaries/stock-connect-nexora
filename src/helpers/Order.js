@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Order from '#models/Orders.js';
 import Product from '../models/Product.js';
 import { formatValueForCSV } from './export.js';
@@ -5,6 +6,58 @@ import { formatDateTime } from './Common.js';
 import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderService.js';
 import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
 import { resolveStoredSkuStatus, deriveSellerOrderStatusFromSkus } from '#root/src/service/sellerOrderService.js';
+
+const normalizeOrderSku = (sku) => (sku ? String(sku).trim() : '');
+
+/**
+ * CE lines often include ExtraData.sellerId when Product catalog mapping is missing.
+ * Used as fallback so orders still land in sellerorders (UI list source).
+ */
+export const getExtraSellerId = (extraData = []) => {
+  if (!Array.isArray(extraData) || !extraData.length) return null;
+
+  const hit = extraData.find((e) => String(e?.Key ?? e?.key ?? '').toLowerCase() === 'sellerid');
+  const value = hit?.Value ?? hit?.value;
+  if (!value) return null;
+
+  const str = String(value).trim();
+  if (!mongoose.Types.ObjectId.isValid(str)) return null;
+
+  return new mongoose.Types.ObjectId(str);
+};
+
+/**
+ * Resolve sellerId for a CE order line.
+ * Order: Product map → existing stored SKU → CE ExtraData.sellerId → order-level finalSellerId.
+ */
+export const resolveOrderLineSellerId = ({
+  merchantProductNo,
+  productSellerMap,
+  existingSku,
+  extraData,
+  finalSellerId,
+}) => {
+  const normalizedSku = normalizeOrderSku(merchantProductNo);
+  const sellerIdFromMap = (normalizedSku && productSellerMap?.get(normalizedSku)) || null;
+  const sellerIdFromExisting = existingSku?.sellerId || null;
+  const sellerIdFromExtra = getExtraSellerId(extraData);
+  const sellerIdFromFinal = finalSellerId || null;
+
+  const sellerId = sellerIdFromMap || sellerIdFromExisting || sellerIdFromExtra || sellerIdFromFinal || null;
+
+  let source = null;
+  if (sellerIdFromMap) source = 'productMap';
+  else if (sellerIdFromExisting) source = 'existingSku';
+  else if (sellerIdFromExtra) source = 'extraData';
+  else if (sellerIdFromFinal) source = 'finalSellerId';
+
+  return {
+    sellerId,
+    source,
+    sellerIdFromMap,
+    sellerIdFromExtra,
+  };
+};
 
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
@@ -379,335 +432,371 @@ export const buildStatuses = ({ line, existingSku }) => {
 };
 
 export const sanitizeOrdersData = async (orders) => {
-  const orderIds = [];
-  const skuSet = new Set();
+  const profilePrefix = '[sync-orders-profile]';
+  console.time(`${profilePrefix} sanitizeOrdersData`);
+  console.log(`${profilePrefix} sanitizeOrdersData input orders: ${orders?.length || 0}`);
+  try {
+    const orderIds = [];
+    const skuSet = new Set();
 
-  // Step 1: collect IDs & SKUs
-  orders.forEach((order) => {
-    if (order.Id) orderIds.push(order.Id);
+    // Step 1: collect IDs & SKUs
+    orders.forEach((order) => {
+      if (order.Id) orderIds.push(order.Id);
 
-    if (Array.isArray(order.Lines)) {
-      order.Lines.forEach((line) => {
-        if (line.MerchantProductNo) skuSet.add(line.MerchantProductNo);
-      });
-    }
-  });
-
-  // Step 2: fetch existing data
-  const [existingOrdersDb, productsDb] = await Promise.all([
-    Order.find({ orderId: { $in: orderIds } }).lean(),
-    Product.find({ productSkuCode: { $in: Array.from(skuSet) } })
-      .select('productSkuCode sellerId brand')
-      .lean(),
-  ]);
-
-  const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
-  const productSellerMap = new Map(productsDb.map((p) => [p.productSkuCode, p.sellerId]));
-
-  const entegraBrands = ENTEGRA_BRAND_MAP.map((b) => b.erpBrand.toLowerCase());
-
-  const entegraSkuSet = new Set(
-    productsDb.filter((p) => entegraBrands.includes(p.brand?.toLowerCase())).map((p) => p.productSkuCode)
-  );
-
-  const entegraOrders = orders.filter(
-    (order) => Array.isArray(order.Lines) && order.Lines.some((line) => entegraSkuSet.has(line.MerchantProductNo))
-  );
-
-  //  final outputs
-  const bulkOps = [];
-  const sellerOrderPayloads = [];
-  const pendingLogs = [];
-
-  //  LOOP (NO async map)
-  for (const data of orders) {
-    const existingOrder = existingOrdersMap.get(String(data.Id));
-
-    // sellerId from first SKU
-    let finalSellerId = null;
-    if (Array.isArray(data.Lines) && data.Lines.length > 0) {
-      const firstSku = data.Lines[0].MerchantProductNo;
-      if (firstSku) {
-        finalSellerId = productSellerMap.get(firstSku) || null;
+      if (Array.isArray(order.Lines)) {
+        order.Lines.forEach((line) => {
+          const sku = normalizeOrderSku(line.MerchantProductNo);
+          if (sku) skuSet.add(sku);
+        });
       }
-    }
+    });
 
-    const sellerIdSet = new Set();
+    // Step 2: fetch existing data
+    const [existingOrdersDb, productsDb] = await Promise.all([
+      Order.find({ orderId: { $in: orderIds } }).lean(),
+      Product.find({ productSkuCode: { $in: Array.from(skuSet) } })
+        .select('productSkuCode sellerId brand')
+        .lean(),
+    ]);
 
-    // SKU LIST
-    const skuList = Array.isArray(data.Lines)
-      ? data.Lines.map((line) => {
-          const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+    const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
+    const productSellerMap = new Map(productsDb.map((p) => [normalizeOrderSku(p.productSkuCode), p.sellerId]));
 
-          const sellerIdFromMap =
-            productSellerMap.get(line.MerchantProductNo) ||
-            (line.MerchantProductNo ? productSellerMap.get(line.MerchantProductNo.trim()) : null) ||
-            null;
-          const sellerId = sellerIdFromMap || existingSku?.sellerId || finalSellerId;
+    const entegraBrands = ENTEGRA_BRAND_MAP.map((b) => b.erpBrand.toLowerCase());
 
-          if (!sellerId) return null;
+    const entegraSkuSet = new Set(
+      productsDb
+        .filter((p) => entegraBrands.includes(p.brand?.toLowerCase()))
+        .map((p) => normalizeOrderSku(p.productSkuCode))
+    );
 
-          sellerIdSet.add(String(sellerId));
+    const entegraOrders = orders.filter(
+      (order) =>
+        Array.isArray(order.Lines) &&
+        order.Lines.some((line) => entegraSkuSet.has(normalizeOrderSku(line.MerchantProductNo)))
+    );
 
-          const sellerOrderId = `${data.Id}_${sellerId}`;
-          const extraStatus = getExtraStatus(line?.ExtraData);
-          const normalizedExtraStatus = extraStatus?.toLowerCase();
-          const qty = line.Quantity || 0;
-          const statusBreakdown = buildStatusBreakdown({
-            line,
-            existingSku,
-          });
+    //  final outputs
+    const bulkOps = [];
+    const sellerOrderPayloads = [];
+    const pendingLogs = [];
 
-          let skuStatus = resolveStoredSkuStatus({
-            breakdown: statusBreakdown,
-            qty,
-            existingSku,
-            extraDelivered: normalizedExtraStatus === 'delivered',
-          });
-          //  DELIVERY DETECTION
+    //  LOOP (NO async map)
+    for (const data of orders) {
+      const existingOrder = existingOrdersMap.get(String(data.Id));
 
-          const alreadyDelivered = existingSku?.status === 'DELIVERED';
-          const isNowDelivered = normalizedExtraStatus === 'delivered' && !alreadyDelivered;
-          //  RETURN DETECTION
-          const alreadyReturned = existingSku?.status === 'RETURNED';
-          const isNowReturned = normalizedExtraStatus === 'returned' && !alreadyReturned;
+      // sellerId from first SKU (Product map), then CE ExtraData.sellerId
+      let finalSellerId = null;
+      if (Array.isArray(data.Lines) && data.Lines.length > 0) {
+        const firstLine = data.Lines[0];
+        const firstSku = normalizeOrderSku(firstLine.MerchantProductNo);
+        if (firstSku) {
+          finalSellerId = productSellerMap.get(firstSku) || null;
+        }
+        if (!finalSellerId) {
+          finalSellerId = getExtraSellerId(firstLine?.ExtraData);
+        }
+      }
 
-          if (isNowDelivered) {
-            pendingLogs.push({
-              orderId: data.Id, // string ID (important)
-              sellerId,
-              description: `SKU ${line.MerchantProductNo} has been delivered`,
-              createdAt: new Date(),
-              status: 'DELIVERED',
-            });
-          }
-          if (isNowReturned) {
-            pendingLogs.push({
-              orderId: data.Id,
-              sellerId,
-              description: `SKU ${line.MerchantProductNo} has been returned`,
-              createdAt: new Date(),
-              status: 'RETURNED',
-            });
-          }
-          return {
-            id: line.Id,
-            sellerOrderId,
-            sellerId,
-            merchantProductNo: line.MerchantProductNo,
-            quantity: line.Quantity,
-            unitPriceInclVat: line.UnitPriceInclVat ?? 0,
-
-            // ---------- STATUS ----------
-            status: skuStatus,
-
-            statusBreakdown,
-
-            cancellationRequestedQuantity:
-              existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
-
-            airWaybillNo: existingSku?.airWaybillNo ?? null,
-
-            // METADATA
-            channelOrderLineNo: line.ChannelOrderLineNo,
-            isFulfillmentByMarketplace: line.IsFulfillmentByMarketplace ?? false,
-            gtin: line.Gtin,
-            description: line.Description,
-
-            stockLocation: line.StockLocation
-              ? {
-                  id: line.StockLocation.Id,
-                  name: line.StockLocation.Name,
-                }
-              : undefined,
-
-            // PRICING
-            unitVat: line.UnitVat,
-            lineTotalInclVat: line.LineTotalInclVat,
-            lineVat: line.LineVat,
-
-            originalUnitPriceInclVat: line.OriginalUnitPriceInclVat,
-            originalUnitVat: line.OriginalUnitVat,
-            originalLineTotalInclVat: line.OriginalLineTotalInclVat,
-            originalLineVat: line.OriginalLineVat,
-            originalFeeFixed: line.OriginalFeeFixed,
-
-            bundleProductMerchantProductNo: line.BundleProductMerchantProductNo,
-            bundleOrderLineId: line.BundleOrderLineId,
-
-            jurisCode: line.JurisCode,
-            jurisName: line.JurisName,
-            vatRate: line.VatRate,
-
-            unitPriceExclVat: line.UnitPriceExclVat,
-            lineTotalExclVat: line.LineTotalExclVat,
-            originalUnitPriceExclVat: line.OriginalUnitPriceExclVat,
-            originalLineTotalExclVat: line.OriginalLineTotalExclVat,
-
-            // EXTRA
-            extraData: Array.isArray(line.ExtraData)
-              ? line.ExtraData.map((e) => ({
-                  key: e.Key,
-                  value: String(e.Value),
-                }))
-              : [],
-
-            channelProductNo: line.ChannelProductNo,
-            feeFixed: line.FeeFixed,
-            feeRate: line.FeeRate,
-            condition: line.Condition ?? 'UNKNOWN',
-
-            // DATES
-            exactDeliveryDate: line.ExactDeliveryDate,
-            expectedDeliveryDate: line.ExpectedDeliveryDate,
-            latestDeliveryDate: line.LatestDeliveryDate,
-            exactShipmentDate: line.ExactShipmentDate,
-            expectedShipmentDate: line.ExpectedShipmentDate,
-            latestShipmentDate: line.LatestShipmentDate,
-            cancelReason: existingSku?.cancelReason || (skuStatus === 'CANCELED' ? 'Other' : null),
-          };
-        }).filter(Boolean)
-      : [];
-    // IGNORE ORDER IF SKU LIST IS EMPTY
-    if (!skuList.length) {
-      continue;
-    }
-    const orderSellerIds = Array.from(sellerIdSet);
-    const updatePayload = {
-      orderId: data.Id?.toString(),
-      channelOrderNumber: data.ChannelOrderNo,
-      channelId: data.ChannelId,
-      sellerId: finalSellerId,
-      sellerIds: orderSellerIds, //  multi-seller support
-      channelName: data.ChannelName,
-      globalChannelName: data.GlobalChannelName,
-      globalChannelId: data.GlobalChannelId,
-      orderDate: data.OrderDate,
-      merchantComment: data.MerchantComment,
-      merchantOrderNo: data.MerchantOrderNo,
-      isBusinessOrder: data.IsBusinessOrder,
-
-      // TOTALS
-      subTotalInclVat: data.SubTotalInclVat,
-      subTotalVat: data.SubTotalVat,
-      shippingCostsInclVat: data.ShippingCostsInclVat,
-      totalInclVat: data.TotalInclVat,
-      totalVat: data.TotalVat,
-
-      subTotalExclVat: data.SubTotalExclVat,
-      totalExclVat: data.TotalExclVat,
-      shippingCostsExclVat: data.ShippingCostsExclVat,
-
-      // ORIGINAL TOTALS
-      originalSubTotalInclVat: data.OriginalSubTotalInclVat,
-      originalSubTotalVat: data.OriginalSubTotalVat,
-      originalShippingCostsInclVat: data.OriginalShippingCostsInclVat,
-      originalShippingCostsVat: data.OriginalShippingCostsVat,
-      originalTotalInclVat: data.OriginalTotalInclVat,
-      originalTotalVat: data.OriginalTotalVat,
-
-      originalSubTotalExclVat: data.OriginalSubTotalExclVat,
-      originalShippingCostsExclVat: data.OriginalShippingCostsExclVat,
-      originalTotalExclVat: data.OriginalTotalExclVat,
-
-      // FEES
-      originalSubTotalFee: data.OriginalSubTotalFee,
-      subTotalFee: data.SubTotalFee,
-      originalOrderFee: data.OriginalOrderFee,
-      orderFee: data.OrderFee,
-      originalTotalFee: data.OriginalTotalFee,
-      totalFee: data.TotalFee,
-
-      // CUSTOMER
-      orderCustomer: {
-        orderId: data?.Id ?? null,
-        gender: data?.BillingAddress?.Gender ?? 'NA',
-        firstName: data?.BillingAddress?.FirstName ?? 'NA',
-        lastName: data?.BillingAddress?.LastName ?? 'NA',
-        phone: data?.Phone ?? data?.BillingAddress?.Phone ?? 'NA',
-        email: data?.Email ?? data?.BillingAddress?.Email ?? 'NA',
-        languageCode: data?.LanguageCode ?? 'en',
-        companyRegistrationNo: data?.CompanyRegistrationNo ?? null,
-        channelCustomerNo: data?.ChannelCustomerNo ?? null,
-      },
-
-      // PAYMENT
-      orderPaymentDetails: {
-        orderId: data?.Id ?? 'NA',
-        vatNo: data?.VatNo ?? 'NA',
-        paymentMethod: data?.PaymentMethod ?? 'NA',
-        paymentReferenceNo: data?.PaymentReferenceNo ?? 'NA',
-        currencyCode: data?.CurrencyCode ?? 'NA',
-      },
+      const sellerIdSet = new Set();
 
       // SKU LIST
-      orderSkuList: {
-        orderId: data.Id,
-        skuList,
-      },
+      const skuList = Array.isArray(data.Lines)
+        ? data.Lines.map((line) => {
+            const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
 
-      // SHIPPING ADDRESS
-      orderShippingAddress: {
-        line1: data?.ShippingAddress?.Line1 ?? 'NA',
-        line2: data?.ShippingAddress?.Line2 ?? 'NA',
-        line3: data?.ShippingAddress?.Line3 ?? 'NA',
-        gender: data?.ShippingAddress?.Gender ?? 'NA',
-        companyName: data?.ShippingAddress?.CompanyName ?? 'NA',
-        firstName: data?.ShippingAddress?.FirstName ?? 'NA',
-        lastName: data?.ShippingAddress?.LastName ?? 'NA',
-        streetName: data?.ShippingAddress?.StreetName ?? 'NA',
-        houseNr: data?.ShippingAddress?.HouseNr ?? 'NA',
-        houseNrAddition: data?.ShippingAddress?.HouseNrAddition ?? 'NA',
-        zipCode: data?.ShippingAddress?.ZipCode ?? 'NA',
-        city: data?.ShippingAddress?.City ?? 'NA',
-        region: data?.ShippingAddress?.Region ?? 'NA',
-        countryIso: data?.ShippingAddress?.CountryIso ?? 'SA',
-      },
+            const { sellerId, source, sellerIdFromMap } = resolveOrderLineSellerId({
+              merchantProductNo: line.MerchantProductNo,
+              productSellerMap,
+              existingSku,
+              extraData: line?.ExtraData,
+              finalSellerId,
+            });
 
-      // BILLING ADDRESS
-      orderBillingAddress: {
-        line1: data?.BillingAddress?.Line1 ?? 'NA',
-        line2: data?.BillingAddress?.Line2 ?? 'NA',
-        line3: data?.BillingAddress?.Line3 ?? 'NA',
-        gender: data?.BillingAddress?.Gender ?? 'NA',
-        companyName: data?.BillingAddress?.CompanyName ?? 'NA',
-        firstName: data?.BillingAddress?.FirstName ?? 'NA',
-        lastName: data?.BillingAddress?.LastName ?? 'NA',
-        streetName: data?.BillingAddress?.StreetName ?? 'NA',
-        houseNr: data?.BillingAddress?.HouseNr ?? 'NA',
-        houseNrAddition: data?.BillingAddress?.HouseNrAddition ?? 'NA',
-        zipCode: data?.BillingAddress?.ZipCode ?? 'NA',
-        city: data?.BillingAddress?.City ?? 'NA',
-        region: data?.BillingAddress?.Region ?? 'NA',
-        countryIso: data?.BillingAddress?.CountryIso ?? 'NA',
-      },
+            if (line.MerchantProductNo && !sellerIdFromMap) {
+              console.warn(
+                `[sanitizeOrdersData] Product lookup failed orderId=${data.Id} SKU=${line.MerchantProductNo}`
+              );
+            }
 
-      // status derived from fulfillment-resolved SKU statuses (same rules for all channels)
-      status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
-        ? existingOrder.status
-        : deriveSellerOrderStatusFromSkus(skuList),
+            if (!sellerId) {
+              console.warn(
+                `[sanitizeOrdersData] Skipping line — no sellerId from map/existing/ExtraData/final orderId=${data.Id} SKU=${line.MerchantProductNo}`
+              );
+              return null;
+            }
+
+            if (source === 'extraData') {
+              console.info(
+                `[sanitizeOrdersData] Using ExtraData sellerId fallback orderId=${data.Id} SKU=${line.MerchantProductNo} sellerId=${sellerId}`
+              );
+            }
+
+            sellerIdSet.add(String(sellerId));
+
+            const sellerOrderId = `${data.Id}_${sellerId}`;
+            const extraStatus = getExtraStatus(line?.ExtraData);
+            const normalizedExtraStatus = extraStatus?.toLowerCase();
+            const qty = line.Quantity || 0;
+            const statusBreakdown = buildStatusBreakdown({
+              line,
+              existingSku,
+            });
+
+            let skuStatus = resolveStoredSkuStatus({
+              breakdown: statusBreakdown,
+              qty,
+              existingSku,
+              extraDelivered: normalizedExtraStatus === 'delivered',
+            });
+            //  DELIVERY DETECTION
+
+            const alreadyDelivered = existingSku?.status === 'DELIVERED';
+            const isNowDelivered = normalizedExtraStatus === 'delivered' && !alreadyDelivered;
+            //  RETURN DETECTION
+            const alreadyReturned = existingSku?.status === 'RETURNED';
+            const isNowReturned = normalizedExtraStatus === 'returned' && !alreadyReturned;
+
+            if (isNowDelivered) {
+              pendingLogs.push({
+                orderId: data.Id, // string ID (important)
+                sellerId,
+                description: `SKU ${line.MerchantProductNo} has been delivered`,
+                createdAt: new Date(),
+                status: 'DELIVERED',
+              });
+            }
+            if (isNowReturned) {
+              pendingLogs.push({
+                orderId: data.Id,
+                sellerId,
+                description: `SKU ${line.MerchantProductNo} has been returned`,
+                createdAt: new Date(),
+                status: 'RETURNED',
+              });
+            }
+            return {
+              id: line.Id,
+              sellerOrderId,
+              sellerId,
+              merchantProductNo: line.MerchantProductNo,
+              quantity: line.Quantity,
+              unitPriceInclVat: line.UnitPriceInclVat ?? 0,
+
+              // ---------- STATUS ----------
+              status: skuStatus,
+
+              statusBreakdown,
+
+              cancellationRequestedQuantity:
+                existingSku?.cancellationRequestedQuantity ?? line.CancellationRequestedQuantity ?? 0,
+
+              airWaybillNo: existingSku?.airWaybillNo ?? null,
+
+              // METADATA
+              channelOrderLineNo: line.ChannelOrderLineNo,
+              isFulfillmentByMarketplace: line.IsFulfillmentByMarketplace ?? false,
+              gtin: line.Gtin,
+              description: line.Description,
+
+              stockLocation: line.StockLocation
+                ? {
+                    id: line.StockLocation.Id,
+                    name: line.StockLocation.Name,
+                  }
+                : undefined,
+
+              // PRICING
+              unitVat: line.UnitVat,
+              lineTotalInclVat: line.LineTotalInclVat,
+              lineVat: line.LineVat,
+
+              originalUnitPriceInclVat: line.OriginalUnitPriceInclVat,
+              originalUnitVat: line.OriginalUnitVat,
+              originalLineTotalInclVat: line.OriginalLineTotalInclVat,
+              originalLineVat: line.OriginalLineVat,
+              originalFeeFixed: line.OriginalFeeFixed,
+
+              bundleProductMerchantProductNo: line.BundleProductMerchantProductNo,
+              bundleOrderLineId: line.BundleOrderLineId,
+
+              jurisCode: line.JurisCode,
+              jurisName: line.JurisName,
+              vatRate: line.VatRate,
+
+              unitPriceExclVat: line.UnitPriceExclVat,
+              lineTotalExclVat: line.LineTotalExclVat,
+              originalUnitPriceExclVat: line.OriginalUnitPriceExclVat,
+              originalLineTotalExclVat: line.OriginalLineTotalExclVat,
+
+              // EXTRA
+              extraData: Array.isArray(line.ExtraData)
+                ? line.ExtraData.map((e) => ({
+                    key: e.Key,
+                    value: String(e.Value),
+                  }))
+                : [],
+
+              channelProductNo: line.ChannelProductNo,
+              feeFixed: line.FeeFixed,
+              feeRate: line.FeeRate,
+              condition: line.Condition ?? 'UNKNOWN',
+
+              // DATES
+              exactDeliveryDate: line.ExactDeliveryDate,
+              expectedDeliveryDate: line.ExpectedDeliveryDate,
+              latestDeliveryDate: line.LatestDeliveryDate,
+              exactShipmentDate: line.ExactShipmentDate,
+              expectedShipmentDate: line.ExpectedShipmentDate,
+              latestShipmentDate: line.LatestShipmentDate,
+              cancelReason: existingSku?.cancelReason || (skuStatus === 'CANCELED' ? 'Other' : null),
+            };
+          }).filter(Boolean)
+        : [];
+      // IGNORE ORDER IF SKU LIST IS EMPTY
+      if (!skuList.length) {
+        console.warn(`[order-sync] Skipping order ${data.Id} — no SKUs resolved to a seller`);
+        continue;
+      }
+      const orderSellerIds = Array.from(sellerIdSet);
+      const updatePayload = {
+        orderId: data.Id?.toString(),
+        channelOrderNumber: data.ChannelOrderNo,
+        channelId: data.ChannelId,
+        sellerId: finalSellerId,
+        sellerIds: orderSellerIds, //  multi-seller support
+        channelName: data.ChannelName,
+        globalChannelName: data.GlobalChannelName,
+        globalChannelId: data.GlobalChannelId,
+        orderDate: data.OrderDate,
+        merchantComment: data.MerchantComment,
+        merchantOrderNo: data.MerchantOrderNo,
+        isBusinessOrder: data.IsBusinessOrder,
+
+        // TOTALS
+        subTotalInclVat: data.SubTotalInclVat,
+        subTotalVat: data.SubTotalVat,
+        shippingCostsInclVat: data.ShippingCostsInclVat,
+        totalInclVat: data.TotalInclVat,
+        totalVat: data.TotalVat,
+
+        subTotalExclVat: data.SubTotalExclVat,
+        totalExclVat: data.TotalExclVat,
+        shippingCostsExclVat: data.ShippingCostsExclVat,
+
+        // ORIGINAL TOTALS
+        originalSubTotalInclVat: data.OriginalSubTotalInclVat,
+        originalSubTotalVat: data.OriginalSubTotalVat,
+        originalShippingCostsInclVat: data.OriginalShippingCostsInclVat,
+        originalShippingCostsVat: data.OriginalShippingCostsVat,
+        originalTotalInclVat: data.OriginalTotalInclVat,
+        originalTotalVat: data.OriginalTotalVat,
+
+        originalSubTotalExclVat: data.OriginalSubTotalExclVat,
+        originalShippingCostsExclVat: data.OriginalShippingCostsExclVat,
+        originalTotalExclVat: data.OriginalTotalExclVat,
+
+        // FEES
+        originalSubTotalFee: data.OriginalSubTotalFee,
+        subTotalFee: data.SubTotalFee,
+        originalOrderFee: data.OriginalOrderFee,
+        orderFee: data.OrderFee,
+        originalTotalFee: data.OriginalTotalFee,
+        totalFee: data.TotalFee,
+
+        // CUSTOMER
+        orderCustomer: {
+          orderId: data?.Id ?? null,
+          gender: data?.BillingAddress?.Gender ?? 'NA',
+          firstName: data?.BillingAddress?.FirstName ?? 'NA',
+          lastName: data?.BillingAddress?.LastName ?? 'NA',
+          phone: data?.Phone ?? data?.BillingAddress?.Phone ?? 'NA',
+          email: data?.Email ?? data?.BillingAddress?.Email ?? 'NA',
+          languageCode: data?.LanguageCode ?? 'en',
+          companyRegistrationNo: data?.CompanyRegistrationNo ?? null,
+          channelCustomerNo: data?.ChannelCustomerNo ?? null,
+        },
+
+        // PAYMENT
+        orderPaymentDetails: {
+          orderId: data?.Id ?? 'NA',
+          vatNo: data?.VatNo ?? 'NA',
+          paymentMethod: data?.PaymentMethod ?? 'NA',
+          paymentReferenceNo: data?.PaymentReferenceNo ?? 'NA',
+          currencyCode: data?.CurrencyCode ?? 'NA',
+        },
+
+        // SKU LIST
+        orderSkuList: {
+          orderId: data.Id,
+          skuList,
+        },
+
+        // SHIPPING ADDRESS
+        orderShippingAddress: {
+          line1: data?.ShippingAddress?.Line1 ?? 'NA',
+          line2: data?.ShippingAddress?.Line2 ?? 'NA',
+          line3: data?.ShippingAddress?.Line3 ?? 'NA',
+          gender: data?.ShippingAddress?.Gender ?? 'NA',
+          companyName: data?.ShippingAddress?.CompanyName ?? 'NA',
+          firstName: data?.ShippingAddress?.FirstName ?? 'NA',
+          lastName: data?.ShippingAddress?.LastName ?? 'NA',
+          streetName: data?.ShippingAddress?.StreetName ?? 'NA',
+          houseNr: data?.ShippingAddress?.HouseNr ?? 'NA',
+          houseNrAddition: data?.ShippingAddress?.HouseNrAddition ?? 'NA',
+          zipCode: data?.ShippingAddress?.ZipCode ?? 'NA',
+          city: data?.ShippingAddress?.City ?? 'NA',
+          region: data?.ShippingAddress?.Region ?? 'NA',
+          countryIso: data?.ShippingAddress?.CountryIso ?? 'SA',
+        },
+
+        // BILLING ADDRESS
+        orderBillingAddress: {
+          line1: data?.BillingAddress?.Line1 ?? 'NA',
+          line2: data?.BillingAddress?.Line2 ?? 'NA',
+          line3: data?.BillingAddress?.Line3 ?? 'NA',
+          gender: data?.BillingAddress?.Gender ?? 'NA',
+          companyName: data?.BillingAddress?.CompanyName ?? 'NA',
+          firstName: data?.BillingAddress?.FirstName ?? 'NA',
+          lastName: data?.BillingAddress?.LastName ?? 'NA',
+          streetName: data?.BillingAddress?.StreetName ?? 'NA',
+          houseNr: data?.BillingAddress?.HouseNr ?? 'NA',
+          houseNrAddition: data?.BillingAddress?.HouseNrAddition ?? 'NA',
+          zipCode: data?.BillingAddress?.ZipCode ?? 'NA',
+          city: data?.BillingAddress?.City ?? 'NA',
+          region: data?.BillingAddress?.Region ?? 'NA',
+          countryIso: data?.BillingAddress?.CountryIso ?? 'NA',
+        },
+
+        // status derived from fulfillment-resolved SKU statuses (same rules for all channels)
+        status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
+          ? existingOrder.status
+          : deriveSellerOrderStatusFromSkus(skuList),
+      };
+
+      //  Prepare SellerOrder payload (NO DB CALL HERE)
+      sellerOrderPayloads.push({
+        orderPayload: updatePayload,
+      });
+
+      // Order bulk
+      bulkOps.push({
+        updateOne: {
+          filter: { orderId: String(data.Id), channelOrderNumber: data.ChannelOrderNo }, // FIXED UNIQUE FILTER
+          update: { $set: updatePayload },
+          upsert: true,
+        },
+      });
+    }
+    pushEntegraOrders(entegraOrders);
+    return {
+      bulkOps,
+      sellerOrderPayloads,
+      pendingLogs,
     };
-
-    //  Prepare SellerOrder payload (NO DB CALL HERE)
-    sellerOrderPayloads.push({
-      orderPayload: updatePayload,
-    });
-
-    // Order bulk
-    bulkOps.push({
-      updateOne: {
-        filter: { orderId: String(data.Id), channelOrderNumber: data.ChannelOrderNo }, // FIXED UNIQUE FILTER
-        update: { $set: updatePayload },
-        upsert: true,
-      },
-    });
+  } finally {
+    console.timeEnd(`${profilePrefix} sanitizeOrdersData`);
   }
-  pushEntegraOrders(entegraOrders);
-  return {
-    bulkOps,
-    sellerOrderPayloads,
-    pendingLogs,
-  };
 };
 export const deriveOrderStatusFromSkus = (skuList = []) => {
   const s = aggregateSkuStatus(skuList);
@@ -875,6 +964,8 @@ const buildStatusBreakdown = ({ line, existingSku }) => {
 
 export default {
   sanitizeOrdersData,
+  getExtraSellerId,
+  resolveOrderLineSellerId,
   getPeriodDate,
   flattenAggregatedOrder,
   getAggregatedOrderHeaders,

@@ -1,5 +1,7 @@
+import mongoose from 'mongoose';
 import SellerOrder from '#root/src/models/OrderSchema/SellerOrder.js';
 import Order from '#root/src/models/Orders.js';
+import Product from '#root/src/models/Product.js';
 
 const STATUS = {
   NEW: 'NEW',
@@ -9,6 +11,16 @@ const STATUS = {
   CANCELED: 'CANCELED',
   RETURNED: 'RETURNED',
   CLOSED: 'CLOSED',
+};
+
+const getExtraSellerIdFromStored = (extraData = []) => {
+  if (!Array.isArray(extraData) || !extraData.length) return null;
+  const hit = extraData.find((e) => String(e?.Key ?? e?.key ?? '').toLowerCase() === 'sellerid');
+  const value = hit?.Value ?? hit?.value;
+  if (!value) return null;
+  const str = String(value).trim();
+  if (!mongoose.Types.ObjectId.isValid(str)) return null;
+  return new mongoose.Types.ObjectId(str);
 };
 
 /** Derive StockConnect fulfillment status from activity — not raw CE marketplace status. */
@@ -55,6 +67,46 @@ export const resolveStoredSkuStatus = ({ breakdown, qty, existingSku, extraDeliv
   });
 };
 
+const buildProductEntry = (sku, price, qty) => ({
+  productId: sku.id || null,
+  merchantProductNo: sku.merchantProductNo || null,
+  quantity: qty,
+  lineTotalInclVat: qty * price || 0,
+  lineVat: sku.lineVat || 0,
+  originalUnitPriceInclVat: sku.originalUnitPriceInclVat || price,
+  originalUnitVat: sku.originalUnitVat || 0,
+  vatRate: sku.vatRate || 0,
+});
+
+const createSellerMapEntry = (sellerId, orderId) => ({
+  totalAmount: 0,
+  deliveredAmount: 0,
+  canceledAmount: 0,
+  returnedAmount: 0,
+  netAmount: 0,
+  totalQuantity: 0,
+  totalSkus: 0,
+  sellerOrderId: `${orderId}_${sellerId}`,
+  products: [],
+  statusBreakdown: {
+    confirmed: 0,
+    shipped: 0,
+    delivered: 0,
+    canceled: 0,
+    returned: 0,
+    shipmentCreated: 0,
+  },
+  statusCounts: {
+    NEW: 0,
+    IN_PROGRESS: 0,
+    SHIPPED: 0,
+    DELIVERED: 0,
+    CANCELED: 0,
+    RETURNED: 0,
+    SHIPMENT_CREATED: 0,
+  },
+});
+
 export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
   try {
     const { orderId, orderDate, channelId, channelName, orderSkuList } = orderPayload;
@@ -71,38 +123,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
       if (!sellerId) return;
 
       if (!sellerMap[sellerId]) {
-        sellerMap[sellerId] = {
-          totalAmount: 0,
-          deliveredAmount: 0,
-          canceledAmount: 0,
-          returnedAmount: 0,
-          netAmount: 0,
-          totalQuantity: 0,
-          totalSkus: 0,
-
-          sellerOrderId: `${orderId}_${sellerId}`,
-
-          products: [],
-
-          statusBreakdown: {
-            confirmed: 0,
-            shipped: 0,
-            delivered: 0,
-            canceled: 0,
-            returned: 0,
-            shipmentCreated: 0,
-          },
-
-          statusCounts: {
-            NEW: 0,
-            IN_PROGRESS: 0,
-            SHIPPED: 0,
-            DELIVERED: 0,
-            CANCELED: 0,
-            RETURNED: 0,
-            SHIPMENT_CREATED: 0,
-          },
-        };
+        sellerMap[sellerId] = createSellerMapEntry(sellerId, orderId);
       }
 
       const data = sellerMap[sellerId];
@@ -119,19 +140,7 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
       const returned = breakdown.returned || 0;
       const shipmentCreated = breakdown.shipmentCreated || 0;
 
-      // -----------------------------
-      //  PRODUCTS ARRAY BUILD
-      // -----------------------------
-      data.products.push({
-        productId: sku.id || null,
-        merchantProductNo: sku.merchantProductNo || null,
-        quantity: qty,
-        lineTotalInclVat: qty * price || 0,
-        lineVat: sku.lineVat || 0,
-        originalUnitPriceInclVat: sku.originalUnitPriceInclVat || price,
-        originalUnitVat: sku.originalUnitVat || 0,
-        vatRate: sku.vatRate || 0,
-      });
+      data.products.push(buildProductEntry(sku, price, qty));
 
       // -----------------------------
       // TOTALS
@@ -250,34 +259,7 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
       if (!sellerId) return;
 
       if (!sellerMap[sellerId]) {
-        sellerMap[sellerId] = {
-          totalAmount: 0,
-          deliveredAmount: 0,
-          canceledAmount: 0,
-          returnedAmount: 0,
-          netAmount: 0,
-          totalQuantity: 0,
-          totalSkus: 0,
-
-          statusBreakdown: {
-            confirmed: 0,
-            shipped: 0,
-            delivered: 0,
-            canceled: 0,
-            returned: 0,
-            shipmentCreated: 0,
-          },
-
-          statusCounts: {
-            NEW: 0,
-            IN_PROGRESS: 0,
-            SHIPPED: 0,
-            DELIVERED: 0,
-            CANCELED: 0,
-            RETURNED: 0,
-            SHIPMENT_CREATED: 0,
-          },
-        };
+        sellerMap[sellerId] = createSellerMapEntry(sellerId, order.orderId);
       }
 
       const data = sellerMap[sellerId];
@@ -292,6 +274,8 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
       const canceled = breakdown.canceled || 0;
       const returned = breakdown.returned || 0;
       const shipmentCreated = breakdown.shipmentCreated || 0;
+
+      data.products.push(buildProductEntry(sku, price, qty));
 
       // -----------------------------
       // TOTALS
@@ -377,6 +361,8 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
 
               status: data.finalStatus,
 
+              products: data.products,
+
               totalAmount: +data.totalAmount.toFixed(2),
               deliveredAmount: +data.deliveredAmount.toFixed(2),
               canceledAmount: +data.canceledAmount.toFixed(2),
@@ -402,6 +388,112 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
   } catch (error) {
     console.error('syncSellerOrdersFromOrder error:', error);
     throw error;
+  }
+};
+
+/**
+ * Repair channelengineorders that never got sellerorders rows.
+ * Resolves seller from Product map or stored ExtraData.sellerId, then upserts sellerorders.
+ * UI list reads sellerorders — without this, orphan CE orders stay invisible.
+ */
+export const backfillMissingSellerOrders = async () => {
+  try {
+    const orphaned = await Order.aggregate([
+      {
+        $lookup: {
+          from: 'sellerorders',
+          localField: 'orderId',
+          foreignField: 'orderId',
+          as: 'so',
+        },
+      },
+      {
+        $match: {
+          so: { $size: 0 },
+          'orderSkuList.skuList.0': { $exists: true },
+        },
+      },
+      {
+        $project: {
+          orderId: 1,
+          orderDate: 1,
+          channelId: 1,
+          channelName: 1,
+          orderSkuList: 1,
+        },
+      },
+      { $limit: 3000 },
+    ]);
+
+    if (!orphaned.length) {
+      return { repaired: 0, scanned: 0 };
+    }
+
+    const skuSet = new Set();
+    for (const order of orphaned) {
+      for (const sku of order.orderSkuList?.skuList || []) {
+        if (sku.merchantProductNo) skuSet.add(sku.merchantProductNo);
+      }
+    }
+
+    const products = await Product.find({ productSkuCode: { $in: [...skuSet] } })
+      .select('productSkuCode sellerId')
+      .lean();
+    const productSellerMap = new Map(products.map((p) => [p.productSkuCode, p.sellerId]));
+
+    let repaired = 0;
+
+    for (const order of orphaned) {
+      const skuList = [...(order.orderSkuList?.skuList || [])];
+      const sellerIdSet = new Set();
+      let changed = false;
+
+      for (const sku of skuList) {
+        let sellerId = sku.sellerId || null;
+        if (!sellerId) {
+          sellerId = productSellerMap.get(sku.merchantProductNo) || getExtraSellerIdFromStored(sku.extraData) || null;
+          if (sellerId) {
+            sku.sellerId = sellerId;
+            changed = true;
+          }
+        }
+        if (sellerId) sellerIdSet.add(String(sellerId));
+      }
+
+      if (!sellerIdSet.size) continue;
+
+      const sellerIds = [...sellerIdSet].map((id) => new mongoose.Types.ObjectId(id));
+
+      if (changed || !order.sellerIds?.length) {
+        await Order.updateOne(
+          { _id: order._id },
+          {
+            $set: {
+              'orderSkuList.skuList': skuList,
+              sellerIds,
+              sellerId: sellerIds[0],
+            },
+          }
+        );
+      }
+
+      await upsertSellerOrdersFromOrder({
+        orderPayload: {
+          orderId: order.orderId,
+          orderDate: order.orderDate,
+          channelId: order.channelId,
+          channelName: order.channelName,
+          orderSkuList: { skuList },
+        },
+      });
+
+      repaired++;
+    }
+
+    return { repaired, scanned: orphaned.length };
+  } catch (error) {
+    console.error('backfillMissingSellerOrders error:', error.message);
+    return { repaired: 0, scanned: 0, error: error.message };
   }
 };
 

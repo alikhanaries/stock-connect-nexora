@@ -1,6 +1,10 @@
 import Order from '#models/Orders.js';
 import mongoose from 'mongoose';
-import { upsertSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
+import {
+  upsertSellerOrdersFromOrder,
+  syncSellerOrdersFromOrder,
+  backfillMissingSellerOrders,
+} from '#root/src/service/sellerOrderService.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
 import orderhelper from '#helpers/Order.js';
@@ -23,7 +27,6 @@ import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
 import fs from 'fs';
 import path from 'path';
-import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
 import { getWarehouseAvailabilityContext, buildWarehouseAvailabilityFields } from '#service/omnifulInventoryService.js';
 
 const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null) => {
@@ -777,13 +780,21 @@ const getOrderStats = async (sellerId) => {
 };
 
 export const processOrders = async (orders, sellerId) => {
+  const profilePrefix = '[sync-orders-profile]';
+  console.time(`${profilePrefix} processOrders total`);
   try {
     const { bulkOps, sellerOrderPayloads, pendingLogs } = await orderhelper.sanitizeOrdersData(orders, sellerId);
+    console.log(
+      `${profilePrefix} bulkOps: ${bulkOps.length}, sellerOrderPayloads: ${sellerOrderPayloads.length}, pendingLogs: ${pendingLogs.length}`
+    );
 
+    console.time(`${profilePrefix} Order.bulkWrite`);
     const result = await Order.bulkWrite(bulkOps, { ordered: false });
+    console.timeEnd(`${profilePrefix} Order.bulkWrite`);
 
-    //  Now safe
+    console.time(`${profilePrefix} sellerOrder upserts`);
     await Promise.allSettled(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
+    console.timeEnd(`${profilePrefix} sellerOrder upserts`);
 
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
@@ -898,35 +909,61 @@ export const processOrders = async (orders, sellerId) => {
         await OrderLogs.bulkWrite(orderLogsBulkOps);
       }
     }
+
+    // Repair CE orders that exist in channelengineorders but never got sellerorders (UI source)
+    console.time(`${profilePrefix} backfillMissingSellerOrders`);
+    const backfill = await backfillMissingSellerOrders();
+    console.timeEnd(`${profilePrefix} backfillMissingSellerOrders`);
+    if (backfill?.repaired) {
+      console.log(`backfillMissingSellerOrders: repaired ${backfill.repaired}/${backfill.scanned}`);
+    }
+    console.log(
+      `${profilePrefix} recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0})`
+    );
+
     return {
       success: true,
       data: {
         ...result,
         insertedOrderIds: upsertedOrderIds,
+        sellerOrdersBackfilled: backfill?.repaired || 0,
       },
     };
   } catch (error) {
     console.error('Error in processOrders:', error.message);
     return { success: false, message: error.message };
+  } finally {
+    console.timeEnd(`${profilePrefix} processOrders total`);
   }
 };
 
 export async function getNewOrders() {
+  const profilePrefix = '[sync-orders-profile]';
+  console.time(`${profilePrefix} getNewOrders total`);
   try {
     let page = 1;
     const pageSize = 100;
     let allOrders = [];
     let hasMore = true;
+    let pagesFetched = 0;
 
     while (hasMore && page <= 55) {
-      const response = await fetch(
-        `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
-      );
+      const pageLabel = `${profilePrefix} CE page fetch page=${page}`;
+      console.time(pageLabel);
+      let data;
+      try {
+        const response = await fetch(
+          `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
+        );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        data = await response.json();
+      } finally {
+        console.timeEnd(pageLabel);
       }
-      const data = await response.json();
+      pagesFetched++;
 
       if (!data?.Content?.length) {
         hasMore = false;
@@ -940,6 +977,9 @@ export async function getNewOrders() {
 
       page++;
     }
+
+    console.log(`${profilePrefix} CE orders fetched: ${allOrders.length}, pages fetched: ${pagesFetched}`);
+
     return {
       success: true,
       data: allOrders,
@@ -947,6 +987,8 @@ export async function getNewOrders() {
   } catch (error) {
     console.error('Error fetching orders from ChannelEngine:', error.message);
     return { success: false, message: error.message };
+  } finally {
+    console.timeEnd(`${profilePrefix} getNewOrders total`);
   }
 }
 
