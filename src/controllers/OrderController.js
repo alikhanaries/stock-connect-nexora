@@ -118,6 +118,9 @@ export const getOrderStats = async (req, res) => {
 };
 
 export const getSyncedOrders = async (req, res) => {
+  const profilePrefix = '[sync-orders-profile]';
+  const requestStart = Date.now();
+  console.time(`${profilePrefix} getSyncedOrders total`);
   try {
     const sellerId = req.sellerId;
     const userId = req.user._id;
@@ -130,11 +133,22 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
+    const runOcpSync = async () => {
+      if (!config.IS_OCP_ORDER_SYNC_ENABLED) {
+        console.log(`${profilePrefix} OCP sync: skipped (disabled)`);
+        return { success: true, message: 'OCP order sync is disabled' };
+      }
+      console.time(`${profilePrefix} getSyncedOrdersOcp`);
+      try {
+        return await getSyncedOrdersOcp(sellerId);
+      } finally {
+        console.timeEnd(`${profilePrefix} getSyncedOrdersOcp`);
+      }
+    };
+
     const [dataSavedInDb, response] = await Promise.allSettled([
       orderService.processOrders(data, sellerId),
-      config.IS_OCP_ORDER_SYNC_ENABLED
-        ? getSyncedOrdersOcp(sellerId)
-        : Promise.resolve({ success: true, message: 'OCP order sync is disabled' }),
+      runOcpSync(),
     ]);
 
     // Check for rejected promises or failed results
@@ -179,6 +193,9 @@ export const getSyncedOrders = async (req, res) => {
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);
+  } finally {
+    console.timeEnd(`${profilePrefix} getSyncedOrders total`);
+    console.log(`${profilePrefix} total HTTP request duration ms: ${Date.now() - requestStart}`);
   }
 };
 
