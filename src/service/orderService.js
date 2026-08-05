@@ -152,16 +152,23 @@ const getAllOrders = async (query, sellerId) => {
     }
 
     // ---------------- STATUS FILTER ----------------
-    if (status !== undefined && status !== null) {
+    // Filter on sellerorders.status — same source as dashboard ORDER_FLOW_STATUS_CONFIG counts.
+    if (status !== undefined && status !== null && String(status).trim() !== '') {
       const statusArray = []
         .concat(status)
         .flatMap((s) => (typeof s === 'string' ? s.split(',') : s))
         .map((s) => String(s).trim().toUpperCase())
         .filter(Boolean);
 
-      filter.status = statusArray.length === 1 ? statusArray[0] : { $in: statusArray };
+      if (statusArray.length === 1) {
+        filter.status = statusArray[0];
+      } else if (statusArray.length > 1) {
+        filter.status = { $in: statusArray };
+      }
 
-      appliedFilters.status = status;
+      if (filter.status) {
+        appliedFilters.status = status;
+      }
     }
 
     // ---------------- SEARCH ----------------
