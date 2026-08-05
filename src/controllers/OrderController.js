@@ -184,7 +184,10 @@ export const getSyncedOrders = async (req, res) => {
         ? `${newUpdateCount} ${req?.locale?.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
         : req?.locale?.NO_NEW_ORDERS_FOUND;
 
-    const newOrdersToAcknowledge = data.filter((order) => order.Status === 'NEW' || !order.MerchantOrderNo);
+    const processedOrderIds = new Set((ceData?.processedOrderIds || []).map(String));
+    const newOrdersToAcknowledge = data.filter(
+      (order) => (order.Status === 'NEW' || !order.MerchantOrderNo) && processedOrderIds.has(String(order.Id))
+    );
     if (newOrdersToAcknowledge.length > 0) {
       orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge);
     }
