@@ -33,16 +33,17 @@ const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null
   let sellerName = '';
   let sellerObjectId = null;
 
-  if (preloadedSeller) {
-    sellerObjectId = preloadedSeller._id;
-    sellerName = preloadedSeller.companyName || preloadedSeller.name || '';
-  } else if (sellerId) {
-    sellerObjectId = typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId;
+  if (sellerId || preloadedSeller) {
+    const resolvedSellerId =
+      preloadedSeller?._id ?? (typeof sellerId === 'string' ? new mongoose.Types.ObjectId(sellerId) : sellerId);
 
-    const seller = await Seller.findById(sellerObjectId, { name: 1, companyName: 1 }).lean();
+    const seller = preloadedSeller ?? (await Seller.findById(resolvedSellerId, { name: 1, companyName: 1 }).lean());
 
     if (seller) {
+      sellerObjectId = seller._id ?? resolvedSellerId;
       sellerName = seller.companyName || seller.name || '';
+    } else {
+      sellerObjectId = resolvedSellerId;
     }
   }
 
@@ -86,7 +87,10 @@ const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null
 };
 
 const getAllOrders = async (query, sellerId) => {
+  const profilePrefix = '[getAllOrders-profile]';
+  console.time(`${profilePrefix} total getAllOrders`);
   try {
+    console.time(`${profilePrefix} filter creation`);
     const {
       page = 1,
       size = 10,
@@ -204,12 +208,12 @@ const getAllOrders = async (query, sellerId) => {
 
       searchMatchStage = { $match: { $and: conditions } };
     }
+    console.timeEnd(`${profilePrefix} filter creation`);
+    console.log(`${profilePrefix} filter:`, JSON.stringify(filter));
+    const hasSearch = Boolean(searchMatchStage);
+    console.log(`${profilePrefix} hasSearch:`, hasSearch);
 
-    // ---------------- PIPELINE ----------------
-    const pipeline = [
-      { $match: filter },
-
-      // JOIN ORDER
+    const lookupStages = [
       {
         $lookup: {
           from: 'channelengineorders',
@@ -224,11 +228,9 @@ const getAllOrders = async (query, sellerId) => {
           preserveNullAndEmptyArrays: true,
         },
       },
+    ];
 
-      //  APPLY SEARCH AFTER LOOKUP
-      ...(searchMatchStage ? [searchMatchStage] : []),
-
-      // MERGE DATA
+    const mergeStages = [
       {
         $addFields: {
           mergedOrder: {
@@ -237,71 +239,91 @@ const getAllOrders = async (query, sellerId) => {
         },
       },
       { $replaceRoot: { newRoot: '$mergedOrder' } },
-
-      // SORT + PAGINATION
-      { $sort: { [sortBy]: sortDirection } },
-      { $skip: skip },
-      { $limit: parseInt(size) },
     ];
 
+    const paginationStages = [{ $sort: { [sortBy]: sortDirection } }, { $skip: skip }, { $limit: parseInt(size) }];
+
+    // ---------------- PIPELINE ----------------
+    // No search: paginate on sellerorders first, then lookup only the current page.
+    // With search: lookup before search match (search uses orderData.* fields).
+    const pipeline = hasSearch
+      ? [{ $match: filter }, ...lookupStages, searchMatchStage, ...mergeStages, ...paginationStages]
+      : [{ $match: filter }, ...paginationStages, ...lookupStages, ...mergeStages];
+
+    const countPipeline = hasSearch
+      ? [{ $match: filter }, ...lookupStages, searchMatchStage, { $count: 'total' }]
+      : null;
+
+    console.log(`${profilePrefix} list pipeline:`, JSON.stringify(pipeline));
+    if (countPipeline) {
+      console.log(`${profilePrefix} count pipeline:`, JSON.stringify(countPipeline));
+    } else {
+      console.log(`${profilePrefix} count: SellerOrder.countDocuments(filter)`);
+    }
+
     // ---------------- EXECUTION ----------------
-    const [orders, allChannels, sellerSync] = await Promise.all([
-      SellerOrder.aggregate(pipeline),
+    console.time(`${profilePrefix} aggregate (list)`);
+    const listPromise = SellerOrder.aggregate(pipeline).then((result) => {
+      console.timeEnd(`${profilePrefix} aggregate (list)`);
+      return result;
+    });
 
+    console.time(`${profilePrefix} count`);
+    const countPromise = hasSearch
+      ? SellerOrder.aggregate(countPipeline).then((result) => {
+          console.timeEnd(`${profilePrefix} count`);
+          return result[0]?.total ?? 0;
+        })
+      : SellerOrder.countDocuments(filter).then((total) => {
+          console.timeEnd(`${profilePrefix} count`);
+          return total;
+        });
+
+    const [orders, allChannels, sellerSync, totalOrders] = await Promise.all([
+      listPromise,
       Channel.find().select('_id channelId channelImageUrl'),
-      Seller.findById(sellerId).select('-_id lastOrderSync'),
+      Seller.findById(sellerId).select('name companyName lastOrderSync'),
+      countPromise,
     ]);
-
-    const totalCountResult = await SellerOrder.aggregate([
-      { $match: filter },
-
-      {
-        $lookup: {
-          from: 'channelengineorders',
-          localField: 'orderId',
-          foreignField: 'orderId',
-          as: 'orderData',
-        },
-      },
-      {
-        $unwind: {
-          path: '$orderData',
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
-      ...(searchMatchStage ? [searchMatchStage] : []),
-
-      { $count: 'total' },
-    ]);
-
-    const totalOrders = totalCountResult[0]?.total || 0;
 
     // ---------------- CHANNEL MAP ----------------
+    console.time(`${profilePrefix} channel map`);
     const channelMap = {};
     allChannels.forEach((channel) => {
       channelMap[channel.channelId] = channel.channelImageUrl;
     });
+    console.timeEnd(`${profilePrefix} channel map`);
 
     // ---------------- RESPONSE ----------------
-    return {
-      data: await Promise.all(
-        orders.map(async (order) => {
-          const matchingChannel = channelMap[order.channelId] || null;
+    console.time(`${profilePrefix} formatting`);
+    const formattedData = await Promise.all(
+      orders.map(async (order) => {
+        const matchingChannel = channelMap[order.channelId] || null;
 
-          const formatted = await formatOrder(order, matchingChannel, sellerObjectId);
+        const formatted = await formatOrder(order, matchingChannel, sellerObjectId, sellerSync);
 
-          return {
-            ...formatted,
-            sellerOrderStatus: order.status || null,
-          };
-        })
-      ),
+        return {
+          ...formatted,
+          sellerOrderStatus: order.status || null,
+        };
+      })
+    );
+    console.timeEnd(`${profilePrefix} formatting`);
+    console.log(`${profilePrefix} rows returned: ${formattedData.length}, page: ${page}, size: ${size}`);
+
+    console.time(`${profilePrefix} response creation`);
+    const response = {
+      data: formattedData,
       appliedFilters,
       latestOrderSyncDate: sellerSync?.lastOrderSync || null,
       pagination: getPagination(totalOrders, page, size),
     };
+    console.timeEnd(`${profilePrefix} response creation`);
+    console.timeEnd(`${profilePrefix} total getAllOrders`);
+
+    return response;
   } catch (err) {
+    console.timeEnd(`${profilePrefix} total getAllOrders`);
     console.error('Error fetching orders:', err.message);
     return { success: false, message: err.message };
   }
