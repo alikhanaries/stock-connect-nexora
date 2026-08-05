@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import SellerOrder from '#root/src/models/OrderSchema/SellerOrder.js';
 import Order from '#root/src/models/Orders.js';
 import Product from '#root/src/models/Product.js';
+import { normalizeOrderSku, resolveSellerIdsForStoredSkus } from '../helpers/orderSellerResolution.js';
 
 const STATUS = {
   NEW: 'NEW',
@@ -11,16 +12,6 @@ const STATUS = {
   CANCELED: 'CANCELED',
   RETURNED: 'RETURNED',
   CLOSED: 'CLOSED',
-};
-
-const getExtraSellerIdFromStored = (extraData = []) => {
-  if (!Array.isArray(extraData) || !extraData.length) return null;
-  const hit = extraData.find((e) => String(e?.Key ?? e?.key ?? '').toLowerCase() === 'sellerid');
-  const value = hit?.Value ?? hit?.value;
-  if (!value) return null;
-  const str = String(value).trim();
-  if (!mongoose.Types.ObjectId.isValid(str)) return null;
-  return new mongoose.Types.ObjectId(str);
 };
 
 /** Derive StockConnect fulfillment status from activity — not raw CE marketplace status. */
@@ -396,8 +387,9 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
  * Resolves seller from Product map or stored ExtraData.sellerId, then upserts sellerorders.
  * UI list reads sellerorders — without this, orphan CE orders stay invisible.
  */
-export const backfillMissingSellerOrders = async () => {
+export const backfillMissingSellerOrders = async (sellerId = null) => {
   try {
+    const sellerIdStr = sellerId ? String(sellerId) : null;
     const orphaned = await Order.aggregate([
       {
         $lookup: {
@@ -426,10 +418,8 @@ export const backfillMissingSellerOrders = async () => {
     ]);
 
     if (!orphaned.length) {
-      return { repaired: 0, scanned: 0 };
+      return { repaired: 0, scanned: 0, repairedForSeller: 0 };
     }
-
-    const normalizeSku = (sku) => (sku ? String(sku).trim().toLowerCase() : '');
 
     const skuSet = new Set();
     for (const order of orphaned) {
@@ -442,29 +432,17 @@ export const backfillMissingSellerOrders = async () => {
       .select('productSkuCode sellerId')
       .collation({ locale: 'en', strength: 2 })
       .lean();
-    const productSellerMap = new Map(products.map((p) => [normalizeSku(p.productSkuCode), p.sellerId]));
+    const productSellerMap = new Map(products.map((p) => [normalizeOrderSku(p.productSkuCode), p.sellerId]));
 
     let repaired = 0;
+    let repairedForSeller = 0;
 
     for (const order of orphaned) {
       const skuList = [...(order.orderSkuList?.skuList || [])];
-      const sellerIdSet = new Set();
-      let changed = false;
-
-      for (const sku of skuList) {
-        let sellerId = sku.sellerId || null;
-        if (!sellerId) {
-          sellerId =
-            productSellerMap.get(normalizeSku(sku.merchantProductNo)) ||
-            getExtraSellerIdFromStored(sku.extraData) ||
-            null;
-          if (sellerId) {
-            sku.sellerId = sellerId;
-            changed = true;
-          }
-        }
-        if (sellerId) sellerIdSet.add(String(sellerId));
-      }
+      const { sellerIdSet, changed } = await resolveSellerIdsForStoredSkus({
+        skuList,
+        productSellerMap,
+      });
 
       if (!sellerIdSet.size) continue;
 
@@ -494,12 +472,15 @@ export const backfillMissingSellerOrders = async () => {
       });
 
       repaired++;
+      if (sellerIdStr && sellerIdSet.has(sellerIdStr)) {
+        repairedForSeller++;
+      }
     }
 
-    return { repaired, scanned: orphaned.length };
+    return { repaired, scanned: orphaned.length, repairedForSeller };
   } catch (error) {
     console.error('backfillMissingSellerOrders error:', error.message);
-    return { repaired: 0, scanned: 0, error: error.message };
+    return { repaired: 0, scanned: 0, repairedForSeller: 0, error: error.message };
   }
 };
 
