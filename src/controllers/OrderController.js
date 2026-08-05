@@ -166,9 +166,16 @@ export const getSyncedOrders = async (req, res) => {
       return Responses.errorResponse(res, errorMessages || 'All sync operations failed', 500);
     }
 
-    const newUpdateCount =
-      ((dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.data?.upsertedCount) || 0) +
-      ((response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0);
+    const ceData = dataSavedInDb.status === 'fulfilled' ? dataSavedInDb.value?.data : null;
+    const ocpUpserted = (response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0;
+    const sellerSyncCount = (ceData?.sellerOrdersSynced || 0) + (ceData?.sellerOrdersBackfilledForSeller || 0);
+    const globalSyncCount =
+      (ceData?.upsertedCount || 0) + (ceData?.modifiedCount || 0) + (ceData?.sellerOrdersBackfilled || 0);
+    const newUpdateCount = (sellerSyncCount > 0 ? sellerSyncCount : globalSyncCount) + ocpUpserted;
+
+    console.log(
+      `${profilePrefix} sync counts: seller=${sellerSyncCount}, global=${globalSyncCount}, upserted=${ceData?.upsertedCount || 0}, modified=${ceData?.modifiedCount || 0}, backfilled=${ceData?.sellerOrdersBackfilled || 0}`
+    );
 
     await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
 

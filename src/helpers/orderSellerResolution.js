@@ -68,6 +68,7 @@ export const resolveOrderLineSellerId = ({
   extraData,
   ceProductSellerMap,
   finalSellerId = null,
+  sellerExistsCache = null,
 }) => {
   const normalizedSku = normalizeOrderSku(merchantProductNo);
   const sellerIdFromMap = (normalizedSku && productSellerMap?.get(normalizedSku)) || null;
@@ -76,29 +77,42 @@ export const resolveOrderLineSellerId = ({
   const sellerIdFromCeProduct = (normalizedSku && ceProductSellerMap?.get(normalizedSku)) || null;
   const sellerIdFromFinal = finalSellerId || null;
 
-  const sellerId =
-    sellerIdFromMap ||
-    sellerIdFromExisting ||
-    sellerIdFromOrderExtra ||
-    sellerIdFromCeProduct ||
-    sellerIdFromFinal ||
-    null;
-
-  let source = null;
-  if (sellerIdFromMap) source = 'productMap';
-  else if (sellerIdFromExisting) source = 'existingSku';
-  else if (sellerIdFromOrderExtra) source = 'orderExtraData';
-  else if (sellerIdFromCeProduct) source = 'ceProductExtraData';
-  else if (sellerIdFromFinal) source = 'finalSellerId';
-
-  return {
-    sellerId,
-    source,
+  const audit = {
     sellerIdFromMap,
     sellerIdFromExisting,
     sellerIdFromOrderExtra,
     sellerIdFromCeProduct,
     sellerIdFromFinal,
+  };
+
+  const isUsableSeller = (id) => {
+    if (!id) return false;
+    if (!sellerExistsCache) return true;
+    return sellerExistsCache.has(String(id));
+  };
+
+  const candidates = [
+    { sellerId: sellerIdFromMap, source: 'productMap' },
+    { sellerId: sellerIdFromExisting, source: 'existingSku' },
+    { sellerId: sellerIdFromOrderExtra, source: 'orderExtraData' },
+    { sellerId: sellerIdFromCeProduct, source: 'ceProductExtraData' },
+    { sellerId: sellerIdFromFinal, source: 'finalSellerId' },
+  ];
+
+  for (const candidate of candidates) {
+    if (isUsableSeller(candidate.sellerId)) {
+      return {
+        sellerId: candidate.sellerId,
+        source: candidate.source,
+        ...audit,
+      };
+    }
+  }
+
+  return {
+    sellerId: null,
+    source: null,
+    ...audit,
   };
 };
 
@@ -196,28 +210,40 @@ export const resolveSellerIdsForStoredSkus = async ({ skuList = [], productSelle
 
   const ceProductSellerMap = await fetchCeProductSellerMapForSkus(unresolvedSkus);
 
+  const extraSellerIds = skuList.flatMap((sku) => {
+    const id = getExtraSellerId(sku.extraData);
+    return id ? [String(id)] : [];
+  });
+
+  const sellerExistsCache = await buildSellerExistenceCache({
+    productSellerMap,
+    ceProductSellerMap,
+    extraSellerIds,
+  });
+
   const sellerIdSet = new Set();
   let changed = false;
 
   for (const sku of skuList) {
-    let sellerId = sku.sellerId || null;
-
-    if (!sellerId) {
-      const resolved = resolveOrderLineSellerId({
-        merchantProductNo: sku.merchantProductNo,
-        productSellerMap,
-        existingSku: sku,
-        extraData: sku.extraData,
-        ceProductSellerMap,
-      });
-      sellerId = resolved.sellerId;
-      if (sellerId) {
-        sku.sellerId = sellerId;
-        changed = true;
-      }
+    if (sku.sellerId && sellerExistsCache.has(String(sku.sellerId))) {
+      sellerIdSet.add(String(sku.sellerId));
+      continue;
     }
 
-    if (sellerId) sellerIdSet.add(String(sellerId));
+    const resolved = resolveOrderLineSellerId({
+      merchantProductNo: sku.merchantProductNo,
+      productSellerMap,
+      existingSku: sku,
+      extraData: sku.extraData,
+      ceProductSellerMap,
+      sellerExistsCache,
+    });
+
+    if (resolved.sellerId) {
+      sku.sellerId = resolved.sellerId;
+      changed = true;
+      sellerIdSet.add(String(resolved.sellerId));
+    }
   }
 
   return { sellerIdSet, changed, ceProductSellerMap };
