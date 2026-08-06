@@ -869,7 +869,9 @@ export const processOrders = async (orders, sellerId, parentTag) => {
     console.time(`${profilePrefix} Order.bulkWrite`);
     let result;
     try {
+      console.log('[bulkWrite-debug] About to execute Order.bulkWrite', bulkOps.length);
       result = await Order.bulkWrite(bulkOps, { ordered: false });
+      console.log('[bulkWrite-debug] Order.bulkWrite completed successfully');
     } catch (err) {
       console.error(`${tag} STEP 3.2 FAILED Order.bulkWrite:`, err);
 
