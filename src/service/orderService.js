@@ -826,16 +826,105 @@ export const processOrders = async (orders, sellerId, parentTag) => {
     );
 
     console.log(`${tag} STEP 3.2 Order.bulkWrite starting, ops=${bulkOps.length}`);
+
+    // TEMP DEBUG: scan bulkOps for duplicate filters / channelOrderNumbers — remove after investigation
+    {
+      const seenFilter = new Set();
+      const seenChannelOrder = new Set();
+      const uniqueFilters = new Set();
+      const uniqueChannelOrderNumbers = new Set();
+
+      for (const op of bulkOps) {
+        const filter = JSON.stringify(op.updateOne?.filter);
+        uniqueFilters.add(filter);
+
+        if (seenFilter.has(filter)) {
+          console.log('[bulkWrite-debug] DUPLICATE FILTER');
+          console.dir(op, { depth: null });
+        }
+        seenFilter.add(filter);
+
+        const channelOrderNumber = op.updateOne?.update?.$set?.channelOrderNumber;
+        if (channelOrderNumber) {
+          uniqueChannelOrderNumbers.add(channelOrderNumber);
+        }
+
+        if (channelOrderNumber && seenChannelOrder.has(channelOrderNumber)) {
+          console.log('[bulkWrite-debug] DUPLICATE CHANNEL ORDER NUMBER IN BULK OPS');
+          console.log(channelOrderNumber);
+          console.dir(op, { depth: null });
+        }
+        if (channelOrderNumber) {
+          seenChannelOrder.add(channelOrderNumber);
+        }
+      }
+
+      console.log('[bulkWrite-debug] bulkOps scan summary:', {
+        bulkOpsLength: bulkOps.length,
+        uniqueFilters: uniqueFilters.size,
+        uniqueChannelOrderNumbers: uniqueChannelOrderNumbers.size,
+      });
+    }
+
     console.time(`${profilePrefix} Order.bulkWrite`);
     let result;
     try {
       result = await Order.bulkWrite(bulkOps, { ordered: false });
     } catch (err) {
       console.error(`${tag} STEP 3.2 FAILED Order.bulkWrite:`, err);
+
+      // TEMP DEBUG: full MongoBulkWriteError dump — remove after investigation
+      console.log('[bulkWrite-debug] Order.bulkWrite threw');
+      console.log('[bulkWrite-debug] err.code:', err.code);
+      console.log('[bulkWrite-debug] err.message:', err.message);
+      console.log('[bulkWrite-debug] err.writeErrors.length:', err.writeErrors?.length ?? 'n/a');
+
+      if (err.result) {
+        console.log('[bulkWrite-debug] err.result:', {
+          matchedCount: err.result.matchedCount,
+          modifiedCount: err.result.modifiedCount,
+          upsertedCount: err.result.upsertedCount,
+          insertedCount: err.result.insertedCount,
+          upsertedIds: err.result.upsertedIds,
+        });
+      }
+
+      if (Array.isArray(err.writeErrors)) {
+        for (let i = 0; i < err.writeErrors.length; i++) {
+          const we = err.writeErrors[i];
+          console.log(`[bulkWrite-debug] writeError[${i}]:`, {
+            index: we.index,
+            code: we.code ?? we.err?.code,
+            errmsg: we.errmsg ?? we.err?.errmsg ?? we.message,
+          });
+          console.dir(
+            {
+              err: we.err,
+              op: we.op,
+              operation: we.operation,
+              getOperation: typeof we.getOperation === 'function' ? we.getOperation() : undefined,
+              bulkOp: bulkOps[we.index],
+            },
+            { depth: null }
+          );
+        }
+      }
+
+      console.dir(err, { depth: null });
       throw err;
     } finally {
       console.timeEnd(`${profilePrefix} Order.bulkWrite`);
     }
+
+    // TEMP DEBUG: successful bulkWrite result counts
+    console.log('[bulkWrite-debug] Order.bulkWrite result:', {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      upsertedCount: result.upsertedCount,
+      insertedCount: result.insertedCount,
+      upsertedIds: result.upsertedIds,
+    });
+
     console.log(
       `${tag} STEP 3.2 DONE upserted=${result.upsertedCount || 0} modified=${result.modifiedCount || 0} matched=${result.matchedCount || 0}`
     );
@@ -1052,6 +1141,21 @@ export async function getNewOrders(parentTag) {
 
       allOrders.push(...data.Content);
 
+      // TEMP DEBUG: trace E11000 channelOrderNumber_1 — remove after investigation
+      for (const order of data.Content) {
+        if (order?.ChannelOrderNo === '406-8364075-2590704') {
+          console.log(
+            JSON.stringify({
+              stage: 'getNewOrders',
+              ceId: order.Id,
+              channelOrderNumber: order.ChannelOrderNo,
+              merchantOrderNo: order.MerchantOrderNo,
+              cePage: page,
+            })
+          );
+        }
+      }
+
       const fetchedCount = page * pageSize;
       hasMore = fetchedCount < data.TotalCount;
 
@@ -1059,6 +1163,14 @@ export async function getNewOrders(parentTag) {
     }
 
     console.log(`${profilePrefix} CE orders fetched: ${allOrders.length}, pages fetched: ${pagesFetched}`);
+
+    // TEMP DEBUG: summary count for traced channelOrderNumber
+    const traceChannelOrderMatches = allOrders.filter((o) => o?.ChannelOrderNo === '406-8364075-2590704');
+    if (traceChannelOrderMatches.length) {
+      console.log(
+        `[bulkWrite-debug] getNewOrders summary: channelOrderNumber 406-8364075-2590704 appeared ${traceChannelOrderMatches.length} time(s), ceIds=${traceChannelOrderMatches.map((o) => o.Id).join(',')}`
+      );
+    }
 
     return {
       success: true,
