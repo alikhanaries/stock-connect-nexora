@@ -873,44 +873,50 @@ export const processOrders = async (orders, sellerId, parentTag) => {
     } catch (err) {
       console.error(`${tag} STEP 3.2 FAILED Order.bulkWrite:`, err);
 
-      // TEMP DEBUG: full MongoBulkWriteError dump — remove after investigation
-      console.log('[bulkWrite-debug] Order.bulkWrite threw');
-      console.log('[bulkWrite-debug] err.code:', err.code);
-      console.log('[bulkWrite-debug] err.message:', err.message);
-      console.log('[bulkWrite-debug] err.writeErrors.length:', err.writeErrors?.length ?? 'n/a');
+      // TEMP DEBUG: forensic WriteError dump — remove after investigation
+      const logBulkWriteOpFields = (op, prefix = '') => {
+        const filter = op?.filter ?? op?.updateOne?.filter;
+        const set = op?.update?.$set ?? op?.updateOne?.update?.$set;
+        console.log(`${prefix}filter:`, filter);
+        console.log(`${prefix}update.$set.orderId:`, set?.orderId);
+        console.log(`${prefix}update.$set.channelOrderNumber:`, set?.channelOrderNumber);
+        console.log(`${prefix}update.$set.merchantOrderNo:`, set?.merchantOrderNo);
+      };
 
-      if (err.result) {
-        console.log('[bulkWrite-debug] err.result:', {
-          matchedCount: err.result.matchedCount,
-          modifiedCount: err.result.modifiedCount,
-          upsertedCount: err.result.upsertedCount,
-          insertedCount: err.result.insertedCount,
-          upsertedIds: err.result.upsertedIds,
-        });
+      console.log('================ WRITE ERROR START ================');
+      console.log('error.code:', err.code);
+      console.log('error.errmsg:', err.errmsg ?? err.message);
+      console.log('error.index:', err.index);
+      if (err.op) {
+        logBulkWriteOpFields(err.op, 'error.op.');
       }
 
       if (Array.isArray(err.writeErrors)) {
+        console.log(`error.writeErrors.length: ${err.writeErrors.length}`);
         for (let i = 0; i < err.writeErrors.length; i++) {
-          const we = err.writeErrors[i];
-          console.log(`[bulkWrite-debug] writeError[${i}]:`, {
-            index: we.index,
-            code: we.code ?? we.err?.code,
-            errmsg: we.errmsg ?? we.err?.errmsg ?? we.message,
-          });
-          console.dir(
-            {
-              err: we.err,
-              op: we.op,
-              operation: we.operation,
-              getOperation: typeof we.getOperation === 'function' ? we.getOperation() : undefined,
-              bulkOp: bulkOps[we.index],
-            },
-            { depth: null }
-          );
+          const writeError = err.writeErrors[i];
+          console.log('--------------------------');
+          console.log('index:', writeError.index);
+          console.log('code:', writeError.code ?? writeError.err?.code);
+          console.log('errmsg:', writeError.errmsg ?? writeError.err?.errmsg ?? writeError.message);
+          console.log('writeError.err:');
+          console.dir(writeError.err, { depth: null });
+          if (writeError.err?.op) {
+            logBulkWriteOpFields(writeError.err.op, 'writeError.err.op.');
+          }
+          if (bulkOps[writeError.index]) {
+            console.log('bulkOps[writeError.index]:');
+            console.dir(bulkOps[writeError.index], { depth: null });
+          }
         }
       }
 
-      console.dir(err, { depth: null });
+      if (err.result) {
+        console.log('err.result:');
+        console.dir(err.result, { depth: null });
+      }
+      console.log('================ WRITE ERROR END ==================');
+
       throw err;
     } finally {
       console.timeEnd(`${profilePrefix} Order.bulkWrite`);
