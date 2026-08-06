@@ -808,18 +808,37 @@ const getOrderStats = async (sellerId) => {
   }
 };
 
-export const processOrders = async (orders, sellerId) => {
+export const processOrders = async (orders, sellerId, parentTag) => {
   const profilePrefix = '[sync-orders-profile]';
+  const tag = parentTag || '[order-sync][processOrders]';
   console.time(`${profilePrefix} processOrders total`);
   try {
-    const { bulkOps, sellerOrderPayloads, pendingLogs } = await orderhelper.sanitizeOrdersData(orders, sellerId);
+    console.log(`${tag} STEP 3.1 sanitizeOrdersData starting, input orders=${orders?.length || 0}`);
+    let bulkOps, sellerOrderPayloads, pendingLogs;
+    try {
+      ({ bulkOps, sellerOrderPayloads, pendingLogs } = await orderhelper.sanitizeOrdersData(orders, sellerId, tag));
+    } catch (err) {
+      console.error(`${tag} STEP 3.1 FAILED sanitizeOrdersData:`, err);
+      throw err;
+    }
     console.log(
-      `${profilePrefix} bulkOps: ${bulkOps.length}, sellerOrderPayloads: ${sellerOrderPayloads.length}, pendingLogs: ${pendingLogs.length}`
+      `${tag} STEP 3.1 DONE bulkOps=${bulkOps.length}, sellerOrderPayloads=${sellerOrderPayloads.length}, pendingLogs=${pendingLogs.length} (skipped=${(orders?.length || 0) - bulkOps.length})`
     );
 
+    console.log(`${tag} STEP 3.2 Order.bulkWrite starting, ops=${bulkOps.length}`);
     console.time(`${profilePrefix} Order.bulkWrite`);
-    const result = await Order.bulkWrite(bulkOps, { ordered: false });
-    console.timeEnd(`${profilePrefix} Order.bulkWrite`);
+    let result;
+    try {
+      result = await Order.bulkWrite(bulkOps, { ordered: false });
+    } catch (err) {
+      console.error(`${tag} STEP 3.2 FAILED Order.bulkWrite:`, err);
+      throw err;
+    } finally {
+      console.timeEnd(`${profilePrefix} Order.bulkWrite`);
+    }
+    console.log(
+      `${tag} STEP 3.2 DONE upserted=${result.upsertedCount || 0} modified=${result.modifiedCount || 0} matched=${result.matchedCount || 0}`
+    );
 
     const sellerIdStr = sellerId ? String(sellerId) : null;
     const sellerOrdersSynced = sellerIdStr
@@ -828,9 +847,18 @@ export const processOrders = async (orders, sellerId) => {
         ).length
       : 0;
 
+    console.log(`${tag} STEP 3.3 sellerOrder upserts starting, count=${sellerOrderPayloads.length}`);
     console.time(`${profilePrefix} sellerOrder upserts`);
-    await Promise.allSettled(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
+    const sellerOrderResults = await Promise.allSettled(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
     console.timeEnd(`${profilePrefix} sellerOrder upserts`);
+    const sellerOrderFailures = sellerOrderResults.filter((r) => r.status === 'rejected');
+    if (sellerOrderFailures.length) {
+      console.error(
+        `${tag} STEP 3.3 ${sellerOrderFailures.length}/${sellerOrderResults.length} sellerOrder upserts FAILED:`,
+        sellerOrderFailures.map((r) => r.reason?.message || r.reason)
+      );
+    }
+    console.log(`${tag} STEP 3.3 DONE`);
 
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
@@ -888,13 +916,15 @@ export const processOrders = async (orders, sellerId) => {
       }
     }
 
+    console.log(`${tag} STEP 3.4 order logs (CREATED) starting, upsertedOrders=${upsertedIndexes.length}`);
     if (orderLogsBulkOps.length) {
       await OrderLogs.bulkWrite(orderLogsBulkOps);
-      console.log('Inserted order logs:', orderLogs.length);
+      console.log(`${tag} STEP 3.4 DONE inserted order logs: ${orderLogs.length}`);
     } else {
-      console.log('No new orders created — skipping log insertion');
+      console.log(`${tag} STEP 3.4 DONE no new orders created — skipping log insertion`);
     }
 
+    console.log(`${tag} STEP 3.5 pending logs starting, count=${pendingLogs.length}`);
     if (pendingLogs.length) {
       // 1 Fetch order _ids
       const insertedOrders = await Order.find({
@@ -945,18 +975,24 @@ export const processOrders = async (orders, sellerId) => {
         await OrderLogs.bulkWrite(orderLogsBulkOps);
       }
     }
+    console.log(`${tag} STEP 3.5 DONE`);
 
     // Repair CE orders that exist in channelengineorders but never got sellerorders (UI source)
+    console.log(`${tag} STEP 3.6 backfillMissingSellerOrders starting sellerId=${sellerId}`);
     console.time(`${profilePrefix} backfillMissingSellerOrders`);
-    const backfill = await backfillMissingSellerOrders(sellerId);
-    console.timeEnd(`${profilePrefix} backfillMissingSellerOrders`);
-    if (backfill?.repaired) {
-      console.log(`backfillMissingSellerOrders: repaired ${backfill.repaired}/${backfill.scanned}`);
+    let backfill;
+    try {
+      backfill = await backfillMissingSellerOrders(sellerId);
+    } catch (err) {
+      console.error(`${tag} STEP 3.6 FAILED backfillMissingSellerOrders:`, err);
+      throw err;
+    } finally {
+      console.timeEnd(`${profilePrefix} backfillMissingSellerOrders`);
     }
     console.log(
-      `${profilePrefix} recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0})`
+      `${tag} STEP 3.6 DONE recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0})`
     );
-    console.log(`${profilePrefix} sellerOrdersSynced for requesting seller: ${sellerOrdersSynced}`);
+    console.log(`${tag} sellerOrdersSynced for requesting seller: ${sellerOrdersSynced}`);
 
     return {
       success: true,
@@ -970,15 +1006,16 @@ export const processOrders = async (orders, sellerId) => {
       },
     };
   } catch (error) {
-    console.error('Error in processOrders:', error.message);
+    console.error(`${tag} processOrders FAILED:`, error);
     return { success: false, message: error.message };
   } finally {
     console.timeEnd(`${profilePrefix} processOrders total`);
   }
 };
 
-export async function getNewOrders() {
+export async function getNewOrders(parentTag) {
   const profilePrefix = '[sync-orders-profile]';
+  const tag = parentTag ? `${parentTag} STEP 2/6` : '[order-sync][getNewOrders]';
   console.time(`${profilePrefix} getNewOrders total`);
   try {
     let page = 1;
@@ -1000,6 +1037,9 @@ export async function getNewOrders() {
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
         data = await response.json();
+      } catch (err) {
+        console.error(`${tag} FAILED fetching page=${page}:`, err);
+        throw err;
       } finally {
         console.timeEnd(pageLabel);
       }
@@ -1136,10 +1176,12 @@ const acknowledgeOrder = async (orderId, merchantOrderNo) => {
       throw new Error(`Failed to acknowledge order: ${errorData.Message || response.status}`);
     }
   } catch (error) {
-    throw new Error(`Failed to acknowledge order ${orderId}`, error);
+    throw new Error(`Failed to acknowledge order ${orderId}: ${error.message}`, { cause: error });
   }
 };
-const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
+const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge, parentTag) => {
+  const tag = parentTag ? `${parentTag} STEP 5/6` : '[order-sync][acknowledge]';
+  console.log(`${tag} acknowledging ${newOrdersToAcknowledge.length} orders with ChannelEngine...`);
   const ackPromises = newOrdersToAcknowledge.map((order) => {
     if (order.ChannelOrderNo && order.Id) {
       const merchantOrderNo = `${order?.ChannelOrderNo}-${order?.Id}`;
@@ -1160,11 +1202,20 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
         MerchantOrderNo: `${originalOrder.ChannelOrderNo}-${originalOrder.Id}`,
         Status: 'IN_PROGRESS',
       });
+    } else {
+      console.error(
+        `${tag} FAILED to acknowledge order Id=${originalOrder?.Id}:`,
+        result.reason?.message || result.reason
+      );
     }
   });
 
+  console.log(
+    `${tag} DONE acknowledged=${successfulOrdersToSave.length}/${newOrdersToAcknowledge.length}, failed=${newOrdersToAcknowledge.length - successfulOrdersToSave.length}`
+  );
+
   if (successfulOrdersToSave.length > 0) {
-    await processOrders(successfulOrdersToSave);
+    await processOrders(successfulOrdersToSave, undefined, tag);
   }
 };
 
