@@ -482,6 +482,18 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
 
     //  LOOP (NO async map)
     for (const data of orders) {
+      // TEMP DEBUG: trace E11000 channelOrderNumber_1 — remove after investigation
+      if (data?.ChannelOrderNo === '406-8364075-2590704') {
+        console.log(
+          JSON.stringify({
+            stage: 'sanitize-start',
+            ceId: data.Id,
+            channelOrderNumber: data.ChannelOrderNo,
+            merchantOrderNo: data.MerchantOrderNo,
+          })
+        );
+      }
+
       const existingOrder = existingOrdersMap.get(String(data.Id));
 
       // sellerId from first SKU (Product map), then order line ExtraData only (CE catalog resolved per line)
@@ -782,13 +794,34 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
       });
 
       // Order bulk
-      bulkOps.push({
+      const bulkOp = {
         updateOne: {
           filter: { orderId: String(data.Id), channelOrderNumber: data.ChannelOrderNo }, // FIXED UNIQUE FILTER
           update: { $set: updatePayload },
           upsert: true,
         },
-      });
+      };
+
+      // TEMP DEBUG: trace E11000 channelOrderNumber_1 — remove after investigation
+      if (data?.ChannelOrderNo === '406-8364075-2590704') {
+        console.dir(
+          {
+            stage: 'bulkOp-created',
+            ceId: data.Id,
+            existingOrderInDb: existingOrder
+              ? {
+                  orderId: existingOrder.orderId,
+                  channelOrderNumber: existingOrder.channelOrderNumber,
+                  _id: existingOrder._id,
+                }
+              : null,
+            bulkOp,
+          },
+          { depth: null }
+        );
+      }
+
+      bulkOps.push(bulkOp);
     }
     pushEntegraOrders(entegraOrders);
     console.log(
