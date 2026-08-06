@@ -181,7 +181,7 @@ export const validateResolvedSellerId = (sellerId, sellerExistsCache) => {
 /**
  * Log detailed seller resolution failure (never silent skip).
  */
-export const logUnresolvedSellerLine = ({ orderId, merchantProductNo, resolution, validationReason }) => {
+export const logUnresolvedSellerLine = ({ orderId, merchantProductNo, resolution, validationReason, tag }) => {
   const audit = {
     orderId,
     sku: merchantProductNo,
@@ -193,7 +193,7 @@ export const logUnresolvedSellerLine = ({ orderId, merchantProductNo, resolution
     reason: validationReason || 'No CE Product Seller',
   };
 
-  console.warn(`[sanitizeOrdersData] Unresolved seller for order line ${JSON.stringify(audit)}`);
+  console.warn(`${tag || '[sanitizeOrdersData]'}.e UNRESOLVED seller for order line ${JSON.stringify(audit)}`);
 };
 
 /**
