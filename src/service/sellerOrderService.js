@@ -98,134 +98,145 @@ const createSellerMapEntry = (sellerId, orderId) => ({
   },
 });
 
-export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
-  try {
-    const { orderId, orderDate, channelId, channelName, orderSkuList } = orderPayload;
+/**
+ * Build the SellerOrder bulkWrite ops for one order — pure, no DB call.
+ * Shared by the single-order path (upsertSellerOrdersFromOrder) and the
+ * batch path (buildSellerOrderBulkOpsBatch) so a whole sync run can be
+ * flushed in one bulkWrite instead of one bulkWrite per order.
+ */
+const buildSellerOrderBulkOps = (orderPayload) => {
+  const { orderId, orderDate, channelId, channelName, orderSkuList } = orderPayload;
 
-    const skuList = orderSkuList?.skuList || [];
+  const skuList = orderSkuList?.skuList || [];
 
-    const sellerMap = {};
+  const sellerMap = {};
 
-    // -----------------------------
-    // PROCESS SKUs
-    // -----------------------------
-    skuList.forEach((sku) => {
-      const sellerId = sku.sellerId?.toString();
-      if (!sellerId) return;
+  // -----------------------------
+  // PROCESS SKUs
+  // -----------------------------
+  skuList.forEach((sku) => {
+    const sellerId = sku.sellerId?.toString();
+    if (!sellerId) return;
 
-      if (!sellerMap[sellerId]) {
-        sellerMap[sellerId] = createSellerMapEntry(sellerId, orderId);
-      }
-
-      const data = sellerMap[sellerId];
-
-      const price = sku.unitPriceInclVat || 0;
-      const qty = sku.quantity || 0;
-
-      const breakdown = sku.statusBreakdown || {};
-
-      const confirmed = breakdown.confirmed || 0;
-      const shipped = breakdown.shipped || 0;
-      const delivered = breakdown.delivered || 0;
-      const canceled = breakdown.canceled || 0;
-      const returned = breakdown.returned || 0;
-      const shipmentCreated = breakdown.shipmentCreated || 0;
-
-      data.products.push(buildProductEntry(sku, price, qty));
-
-      // -----------------------------
-      // TOTALS
-      // -----------------------------
-      data.totalQuantity += qty;
-      data.totalSkus += 1;
-
-      data.totalAmount += qty * price;
-      data.deliveredAmount += delivered * price;
-      data.canceledAmount += canceled * price;
-      data.returnedAmount += returned * price;
-
-      // -----------------------------
-      // BREAKDOWN
-      // -----------------------------
-      data.statusBreakdown.confirmed += confirmed;
-      data.statusBreakdown.shipped += shipped;
-      data.statusBreakdown.delivered += delivered;
-      data.statusBreakdown.canceled += canceled;
-      data.statusBreakdown.returned += returned;
-      data.statusBreakdown.shipmentCreated += shipmentCreated;
-
-      // -----------------------------
-      // DERIVE SKU STATUS
-      // -----------------------------
-      let skuStatus = (sku.status || '').toUpperCase();
-
-      if (!skuStatus) {
-        if (canceled === qty) skuStatus = STATUS.CANCELED;
-        else if (returned === qty) skuStatus = STATUS.RETURNED;
-        else if (delivered === qty) skuStatus = STATUS.DELIVERED;
-        // IN_PROGRESS must come before SHIPPED
-        // confirmed === qty means nothing processed yet → stay NEW
-        else if (shipmentCreated > 0 || (confirmed > 0 && confirmed < qty)) skuStatus = STATUS.IN_PROGRESS;
-        else if (shipped > 0) skuStatus = STATUS.SHIPPED;
-        else skuStatus = STATUS.NEW;
-      }
-
-      if (data.statusCounts[skuStatus] !== undefined) {
-        data.statusCounts[skuStatus] += 1;
-      }
-    });
-
-    if (!Object.keys(sellerMap).length) {
-      console.warn(`upsertSellerOrdersFromOrder: no resolvable sellerId for any SKU on orderId=${orderId}, skipping`);
-      return true;
+    if (!sellerMap[sellerId]) {
+      sellerMap[sellerId] = createSellerMapEntry(sellerId, orderId);
     }
 
-    // -----------------------------
-    // NET AMOUNT
-    // -----------------------------
-    Object.values(sellerMap).forEach((data) => {
-      data.netAmount = data.totalAmount - data.canceledAmount - data.returnedAmount;
-      data.finalStatus = deriveSellerStatus(data.statusCounts, data.totalSkus);
-    });
+    const data = sellerMap[sellerId];
+
+    const price = sku.unitPriceInclVat || 0;
+    const qty = sku.quantity || 0;
+
+    const breakdown = sku.statusBreakdown || {};
+
+    const confirmed = breakdown.confirmed || 0;
+    const shipped = breakdown.shipped || 0;
+    const delivered = breakdown.delivered || 0;
+    const canceled = breakdown.canceled || 0;
+    const returned = breakdown.returned || 0;
+    const shipmentCreated = breakdown.shipmentCreated || 0;
+
+    data.products.push(buildProductEntry(sku, price, qty));
 
     // -----------------------------
-    // BULK OPS
+    // TOTALS
     // -----------------------------
-    const bulkOps = Object.entries(sellerMap).map(([sellerId, data]) => {
-      const sellerOrderId = data.sellerOrderId;
+    data.totalQuantity += qty;
+    data.totalSkus += 1;
 
-      return {
-        updateOne: {
-          filter: { sellerOrderId },
-          update: {
-            $set: {
-              sellerOrderId,
-              orderId,
-              sellerId,
-              orderDate,
-              channelId,
-              channelName,
+    data.totalAmount += qty * price;
+    data.deliveredAmount += delivered * price;
+    data.canceledAmount += canceled * price;
+    data.returnedAmount += returned * price;
 
-              status: data.finalStatus,
+    // -----------------------------
+    // BREAKDOWN
+    // -----------------------------
+    data.statusBreakdown.confirmed += confirmed;
+    data.statusBreakdown.shipped += shipped;
+    data.statusBreakdown.delivered += delivered;
+    data.statusBreakdown.canceled += canceled;
+    data.statusBreakdown.returned += returned;
+    data.statusBreakdown.shipmentCreated += shipmentCreated;
 
-              products: data.products,
+    // -----------------------------
+    // DERIVE SKU STATUS
+    // -----------------------------
+    let skuStatus = (sku.status || '').toUpperCase();
 
-              totalAmount: Number(data.totalAmount.toFixed(2)),
-              deliveredAmount: Number(data.deliveredAmount.toFixed(2)),
-              canceledAmount: Number(data.canceledAmount.toFixed(2)),
-              returnedAmount: Number(data.returnedAmount.toFixed(2)),
-              netAmount: Number(data.netAmount.toFixed(2)),
+    if (!skuStatus) {
+      if (canceled === qty) skuStatus = STATUS.CANCELED;
+      else if (returned === qty) skuStatus = STATUS.RETURNED;
+      else if (delivered === qty) skuStatus = STATUS.DELIVERED;
+      // IN_PROGRESS must come before SHIPPED
+      // confirmed === qty means nothing processed yet → stay NEW
+      else if (shipmentCreated > 0 || (confirmed > 0 && confirmed < qty)) skuStatus = STATUS.IN_PROGRESS;
+      else if (shipped > 0) skuStatus = STATUS.SHIPPED;
+      else skuStatus = STATUS.NEW;
+    }
 
-              totalQuantity: data.totalQuantity,
-              totalSkus: data.totalSkus,
+    if (data.statusCounts[skuStatus] !== undefined) {
+      data.statusCounts[skuStatus] += 1;
+    }
+  });
 
-              statusBreakdown: data.statusBreakdown,
-            },
+  if (!Object.keys(sellerMap).length) {
+    console.warn(`upsertSellerOrdersFromOrder: no resolvable sellerId for any SKU on orderId=${orderId}, skipping`);
+    return [];
+  }
+
+  // -----------------------------
+  // NET AMOUNT
+  // -----------------------------
+  Object.values(sellerMap).forEach((data) => {
+    data.netAmount = data.totalAmount - data.canceledAmount - data.returnedAmount;
+    data.finalStatus = deriveSellerStatus(data.statusCounts, data.totalSkus);
+  });
+
+  // -----------------------------
+  // BULK OPS
+  // -----------------------------
+  return Object.entries(sellerMap).map(([sellerId, data]) => {
+    const sellerOrderId = data.sellerOrderId;
+
+    return {
+      updateOne: {
+        filter: { sellerOrderId },
+        update: {
+          $set: {
+            sellerOrderId,
+            orderId,
+            sellerId,
+            orderDate,
+            channelId,
+            channelName,
+
+            status: data.finalStatus,
+
+            products: data.products,
+
+            totalAmount: Number(data.totalAmount.toFixed(2)),
+            deliveredAmount: Number(data.deliveredAmount.toFixed(2)),
+            canceledAmount: Number(data.canceledAmount.toFixed(2)),
+            returnedAmount: Number(data.returnedAmount.toFixed(2)),
+            netAmount: Number(data.netAmount.toFixed(2)),
+
+            totalQuantity: data.totalQuantity,
+            totalSkus: data.totalSkus,
+
+            statusBreakdown: data.statusBreakdown,
           },
-          upsert: true,
         },
-      };
-    });
+        upsert: true,
+      },
+    };
+  });
+};
+
+export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
+  try {
+    const bulkOps = buildSellerOrderBulkOps(orderPayload);
+    if (!bulkOps.length) return true;
 
     await SellerOrder.bulkWrite(bulkOps);
 
@@ -234,6 +245,48 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
     console.error('Error in upsertSellerOrdersFromOrder:', error);
     throw error;
   }
+};
+
+const SELLER_ORDER_BULKWRITE_CHUNK_SIZE = 1000;
+
+/**
+ * Flush SellerOrder writes for a whole sync batch in a handful of sequential
+ * bulkWrite calls instead of one Promise.allSettled'd bulkWrite PER ORDER.
+ *
+ * Firing hundreds of concurrent bulkWrite calls (one per order) exhausts the
+ * Mongo connection pool under load — some calls fail with connection/timeout
+ * errors essentially at random, even when their order data is perfectly valid.
+ * Building every order's ops in memory first (cheap, synchronous) and writing
+ * them in a few chunked bulkWrite calls avoids that entirely.
+ */
+export const upsertSellerOrdersBatch = async (orderPayloads) => {
+  const allOps = [];
+  const buildFailures = [];
+
+  for (const { orderPayload } of orderPayloads) {
+    try {
+      allOps.push(...buildSellerOrderBulkOps(orderPayload));
+    } catch (error) {
+      buildFailures.push({ orderId: orderPayload?.orderId, error });
+      console.error(
+        `upsertSellerOrdersBatch: failed to build ops for orderId=${orderPayload?.orderId}:`,
+        error.message
+      );
+    }
+  }
+
+  let writeFailures = 0;
+  for (let i = 0; i < allOps.length; i += SELLER_ORDER_BULKWRITE_CHUNK_SIZE) {
+    const chunk = allOps.slice(i, i + SELLER_ORDER_BULKWRITE_CHUNK_SIZE);
+    try {
+      await SellerOrder.bulkWrite(chunk, { ordered: false });
+    } catch (error) {
+      writeFailures += chunk.length;
+      console.error(`upsertSellerOrdersBatch: bulkWrite chunk [${i}, ${i + chunk.length}) FAILED:`, error.message);
+    }
+  }
+
+  return { totalOps: allOps.length, buildFailures: buildFailures.length, writeFailures };
 };
 export const syncSellerOrdersFromOrder = async (orderId) => {
   try {
