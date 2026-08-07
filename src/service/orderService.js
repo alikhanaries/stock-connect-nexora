@@ -954,7 +954,7 @@ export const processOrders = async (orders, sellerId) => {
       console.log(`backfillMissingSellerOrders: repaired ${backfill.repaired}/${backfill.scanned}`);
     }
     console.log(
-      `${profilePrefix} recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0})`
+      `${profilePrefix} recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0}, failed: ${backfill?.failed || 0})`
     );
     console.log(`${profilePrefix} sellerOrdersSynced for requesting seller: ${sellerOrdersSynced}`);
 
