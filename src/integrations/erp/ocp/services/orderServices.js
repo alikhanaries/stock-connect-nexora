@@ -7,7 +7,7 @@ import { createERPAdapter } from '../../base/ERPFactory.js';
 import { cancelAymakanShipment } from '#root/src/service/aymakanService.js';
 import Shipment from '#root/src/models/Shipment/Shipment.js';
 import { BLOCKED_STATUSES, ORDER_STATUS_MAP } from '#root/src/constants/common.js';
-import { upsertSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
+import { upsertSellerOrdersBatch } from '#root/src/service/sellerOrderService.js';
 
 const adaptor = createERPAdapter('ocp');
 
@@ -50,7 +50,7 @@ export const processOrders = async (orders, sellerId) => {
     // Execute the bulk write
     const result = await Order.bulkWrite(bulkOps);
     // Upsert into SellerOrder collection
-    await Promise.all(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
+    await upsertSellerOrdersBatch(sellerOrderPayloads);
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
     const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));

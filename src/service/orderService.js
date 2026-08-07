@@ -1,7 +1,7 @@
 import Order from '#models/Orders.js';
 import mongoose from 'mongoose';
 import {
-  upsertSellerOrdersFromOrder,
+  upsertSellerOrdersBatch,
   syncSellerOrdersFromOrder,
   backfillMissingSellerOrders,
 } from '#root/src/service/sellerOrderService.js';
@@ -11,6 +11,7 @@ import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 import { channelEnginePush } from '#service/channelEngineClient.js';
 import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import { fetchWithRetry } from '#utils/fetchWithRetry.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
@@ -829,8 +830,11 @@ export const processOrders = async (orders, sellerId) => {
       : 0;
 
     console.time(`${profilePrefix} sellerOrder upserts`);
-    await Promise.allSettled(sellerOrderPayloads.map((p) => upsertSellerOrdersFromOrder(p)));
+    const sellerOrderBatchResult = await upsertSellerOrdersBatch(sellerOrderPayloads);
     console.timeEnd(`${profilePrefix} sellerOrder upserts`);
+    console.log(
+      `${profilePrefix} sellerOrder upserts: ops=${sellerOrderBatchResult.totalOps} buildFailures=${sellerOrderBatchResult.buildFailures} writeFailures=${sellerOrderBatchResult.writeFailures}`
+    );
 
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
@@ -992,7 +996,7 @@ export async function getNewOrders() {
       console.time(pageLabel);
       let data;
       try {
-        const response = await fetch(
+        const response = await fetchWithRetry(
           `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
         );
 

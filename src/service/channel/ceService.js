@@ -1,6 +1,7 @@
 import { config } from '#root/src/config/config.js';
 import { channelEnginePush } from '#service/channelEngineClient.js';
 import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import { fetchWithRetry } from '#utils/fetchWithRetry.js';
 
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 
@@ -14,7 +15,7 @@ export const getExistingProductsBySkuFromCE = async (skuList = []) => {
       params.append('merchantProductNoList', sku);
     });
 
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}products?${params.toString()}`, {
+    const response = await fetchWithRetry(`${CHANNEL_ENGINE_BASE_URL}products?${params.toString()}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
