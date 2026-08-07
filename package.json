@@ -28,6 +28,8 @@
     "remap:deleted-seller-orders": "node scripts/remap-deleted-seller-orders.mjs",
     "remap:deleted-seller-orders:execute": "node scripts/remap-deleted-seller-orders.mjs --execute",
     "dump:ce-orders": "node scripts/dump-ce-orders.mjs",
+    "check:channelordernumber-index": "node scripts/check-channelordernumber-index.mjs",
+    "check:channelordernumber-index:execute": "node scripts/check-channelordernumber-index.mjs --execute",
     "lint": "eslint src --fix",
     "prettier": "prettier . --ignore-path .prettierignore",
     "format:check": "yarn run prettier --check",
