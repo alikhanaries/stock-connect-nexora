@@ -1087,7 +1087,7 @@ export const processOrders = async (orders, sellerId, parentTag) => {
       console.timeEnd(`${profilePrefix} backfillMissingSellerOrders`);
     }
     console.log(
-      `${tag} STEP 3.6 DONE recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0})`
+      `${profilePrefix} recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0}, failed: ${backfill?.failed || 0})`
     );
     console.log(`${tag} sellerOrdersSynced for requesting seller: ${sellerOrdersSynced}`);
 

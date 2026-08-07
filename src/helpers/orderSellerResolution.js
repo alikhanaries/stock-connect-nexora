@@ -211,8 +211,14 @@ export const resolveSellerIdsForStoredSkus = async ({ skuList = [], productSelle
   const ceProductSellerMap = await fetchCeProductSellerMapForSkus(unresolvedSkus);
 
   const extraSellerIds = skuList.flatMap((sku) => {
-    const id = getExtraSellerId(sku.extraData);
-    return id ? [String(id)] : [];
+    const ids = [];
+    const extraId = getExtraSellerId(sku.extraData);
+    if (extraId) ids.push(String(extraId));
+    // Verify the sku's own already-stored sellerId too — otherwise a perfectly valid,
+    // still-existing seller gets treated as "doesn't exist" just because it isn't
+    // independently derivable from the product map / CE catalog / ExtraData.
+    if (sku.sellerId) ids.push(String(sku.sellerId));
+    return ids;
   });
 
   const sellerExistsCache = await buildSellerExistenceCache({

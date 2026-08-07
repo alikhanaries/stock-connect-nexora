@@ -175,7 +175,10 @@ export const upsertSellerOrdersFromOrder = async ({ orderPayload }) => {
       }
     });
 
-    if (!Object.keys(sellerMap).length) return true;
+    if (!Object.keys(sellerMap).length) {
+      console.warn(`upsertSellerOrdersFromOrder: no resolvable sellerId for any SKU on orderId=${orderId}, skipping`);
+      return true;
+    }
 
     // -----------------------------
     // NET AMOUNT
@@ -321,7 +324,10 @@ export const syncSellerOrdersFromOrder = async (orderId) => {
       data.statusCounts[skuStatus] += 1;
     });
 
-    if (!Object.keys(sellerMap).length) return true;
+    if (!Object.keys(sellerMap).length) {
+      console.warn(`syncSellerOrdersFromOrder: no resolvable sellerId for any SKU on orderId=${orderId}, skipping`);
+      return true;
+    }
 
     // -----------------------------
     // FINAL CALCULATIONS
@@ -436,48 +442,54 @@ export const backfillMissingSellerOrders = async (sellerId = null) => {
 
     let repaired = 0;
     let repairedForSeller = 0;
+    let failed = 0;
 
     for (const order of orphaned) {
-      const skuList = [...(order.orderSkuList?.skuList || [])];
-      const { sellerIdSet, changed } = await resolveSellerIdsForStoredSkus({
-        skuList,
-        productSellerMap,
-      });
+      try {
+        const skuList = [...(order.orderSkuList?.skuList || [])];
+        const { sellerIdSet, changed } = await resolveSellerIdsForStoredSkus({
+          skuList,
+          productSellerMap,
+        });
 
-      if (!sellerIdSet.size) continue;
+        if (!sellerIdSet.size) continue;
 
-      const sellerIds = [...sellerIdSet].map((id) => new mongoose.Types.ObjectId(id));
+        const sellerIds = [...sellerIdSet].map((id) => new mongoose.Types.ObjectId(id));
 
-      if (changed || !order.sellerIds?.length) {
-        await Order.updateOne(
-          { _id: order._id },
-          {
-            $set: {
-              'orderSkuList.skuList': skuList,
-              sellerIds,
-              sellerId: sellerIds[0],
-            },
-          }
-        );
-      }
+        if (changed || !order.sellerIds?.length) {
+          await Order.updateOne(
+            { _id: order._id },
+            {
+              $set: {
+                'orderSkuList.skuList': skuList,
+                sellerIds,
+                sellerId: sellerIds[0],
+              },
+            }
+          );
+        }
 
-      await upsertSellerOrdersFromOrder({
-        orderPayload: {
-          orderId: order.orderId,
-          orderDate: order.orderDate,
-          channelId: order.channelId,
-          channelName: order.channelName,
-          orderSkuList: { skuList },
-        },
-      });
+        await upsertSellerOrdersFromOrder({
+          orderPayload: {
+            orderId: order.orderId,
+            orderDate: order.orderDate,
+            channelId: order.channelId,
+            channelName: order.channelName,
+            orderSkuList: { skuList },
+          },
+        });
 
-      repaired++;
-      if (sellerIdStr && sellerIdSet.has(sellerIdStr)) {
-        repairedForSeller++;
+        repaired++;
+        if (sellerIdStr && sellerIdSet.has(sellerIdStr)) {
+          repairedForSeller++;
+        }
+      } catch (error) {
+        failed++;
+        console.error(`backfillMissingSellerOrders: failed to repair orderId=${order.orderId}:`, error.message);
       }
     }
 
-    return { repaired, scanned: orphaned.length, repairedForSeller };
+    return { repaired, scanned: orphaned.length, repairedForSeller, failed };
   } catch (error) {
     console.error('backfillMissingSellerOrders error:', error.message);
     return { repaired: 0, scanned: 0, repairedForSeller: 0, error: error.message };
