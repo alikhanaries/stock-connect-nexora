@@ -809,18 +809,134 @@ const getOrderStats = async (sellerId) => {
   }
 };
 
-export const processOrders = async (orders, sellerId) => {
+export const processOrders = async (orders, sellerId, parentTag) => {
   const profilePrefix = '[sync-orders-profile]';
+  const tag = parentTag || '[order-sync][processOrders]';
   console.time(`${profilePrefix} processOrders total`);
   try {
-    const { bulkOps, sellerOrderPayloads, pendingLogs } = await orderhelper.sanitizeOrdersData(orders, sellerId);
+    console.log(`${tag} STEP 3.1 sanitizeOrdersData starting, input orders=${orders?.length || 0}`);
+    let bulkOps, sellerOrderPayloads, pendingLogs;
+    try {
+      ({ bulkOps, sellerOrderPayloads, pendingLogs } = await orderhelper.sanitizeOrdersData(orders, sellerId, tag));
+    } catch (err) {
+      console.error(`${tag} STEP 3.1 FAILED sanitizeOrdersData:`, err);
+      throw err;
+    }
     console.log(
-      `${profilePrefix} bulkOps: ${bulkOps.length}, sellerOrderPayloads: ${sellerOrderPayloads.length}, pendingLogs: ${pendingLogs.length}`
+      `${tag} STEP 3.1 DONE bulkOps=${bulkOps.length}, sellerOrderPayloads=${sellerOrderPayloads.length}, pendingLogs=${pendingLogs.length} (skipped=${(orders?.length || 0) - bulkOps.length})`
     );
 
+    console.log(`${tag} STEP 3.2 Order.bulkWrite starting, ops=${bulkOps.length}`);
+
+    // TEMP DEBUG: scan bulkOps for duplicate filters / channelOrderNumbers — remove after investigation
+    {
+      const seenFilter = new Set();
+      const seenChannelOrder = new Set();
+      const uniqueFilters = new Set();
+      const uniqueChannelOrderNumbers = new Set();
+
+      for (const op of bulkOps) {
+        const filter = JSON.stringify(op.updateOne?.filter);
+        uniqueFilters.add(filter);
+
+        if (seenFilter.has(filter)) {
+          console.log('[bulkWrite-debug] DUPLICATE FILTER');
+          console.dir(op, { depth: null });
+        }
+        seenFilter.add(filter);
+
+        const channelOrderNumber = op.updateOne?.update?.$set?.channelOrderNumber;
+        if (channelOrderNumber) {
+          uniqueChannelOrderNumbers.add(channelOrderNumber);
+        }
+
+        if (channelOrderNumber && seenChannelOrder.has(channelOrderNumber)) {
+          console.log('[bulkWrite-debug] DUPLICATE CHANNEL ORDER NUMBER IN BULK OPS');
+          console.log(channelOrderNumber);
+          console.dir(op, { depth: null });
+        }
+        if (channelOrderNumber) {
+          seenChannelOrder.add(channelOrderNumber);
+        }
+      }
+
+      console.log('[bulkWrite-debug] bulkOps scan summary:', {
+        bulkOpsLength: bulkOps.length,
+        uniqueFilters: uniqueFilters.size,
+        uniqueChannelOrderNumbers: uniqueChannelOrderNumbers.size,
+      });
+    }
+
     console.time(`${profilePrefix} Order.bulkWrite`);
-    const result = await Order.bulkWrite(bulkOps, { ordered: false });
-    console.timeEnd(`${profilePrefix} Order.bulkWrite`);
+    let result;
+    try {
+      console.log('[bulkWrite-debug] About to execute Order.bulkWrite', bulkOps.length);
+      result = await Order.bulkWrite(bulkOps, { ordered: false });
+      console.log('[bulkWrite-debug] Order.bulkWrite completed successfully');
+    } catch (err) {
+      console.error(`${tag} STEP 3.2 FAILED Order.bulkWrite:`, err);
+
+      // TEMP DEBUG: forensic WriteError dump — remove after investigation
+      const logBulkWriteOpFields = (op, prefix = '') => {
+        const filter = op?.filter ?? op?.updateOne?.filter;
+        const set = op?.update?.$set ?? op?.updateOne?.update?.$set;
+        console.log(`${prefix}filter:`, filter);
+        console.log(`${prefix}update.$set.orderId:`, set?.orderId);
+        console.log(`${prefix}update.$set.channelOrderNumber:`, set?.channelOrderNumber);
+        console.log(`${prefix}update.$set.merchantOrderNo:`, set?.merchantOrderNo);
+      };
+
+      console.log('================ WRITE ERROR START ================');
+      console.log('error.code:', err.code);
+      console.log('error.errmsg:', err.errmsg ?? err.message);
+      console.log('error.index:', err.index);
+      if (err.op) {
+        logBulkWriteOpFields(err.op, 'error.op.');
+      }
+
+      if (Array.isArray(err.writeErrors)) {
+        console.log(`error.writeErrors.length: ${err.writeErrors.length}`);
+        for (let i = 0; i < err.writeErrors.length; i++) {
+          const writeError = err.writeErrors[i];
+          console.log('--------------------------');
+          console.log('index:', writeError.index);
+          console.log('code:', writeError.code ?? writeError.err?.code);
+          console.log('errmsg:', writeError.errmsg ?? writeError.err?.errmsg ?? writeError.message);
+          console.log('writeError.err:');
+          console.dir(writeError.err, { depth: null });
+          if (writeError.err?.op) {
+            logBulkWriteOpFields(writeError.err.op, 'writeError.err.op.');
+          }
+          if (bulkOps[writeError.index]) {
+            console.log('bulkOps[writeError.index]:');
+            console.dir(bulkOps[writeError.index], { depth: null });
+          }
+        }
+      }
+
+      if (err.result) {
+        console.log('err.result:');
+        console.dir(err.result, { depth: null });
+      }
+      console.log('================ WRITE ERROR END ==================');
+
+      throw err;
+    } finally {
+      console.timeEnd(`${profilePrefix} Order.bulkWrite`);
+    }
+
+    // TEMP DEBUG: successful bulkWrite result counts
+    console.log('[bulkWrite-debug] Order.bulkWrite result:', {
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
+      upsertedCount: result.upsertedCount,
+      insertedCount: result.insertedCount,
+      upsertedIds: result.upsertedIds,
+    });
+
+    console.log(
+      `${tag} STEP 3.2 DONE upserted=${result.upsertedCount || 0} modified=${result.modifiedCount || 0} matched=${result.matchedCount || 0}`
+    );
 
     const sellerIdStr = sellerId ? String(sellerId) : null;
     const sellerOrdersSynced = sellerIdStr
@@ -829,12 +945,16 @@ export const processOrders = async (orders, sellerId) => {
         ).length
       : 0;
 
+    console.log(`${tag} STEP 3.3 sellerOrder upserts starting, count=${sellerOrderPayloads.length}`);
     console.time(`${profilePrefix} sellerOrder upserts`);
     const sellerOrderBatchResult = await upsertSellerOrdersBatch(sellerOrderPayloads);
     console.timeEnd(`${profilePrefix} sellerOrder upserts`);
-    console.log(
-      `${profilePrefix} sellerOrder upserts: ops=${sellerOrderBatchResult.totalOps} buildFailures=${sellerOrderBatchResult.buildFailures} writeFailures=${sellerOrderBatchResult.writeFailures}`
-    );
+    if (sellerOrderBatchResult.buildFailures || sellerOrderBatchResult.writeFailures) {
+      console.error(
+        `${tag} STEP 3.3 buildFailures=${sellerOrderBatchResult.buildFailures} writeFailures=${sellerOrderBatchResult.writeFailures} (ops=${sellerOrderBatchResult.totalOps})`
+      );
+    }
+    console.log(`${tag} STEP 3.3 DONE ops=${sellerOrderBatchResult.totalOps}`);
 
     // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
@@ -892,13 +1012,15 @@ export const processOrders = async (orders, sellerId) => {
       }
     }
 
+    console.log(`${tag} STEP 3.4 order logs (CREATED) starting, upsertedOrders=${upsertedIndexes.length}`);
     if (orderLogsBulkOps.length) {
       await OrderLogs.bulkWrite(orderLogsBulkOps);
-      console.log('Inserted order logs:', orderLogs.length);
+      console.log(`${tag} STEP 3.4 DONE inserted order logs: ${orderLogs.length}`);
     } else {
-      console.log('No new orders created — skipping log insertion');
+      console.log(`${tag} STEP 3.4 DONE no new orders created — skipping log insertion`);
     }
 
+    console.log(`${tag} STEP 3.5 pending logs starting, count=${pendingLogs.length}`);
     if (pendingLogs.length) {
       // 1 Fetch order _ids
       const insertedOrders = await Order.find({
@@ -949,18 +1071,24 @@ export const processOrders = async (orders, sellerId) => {
         await OrderLogs.bulkWrite(orderLogsBulkOps);
       }
     }
+    console.log(`${tag} STEP 3.5 DONE`);
 
     // Repair CE orders that exist in channelengineorders but never got sellerorders (UI source)
+    console.log(`${tag} STEP 3.6 backfillMissingSellerOrders starting sellerId=${sellerId}`);
     console.time(`${profilePrefix} backfillMissingSellerOrders`);
-    const backfill = await backfillMissingSellerOrders(sellerId);
-    console.timeEnd(`${profilePrefix} backfillMissingSellerOrders`);
-    if (backfill?.repaired) {
-      console.log(`backfillMissingSellerOrders: repaired ${backfill.repaired}/${backfill.scanned}`);
+    let backfill;
+    try {
+      backfill = await backfillMissingSellerOrders(sellerId);
+    } catch (err) {
+      console.error(`${tag} STEP 3.6 FAILED backfillMissingSellerOrders:`, err);
+      throw err;
+    } finally {
+      console.timeEnd(`${profilePrefix} backfillMissingSellerOrders`);
     }
     console.log(
-      `${profilePrefix} recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0}, failed: ${backfill?.failed || 0})`
+      `${tag} STEP 3.6 DONE recovered seller orders: ${backfill?.repaired || 0} (scanned: ${backfill?.scanned || 0}, for seller: ${backfill?.repairedForSeller || 0}, failed: ${backfill?.failed || 0})`
     );
-    console.log(`${profilePrefix} sellerOrdersSynced for requesting seller: ${sellerOrdersSynced}`);
+    console.log(`${tag} sellerOrdersSynced for requesting seller: ${sellerOrdersSynced}`);
 
     return {
       success: true,
@@ -974,15 +1102,16 @@ export const processOrders = async (orders, sellerId) => {
       },
     };
   } catch (error) {
-    console.error('Error in processOrders:', error.message);
+    console.error(`${tag} processOrders FAILED:`, error);
     return { success: false, message: error.message };
   } finally {
     console.timeEnd(`${profilePrefix} processOrders total`);
   }
 };
 
-export async function getNewOrders() {
+export async function getNewOrders(parentTag) {
   const profilePrefix = '[sync-orders-profile]';
+  const tag = parentTag ? `${parentTag} STEP 2/6` : '[order-sync][getNewOrders]';
   console.time(`${profilePrefix} getNewOrders total`);
   try {
     let page = 1;
@@ -1004,6 +1133,9 @@ export async function getNewOrders() {
           throw new Error(`HTTP error! Status: ${response.status}`);
         }
         data = await response.json();
+      } catch (err) {
+        console.error(`${tag} FAILED fetching page=${page}:`, err);
+        throw err;
       } finally {
         console.timeEnd(pageLabel);
       }
@@ -1016,6 +1148,21 @@ export async function getNewOrders() {
 
       allOrders.push(...data.Content);
 
+      // TEMP DEBUG: trace E11000 channelOrderNumber_1 — remove after investigation
+      for (const order of data.Content) {
+        if (order?.ChannelOrderNo === '406-8364075-2590704') {
+          console.log(
+            JSON.stringify({
+              stage: 'getNewOrders',
+              ceId: order.Id,
+              channelOrderNumber: order.ChannelOrderNo,
+              merchantOrderNo: order.MerchantOrderNo,
+              cePage: page,
+            })
+          );
+        }
+      }
+
       const fetchedCount = page * pageSize;
       hasMore = fetchedCount < data.TotalCount;
 
@@ -1023,6 +1170,14 @@ export async function getNewOrders() {
     }
 
     console.log(`${profilePrefix} CE orders fetched: ${allOrders.length}, pages fetched: ${pagesFetched}`);
+
+    // TEMP DEBUG: summary count for traced channelOrderNumber
+    const traceChannelOrderMatches = allOrders.filter((o) => o?.ChannelOrderNo === '406-8364075-2590704');
+    if (traceChannelOrderMatches.length) {
+      console.log(
+        `[bulkWrite-debug] getNewOrders summary: channelOrderNumber 406-8364075-2590704 appeared ${traceChannelOrderMatches.length} time(s), ceIds=${traceChannelOrderMatches.map((o) => o.Id).join(',')}`
+      );
+    }
 
     return {
       success: true,
@@ -1140,10 +1295,12 @@ const acknowledgeOrder = async (orderId, merchantOrderNo) => {
       throw new Error(`Failed to acknowledge order: ${errorData.Message || response.status}`);
     }
   } catch (error) {
-    throw new Error(`Failed to acknowledge order ${orderId}`, error);
+    throw new Error(`Failed to acknowledge order ${orderId}: ${error.message}`, { cause: error });
   }
 };
-const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
+const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge, parentTag) => {
+  const tag = parentTag ? `${parentTag} STEP 5/6` : '[order-sync][acknowledge]';
+  console.log(`${tag} acknowledging ${newOrdersToAcknowledge.length} orders with ChannelEngine...`);
   const ackPromises = newOrdersToAcknowledge.map((order) => {
     if (order.ChannelOrderNo && order.Id) {
       const merchantOrderNo = `${order?.ChannelOrderNo}-${order?.Id}`;
@@ -1164,11 +1321,20 @@ const backgroundAcknowledgementOrders = async (newOrdersToAcknowledge) => {
         MerchantOrderNo: `${originalOrder.ChannelOrderNo}-${originalOrder.Id}`,
         Status: 'IN_PROGRESS',
       });
+    } else {
+      console.error(
+        `${tag} FAILED to acknowledge order Id=${originalOrder?.Id}:`,
+        result.reason?.message || result.reason
+      );
     }
   });
 
+  console.log(
+    `${tag} DONE acknowledged=${successfulOrdersToSave.length}/${newOrdersToAcknowledge.length}, failed=${newOrdersToAcknowledge.length - successfulOrdersToSave.length}`
+  );
+
   if (successfulOrdersToSave.length > 0) {
-    await processOrders(successfulOrdersToSave);
+    await processOrders(successfulOrdersToSave, undefined, tag);
   }
 };
 
