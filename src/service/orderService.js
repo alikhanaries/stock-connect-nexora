@@ -848,11 +848,17 @@ export const processOrders = async (orders, sellerId, parentTag) => {
 
     const orderLogs = [];
 
+    const latestOrdersList =
+      upsertedOrderIds.length > 0
+        ? await Order.find({ _id: { $in: upsertedOrderIds } }, { _id: 1, orderId: 1, sellerIds: 1 }).lean()
+        : [];
+    const latestOrderMap = new Map(latestOrdersList.map((o) => [String(o._id), o]));
+
     for (let i = 0; i < upsertedIndexes.length; i++) {
       const index = upsertedIndexes[i];
       const order = orders[index];
       const orderId = upsertedOrderIds[i];
-      const latestOrderData = await Order.findOne({ _id: orderId }, { _id: 1, orderId: 1, sellerIds: 1 }).lean();
+      const latestOrderData = latestOrderMap.get(String(orderId));
       const logDetails = [
         {
           status: 'CREATED',
@@ -982,38 +988,55 @@ export const processOrders = async (orders, sellerId, parentTag) => {
 export async function getNewOrders(parentTag) {
   const tag = parentTag ? `${parentTag} STEP 2/6` : '[order-sync][getNewOrders]';
   try {
-    let page = 1;
     const pageSize = 100;
     let allOrders = [];
-    let hasMore = true;
 
-    while (hasMore) {
-      let data;
-      try {
-        const response = await fetchWithRetry(
-          `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${page}&pageSize=${pageSize}`
+    // 1. Fetch Page 1 to get TotalCount and initial items
+    let firstData;
+    try {
+      const response = await fetchWithRetry(
+        `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=1&pageSize=${pageSize}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      firstData = await response.json();
+    } catch (err) {
+      console.error(`${tag} FAILED fetching page=1:`, err);
+      throw err;
+    }
+
+    if (!firstData?.Content?.length) {
+      return { success: true, data: [] };
+    }
+
+    allOrders.push(...firstData.Content);
+
+    const totalCount = firstData.TotalCount || 0;
+    const totalPages = Math.ceil(totalCount / pageSize);
+
+    // 2. Fetch remaining pages concurrently in batches of 5
+    if (totalPages > 1) {
+      const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+      const BATCH_SIZE = 5;
+
+      for (let i = 0; i < remainingPages.length; i += BATCH_SIZE) {
+        const batch = remainingPages.slice(i, i + BATCH_SIZE);
+        const pageResults = await Promise.all(
+          batch.map(async (p) => {
+            const response = await fetchWithRetry(
+              `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${p}&pageSize=${pageSize}`
+            );
+            if (!response.ok) {
+              throw new Error(`HTTP error! Status: ${response.status} on page ${p}`);
+            }
+            const json = await response.json();
+            return json?.Content || [];
+          })
         );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-        data = await response.json();
-      } catch (err) {
-        console.error(`${tag} FAILED fetching page=${page}:`, err);
-        throw err;
+        pageResults.forEach((items) => allOrders.push(...items));
       }
-
-      if (!data?.Content?.length) {
-        hasMore = false;
-        break;
-      }
-
-      allOrders.push(...data.Content);
-
-      const fetchedCount = page * pageSize;
-      hasMore = fetchedCount < data.TotalCount;
-
-      page++;
     }
 
     return {
