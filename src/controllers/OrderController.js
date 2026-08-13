@@ -118,18 +118,13 @@ export const getOrderStats = async (req, res) => {
 };
 
 export const getSyncedOrders = async (req, res) => {
-  const profilePrefix = '[sync-orders-profile]';
   const runId = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
   const tag = `[order-sync][run=${runId}]`;
-  const requestStart = Date.now();
-  console.time(`${profilePrefix} getSyncedOrders total`);
   try {
     const sellerId = req.sellerId;
     const userId = req.user._id;
-    console.log(`${tag} STEP 1/6 START sellerId=${sellerId} userId=${userId}`);
 
     // TODO : Move this to service layer
-    console.log(`${tag} STEP 2/6 fetching orders from ChannelEngine...`);
     let success, data;
     try {
       ({ success, data } = await orderService.getNewOrders(tag));
@@ -141,29 +136,22 @@ export const getSyncedOrders = async (req, res) => {
       console.error(`${tag} STEP 2/6 FAILED getNewOrders returned success=false`);
       return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
     }
-    console.log(`${tag} STEP 2/6 DONE fetched=${data.length}`);
     if (data.length === 0) {
-      console.log(`${tag} STEP 2/6 no new orders — already up to date`);
       return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
     const runOcpSync = async () => {
       if (!config.IS_OCP_ORDER_SYNC_ENABLED) {
-        console.log(`${profilePrefix} OCP sync: skipped (disabled)`);
         return { success: true, message: 'OCP order sync is disabled' };
       }
-      console.time(`${profilePrefix} getSyncedOrdersOcp`);
       try {
         return await getSyncedOrdersOcp(sellerId);
       } catch (err) {
         console.error(`${tag} STEP 3/6 FAILED OCP sync:`, err);
         throw err;
-      } finally {
-        console.timeEnd(`${profilePrefix} getSyncedOrdersOcp`);
       }
     };
 
-    console.log(`${tag} STEP 3/6 processing orders (ChannelEngine + OCP in parallel)...`);
     const [dataSavedInDb, response] = await Promise.allSettled([
       orderService.processOrders(data, sellerId, tag),
       runOcpSync(),
@@ -179,7 +167,6 @@ export const getSyncedOrders = async (req, res) => {
     // Check for rejected promises or failed results
     const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
     const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
-    console.log(`${tag} STEP 3/6 DONE ceSuccess=${isChannelEngineSuccess} ocpSuccess=${isOcpSuccess}`);
 
     if (!isChannelEngineSuccess && !isOcpSuccess) {
       const errorMessages = [
@@ -200,13 +187,7 @@ export const getSyncedOrders = async (req, res) => {
       (ceData?.upsertedCount || 0) + (ceData?.modifiedCount || 0) + (ceData?.sellerOrdersBackfilled || 0);
     const newUpdateCount = (sellerSyncCount > 0 ? sellerSyncCount : globalSyncCount) + ocpUpserted;
 
-    console.log(
-      `${profilePrefix} sync counts: seller=${sellerSyncCount}, global=${globalSyncCount}, upserted=${ceData?.upsertedCount || 0}, modified=${ceData?.modifiedCount || 0}, backfilled=${ceData?.sellerOrdersBackfilled || 0}`
-    );
-
-    console.log(`${tag} STEP 4/6 updating sync date... newUpdateCount=${newUpdateCount}`);
     await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
-    console.log(`${tag} STEP 4/6 DONE`);
 
     const message =
       newUpdateCount > 0
@@ -217,30 +198,17 @@ export const getSyncedOrders = async (req, res) => {
     const newOrdersToAcknowledge = data.filter(
       (order) => (order.Status === 'NEW' || !order.MerchantOrderNo) && processedOrderIds.has(String(order.Id))
     );
-    console.log(
-      `${tag} STEP 5/6 orders eligible for CE acknowledge: ${newOrdersToAcknowledge.length} (processed=${processedOrderIds.size}, fetched=${data.length})`
-    );
     if (newOrdersToAcknowledge.length > 0) {
       orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge, tag);
     }
-    console.log(`${tag} STEP 6/6 kicking off shipment sync (background)...`);
-    shipmentService
-      ?.getChannelEngineShipmentDetailsService(userId)
-      .then(() => {
-        console.log(`${tag} STEP 6/6 ChannelEngine shipment sync completed successfully`);
-      })
-      .catch((error) => {
-        console.error(`${tag} STEP 6/6 ChannelEngine shipment sync failed:`, error);
-      });
-    console.log(`${tag} DONE — responding to client`);
+    shipmentService?.getChannelEngineShipmentDetailsService(userId).catch((error) => {
+      console.error(`${tag} STEP 6/6 ChannelEngine shipment sync failed:`, error);
+    });
     return Responses.successResponse(res, message, 200);
   } catch (error) {
     console.error(`${tag} FAILED:`, error);
     errorLog(error);
     return Responses.errorResponse(res, error, 500);
-  } finally {
-    console.timeEnd(`${profilePrefix} getSyncedOrders total`);
-    console.log(`${profilePrefix} total HTTP request duration ms: ${Date.now() - requestStart}`);
   }
 };
 

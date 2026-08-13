@@ -390,10 +390,7 @@ export const buildStatuses = ({ line, existingSku }) => {
 };
 
 export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
-  const profilePrefix = '[sync-orders-profile]';
   const tag = parentTag ? `${parentTag} STEP 3.1` : '[order-sync][sanitizeOrdersData]';
-  console.time(`${profilePrefix} sanitizeOrdersData`);
-  console.log(`${profilePrefix} sanitizeOrdersData input orders: ${orders?.length || 0}`);
   try {
     const orderIds = [];
     const skuSet = new Set();
@@ -409,10 +406,8 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
         });
       }
     });
-    console.log(`${tag}.a collected orderIds=${orderIds.length} distinctSkus=${skuSet.size}`);
 
     // Step 2: fetch existing data
-    console.log(`${tag}.b fetching existing orders + products from DB...`);
     let existingOrdersDb, productsDb;
     try {
       [existingOrdersDb, productsDb] = await Promise.all([
@@ -426,15 +421,11 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
       console.error(`${tag}.b FAILED fetching existing orders/products:`, err);
       throw err;
     }
-    console.log(`${tag}.b DONE existingOrders=${existingOrdersDb.length} products=${productsDb.length}`);
 
     const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
     const productSellerMap = new Map(productsDb.map((p) => [normalizeOrderSku(p.productSkuCode), p.sellerId]));
 
     const unresolvedSkus = [...skuSet].filter((sku) => !productSellerMap.has(sku));
-    console.log(
-      `${tag}.c ${unresolvedSkus.length}/${skuSet.size} SKUs not found in Product collection — checking CE product catalog...`
-    );
     let ceProductSellerMap;
     try {
       ceProductSellerMap = await fetchCeProductSellerMapForSkus(unresolvedSkus);
@@ -442,7 +433,6 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
       console.error(`${tag}.c FAILED fetchCeProductSellerMapForSkus:`, err);
       throw err;
     }
-    console.log(`${tag}.c DONE ceProductSellerMap resolved ${ceProductSellerMap.size}/${unresolvedSkus.length}`);
 
     const extraSellerIds = [];
     for (const order of orders) {
@@ -452,14 +442,12 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
       }
     }
 
-    console.log(`${tag}.d building seller existence cache...`);
     const sellerExistsCache = await buildSellerExistenceCache({
       productSellerMap,
       ceProductSellerMap,
       existingOrders: existingOrdersDb,
       extraSellerIds,
     });
-    console.log(`${tag}.d DONE sellerExistsCache size=${sellerExistsCache.size}`);
 
     const entegraBrands = ENTEGRA_BRAND_MAP.map((b) => b.erpBrand.toLowerCase());
 
@@ -482,18 +470,6 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
 
     //  LOOP (NO async map)
     for (const data of orders) {
-      // TEMP DEBUG: trace E11000 channelOrderNumber_1 — remove after investigation
-      if (data?.ChannelOrderNo === '406-8364075-2590704') {
-        console.log(
-          JSON.stringify({
-            stage: 'sanitize-start',
-            ceId: data.Id,
-            channelOrderNumber: data.ChannelOrderNo,
-            merchantOrderNo: data.MerchantOrderNo,
-          })
-        );
-      }
-
       const existingOrder = existingOrdersMap.get(String(data.Id));
 
       // sellerId from first SKU (Product map), then order line ExtraData only (CE catalog resolved per line)
@@ -526,7 +502,7 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
               sellerExistsCache,
             });
 
-            const { sellerId, source } = resolution;
+            const { sellerId } = resolution;
             const validation = validateResolvedSellerId(sellerId, sellerExistsCache);
 
             if (!validation.valid) {
@@ -539,10 +515,6 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
               });
               return null;
             }
-
-            console.info(
-              `${tag}.e RESOLVED orderId=${data.Id} SKU=${line.MerchantProductNo} sellerId=${sellerId} source=${source}`
-            );
 
             sellerIdSet.add(String(sellerId));
 
@@ -802,38 +774,16 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
         },
       };
 
-      // TEMP DEBUG: trace E11000 channelOrderNumber_1 — remove after investigation
-      if (data?.ChannelOrderNo === '406-8364075-2590704') {
-        console.dir(
-          {
-            stage: 'bulkOp-created',
-            ceId: data.Id,
-            existingOrderInDb: existingOrder
-              ? {
-                  orderId: existingOrder.orderId,
-                  channelOrderNumber: existingOrder.channelOrderNumber,
-                  _id: existingOrder._id,
-                }
-              : null,
-            bulkOp,
-          },
-          { depth: null }
-        );
-      }
-
       bulkOps.push(bulkOp);
     }
     pushEntegraOrders(entegraOrders);
-    console.log(
-      `${tag}.g DONE processed=${orders.length} kept=${bulkOps.length} skipped=${orders.length - bulkOps.length}`
-    );
     return {
       bulkOps,
       sellerOrderPayloads,
       pendingLogs,
     };
   } finally {
-    console.timeEnd(`${profilePrefix} sanitizeOrdersData`);
+    // profiling timer removed
   }
 };
 export const deriveOrderStatusFromSkus = (skuList = []) => {
