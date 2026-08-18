@@ -10,13 +10,8 @@ export const fetchProductCount = async (req, res) => {
     const sellerId = req.sellerId;
     const { publishedStatus } = req.query;
     const result = await productService.fetchProductsCount(sellerId, publishedStatus);
-    if (!result.count) {
-      return successResponse(res, 200, {
-        message: 'No products found',
-      });
-    }
     return successResponse(res, 200, {
-      count: result.count,
+      count: result.count ?? 0,
     });
   } catch (error) {
     console.error('unicommerce fetchProductCount error:', error.message, error.stack);

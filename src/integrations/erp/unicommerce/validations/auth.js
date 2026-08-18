@@ -70,6 +70,13 @@ export const headerSchema = z
     path: ['apikey'],
   });
 
+export const loginQueryValidator = validate(async (req) => {
+  z.object({
+    username: userNameSchema,
+    password: passwordSchema,
+  }).parse(req.query);
+});
+
 export const loginValidator = validate(async (req) => {
   const bodySchema = z
     .object({

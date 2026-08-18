@@ -10,44 +10,44 @@ import {
 
 export const login = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const username = req.body?.username ?? req.query?.username;
+    const password = req.body?.password ?? req.query?.password;
 
     if (!username || !password) {
-      failResponse(res, 400, { message: req.locale.MISSING_CREDENTIALS });
+      return failResponse(res, 400, { message: req.locale.MISSING_CREDENTIALS });
     }
 
     const user = await User.findOne({ email: username, isDeleted: false, active: true }).select('+password');
 
     if (!user) {
-      failResponse(res, 404, { message: req.locale.NO_ACCOUNT });
+      return failResponse(res, 404, { message: req.locale.NO_ACCOUNT });
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      failResponse(res, 401, { message: req.locale.INVALID_CREDENTIALS });
+      return failResponse(res, 401, { message: req.locale.INVALID_CREDENTIALS });
     }
 
     const sellerIds = (await userHelper.getSellerIds(user._id.toString())) || [];
     if (sellerIds.length === 0) {
-      failResponse(res, 400, { message: req.locale.NO_SELLER_CONNECTED });
+      return failResponse(res, 400, { message: req.locale.NO_SELLER_CONNECTED });
     }
-    // Create JWT payload
+
     const tokenResponse = generateTokenResponse(user, user.role, sellerIds);
 
     if (!tokenResponse) {
-      errorResponse(res, 500, { message: req.locale.TOKEN_ERROR });
+      return errorResponse(res, 500, { message: req.locale.TOKEN_ERROR });
     }
-    // Update last login time
+
     await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
 
-    successResponse(res, 200, {
+    return successResponse(res, 200, {
       status: 'SUCCESS',
       accessToken: tokenResponse.token,
-      sellerId: tokenResponse.sellerIds?.[0],
     });
   } catch (error) {
     console.error('user login Error:', error);
     errorLog(error);
-    errorResponse(res, error.statusCode || 500, { message: error.message });
+    return errorResponse(res, error.statusCode || 500, { message: error.message });
   }
 };

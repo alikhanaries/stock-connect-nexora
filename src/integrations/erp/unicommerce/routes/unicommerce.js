@@ -6,7 +6,7 @@ import {
   fetchProducts,
 } from '#root/src/integrations/erp/unicommerce/controllers/productController.js';
 import { login } from '#root/src/integrations/erp/unicommerce/controllers/authController.js';
-import { loginValidator } from '#root/src/integrations/erp/unicommerce/validations/auth.js';
+import { loginValidator, loginQueryValidator } from '#root/src/integrations/erp/unicommerce/validations/auth.js';
 import { checkLanguage } from '#middleware/index.js';
 import { getProductCountValidator, getProductsValidator } from '../validations/products.js';
 import { ordersController, orderDispatch, cancelOrder } from '../controllers/orderController.js';
@@ -23,11 +23,53 @@ const UniCommerceRouter = express.Router();
 /**
  * @openapi
  * /erp/unicommerce/authToken:
+ *   get:
+ *     tags: [UniCommerce]
+ *     summary: Get Authentication
+ *     description: |
+ *       Official Uniware contract. Validates seller credentials and returns an access token
+ *       for use in the apiKey header on subsequent API requests.
+ *     parameters:
+ *       - in: query
+ *         name: username
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Seller username
+ *       - in: query
+ *         name: password
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Seller password
+ *     responses:
+ *       200:
+ *         description: Authentication successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               required: [status, accessToken]
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [SUCCESS, FAILED]
+ *                   example: SUCCESS
+ *                 accessToken:
+ *                   type: string
+ *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *       400:
+ *         description: Validation error or missing credentials
+ *       401:
+ *         description: Invalid credentials
+ *       404:
+ *         description: Account not found
+ *       500:
+ *         description: Internal server error
  *   post:
  *     tags: [UniCommerce]
- *     summary: Generate UniCommerce access token
- *     description: Authenticates user and returns JWT access token with sellerId.
- *
+ *     summary: Post Authentication
+ *     description: Alternate POST variant with credentials in the JSON request body.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -36,7 +78,6 @@ const UniCommerceRouter = express.Router();
  *           type: string
  *           enum: [en, ar, zh-CN, tr]
  *         description: Preferred response language
- *
  *     requestBody:
  *       required: true
  *       content:
@@ -58,7 +99,6 @@ const UniCommerceRouter = express.Router();
  *                 maxLength: 128
  *                 example: Test@123
  *                 description: User password
- *
  *     responses:
  *       200:
  *         description: Login successful
@@ -66,6 +106,7 @@ const UniCommerceRouter = express.Router();
  *           application/json:
  *             schema:
  *               type: object
+ *               required: [status, accessToken]
  *               properties:
  *                 status:
  *                   type: string
@@ -73,32 +114,18 @@ const UniCommerceRouter = express.Router();
  *                 accessToken:
  *                   type: string
  *                   example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
- *                 sellerId:
- *                   type: string
- *                   example: 65f2c9a1b12c3d0012ab45cd
- *
  *       400:
  *         description: Validation error or missing credentials
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: MISSING_CREDENTIALS
- *
  *       401:
  *         description: Invalid credentials
- *
  *       404:
  *         description: Account not found
- *
  *       500:
  *         description: Internal server error
  */
 
 const parseJsonAnyContentType = express.json({ type: () => true });
+UniCommerceRouter.get('/authToken', loginQueryValidator, checkLanguage, login);
 UniCommerceRouter.post('/authToken', parseJsonAnyContentType, loginValidator, checkLanguage, login);
 
 /**
@@ -742,8 +769,9 @@ UniCommerceRouter.post(
  *     tags: [UniCommerce]
  *     summary: Get Labels
  *     description: |
- *       Fetches the shipping label (and optionally invoice/pack-slip) as a base64 encoded string
- *       for marketplace-allocated logistics. Used by Uniware to print labels.
+ *       Fetches label or label with channel-invoice/pack-slip as a base64 encoded string.
+ *       Required only when orders are shipped by marketplace-allocated logistics.
+ *       See https://documentation.unicommerce.com/docs/getlabels.html
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -763,10 +791,10 @@ UniCommerceRouter.post(
  *         schema:
  *           type: string
  *         example: abc123,abc456
- *         description: Comma-separated list of order item IDs
+ *         description: Item ID or Item IDs (comma separated). For multiple order items send all IDs separated by comma.
  *     responses:
  *       200:
- *         description: Label fetched successfully as base64 encoded string
+ *         description: Base64 encoded label string (convert to PDF for printing)
  *         content:
  *           application/json:
  *             schema:
@@ -774,6 +802,8 @@ UniCommerceRouter.post(
  *               example: JVBERi0xLjMKM........
  *       400:
  *         description: Validation error
+ *       404:
+ *         description: Label not found
  *       500:
  *         description: Internal server error
  */

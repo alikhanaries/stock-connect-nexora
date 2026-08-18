@@ -19,16 +19,19 @@ const mapOrderLevelStatus = (order) => {
   }
 };
 const mapItemStatus = (item) => {
-  switch (item.status) {
+  switch ((item.status || '').toUpperCase()) {
     case 'CANCELLED':
+    case 'CANCELED':
       return 'CANCELLED';
     case 'DISPATCHED':
+    case 'SHIPPED':
       return 'DISPATCHED';
     case 'DELIVERED':
       return 'DELIVERED';
     case 'RETURN_REQUESTED':
       return 'RETURN_REQUESTED'; // CIR
     case 'COURIER_RETURN':
+    case 'RETURNED':
       return 'COURIER_RETURN'; // RTO
     default:
       return 'CREATED';
@@ -51,7 +54,8 @@ export const mapOrderStatus = (order) => {
   const items = order.orderSkuList?.skuList || [];
 
   return {
-    id: order.orderId,
+    id: String(order._id),
+    code: order.channelOrderNumber || String(order.orderId),
     orderDate: order.orderDate,
     orderStatus: mapOrderLevelStatus(order),
     sla: order.slaDate,
@@ -68,7 +72,7 @@ export const mapOrderStatus = (order) => {
     },
 
     orderItems: items.map((item) => ({
-      orderItemId: item.id,
+      orderItemId: String(item.id),
       status: mapItemStatus(item),
       productId: item.merchantProductNo,
       variantId: item.channelProductNo,
