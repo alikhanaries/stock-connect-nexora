@@ -13,8 +13,8 @@ import { ordersController, orderDispatch, cancelOrder } from '../controllers/ord
 import { orderCancelValidator, orderDispatchValidator, ordersValidator } from '../validations/orders.js';
 import { updateInventoryValidator } from '../validations/inventory.js';
 import { updateInventory } from '../controllers/inventoryController.js';
-import { getCourierDetailsValidator, getLabelsValidator } from '../validations/shipment.js';
-import { getCourierDetails, getLabels } from '../controllers/shipmentController.js';
+import { getCourierDetailsValidator, getLabelsQueryValidator, postLabelsValidator } from '../validations/shipment.js';
+import { getCourierDetails, getLabels, postShipmentDetails } from '../controllers/shipmentController.js';
 import { createShipment } from '#root/src/controllers/ShipmentController.js';
 import { createShipmentValidator } from '#validations/shipment.js';
 
@@ -806,13 +806,122 @@ UniCommerceRouter.post(
  *         description: Label not found
  *       500:
  *         description: Internal server error
+ *   post:
+ *     tags: [UniCommerce]
+ *     summary: Post Shipment Details
+ *     description: |
+ *       Uniware posts shipment data (box dimensions, invoice/tax per item) before label generation.
+ *       Returns acknowledgement per order item. See https://documentation.unicommerce.com/docs/postlabels.html
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [en, ar, zh-CN, tr]
+ *       - in: header
+ *         name: apiKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Raw access token obtained from Get Authentication API (sent as-is, no "Bearer" prefix)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orderItems
+ *             properties:
+ *               boxHeight:
+ *                 type: number
+ *                 example: 0
+ *               boxLength:
+ *                 type: number
+ *                 example: 0
+ *               boxWidth:
+ *                 type: number
+ *                 example: 0
+ *               weight:
+ *                 type: number
+ *                 example: 0
+ *               orderItems:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - orderItemId
+ *                   properties:
+ *                     orderItemId:
+ *                       type: string
+ *                       example: "47123"
+ *                     invoiceNumber:
+ *                       type: string
+ *                       example: INV-1001
+ *                     invoiceDate:
+ *                       type: string
+ *                       format: date
+ *                       example: 2017-01-02
+ *                     taxRate:
+ *                       type: number
+ *                       example: 0
+ *                     centralGstPercentage:
+ *                       type: number
+ *                       example: 6
+ *                     compensationCessPercentage:
+ *                       type: number
+ *                       example: 0
+ *                     integratedGstPercentage:
+ *                       type: number
+ *                       example: 12
+ *                     stateGstPercentage:
+ *                       type: number
+ *                       example: 6
+ *                     unionTerritoryGstPercentage:
+ *                       type: number
+ *                       example: 0
+ *     responses:
+ *       200:
+ *         description: Shipment details acknowledgement
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [SUCCESS, FAILED, PARTIAL_SUCCESS]
+ *                 orderItems:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       orderItemId:
+ *                         type: string
+ *                       errorMessage:
+ *                         type: string
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Internal server error
  */
 UniCommerceRouter.get(
   '/orders/labels',
-  getLabelsValidator,
+  getLabelsQueryValidator,
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
   getLabels
+);
+
+UniCommerceRouter.post(
+  '/orders/labels',
+  parseJsonAnyContentType,
+  postLabelsValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  postShipmentDetails
 );
 
 /**

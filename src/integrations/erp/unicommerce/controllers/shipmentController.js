@@ -4,7 +4,7 @@ import {
   successResponse,
 } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
 
-import { getCourierDetailsService, getLabelsService } from '../services/shipmentService.js';
+import { getCourierDetailsService, getLabelsService, postShipmentDetailsService } from '../services/shipmentService.js';
 
 export const getCourierDetails = async (req, res) => {
   try {
@@ -35,7 +35,6 @@ export const getLabels = async (req, res) => {
     }
 
     const { orderItemIds } = req.query;
-
     const base64Label = await getLabelsService(sellerId, orderItemIds);
 
     if (!base64Label) {
@@ -45,6 +44,24 @@ export const getLabels = async (req, res) => {
     return successResponse(res, 200, base64Label);
   } catch (error) {
     console.error('getLabels error:', error.message, error.stack);
+
+    return errorResponse(res, 500, error.message);
+  }
+};
+
+export const postShipmentDetails = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+
+    if (!sellerId) {
+      return failResponse(res, 400, { message: 'sellerId is missing' });
+    }
+
+    const result = await postShipmentDetailsService(sellerId, req.body);
+
+    return successResponse(res, 200, result);
+  } catch (error) {
+    console.error('postShipmentDetails error:', error.message, error.stack);
 
     return errorResponse(res, 500, error.message);
   }

@@ -1,4 +1,5 @@
 import Shipment from '#root/src/models/Shipment/Shipment.js';
+import Order from '#root/src/models/Orders.js';
 import { Buffer } from 'buffer';
 
 const SHIPMENT_LOOKUP_METHODS = ['AYMAKAN', 'UNICOMMERCE', 'CHANNEL_ENGINE', 'MANUAL'];
@@ -127,4 +128,76 @@ export const getLabelsService = async (sellerId, orderItemIds) => {
   }
 
   return base64Label;
+};
+
+export const postShipmentDetailsService = async (sellerId, payload) => {
+  const { boxHeight, boxLength, boxWidth, weight, orderItems = [] } = payload;
+  const responseItems = [];
+
+  if (!orderItems.length) {
+    return { status: 'FAILED', orderItems: [] };
+  }
+
+  for (const item of orderItems) {
+    const lineId = Number(item.orderItemId);
+
+    if (Number.isNaN(lineId)) {
+      responseItems.push({
+        orderItemId: String(item.orderItemId),
+        errorMessage: 'Invalid orderItemId',
+      });
+      continue;
+    }
+
+    const order = await Order.findOne({
+      $or: [{ sellerId }, { sellerIds: sellerId }],
+      'orderSkuList.skuList.id': lineId,
+    }).lean();
+
+    if (!order) {
+      responseItems.push({
+        orderItemId: String(item.orderItemId),
+        errorMessage: 'Order item not found',
+      });
+      continue;
+    }
+
+    const shipment = await Shipment.findOne({
+      sellerId,
+      'products.orderLineId': lineId,
+      status: { $nin: ['CANCELED'] },
+    }).sort({ createdAt: -1 });
+
+    if (shipment) {
+      await Shipment.updateOne(
+        { _id: shipment._id },
+        {
+          $set: {
+            'extraData.shipmentDetails.height': boxHeight ?? null,
+            'extraData.shipmentDetails.length': boxLength ?? null,
+            'extraData.shipmentDetails.width': boxWidth ?? null,
+            'extraData.shipmentDetails.weight': weight ?? null,
+            'extraData.shipmentDetails.invoice_number': item.invoiceNumber ?? null,
+            'extraData.shipmentDetails.invoice_date': item.invoiceDate ?? null,
+          },
+        }
+      );
+    }
+
+    responseItems.push({
+      orderItemId: String(item.orderItemId),
+      errorMessage: '',
+    });
+  }
+
+  const successCount = responseItems.filter((i) => i.errorMessage === '').length;
+  let status = 'FAILED';
+
+  if (successCount === orderItems.length) {
+    status = 'SUCCESS';
+  } else if (successCount > 0) {
+    status = 'PARTIAL_SUCCESS';
+  }
+
+  return { status, orderItems: responseItems };
 };
