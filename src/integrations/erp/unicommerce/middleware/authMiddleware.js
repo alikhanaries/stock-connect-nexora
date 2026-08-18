@@ -11,24 +11,24 @@ export const unicommerceAuthMiddleware = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
     }
     if (!token) {
-      failResponse(res, 401, { message: 'Authentication token is required' });
+      return failResponse(res, 401, { message: 'Authentication token is required' });
     }
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
 
       const user = await User.findById(decoded.id).lean();
       if (!user || user.isDeleted) {
-        failResponse(res, 403, { message: 'User unauthorized' });
+        return failResponse(res, 403, { message: 'User unauthorized' });
       }
       req.user = user;
       req.sellerIds = decoded.sellerIds;
-      next();
+      return next();
     } catch (error) {
       console.log('JWT verification error:', error.message);
-      failResponse(res, 401, { message: 'User unauthorized' });
+      return failResponse(res, 401, { message: 'User unauthorized' });
     }
   } catch (error) {
     console.log('authMiddleware error:', error.message);
-    errorResponse(res, 500, { message: 'Server error' });
+    return errorResponse(res, 500, { message: 'Server error' });
   }
 };

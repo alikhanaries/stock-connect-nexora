@@ -1,6 +1,8 @@
 import Product from '#models/Product.js';
 import Inventory from '#models/Inventory.js';
 import { getProductStatus, getSellerNameById } from '#root/src/util/mapRowToInventory.js';
+import { sendStockBatch } from '#service/InventoryService.js';
+
 const CHUNK_SIZE = 500;
 const CONCURRENCY_LIMIT = 10;
 
@@ -11,6 +13,7 @@ export const updateInventory = async (sellerId, inventoryList = [], locale) => {
     }
 
     const failedProductList = [];
+    const stockPayloadsBySku = new Map();
     const now = new Date();
     const sellerName = await getSellerNameById(sellerId);
 
@@ -79,6 +82,11 @@ export const updateInventory = async (sellerId, inventoryList = [], locale) => {
                   },
                 }
               );
+
+              stockPayloadsBySku.set(product.productSkuCode, {
+                MerchantProductNo: product.productSkuCode,
+                StockLocations: [{ Stock: stock }],
+              });
             } catch (err) {
               failedProductList.push({
                 productId,
@@ -93,6 +101,13 @@ export const updateInventory = async (sellerId, inventoryList = [], locale) => {
       }
 
       index += CHUNK_SIZE;
+    }
+
+    const stockPayloads = [...stockPayloadsBySku.values()];
+    if (stockPayloads.length > 0) {
+      sendStockBatch(stockPayloads, undefined, sellerId).catch((err) =>
+        console.error('Unicommerce CE stock sync failed:', err.message)
+      );
     }
 
     // Uniware status calculation
