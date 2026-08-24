@@ -11,7 +11,8 @@ import {
 import { channelEnginePush } from '#service/channelEngineClient.js';
 import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 
-const { OMNIFUL_API_URL, OMNIFUL_HUB_CODE, CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+const { OMNIFUL_API_URL, OMNIFUL_HUB_CODE, OMNIFUL_SUPPLIER_CODE, CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } =
+  config;
 
 export { getReportToken, upsertToken, getToken };
 
@@ -74,85 +75,57 @@ export const forwardAymakanShipment = async (shipmentData) => {
     const createSkuData = await createSkuResponse.json();
 
     if (createSkuData.is_success) {
+      if (!OMNIFUL_HUB_CODE) {
+        throw new Error('OMNIFUL_HUB_CODE is not configured');
+      }
+
+      if (!OMNIFUL_SUPPLIER_CODE) {
+        throw new Error('OMNIFUL_SUPPLIER_CODE is not configured');
+      }
+
       const orderFromMerchantNo = await Order.findOne({
         merchantOrderNo: shipmentData.merchantOrderNo,
       }).lean();
 
-      const orderSkuList = orderFromMerchantNo.orderSkuList?.skuList || [];
+      const orderSkuList = orderFromMerchantNo?.orderSkuList?.skuList || [];
 
-      let itemsSubtotal = 0;
-      let itemsTax = 0;
-
-      const order_items = (shipmentData.products || []).map((item) => {
+      const purchase_order_items = (shipmentData.products || []).map((item) => {
         const orderSku =
           orderSkuList.find((s) => String(s.id) === String(item.orderLineId)) ||
           orderSkuList.find((s) => s.merchantProductNo === item.merchantProductNo);
         const quantity = item.quantity || item.Quantity || 0;
-        const selling_price =
+        const unit_price =
           orderSku?.unitPriceInclVat || orderSku?.originalUnitPriceInclVat || item.originalLineTotalInclVat || 0;
-
-        itemsSubtotal += selling_price * quantity;
-        if (orderSku?.lineVat != null && orderSku.quantity) {
-          itemsTax += orderSku.lineVat * (quantity / orderSku.quantity);
-        }
 
         return {
           sku_code: item.merchantProductNo,
-          name: orderSku?.description || 'Unknown Product',
-          selling_price,
           quantity,
+          unit_price,
         };
       });
 
-      const createOrderPayload = {
-        // External order reference sent to OmniFul — our MongoDB shipment _id
-        order_id: shipmentData._id.toString(),
-        hub_code: OMNIFUL_HUB_CODE,
+      const referencePurchaseOrderId = shipmentData._id.toString();
 
-        order_items,
-
-        billing_address: {
-          address1: orderFromMerchantNo.orderBillingAddress?.line1,
-          city: orderFromMerchantNo.orderBillingAddress?.city,
-          country: orderFromMerchantNo.orderBillingAddress?.countryIso,
-        },
-
-        shipping_address: {
-          address1: orderFromMerchantNo.orderShippingAddress?.line1,
-          city: orderFromMerchantNo.orderShippingAddress?.city,
-          country: orderFromMerchantNo.orderShippingAddress?.countryIso,
-        },
-
-        invoice: {
-          currency: orderFromMerchantNo.orderPaymentDetails?.currencyCode,
-          subtotal: itemsSubtotal,
-          tax: itemsTax,
-          discount: 0,
-          total: itemsSubtotal,
-          total_paid: itemsSubtotal,
-          total_due: 0,
-        },
-
-        customer: {
-          id: orderFromMerchantNo.orderCustomer?.orderId,
-          first_name: orderFromMerchantNo.orderCustomer?.firstName,
-        },
-
-        payment_method: 'prepaid',
-        is_cash_on_delivery: false,
-        type: 'b2b',
+      const createPurchaseOrderPayload = {
+        supplier_code: OMNIFUL_SUPPLIER_CODE,
+        purchase_order_items,
+        reference_purchase_order_id: referencePurchaseOrderId,
+        currency: 'SAR',
       };
 
-      const res = await fetch(`${OMNIFUL_API_URL}/sales-channel/public/v1/orders`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          Accept: 'application/json',
-          Connection: 'keep-alive',
-          Authorization: `Bearer ${omnifulAccessToken}`,
-        },
-        body: JSON.stringify(createOrderPayload),
-      });
+      const res = await fetch(
+        `${OMNIFUL_API_URL}/sales-channel/public/v1/purchase_orders/hubs/${encodeURIComponent(OMNIFUL_HUB_CODE)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            Accept: 'application/json',
+            Connection: 'keep-alive',
+            Authorization: `Bearer ${omnifulAccessToken}`,
+          },
+          body: JSON.stringify(createPurchaseOrderPayload),
+        }
+      );
 
       if (!res.ok) {
         throw new Error(`API failed with status ${res.status}`);
@@ -160,22 +133,20 @@ export const forwardAymakanShipment = async (shipmentData) => {
 
       const json = await res.json();
 
-      if (!json?.data) {
-        throw new Error('Invalid response structure');
+      if (!json?.data?.purchase_order_id) {
+        throw new Error('Invalid response structure: missing purchase_order_id');
       }
 
-      /**
-       * POST /orders response ID mapping (stored on shipment.omniful):
-       * - id          → shipment.omniful.omnifulId       — OmniFul internal ID (omniful_order_id); use for GET
-       * - order_id    → shipment.omniful.omnifulOrderId — external ID we sent (shipment MongoDB _id)
-       */
-      const result = {
-        id: json.data.id,
-        orderId: json.data.order_id,
-        createOrderPayload,
-        createOrderResponse: json,
+      console.log(
+        `OmniFul PO created: shipment_id=${referencePurchaseOrderId} purchase_order_id=${json.data.purchase_order_id}`
+      );
+
+      return {
+        purchaseOrderId: json.data.purchase_order_id,
+        referencePurchaseOrderId,
+        createPurchaseOrderPayload,
+        createPurchaseOrderResponse: json,
       };
-      return result;
     }
   }
 };

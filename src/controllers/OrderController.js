@@ -427,7 +427,20 @@ export const handleOmnifulOrderWebhook = async (req, res) => {
     if (!event_name || !data) {
       return Responses.failResponse(res, 'Invalid webhook structure', 400);
     }
-    const result = await omnifullService.handleOmnifulOrdersWebhook(req.body);
+
+    const result =
+      event_name === 'purchase_order.update.event'
+        ? await omnifullService.handleOmnifulPurchaseOrderReadyToShip(req.body)
+        : await omnifullService.handleOmnifulOrdersWebhook(req.body);
+
+    if (!result.success) {
+      return Responses.failResponse(
+        res,
+        result.message || 'Failed to process Omniful webhook',
+        result.statusCode || 400
+      );
+    }
+
     return Responses.successResponse(res, result.message || 'Order details updated successfully', 200, result.data);
   } catch (error) {
     console.error('Controller Error: handleOmnifulOrderWebhook:', error.message);

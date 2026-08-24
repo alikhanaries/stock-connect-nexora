@@ -873,6 +873,7 @@ export const ayMakanWebHookService = async (data) => {
         orderId: 1,
         submissionDate: 1,
         sellerId: 1,
+        extraData: 1,
       }
     ).lean();
 
@@ -899,27 +900,52 @@ export const ayMakanWebHookService = async (data) => {
     const orderForChannel = await Order.findById(shipmentData.orderId).select('channelName').lean();
     const isAmazonFulfillment = isAmazonChannelOrder(orderForChannel);
 
+    const existingPurchaseOrderId = shipmentData.extraData?.omniful?.purchase_order_id;
+    const isAlreadyOmnifulProcessed = (shipmentData.status || '').toUpperCase() === 'OMNIFUL_PROCESSED';
+
     if (shipmentStatus === 'HUB_RECIEVED' && !isAmazonFulfillment) {
-      omnifulResponse = await forwardShipmentService.forwardAymakanShipment(shipmentData);
+      if (existingPurchaseOrderId) {
+        console.log(
+          `Skipping OmniFul PO create for shipment ${shipmentData._id}: purchase_order_id ${existingPurchaseOrderId} already stored`
+        );
+        omnifulResponse = {
+          purchaseOrderId: existingPurchaseOrderId,
+          referencePurchaseOrderId: shipmentData.extraData?.omniful?.reference_purchase_order_id,
+          skipped: true,
+        };
+      } else if (isAlreadyOmnifulProcessed) {
+        console.log(`Skipping OmniFul PO create for shipment ${shipmentData._id}: status is already OMNIFUL_PROCESSED`);
+        omnifulResponse = { skipped: true, preserveOmnifulProcessed: true };
+      } else {
+        omnifulResponse = await forwardShipmentService.forwardAymakanShipment(shipmentData);
+      }
       await safeExecute(async () => {}, 'Updating delivery state in ChannelEngine');
     }
 
+    const poCreateSucceeded = Boolean(omnifulResponse?.purchaseOrderId);
+    const poCreateSkipped = Boolean(omnifulResponse?.skipped);
+
     // ---------------- UPDATE SHIPMENT ----------------
     const updateData = {
-      status: omnifulResponse?.id ? 'OMNIFUL_PROCESSED' : shipmentStatus,
+      status: poCreateSucceeded
+        ? 'OMNIFUL_PROCESSED'
+        : omnifulResponse?.preserveOmnifulProcessed
+          ? shipmentData.status
+          : shipmentStatus,
       trackingInfo: (data.tracking_info || []).map((i) => ({
         statusCode: i.status_code,
         description: i.description,
         createdAt: i.created_at,
       })),
-
-      omniful: {
-        // omnifulId: OmniFul internal ID (POST response data.id) — use for GET /seller/orders/{id}
-        omnifulId: omnifulResponse?.id,
-        // omnifulOrderId: external order_id we sent (shipment _id string) — matches GET response data.order_id
-        omnifulOrderId: omnifulResponse?.orderId,
-      },
     };
+
+    if (poCreateSucceeded && !poCreateSkipped) {
+      updateData['extraData.omniful'] = {
+        purchase_order_id: String(omnifulResponse.purchaseOrderId),
+        reference_purchase_order_id: omnifulResponse.referencePurchaseOrderId,
+        created_at: new Date(),
+      };
+    }
 
     // Add submissionDate only when status is SHIPPED and submissionDate is not already set
     if (shipmentStatus === 'SHIPMENT_PROCESSED' && !shipmentData.submissionDate) {
@@ -1070,14 +1096,14 @@ export const ayMakanWebHookService = async (data) => {
         createdAt: convetDateToUTC(new Date()),
       });
 
-      // Second log (only if omnifulResponse exists)
-      if (omnifulResponse) {
+      // Second log (only on a newly created PO, not idempotent skip)
+      if (omnifulResponse && !omnifulResponse.skipped) {
         logEntries.push({
           status: finalOrderStatus,
           shippedQty: shippedDelta || 0,
           deliveredQty: deliveredDelta || 0,
           canceledQty: canceledDelta || 0,
-          description: `Shipment Order with id ${omnifulResponse?.orderId} has been generated at Omniful`,
+          description: `Purchase Order with id ${omnifulResponse?.purchaseOrderId} has been generated at Omniful`,
           createdAt: convetDateToUTC(new Date()),
         });
       }

@@ -56,6 +56,7 @@ const shipmentSchema = new mongoose.Schema(
     extraData: {
       aymakan: { type: mongoose.Schema.Types.Mixed },
       channelEngine: { type: mongoose.Schema.Types.Mixed },
+      omniful: { type: mongoose.Schema.Types.Mixed },
       shipmentDetails: {
         length: { type: Number },
         width: { type: Number },
@@ -102,6 +103,7 @@ const shipmentSchema = new mongoose.Schema(
   }
 );
 shipmentSchema.index({ _id: 1, sellerId: 1 });
+shipmentSchema.index({ 'extraData.omniful.purchase_order_id': 1 });
 
 const Shipment = mongoose.model('Shipment', shipmentSchema);
 export default Shipment;
