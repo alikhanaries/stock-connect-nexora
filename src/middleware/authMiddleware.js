@@ -24,6 +24,12 @@ export const authMiddleware = async (req, res, next) => {
         return Responses.failResponse(res, 'User unauthorized', 403);
       }
 
+      const userTokenVersion = user.tokenVersion || 0;
+      const decodedTokenVersion = decoded.tokenVersion ?? 0;
+      if (userTokenVersion !== decodedTokenVersion) {
+        return Responses.failResponse(res, 'User unauthorized', 401);
+      }
+
       req.user = user;
       req.sellerIds = decoded.sellerIds;
       next();
