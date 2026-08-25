@@ -7,6 +7,5 @@ export const formatSellerResponse = (seller) => {
     ...rest,
     shopifyStoreUrl: shopifyConfig?.url,
     shopifyApiVersion: shopifyConfig?.apiVersion,
-    shopifyAccessToken: shopifyConfig?.accessToken,
   };
 };
