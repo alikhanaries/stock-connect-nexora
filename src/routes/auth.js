@@ -14,7 +14,7 @@ import {
   resetPasswordValidator,
   resetTokenValidator,
 } from '#validations/auth.js';
-import { authMiddleware, authorize, checkLanguage } from '#middleware/index.js';
+import { authMiddleware, authorize, checkLanguage, forgetPasswordRateLimiter } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 const allowedRoles = Object.values(USER_ROLES);
 
@@ -124,7 +124,10 @@ router.post('/refresh-token', checkLanguage, refreshToken);
  *     tags:
  *       - Auth
  *     summary: Forget Password
- *     description: Request a password reset link
+ *     description: |
+ *       Request a password reset link. If the email is registered, a reset link is sent.
+ *       The response is always the same whether or not the email exists (no enumeration).
+ *       The reset token is never returned in the response body.
  *     requestBody:
  *       required: true
  *       content:
@@ -135,14 +138,28 @@ router.post('/refresh-token', checkLanguage, refreshToken);
  *             properties:
  *               email:
  *                 type: string
+ *                 format: email
  *                 example: "test@example.com"
  *     responses:
  *       200:
- *         description: Reset link sent successfully
+ *         description: If the email is registered, a reset link has been dispatched
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Email verification successful"
  *       400:
- *         description: Email not found
+ *         description: Invalid email format
+ *       429:
+ *         description: Too many requests
  */
-router.post('/forget-password', forgetPasswordValidator, checkLanguage, forgotPassword);
+router.post('/forget-password', forgetPasswordRateLimiter, forgetPasswordValidator, checkLanguage, forgotPassword);
 
 /**
  * @openapi
@@ -151,7 +168,7 @@ router.post('/forget-password', forgetPasswordValidator, checkLanguage, forgotPa
  *     tags:
  *       - Auth
  *     summary: Validate Reset Token
- *     description: Check if password reset token is valid
+ *     description: Check whether a password reset token from the email link is still valid
  *     requestBody:
  *       required: true
  *       content:
@@ -162,12 +179,26 @@ router.post('/forget-password', forgetPasswordValidator, checkLanguage, forgotPa
  *             properties:
  *               resetToken:
  *                 type: string
- *                 example: "reset-token-123"
+ *                 example: "a1b2c3d4e5f6..."
  *     responses:
  *       200:
- *         description: Token is valid
+ *         description: Token validation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     valid:
+ *                       type: boolean
+ *                       example: true
  *       400:
- *         description: Invalid or expired token
+ *         description: Missing or invalid request body
  */
 router.post('/validate-reset-token', resetTokenValidator, checkLanguage, validateResetToken);
 
@@ -178,26 +209,29 @@ router.post('/validate-reset-token', resetTokenValidator, checkLanguage, validat
  *     tags:
  *       - Auth
  *     summary: Reset Password
- *     description: Reset the password using a valid token
+ *     description: |
+ *       Set a new password using the reset token from the email link.
+ *       All existing access and refresh tokens are invalidated after a successful reset.
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [token, password]
+ *             required: [resetToken, newPassword]
  *             properties:
- *               token:
+ *               resetToken:
  *                 type: string
- *                 example: "reset-token-123"
- *               password:
+ *                 example: "a1b2c3d4e5f6..."
+ *               newPassword:
  *                 type: string
+ *                 minLength: 6
  *                 example: "newpassword123"
  *     responses:
  *       200:
  *         description: Password reset successful
  *       400:
- *         description: Invalid token or password
+ *         description: Invalid or expired token, or invalid password
  */
 router.post('/reset-password', resetPasswordValidator, checkLanguage, resetPassword);
 
