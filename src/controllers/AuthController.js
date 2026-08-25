@@ -135,6 +135,12 @@ export const refreshToken = async (req, res) => {
       return Response.failResponse(res, req.locale.USER_NOT_FOUND_WITH_THE_DETAILS, 404);
     }
 
+    const userTokenVersion = user.tokenVersion || 0;
+    const decodedTokenVersion = decoded.tokenVersion ?? 0;
+    if (userTokenVersion !== decodedTokenVersion) {
+      return Response.failResponse(res, req.locale.INVALID_TOKEN, 401);
+    }
+
     const tokenResponse = generateTokenResponse(user, user.role);
     return Response.successResponse(res, req.locale.REFRESH_TOKEN, 200, tokenResponse);
   } catch (error) {
@@ -150,7 +156,7 @@ export const forgotPassword = async (req, res) => {
     }
     const user = await User.findOne({ email, isDeleted: false });
     if (!user) {
-      return Response.failResponse(res, `${req.locale.USER_NOT_FOUND_WITH_GIVEN} ${email}`, 400);
+      return Response.successResponse(res, req.locale.EMAIL_VERIFICATION_SUCCESS, 200);
     }
 
     const { token, hashedToken } = generateResetToken();
@@ -173,9 +179,10 @@ export const forgotPassword = async (req, res) => {
     });
 
     if (!mailResult.success) {
-      return Response.failResponse(res, req.locale.RESET_EMAIL_FAILED, 500);
+      console.error('Reset email failed for', email, mailResult.error);
+      return Response.successResponse(res, req.locale.EMAIL_VERIFICATION_SUCCESS, 200);
     }
-    return Response.successResponse(res, req.locale.EMAIL_VERIFICATION_SUCCESS, 200, { token });
+    return Response.successResponse(res, req.locale.EMAIL_VERIFICATION_SUCCESS, 200);
   } catch (error) {
     console.error('Forget password error', error);
     errorLog(error);
@@ -221,6 +228,7 @@ export const resetPassword = async (req, res) => {
     user.password = newPassword;
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
 
     return Response.successResponse(res, req.locale.PASSWORD_RESET_SUCCESS, 200);
