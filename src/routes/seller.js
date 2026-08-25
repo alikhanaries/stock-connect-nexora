@@ -157,7 +157,14 @@ seller.post(
  *       200: { $ref: "#/components/schemas/SuccessResponse" }
  */
 seller.get('/', getAllSellerValidator, checkLanguage, authMiddleware, getAllUserSeller);
-seller.get('/getAllSeller', checkLanguage, getAllSeller);
+seller.get(
+  '/getAllSeller',
+  getAllSellerValidator,
+  checkLanguage,
+  authMiddleware,
+  authorize([USER_ROLES.MASTER_ADMIN]),
+  getAllSeller
+);
 
 /**
  * @swagger
