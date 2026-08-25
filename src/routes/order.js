@@ -15,7 +15,7 @@ import {
   getAnalyticsOrders,
   handleOmnifulOrderWebhook,
 } from '#controllers/OrderController.js';
-import { authMiddleware, checkLanguage, verifySellerAccess } from '#middleware/index.js';
+import { authMiddleware, checkLanguage, verifySellerAccess, omnifulWebHookAuthMiddleware } from '#middleware/index.js';
 import {
   getAllOrdersValidator,
   getOrderByIdValidator,
@@ -494,5 +494,37 @@ router.post(
   generateDocumentId
 );
 
-router.post('/omniful-order-webhook', handleOmnifulOrderWebhook);
+/**
+ * @swagger
+ * /orders/omniful-order-webhook:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Omniful order status webhook
+ *     description: Receives order and purchase order status events from Omniful. Requires webhook authentication header.
+ *     security:
+ *       - webhookAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [event_name, data]
+ *             properties:
+ *               event_name:
+ *                 type: string
+ *                 example: purchase_order.update.event
+ *               data:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Webhook processed successfully
+ *       400:
+ *         description: Invalid webhook payload
+ *       401:
+ *         description: Missing webhook authentication header
+ *       403:
+ *         description: Invalid webhook authentication
+ */
+router.post('/omniful-order-webhook', omnifulWebHookAuthMiddleware, handleOmnifulOrderWebhook);
 export default router;

@@ -11,7 +11,13 @@ import {
   exportReturns,
   handleOmnifulQCWebhook,
 } from '#controllers/ReturnController.js';
-import { authMiddleware, checkLanguage, verifySellerAccess, webHookAuthMiddleware } from '#middleware/index.js';
+import {
+  authMiddleware,
+  checkLanguage,
+  verifySellerAccess,
+  webHookAuthMiddleware,
+  omnifulWebHookAuthMiddleware,
+} from '#middleware/index.js';
 import {
   getAllReturnsValidator,
   syncReturnsValidator,
@@ -223,6 +229,8 @@ router.put('/update', updateReturnValidator, checkLanguage, authMiddleware, upda
  *   post:
  *     tags: [Returns]
  *     summary: Webhook to receive return updates
+ *     security:
+ *       - webhookAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -232,9 +240,36 @@ router.put('/update', updateReturnValidator, checkLanguage, authMiddleware, upda
  *     responses:
  *       200:
  *         description: Webhook received
+ *       401:
+ *         description: Missing webhook authentication header
+ *       403:
+ *         description: Invalid webhook authentication
  */
 router.post('/fetchReturnsWebhook', returnWebHookValidator, webHookAuthMiddleware, fetchReturnsWebhook);
 
-router.post('/omniful-qc-webhook', handleOmnifulQCWebhook);
+/**
+ * @swagger
+ * /returns/omniful-qc-webhook:
+ *   post:
+ *     tags: [Returns]
+ *     summary: Omniful return QC webhook
+ *     description: Receives return quality-control updates from Omniful. Requires webhook authentication header.
+ *     security:
+ *       - webhookAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Webhook processed successfully
+ *       401:
+ *         description: Missing webhook authentication header
+ *       403:
+ *         description: Invalid webhook authentication
+ */
+router.post('/omniful-qc-webhook', omnifulWebHookAuthMiddleware, handleOmnifulQCWebhook);
 
 export default router;
