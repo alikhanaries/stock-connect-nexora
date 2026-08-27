@@ -1,7 +1,7 @@
 import User from '#models/User.js';
 import { generateTokenResponse, decodeToken, generateResetToken } from '#util/token.js';
 import { errorHandler } from '#helpers/ErrorHandler.js';
-import { errorLog } from '#middleware/index.js';
+import { errorLog, isLoginFailureLockedOut, recordLoginFailure, clearLoginFailures } from '#middleware/index.js';
 import crypto from 'crypto';
 import Response from '#helpers/response.js';
 import userHelper from '#helpers/User.js';
@@ -11,6 +11,10 @@ import { config } from '#config/config.js';
 
 export const login = async (req, res) => {
   try {
+    if (await isLoginFailureLockedOut(req, res)) {
+      return;
+    }
+
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -20,11 +24,13 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email, isDeleted: false, active: true }).select('+password');
 
     if (!user) {
+      await recordLoginFailure(req);
       return Response.failResponse(res, req.locale.NO_ACCOUNT, 404);
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      await recordLoginFailure(req);
       return Response.failResponse(res, req.locale.INVALID_CREDENTIALS, 401);
     }
 
@@ -38,6 +44,9 @@ export const login = async (req, res) => {
     if (!tokenResponse) {
       return Response.failResponse(res, req.locale.TOKEN_ERROR, 500);
     }
+
+    await clearLoginFailures(req);
+
     // Update last login time
     await User.findByIdAndUpdate(user._id, { lastLogin: new Date() });
 
