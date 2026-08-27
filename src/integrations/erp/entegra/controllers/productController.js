@@ -9,7 +9,7 @@ export const syncEntegraProducts = async (req, res) => {
 
     const isImageUpdate = Object.prototype.hasOwnProperty.call(req.query, 'isImageUpdate')
       ? req.query.isImageUpdate === 'true' || req.query.isImageUpdate === true
-      : false;
+      : true;
 
     const seller = await Seller.findById(sellerId, { slug: 1 }).lean();
     if (!seller?.slug) return errorResponse(res, `Seller ${sellerId} not found or missing slug`);
