@@ -4,6 +4,7 @@ import { mapRowToInventory, getSellerNameById, getProductStatus } from '#utils/m
 import { config } from '../config/config.js';
 import csv from 'csv-parser';
 import fs from 'fs';
+import { safeUnlinkTempFile } from '../helpers/tempFileCleanup.js';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
 import { ObjectId } from 'mongodb';
@@ -31,215 +32,214 @@ const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
 const SKU_BATCH_SIZE = 50;
 
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId } = {}) => {
-  const batchSize = Number(process.env.BATCH_SIZE) || 500;
-  const errorDetails = [];
-  let invalidRowsCount = 0;
-  let rowIndex = 0;
+  try {
+    const batchSize = Number(process.env.BATCH_SIZE) || 500;
+    const errorDetails = [];
+    let invalidRowsCount = 0;
+    let rowIndex = 0;
 
-  const incomingSkuSet = new Set();
-  const validInventories = [];
-  const rowTasks = [];
-  const now = new Date();
+    const incomingSkuSet = new Set();
+    const validInventories = [];
+    const rowTasks = [];
+    const now = new Date();
 
-  // 1. Read & parse CSV
-  await new Promise((resolve, reject) => {
-    stream
-      .pipe(csv())
-      .on('data', (row) => {
-        rowIndex++;
-        if (rowIndex > MAX_ROWS) {
-          reject(new Error('CSV row limit exceeded'));
-          stream.destroy();
-        }
-        const currentRow = rowIndex;
+    // 1. Read & parse CSV
+    await new Promise((resolve, reject) => {
+      stream
+        .pipe(csv())
+        .on('data', (row) => {
+          rowIndex++;
+          if (rowIndex > MAX_ROWS) {
+            reject(new Error('CSV row limit exceeded'));
+            stream.destroy();
+          }
+          const currentRow = rowIndex;
 
-        rowTasks.push(
-          limit(async () => {
-            try {
-              if (Object.values(row).every((v) => !v || String(v).trim() === '')) {
-                errorDetails.push({
-                  rowNumber: currentRow,
-                  errorData: [locale.EMPTY_ROW],
-                });
+          rowTasks.push(
+            limit(async () => {
+              try {
+                if (Object.values(row).every((v) => !v || String(v).trim() === '')) {
+                  errorDetails.push({
+                    rowNumber: currentRow,
+                    errorData: [locale.EMPTY_ROW],
+                  });
+                  invalidRowsCount++;
+                  return;
+                }
+
+                const inventory = await mapRowToInventory(row, currentRow, locale);
+
+                if (inventory?.errorData) {
+                  errorDetails.push(inventory);
+                  invalidRowsCount++;
+                  return;
+                }
+
+                incomingSkuSet.add(inventory.productSkuCode);
+                validInventories.push(inventory);
+              } catch (err) {
+                console.error('Row parse error:', err.message);
                 invalidRowsCount++;
-                return;
               }
+            })
+          );
+        })
+        .on('end', resolve)
+        .on('error', reject);
+    });
 
-              const inventory = await mapRowToInventory(row, currentRow, locale);
+    await Promise.all(rowTasks);
 
-              if (inventory?.errorData) {
-                errorDetails.push(inventory);
-                invalidRowsCount++;
-                return;
-              }
-
-              incomingSkuSet.add(inventory.productSkuCode);
-              validInventories.push(inventory);
-            } catch (err) {
-              console.error('Row parse error:', err.message);
-              invalidRowsCount++;
-            }
-          })
-        );
-      })
-      .on('end', resolve)
-      .on('error', reject);
-  });
-
-  await Promise.all(rowTasks);
-
-  if (!incomingSkuSet.size) {
-    return {
-      success: true,
-      message: 'No valid rows found',
-      updatedCount: 0,
-      invalidRowsCount,
-      errorDetails,
-    };
-  }
-  const sellerName = await getSellerNameById(sellerId);
-
-  //2. Fetch products
-  const products = await Product.find(
-    { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
-    { _id: 1, productSkuCode: 1, price: 1 }
-  ).lean();
-
-  const productMap = new Map(products.map((p) => [p.productSkuCode, p]));
-
-  //3. Fetch existing inventories
-  const inventories = await Inventory.find(
-    { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
-    { productSkuCode: 1 }
-  ).lean();
-
-  const inventorySkuSet = new Set(inventories.map((i) => i.productSkuCode));
-
-  // Remove Duplicate SKU
-  const inventoryBySku = new Map();
-  for (const inv of validInventories) {
-    inventoryBySku.set(inv.productSkuCode, inv);
-  }
-  const dedupedInventories = [...inventoryBySku.values()];
-
-  //4. Build bulk operations
-  const inventoryBulkOps = [];
-  const productBulkOps = [];
-
-  for (const inventory of dedupedInventories) {
-    const { productSkuCode, currentStockCount, rowNumber } = inventory;
-
-    const product = productMap.get(productSkuCode);
-
-    // Product does not exist
-    if (!product) {
-      errorDetails.push({
-        rowNumber,
-        errorData: [`Product does not exist for SKU ${productSkuCode}`],
-      });
-      invalidRowsCount++;
-      continue;
+    if (!incomingSkuSet.size) {
+      return {
+        success: true,
+        message: 'No valid rows found',
+        updatedCount: 0,
+        invalidRowsCount,
+        errorDetails,
+      };
     }
+    const sellerName = await getSellerNameById(sellerId);
 
-    if (inventorySkuSet.has(productSkuCode)) {
-      //Inventory exists → update inventory + product
-      inventoryBulkOps.push({
+    //2. Fetch products
+    const products = await Product.find(
+      { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
+      { _id: 1, productSkuCode: 1, price: 1 }
+    ).lean();
+
+    const productMap = new Map(products.map((p) => [p.productSkuCode, p]));
+
+    //3. Fetch existing inventories
+    const inventories = await Inventory.find(
+      { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
+      { productSkuCode: 1 }
+    ).lean();
+
+    const inventorySkuSet = new Set(inventories.map((i) => i.productSkuCode));
+
+    // Remove Duplicate SKU
+    const inventoryBySku = new Map();
+    for (const inv of validInventories) {
+      inventoryBySku.set(inv.productSkuCode, inv);
+    }
+    const dedupedInventories = [...inventoryBySku.values()];
+
+    //4. Build bulk operations
+    const inventoryBulkOps = [];
+    const productBulkOps = [];
+
+    for (const inventory of dedupedInventories) {
+      const { productSkuCode, currentStockCount, rowNumber } = inventory;
+
+      const product = productMap.get(productSkuCode);
+
+      // Product does not exist
+      if (!product) {
+        errorDetails.push({
+          rowNumber,
+          errorData: [`Product does not exist for SKU ${productSkuCode}`],
+        });
+        invalidRowsCount++;
+        continue;
+      }
+
+      if (inventorySkuSet.has(productSkuCode)) {
+        //Inventory exists → update inventory + product
+        inventoryBulkOps.push({
+          updateOne: {
+            filter: { sellerId, productSkuCode },
+            update: {
+              $set: {
+                currentStockCount,
+                lastSyncedAt: now,
+              },
+            },
+          },
+        });
+      } else {
+        //Inventory does not exist → create inventory
+        inventoryBulkOps.push({
+          insertOne: {
+            document: {
+              sellerId,
+              productId: product._id,
+              productSkuCode,
+              currentStockCount,
+              lastSyncedAt: now,
+              createdAt: now,
+              updatedAt: now,
+            },
+          },
+        });
+      }
+      let prodStatus = getProductStatus(sellerName, currentStockCount);
+      if (MAX_PRICE_SELLERS.includes(sellerName) && (product.price ?? 0) >= MAX_PRICE) {
+        prodStatus = 'inactive';
+      }
+
+      // Always update product stock (if product exists)
+      productBulkOps.push({
         updateOne: {
-          filter: { sellerId, productSkuCode },
+          filter: { _id: product._id },
           update: {
             $set: {
               currentStockCount,
-              lastSyncedAt: now,
+              status: prodStatus,
+              updatedAt: now,
             },
           },
         },
       });
-    } else {
-      //Inventory does not exist → create inventory
-      inventoryBulkOps.push({
-        insertOne: {
-          document: {
-            sellerId,
-            productId: product._id,
-            productSkuCode,
-            currentStockCount,
-            lastSyncedAt: now,
-            createdAt: now,
-            updatedAt: now,
-          },
-        },
-      });
-    }
-    let prodStatus = getProductStatus(sellerName, currentStockCount);
-    if (MAX_PRICE_SELLERS.includes(sellerName) && (product.price ?? 0) >= MAX_PRICE) {
-      prodStatus = 'inactive';
     }
 
-    // Always update product stock (if product exists)
-    productBulkOps.push({
-      updateOne: {
-        filter: { _id: product._id },
-        update: {
-          $set: {
-            currentStockCount,
-            status: prodStatus,
-            updatedAt: now,
-          },
-        },
-      },
-    });
-  }
+    if (!inventoryBulkOps.length) {
+      return {
+        success: true,
+        message: 'No valid inventories to process',
+        updatedCount: 0,
+        invalidRowsCount,
+        errorDetails,
+      };
+    }
 
-  if (!inventoryBulkOps.length) {
+    //5. Execute bulk writes
+    let updatedCount = 0;
+    const bulkTasks = [];
+
+    for (let i = 0; i < inventoryBulkOps.length; i += batchSize) {
+      bulkTasks.push(
+        writeLimit(async () => {
+          try {
+            const invRes = await Inventory.bulkWrite(inventoryBulkOps.slice(i, i + batchSize), { ordered: false });
+
+            await Product.bulkWrite(productBulkOps.slice(i, i + batchSize), { ordered: false });
+
+            updatedCount += (invRes.modifiedCount || 0) + (invRes.insertedCount || 0);
+          } catch (err) {
+            console.error('Bulk write failed:', err.message);
+            errorDetails.push({
+              rowNumber: null,
+              errorData: ['Bulk write failed for a batch'],
+            });
+          }
+        })
+      );
+    }
+
+    await Promise.all(bulkTasks);
+
     return {
       success: true,
-      message: 'No valid inventories to process',
-      updatedCount: 0,
+      message: `Processed ${updatedCount} inventories, skipped ${invalidRowsCount} invalid rows`,
+      updatedCount,
       invalidRowsCount,
       errorDetails,
     };
+  } finally {
+    if (deleteAfter && filePath) {
+      await safeUnlinkTempFile(filePath);
+    }
   }
-
-  //5. Execute bulk writes
-  let updatedCount = 0;
-  const bulkTasks = [];
-
-  for (let i = 0; i < inventoryBulkOps.length; i += batchSize) {
-    bulkTasks.push(
-      writeLimit(async () => {
-        try {
-          const invRes = await Inventory.bulkWrite(inventoryBulkOps.slice(i, i + batchSize), { ordered: false });
-
-          await Product.bulkWrite(productBulkOps.slice(i, i + batchSize), { ordered: false });
-
-          updatedCount += (invRes.modifiedCount || 0) + (invRes.insertedCount || 0);
-        } catch (err) {
-          console.error('Bulk write failed:', err.message);
-          errorDetails.push({
-            rowNumber: null,
-            errorData: ['Bulk write failed for a batch'],
-          });
-        }
-      })
-    );
-  }
-
-  await Promise.all(bulkTasks);
-
-  //6. Cleanup
-  if (deleteAfter && filePath) {
-    fs.unlink(filePath, (err) => {
-      if (err) console.error('File cleanup failed:', err.message);
-    });
-  }
-
-  return {
-    success: true,
-    message: `Processed ${updatedCount} inventories, skipped ${invalidRowsCount} invalid rows`,
-    updatedCount,
-    invalidRowsCount,
-    errorDetails,
-  };
 };
 
 /* Google Sheet Import */
