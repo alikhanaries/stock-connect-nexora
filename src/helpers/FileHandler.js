@@ -1,12 +1,11 @@
 import multer from 'multer';
-import path from 'path';
 import fs from 'fs';
-
-const uploadDir = path.join(process.cwd(), 'uploads');
+import crypto from 'crypto';
+import { UPLOAD_DIR, deriveSafeExtension } from './tempFileCleanup.js';
 
 try {
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+  if (!fs.existsSync(UPLOAD_DIR)) {
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
   }
 } catch (err) {
   console.error('Error creating upload directory:', err);
@@ -14,12 +13,12 @@ try {
 }
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir); // save in uploads folder
+  destination: (_req, _file, cb) => {
+    cb(null, UPLOAD_DIR);
   },
-  filename: (req, file, cb) => {
-    const uniqueName = Date.now() + '-' + file.originalname;
-    cb(null, uniqueName);
+  filename: (_req, file, cb) => {
+    const ext = deriveSafeExtension(file.originalname);
+    cb(null, `${crypto.randomUUID()}${ext}`);
   },
 });
 

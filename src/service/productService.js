@@ -21,6 +21,7 @@ import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import { buildFilter, castFilter, remapExprField } from '#utils/buildFilter.js';
 import csv from 'csv-parser';
 import fs from 'fs';
+import { safeUnlinkTempFile } from '../helpers/tempFileCleanup.js';
 import mongoose from 'mongoose';
 import pLimit from 'p-limit';
 import { Readable } from 'stream';
@@ -506,288 +507,287 @@ export const pushInActiveProductsToChannel = async (inactiveSkuList = []) => {
 };
 
 export const processImportStream = async (stream, { deleteAfter, filePath, locale, sellerId, isImageUpdate } = {}) => {
-  const batchSize = Number(process.env.BATCH_SIZE) || 500;
-  const errorDetails = [];
-  const parsedRows = [];
-  const parsedProducts = [];
-  const categoryTrailsSet = new Set();
-  let invalidRowsCount = 0;
-  let rowIndex = 1;
+  try {
+    const batchSize = Number(process.env.BATCH_SIZE) || 500;
+    const errorDetails = [];
+    const parsedRows = [];
+    const parsedProducts = [];
+    const categoryTrailsSet = new Set();
+    let invalidRowsCount = 0;
+    let rowIndex = 1;
 
-  const incomingSkuSet = new Set();
-  const rowTasks = [];
-  // Fetch seller brand
-  const seller = await Seller.findById(sellerId, { name: 1 }).lean();
-  if (!seller?.name) {
-    throw new Error('Brand not configured for seller');
-  }
-  const brand = seller.name;
+    const incomingSkuSet = new Set();
+    const rowTasks = [];
+    // Fetch seller brand
+    const seller = await Seller.findById(sellerId, { name: 1 }).lean();
+    if (!seller?.name) {
+      throw new Error('Brand not configured for seller');
+    }
+    const brand = seller.name;
 
-  await new Promise((resolve, reject) => {
-    stream
-      .pipe(csv())
-      .on('data', (row) => {
-        rowIndex++;
-        const currentRow = rowIndex;
+    await new Promise((resolve, reject) => {
+      stream
+        .pipe(csv())
+        .on('data', (row) => {
+          rowIndex++;
+          const currentRow = rowIndex;
 
-        rowTasks.push(
-          limit(async () => {
-            try {
-              // Skip empty rows
-              if (Object.values(row).every((v) => !v || String(v).trim() === '')) {
-                errorDetails.push({
-                  rowNumber: currentRow,
-                  errorData: [locale.EMPTY_ROW],
-                });
+          rowTasks.push(
+            limit(async () => {
+              try {
+                // Skip empty rows
+                if (Object.values(row).every((v) => !v || String(v).trim() === '')) {
+                  errorDetails.push({
+                    rowNumber: currentRow,
+                    errorData: [locale.EMPTY_ROW],
+                  });
+                  invalidRowsCount++;
+                  return;
+                }
+
+                const sku = row.ProductSkuCode;
+                if (sku) incomingSkuSet.add(String(sku).trim());
+
+                parsedRows.push({ row, rowNumber: currentRow });
+              } catch (err) {
+                console.error('Row read error:', err.message);
                 invalidRowsCount++;
-                return;
               }
+            })
+          );
+        })
+        .on('end', resolve)
+        .on('error', reject);
+    });
+    await Promise.all(rowTasks);
+    const existingProducts = await Product.find(
+      { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
+      { productSkuCode: 1 }
+    ).lean();
 
-              const sku = row.ProductSkuCode;
-              if (sku) incomingSkuSet.add(String(sku).trim());
+    const existingSkuSet = new Set(existingProducts.map((p) => p.productSkuCode));
+    for (const { row, rowNumber } of parsedRows) {
+      try {
+        const sku = row.ProductSkuCode;
+        const normalizedSku = String(sku).trim();
+        const isNewSku = !existingSkuSet.has(normalizedSku);
+        const product = await mapRowToProduct(row, rowNumber, locale, sellerId, isImageUpdate, isNewSku, brand);
+        if (product?.errorData) {
+          errorDetails.push(product);
+          invalidRowsCount++;
+          continue;
+        }
 
-              parsedRows.push({ row, rowNumber: currentRow });
-            } catch (err) {
-              console.error('Row read error:', err.message);
-              invalidRowsCount++;
-            }
-          })
-        );
-      })
-      .on('end', resolve)
-      .on('error', reject);
-  });
-  await Promise.all(rowTasks);
-  const existingProducts = await Product.find(
-    { sellerId, productSkuCode: { $in: [...incomingSkuSet] } },
-    { productSkuCode: 1 }
-  ).lean();
+        // Basic hierarchy validation
+        const { valid, errors } = validateHierarchy(product);
+        if (!valid) {
+          errorDetails.push({
+            rowNumber,
+            errorData: errors,
+          });
+          invalidRowsCount++;
+          continue;
+        }
 
-  const existingSkuSet = new Set(existingProducts.map((p) => p.productSkuCode));
-  for (const { row, rowNumber } of parsedRows) {
-    try {
-      const sku = row.ProductSkuCode;
-      const normalizedSku = String(sku).trim();
-      const isNewSku = !existingSkuSet.has(normalizedSku);
-      const product = await mapRowToProduct(row, rowNumber, locale, sellerId, isImageUpdate, isNewSku, brand);
-      if (product?.errorData) {
-        errorDetails.push(product);
+        parsedProducts.push(product);
+      } catch (err) {
+        console.error('Row error:', err.message);
         invalidRowsCount++;
-        continue;
+      }
+    }
+    const { validated, errors: hierarchyErrors } = await validateHierarchyExistenceBatch(parsedProducts, sellerId);
+
+    if (hierarchyErrors.length) {
+      errorDetails.push(...hierarchyErrors);
+      invalidRowsCount += hierarchyErrors.length;
+    }
+
+    const validProducts = validated.filter((v) => v.valid).map((v) => v.product);
+
+    const referencedSKUs = new Set();
+
+    // From current import file
+    for (const p of parsedProducts) {
+      if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
+      if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
+    }
+
+    // From database (single query)
+    const dbRefs = await Product.find({ sellerId }, { parentProductSkuCode: 1, grandParentProductSkuCode: 1 }).lean();
+
+    for (const p of dbRefs) {
+      if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
+      if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
+    }
+
+    const finalValidProducts = [];
+
+    for (const product of validProducts) {
+      const rowErrors = [];
+
+      // FINAL & CORRECT simple-product detection
+      const isSimple = !referencedSKUs.has(product.productSkuCode);
+      const isNewSku = !existingSkuSet.has(product.productSkuCode);
+
+      if (isNewSku && isSimple) {
+        if (typeof product.price !== 'number' || product.price <= 0) {
+          rowErrors.push('Price must be greater than 0 for simple products.');
+        }
+        if (typeof product.noonPrice !== 'number' || product.noonPrice <= 0) {
+          rowErrors.push('Noon Price must be greater than 0 for simple products.');
+        }
+        if (typeof product.namshiPrice !== 'number' || product.namshiPrice <= 0) {
+          rowErrors.push('Namshi Price must be greater than 0 for simple products.');
+        }
       }
 
-      // Basic hierarchy validation
-      const { valid, errors } = validateHierarchy(product);
-      if (!valid) {
+      if (rowErrors.length) {
         errorDetails.push({
-          rowNumber,
-          errorData: errors,
+          rowNumber: product.rowNumber,
+          errorData: rowErrors,
         });
         invalidRowsCount++;
         continue;
       }
 
-      parsedProducts.push(product);
-    } catch (err) {
-      console.error('Row error:', err.message);
-      invalidRowsCount++;
-    }
-  }
-  const { validated, errors: hierarchyErrors } = await validateHierarchyExistenceBatch(parsedProducts, sellerId);
-
-  if (hierarchyErrors.length) {
-    errorDetails.push(...hierarchyErrors);
-    invalidRowsCount += hierarchyErrors.length;
-  }
-
-  const validProducts = validated.filter((v) => v.valid).map((v) => v.product);
-
-  const referencedSKUs = new Set();
-
-  // From current import file
-  for (const p of parsedProducts) {
-    if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
-    if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
-  }
-
-  // From database (single query)
-  const dbRefs = await Product.find({ sellerId }, { parentProductSkuCode: 1, grandParentProductSkuCode: 1 }).lean();
-
-  for (const p of dbRefs) {
-    if (p.parentProductSkuCode) referencedSKUs.add(p.parentProductSkuCode);
-    if (p.grandParentProductSkuCode) referencedSKUs.add(p.grandParentProductSkuCode);
-  }
-
-  const finalValidProducts = [];
-
-  for (const product of validProducts) {
-    const rowErrors = [];
-
-    // FINAL & CORRECT simple-product detection
-    const isSimple = !referencedSKUs.has(product.productSkuCode);
-    const isNewSku = !existingSkuSet.has(product.productSkuCode);
-
-    if (isNewSku && isSimple) {
-      if (typeof product.price !== 'number' || product.price <= 0) {
-        rowErrors.push('Price must be greater than 0 for simple products.');
-      }
-      if (typeof product.noonPrice !== 'number' || product.noonPrice <= 0) {
-        rowErrors.push('Noon Price must be greater than 0 for simple products.');
-      }
-      if (typeof product.namshiPrice !== 'number' || product.namshiPrice <= 0) {
-        rowErrors.push('Namshi Price must be greater than 0 for simple products.');
-      }
+      finalValidProducts.push(product);
     }
 
-    if (rowErrors.length) {
-      errorDetails.push({
-        rowNumber: product.rowNumber,
-        errorData: rowErrors,
-      });
-      invalidRowsCount++;
-      continue;
-    }
+    const productSkuCodes = finalValidProducts.map((p) => p.productSkuCode);
 
-    finalValidProducts.push(product);
-  }
+    const existingMap = new Map(
+      (await Product.find({ sellerId, productSkuCode: { $in: productSkuCodes } }).lean()).map((p) => [
+        p.productSkuCode,
+        p,
+      ])
+    );
+    // Counters
+    let insertedCount = 0;
+    let updatedCount = 0;
 
-  const productSkuCodes = finalValidProducts.map((p) => p.productSkuCode);
+    // Prepare bulk write operations
+    const bulkOps = finalValidProducts
+      .map((product) => {
+        const existing = existingMap.get(product.productSkuCode);
 
-  const existingMap = new Map(
-    (await Product.find({ sellerId, productSkuCode: { $in: productSkuCodes } }).lean()).map((p) => [
-      p.productSkuCode,
-      p,
-    ])
-  );
-  // Counters
-  let insertedCount = 0;
-  let updatedCount = 0;
+        if (['removed', undefined, null].includes(existing?.status)) {
+          product.status = 'active';
+        }
 
-  // Prepare bulk write operations
-  const bulkOps = finalValidProducts
-    .map((product) => {
-      const existing = existingMap.get(product.productSkuCode);
+        const comparableProduct = makeComparableProductFromSchema(product, Product);
 
-      if (['removed', undefined, null].includes(existing?.status)) {
-        product.status = 'active';
-      }
+        let updateFields = comparableProduct;
 
-      const comparableProduct = makeComparableProductFromSchema(product, Product);
+        if (existing) {
+          const existingComparable = makeComparableProductFromSchema(existing, Product);
 
-      let updateFields = comparableProduct;
+          // Pick only changed fields
+          updateFields = getChangedFields(comparableProduct, existingComparable);
 
-      if (existing) {
-        const existingComparable = makeComparableProductFromSchema(existing, Product);
-
-        // Pick only changed fields
-        updateFields = getChangedFields(comparableProduct, existingComparable);
-
-        // URLs vs converted S3 URLs on normal imports). When the caller explicitly
-        // requests an image update, force the newly uploaded image URLs into the
-        // update so existing products actually get their images refreshed.
-        if (isImageUpdate) {
-          const IMAGE_FIELDS = [...NAMED_IMAGE_URL_KEYS, 'images'];
-          for (const field of IMAGE_FIELDS) {
-            if (product[field] !== undefined && product[field] !== null && product[field] !== '') {
-              updateFields[field] = product[field];
+          // URLs vs converted S3 URLs on normal imports). When the caller explicitly
+          // requests an image update, force the newly uploaded image URLs into the
+          // update so existing products actually get their images refreshed.
+          if (isImageUpdate) {
+            const IMAGE_FIELDS = [...NAMED_IMAGE_URL_KEYS, 'images'];
+            for (const field of IMAGE_FIELDS) {
+              if (product[field] !== undefined && product[field] !== null && product[field] !== '') {
+                updateFields[field] = product[field];
+              }
             }
           }
+
+          if (!Object.keys(updateFields).length) {
+            // Nothing changed → skip update
+            return null;
+          }
+          updateFields.updatedAt = new Date();
+          updatedCount++;
+        } else {
+          updateFields.createdAt = new Date();
+          updateFields.updatedAt = new Date();
+          insertedCount++;
         }
 
-        if (!Object.keys(updateFields).length) {
-          // Nothing changed → skip update
-          return null;
-        }
-        updateFields.updatedAt = new Date();
-        updatedCount++;
-      } else {
-        updateFields.createdAt = new Date();
-        updateFields.updatedAt = new Date();
-        insertedCount++;
-      }
+        if (product.categoryTrail) categoryTrailsSet.add(product.categoryTrail);
+        if (!('syncedAt' in product)) product.syncedAt = null;
 
-      if (product.categoryTrail) categoryTrailsSet.add(product.categoryTrail);
-      if (!('syncedAt' in product)) product.syncedAt = null;
+        return {
+          updateOne: {
+            filter: { sellerId, productSkuCode: product.productSkuCode },
+            update: { $set: updateFields },
+            upsert: true,
+          },
+        };
+      })
+      .filter(Boolean);
 
-      return {
-        updateOne: {
-          filter: { sellerId, productSkuCode: product.productSkuCode },
-          update: { $set: updateFields },
-          upsert: true,
-        },
-      };
-    })
-    .filter(Boolean);
+    // Bulk writes in parallel batches
+    const bulkTasks = [];
+    for (let i = 0; i < bulkOps.length; i += batchSize) {
+      bulkTasks.push(
+        writeLimit(() =>
+          Product.bulkWrite(bulkOps.slice(i, i + batchSize), {
+            ordered: false,
+          })
+        )
+      );
+    }
+    await Promise.all(bulkTasks);
 
-  // Bulk writes in parallel batches
-  const bulkTasks = [];
-  for (let i = 0; i < bulkOps.length; i += batchSize) {
-    bulkTasks.push(
-      writeLimit(() =>
-        Product.bulkWrite(bulkOps.slice(i, i + batchSize), {
-          ordered: false,
-        })
-      )
-    );
+    const warnings = [];
+    // insert inventories for products imported/updated
+    const [inventoryResult, priceResult] = await Promise.allSettled([
+      upsertInventoriesForProducts({
+        sellerId,
+        productSkuCodes,
+        batchSize,
+        writeLimit,
+      }),
+      upsertPricesForProducts({
+        sellerId,
+        productSkuCodes,
+        batchSize,
+        writeLimit,
+      }),
+    ]);
+
+    if (inventoryResult.status === 'rejected') {
+      console.error('Inventory upsert failed:', inventoryResult.reason);
+      warnings.push('Inventory update failed');
+    }
+
+    if (priceResult.status === 'rejected') {
+      console.error('Price upsert failed:', priceResult.reason);
+      warnings.push('Price update failed');
+    }
+
+    //  Update categories – fire & forget (NO WAIT)
+    if (categoryTrailsSet.size) {
+      insertCategoryTrail([...categoryTrailsSet], sellerId).catch((e) =>
+        console.warn('CategoryTrail update error:', e.message)
+      );
+    }
+    // Resolve hierarchy only on successful imports/updates
+
+    if (finalValidProducts.length > 0) {
+      await resolveProductTypes(sellerId);
+      await resolveHierarchyStatus(sellerId, productSkuCodes);
+    }
+
+    return {
+      success: true,
+      message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
+      insertedCount,
+      updatedCount,
+      invalidRowsCount,
+      errorDetails,
+      warnings,
+    };
+  } finally {
+    if (deleteAfter && filePath) {
+      await safeUnlinkTempFile(filePath);
+    }
   }
-  await Promise.all(bulkTasks);
-
-  const warnings = [];
-  // insert inventories for products imported/updated
-  const [inventoryResult, priceResult] = await Promise.allSettled([
-    upsertInventoriesForProducts({
-      sellerId,
-      productSkuCodes,
-      batchSize,
-      writeLimit,
-    }),
-    upsertPricesForProducts({
-      sellerId,
-      productSkuCodes,
-      batchSize,
-      writeLimit,
-    }),
-  ]);
-
-  if (inventoryResult.status === 'rejected') {
-    console.error('Inventory upsert failed:', inventoryResult.reason);
-    warnings.push('Inventory update failed');
-  }
-
-  if (priceResult.status === 'rejected') {
-    console.error('Price upsert failed:', priceResult.reason);
-    warnings.push('Price update failed');
-  }
-
-  // Delete file async (non-blocking)
-  if (deleteAfter && filePath) {
-    fs.unlink(filePath, (err) => {
-      if (err) console.warn('File cleanup failed:', err.message);
-    });
-  }
-
-  //  Update categories – fire & forget (NO WAIT)
-  if (categoryTrailsSet.size) {
-    insertCategoryTrail([...categoryTrailsSet], sellerId).catch((e) =>
-      console.warn('CategoryTrail update error:', e.message)
-    );
-  }
-  // Resolve hierarchy only on successful imports/updates
-
-  if (finalValidProducts.length > 0) {
-    await resolveProductTypes(sellerId);
-    await resolveHierarchyStatus(sellerId, productSkuCodes);
-  }
-
-  return {
-    success: true,
-    message: `Imported ${insertedCount} new products, updated ${updatedCount}, skipped ${invalidRowsCount} invalid rows`,
-    insertedCount,
-    updatedCount,
-    invalidRowsCount,
-    errorDetails,
-    warnings,
-  };
 };
 
 export const upsertInventoriesForProducts = async ({ sellerId, productSkuCodes, batchSize, writeLimit }) => {
