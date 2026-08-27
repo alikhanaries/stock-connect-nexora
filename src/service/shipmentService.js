@@ -30,6 +30,7 @@ import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
 import { decreaseStock, increaseStock, validateStockAvailability } from '../helpers/inventoryHandler.js';
+import { runInTransaction } from '#util/mongoTransaction.js';
 import { sendStockBatch } from '../service/InventoryService.js';
 import Seller from '#models/Seller.js';
 import forwardShipmentService from './forwardShipmentService.js';
@@ -523,22 +524,16 @@ export const createFullShipmentService = async (shipmentData) => {
       }
     }
 
-    // Step 12: Decrease stock
-    const stockPayloads = [];
-    for (const product of validProducts) {
-      const shippedQty = Number(product.quantity || 0);
-      const stockResult = await decreaseStock(product.merchantProductNo, shippedQty, sellerId, sellerName, 'CE');
+    const shipmentProducts = await Promise.all(
+      validProducts.map(async (p) => ({
+        ...p,
+        aymakanoriginalLineTotalExclVat: await convertFromSar(
+          AYMAKAN_PRICE_CURRENCY,
+          (p.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
+        ),
+      }))
+    );
 
-      if (!stockResult?.success) {
-        return {
-          success: false,
-          message: stockResult?.message || 'Stock decrease failed',
-        };
-      }
-      if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
-    }
-
-    // Step 13: Create shipment document
     const shipmentDocument = new Shipment({
       orderId: new mongoose.Types.ObjectId(id),
       sellerId: new mongoose.Types.ObjectId(sellerId),
@@ -550,15 +545,7 @@ export const createFullShipmentService = async (shipmentData) => {
       merchantOrderNo,
       status: AYMAKAN_STATUS['AY-0001'].status,
       trackingInfo,
-      products: await Promise.all(
-        validProducts.map(async (p) => ({
-          ...p,
-          aymakanoriginalLineTotalExclVat: await convertFromSar(
-            AYMAKAN_PRICE_CURRENCY,
-            (p.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
-          ),
-        }))
-      ),
+      products: shipmentProducts,
       shipmentMethod: 'AYMAKAN',
       extraData: {
         aymakan: aymakanResult,
@@ -584,34 +571,62 @@ export const createFullShipmentService = async (shipmentData) => {
       invoiceDocumentId: documentId || shipmentData.documentId || null,
     });
 
-    await shipmentDocument.save();
+    const stockPayloads = [];
+    try {
+      await runInTransaction(async (session) => {
+        for (const product of validProducts) {
+          const shippedQty = Number(product.quantity || 0);
+          const stockResult = await decreaseStock(
+            product.merchantProductNo,
+            shippedQty,
+            sellerId,
+            sellerName,
+            'CE',
+            session
+          );
 
-    // STEP 14: SKU STATUS BREAKDOWN UPDATE
+          if (!stockResult?.success) {
+            throw new Error(stockResult?.message || 'Stock decrease failed');
+          }
+          if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
+        }
 
-    for (const product of validProducts) {
-      const sku = orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
+        await shipmentDocument.save(session ? { session } : undefined);
 
-      const shippedQty = Number(product.quantity || 0);
+        for (const product of validProducts) {
+          const sku = orderSkuList.skuList.find((s) => String(s.id) === String(product.orderLineId));
+          const shippedQty = Number(product.quantity || 0);
 
-      sku.statusBreakdown ??= {
-        confirmed: sku.quantity || 0,
-        shipped: 0,
-        delivered: 0,
-        returned: 0,
-        canceled: 0,
-        shipmentCreated: 0,
-      };
+          sku.statusBreakdown ??= {
+            confirmed: sku.quantity || 0,
+            shipped: 0,
+            delivered: 0,
+            returned: 0,
+            canceled: 0,
+            shipmentCreated: 0,
+          };
 
-      sku.statusBreakdown.confirmed = Math.max(sku.statusBreakdown.confirmed - shippedQty, 0);
+          sku.statusBreakdown.confirmed = Math.max(sku.statusBreakdown.confirmed - shippedQty, 0);
+          sku.statusBreakdown.shipmentCreated += shippedQty;
+          sku.airWaybillNo = trackingNumber;
+          sku.status = 'IN_PROGRESS';
+        }
 
-      sku.statusBreakdown.shipmentCreated += shippedQty;
-      sku.airWaybillNo = trackingNumber;
-      sku.status = 'IN_PROGRESS';
+        order.status = 'IN_PROGRESS';
+        await order.save(session ? { session } : undefined);
+      });
+    } catch (error) {
+      const msg = error?.message || '';
+      if (
+        msg.includes('Stock decrease failed') ||
+        msg.includes('Insufficient') ||
+        msg.includes('Inventory or product') ||
+        msg.includes('Invalid quantity')
+      ) {
+        return { success: false, message: msg };
+      }
+      throw error;
     }
-
-    // Step 15: Order update
-    order.status = 'IN_PROGRESS';
-    await order.save();
 
     const qtyMessage = validProducts.map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
 
@@ -1443,56 +1458,75 @@ export const cancelShipmentService = async (shipmentId, reason = 'NA') => {
 
     const sellerName = sellerDoc?.name || '';
 
-    await Shipment.findByIdAndUpdate(shipmentId, { status: 'CANCELED', cancelReason });
-
-    // Revert to NEW when no active (non-canceled) shipments remain
     const hasActiveShipment = await Shipment.exists({
       orderId,
+      _id: { $ne: shipmentId },
       status: { $ne: 'CANCELED' },
     });
     const orderStatus = hasActiveShipment ? 'IN_PROGRESS' : 'NEW';
 
     const stockPayloads = [];
-    for (const product of products || []) {
-      const sku = order?.orderSkuList?.skuList.find((s) => String(s.id) === String(product.orderLineId));
+    try {
+      await runInTransaction(async (session) => {
+        await Shipment.findByIdAndUpdate(
+          shipmentId,
+          { status: 'CANCELED', cancelReason },
+          session ? { session } : undefined
+        );
 
-      if (!sku) continue;
+        for (const product of products || []) {
+          const sku = order?.orderSkuList?.skuList.find((s) => String(s.id) === String(product.orderLineId));
 
-      const qty = Number(product.quantity || 0);
+          if (!sku) continue;
 
-      // Defensive init
-      if (!sku.statusBreakdown) {
-        sku.statusBreakdown = {
-          confirmed: sku.quantity || 0,
-          shipped: 0,
-          delivered: 0,
-          returned: 0,
-          canceled: 0,
-          shipmentCreated: 0,
-        };
-      }
+          const qty = Number(product.quantity || 0);
 
-      //  Reduce shipmentCreated
-      sku.statusBreakdown.shipmentCreated = Math.max(sku.statusBreakdown.shipmentCreated - qty, 0);
+          if (!sku.statusBreakdown) {
+            sku.statusBreakdown = {
+              confirmed: sku.quantity || 0,
+              shipped: 0,
+              delivered: 0,
+              returned: 0,
+              canceled: 0,
+              shipmentCreated: 0,
+            };
+          }
 
-      //  Restore confirmed
-      sku.statusBreakdown.confirmed += qty;
+          sku.statusBreakdown.shipmentCreated = Math.max(sku.statusBreakdown.shipmentCreated - qty, 0);
+          sku.statusBreakdown.confirmed += qty;
+          sku.status = orderStatus;
 
-      // SKU status correction
-      sku.status = orderStatus;
+          const stockResult = await increaseStock(
+            product.merchantProductNo,
+            qty,
+            shipment.sellerId,
+            sellerName,
+            'CE',
+            session
+          );
+          if (!stockResult?.success) {
+            throw new Error(stockResult?.message || 'Stock restore failed');
+          }
+          if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
+        }
 
-      const stockResult = await increaseStock(product.merchantProductNo, qty, shipment.sellerId, sellerName, 'CE');
-      if (!stockResult?.success) {
+        order.status = orderStatus;
+        await order.save(session ? { session } : undefined);
+      });
+    } catch (error) {
+      const msg = error?.message || '';
+      if (
+        msg.includes('Stock restore failed') ||
+        msg.includes('Inventory or product') ||
+        msg.includes('Invalid quantity')
+      ) {
         return {
           success: false,
-          message: `Unable to cancel shipment: ${stockResult?.message || 'unknown error'}`,
+          message: `Unable to cancel shipment: ${msg}`,
         };
       }
-      if (stockResult.stockPayload) stockPayloads.push(stockResult.stockPayload);
+      throw error;
     }
-
-    order.status = orderStatus;
-    await order.save();
 
     // Order logs
     const qtyMessage = (products || []).map((p) => `${p.quantity} x ${p.merchantProductNo}`).join(', ');
