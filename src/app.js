@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import cors from 'cors';
 import { corsOptions } from './config/cors.js';
 import apiRoutes from './routes/api.js';
@@ -29,6 +30,13 @@ const swaggerUiOptions = {
 };
 
 const app = express();
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
 function setupSwagger(path, swaggerSpec, options = {}) {
   app.use(path, swaggerUi.serveFiles(swaggerSpec, {}), swaggerUi.setup(swaggerSpec, options));
