@@ -44,12 +44,12 @@ const applyIncreaseStock = async (sku, qty, sellerId, sellerName, type, session)
 
 const applyDecreaseStock = async (sku, qty, sellerId, sellerName, type, session) => {
   const inventory = await Inventory.findOneAndUpdate(
-    { productSkuCode: sku, currentStockCount: { $gte: qty } },
+    { productSkuCode: sku, sellerId, currentStockCount: { $gte: qty } },
     { $inc: { currentStockCount: -qty } },
     withSession(session, { new: true })
   );
   const product = await Product.findOneAndUpdate(
-    { productSkuCode: sku, currentStockCount: { $gte: qty } },
+    { productSkuCode: sku, sellerId, currentStockCount: { $gte: qty } },
     { $inc: { currentStockCount: -qty }, $set: { updatedAt: new Date() } },
     withSession(session, { new: true })
   );
