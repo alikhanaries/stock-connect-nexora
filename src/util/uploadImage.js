@@ -1,22 +1,25 @@
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { s3Client } from '../config/s3.js';
 import sharp from 'sharp';
+import { fetchSafeImageBuffer } from './safeImageFetch.js';
+
+const ALLOWED_IMAGE_FORMATS = new Set(['jpeg', 'jpg', 'png', 'webp', 'gif', 'tiff', 'avif']);
 
 export const uploadImageFromUrl = async (imageUrl, fileKey) => {
   try {
-    const response = await fetch(imageUrl, {
-      headers: {
-        Accept: 'image/jpeg,image/png',
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
-      },
-    });
-    if (!response.ok) {
-      console.error(`Skipping image (${response.status}): ${imageUrl}`);
+    const buffer = await fetchSafeImageBuffer(imageUrl);
+    const metadata = await sharp(buffer).metadata();
+
+    if (!metadata.format || !metadata.width || !metadata.height) {
+      console.error(`Skipping image (invalid bitmap): ${imageUrl}`);
       return null;
     }
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+
+    if (!ALLOWED_IMAGE_FORMATS.has(metadata.format)) {
+      console.error(`Skipping image (unsupported format ${metadata.format}): ${imageUrl}`);
+      return null;
+    }
+
     const imageToJpgUsingBuffer = await sharp(buffer).jpeg({ quality: 90 }).toBuffer();
 
     await s3Client.send(
