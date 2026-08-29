@@ -1,5 +1,5 @@
 import express from 'express';
-import { checkLanguage } from '#middleware/index.js';
+import { checkLanguage, webHookAuthMiddleware } from '#middleware/index.js';
 import {
   createShipment,
   getAllShipments,
@@ -206,8 +206,10 @@ router.get('/admin/shipments', getShipmentValidator, checkLanguage, authMiddlewa
  *     responses:
  *       200: { description: "Shipment updated" }
  *       400: { description: "Invalid payload" }
+ *       401: { description: "Missing webhook authentication header" }
+ *       403: { description: "Invalid webhook authentication" }
  */
-router.post('/ayMakanWebHook', ayMakanWebHook);
+router.post('/ayMakanWebHook', webHookAuthMiddleware, ayMakanWebHook);
 
 // GET SINGLE SHIPMENT
 /**

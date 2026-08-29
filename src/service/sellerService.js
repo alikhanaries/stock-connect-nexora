@@ -117,13 +117,7 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
 
     const [totalElements, seller] = await Promise.all([
       Seller.countDocuments(filter),
-      Seller.find(filter)
-        .select('+shopifyConfig.accessToken')
-        .sort(sort)
-        .collation({ locale: 'en', strength: 2 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
+      Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).skip(skip).limit(limit).lean(),
     ]);
 
     return {
@@ -132,11 +126,7 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
       appliedFilters,
     };
   } else {
-    const seller = await Seller.find(filter)
-      .select('+shopifyConfig.accessToken')
-      .sort(sort)
-      .collation({ locale: 'en', strength: 2 })
-      .lean();
+    const seller = await Seller.find(filter).sort(sort).collation({ locale: 'en', strength: 2 }).lean();
     return {
       seller: seller.map(formatSellerResponse),
       appliedFilters,
@@ -244,9 +234,7 @@ export const getSellerById = async (id) => {
   const seller = await Seller.findOne({
     _id: id,
     isDeleted: false,
-  })
-    .select('+shopifyConfig.accessToken')
-    .lean();
+  }).lean();
 
   return formatSellerResponse(seller);
 };

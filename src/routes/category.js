@@ -1,5 +1,5 @@
 import express from 'express';
-import multer from 'multer';
+import upload from '#helpers/FileHandler.js';
 import {
   importMarketPlaceCategoriesFromCsv,
   mapCategory,
@@ -16,7 +16,6 @@ import {
   getMarketPlaceCategoryTrailsValidator,
 } from '#validations/category.js';
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' }); // saves CSV temporarily
 
 /**
  * @swagger
@@ -68,9 +67,9 @@ router.post(
   '/importMarketPlaceCategories/:marketPlaceId',
   importMarketPlaceCategoriesValidator,
   checkLanguage,
+  authMiddleware,
   upload.single('file'),
   validateFile,
-  authMiddleware,
   importMarketPlaceCategoriesFromCsv
 );
 

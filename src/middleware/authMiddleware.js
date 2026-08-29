@@ -62,42 +62,53 @@ export const authorize = (roles) => {
   };
 };
 
-export const webHookAuthMiddleware = async (req, res, next) => {
-  console.time('webHookAuthMiddleware');
+export const createWebhookAuthMiddleware = ({ secret, headerName, secretLabel }) => {
+  return async (req, res, next) => {
+    console.time('webHookAuthMiddleware');
 
-  try {
-    const headerName = config.AYMAKAN_WEBHOOK_HEADER || 'X-Custom-Auth';
-    const expectedSecret = config.AYMAKAN_WEBHOOK_SECRET;
+    try {
+      const resolvedHeader = headerName || 'X-Custom-Auth';
 
-    if (!expectedSecret) {
-      console.error('AYMAKAN_WEBHOOK_SECRET missing in environment');
-      return Responses.failResponse(res, 'Server misconfiguration', 500);
+      if (!secret) {
+        console.error(`${secretLabel} missing in environment`);
+        return Responses.failResponse(res, 'Server misconfiguration', 500);
+      }
+
+      const receivedToken = req.headers[resolvedHeader.toLowerCase()];
+      if (!receivedToken) {
+        return Responses.failResponse(res, `Missing ${resolvedHeader} header`, 401);
+      }
+
+      const receivedBuffer = Buffer.from(receivedToken);
+      const expectedBuffer = Buffer.from(secret);
+
+      if (receivedBuffer.length !== expectedBuffer.length) {
+        return Responses.failResponse(res, 'Unauthorized', 403);
+      }
+
+      const isValid = crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
+
+      if (!isValid) {
+        return Responses.failResponse(res, 'Unauthorized', 403);
+      }
+
+      console.timeEnd('webHookAuthMiddleware');
+      next();
+    } catch (error) {
+      console.error('webHookAuthMiddleware error:', error.message);
+      return Responses.failResponse(res, 'Server error', 500);
     }
-
-    // Extract header value (case-insensitive)
-    const receivedToken = req.headers[headerName.toLowerCase()];
-    console.log('receivedToken', receivedToken);
-    if (!receivedToken) {
-      return Responses.failResponse(res, `Missing ${headerName} header`, 401);
-    }
-
-    const receivedBuffer = Buffer.from(receivedToken);
-    const expectedBuffer = Buffer.from(expectedSecret);
-
-    if (receivedBuffer.length !== expectedBuffer.length) {
-      return Responses.failResponse(res, 'Unauthorized', 403);
-    }
-
-    const isValid = crypto.timingSafeEqual(receivedBuffer, expectedBuffer);
-
-    if (!isValid) {
-      return Responses.failResponse(res, 'Unauthorized', 403);
-    }
-
-    console.timeEnd('webHookAuthMiddleware');
-    next();
-  } catch (error) {
-    console.error('webHookAuthMiddleware error:', error.message);
-    return Responses.failResponse(res, 'Server error', 500);
-  }
+  };
 };
+
+export const webHookAuthMiddleware = createWebhookAuthMiddleware({
+  secret: config.AYMAKAN_WEBHOOK_SECRET,
+  headerName: config.AYMAKAN_WEBHOOK_HEADER || 'X-Custom-Auth',
+  secretLabel: 'AYMAKAN_WEBHOOK_SECRET',
+});
+
+export const omnifulWebHookAuthMiddleware = createWebhookAuthMiddleware({
+  secret: config.OMNIFUL_WEBHOOK_SECRET,
+  headerName: config.OMNIFUL_WEBHOOK_HEADER || 'X-Custom-Auth',
+  secretLabel: 'OMNIFUL_WEBHOOK_SECRET',
+});

@@ -6,6 +6,7 @@ import fs from 'fs';
 import csv from 'csv-parser'; // for reading CSV
 import { mapRowToMarketPlaceCategory } from '#root/src/util/mapRowtoMarketPlaceCategory.js'; // your helper
 import { processBatch } from '../helpers/ProcessBatchHandler.js';
+import { safeUnlinkTempFile } from '../helpers/tempFileCleanup.js';
 import MarketPlaceCategory from '#models/MarketPlaceCategory.js';
 import Channel from '../models/Channel.js';
 import mongoose from 'mongoose';
@@ -182,64 +183,61 @@ export const insertCategoryTrail = async (categoryTrailArray, sellerId) => {
 };
 
 export const processMarketPlaceImportStream = async (stream, { filePath, marketPlaceId } = {}) => {
-  const batchSize = parseInt(process.env.BATCH_SIZE) || 500;
-  let batch = [];
-  let rowIndex = 0;
+  try {
+    const batchSize = parseInt(process.env.BATCH_SIZE) || 500;
+    let batch = [];
+    let rowIndex = 0;
 
-  /// Shared counters object (mutated inside processBatch)
-  const counters = {
-    insertedCount: 0,
-    updatedCount: 0,
-  };
+    /// Shared counters object (mutated inside processBatch)
+    const counters = {
+      insertedCount: 0,
+      updatedCount: 0,
+    };
 
-  let invalidRowsCount = 0;
-  let errorRows = [];
+    let invalidRowsCount = 0;
+    let errorRows = [];
 
-  const parser = stream.pipe(csv({ headers: ['categoryPath'], skipLines: 0 }));
+    const parser = stream.pipe(csv({ headers: ['categoryPath'], skipLines: 0 }));
 
-  for await (const row of parser) {
-    rowIndex++;
-    try {
-      const categories = await mapRowToMarketPlaceCategory(row, marketPlaceId);
+    for await (const row of parser) {
+      rowIndex++;
+      try {
+        const categories = await mapRowToMarketPlaceCategory(row, marketPlaceId);
 
-      if (!categories.length) {
+        if (!categories.length) {
+          invalidRowsCount++;
+          errorRows.push(rowIndex);
+          continue;
+        }
+
+        batch.push(...categories);
+
+        if (batch.length >= batchSize) {
+          await processBatch(batch, counters, `Batch ${Math.ceil(rowIndex / batchSize)}`);
+          batch = [];
+        }
+      } catch (err) {
+        console.error(`Row ${rowIndex} error:`, err.message);
         invalidRowsCount++;
         errorRows.push(rowIndex);
-        continue;
       }
+    }
 
-      batch.push(...categories);
+    // Final leftover batch
+    await processBatch(batch, counters, 'Final batch');
 
-      if (batch.length >= batchSize) {
-        await processBatch(batch, counters, `Batch ${Math.ceil(rowIndex / batchSize)}`);
-        batch = [];
-      }
-    } catch (err) {
-      console.error(`Row ${rowIndex} error:`, err.message);
-      invalidRowsCount++;
-      errorRows.push(rowIndex);
+    return {
+      success: true,
+      message: `Imported ${counters.insertedCount} new categories, updated ${counters.updatedCount}, skipped ${invalidRowsCount} invalid rows`,
+      ...counters,
+      invalidRowsCount,
+      errorRows,
+    };
+  } finally {
+    if (filePath) {
+      await safeUnlinkTempFile(filePath);
     }
   }
-
-  // Final leftover batch
-  await processBatch(batch, counters, 'Final batch');
-
-  // Delete temp file
-  if (filePath) {
-    try {
-      await fs.promises.unlink(filePath);
-    } catch (err) {
-      console.error('Failed to delete CSV file:', err.message);
-    }
-  }
-
-  return {
-    success: true,
-    message: `Imported ${counters.insertedCount} new categories, updated ${counters.updatedCount}, skipped ${invalidRowsCount} invalid rows`,
-    ...counters,
-    invalidRowsCount,
-    errorRows,
-  };
 };
 /* CSV File Import */
 export const importMarketPlaceCategories = async (filePath, marketPlaceId) => {

@@ -28,6 +28,7 @@ import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
 import fs from 'fs';
 import path from 'path';
+import { safeUnlinkTempFile } from '../helpers/tempFileCleanup.js';
 import { getWarehouseAvailabilityContext, buildWarehouseAvailabilityFields } from '#service/omnifulInventoryService.js';
 
 const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null) => {
@@ -1864,66 +1865,72 @@ export const addOrderLog = async (orderId, sellerId, log) => {
 };
 
 export const generateDocumentId = async ({ orderId, skuCodes, file }) => {
-  // Normalize from-data inputs
-  const normalizedOrderId = String(orderId)
-    .replace(/^"+|"+$/g, '')
-    .trim();
-  const normalizedSkuCodes = Array.isArray(skuCodes)
-    ? skuCodes.map((s) =>
-        String(s)
-          .replace(/^"+|"+$/g, '')
-          .trim()
-      )
-    : [
-        String(skuCodes)
-          .replace(/^"+|"+$/g, '')
-          .trim(),
-      ];
+  try {
+    // Normalize from-data inputs
+    const normalizedOrderId = String(orderId)
+      .replace(/^"+|"+$/g, '')
+      .trim();
+    const normalizedSkuCodes = Array.isArray(skuCodes)
+      ? skuCodes.map((s) =>
+          String(s)
+            .replace(/^"+|"+$/g, '')
+            .trim()
+        )
+      : [
+          String(skuCodes)
+            .replace(/^"+|"+$/g, '')
+            .trim(),
+        ];
 
-  // Find the order
-  const order = await Order.findOne({ orderId: normalizedOrderId });
-  if (!order) throw new Error(`Order not found: ${normalizedOrderId}`);
+    // Find the order
+    const order = await Order.findOne({ orderId: normalizedOrderId });
+    if (!order) throw new Error(`Order not found: ${normalizedOrderId}`);
 
-  // Check all requested SKUs exist
-  const skuList = order.orderSkuList?.skuList || [];
-  const missingSkus = normalizedSkuCodes.filter((sku) => !skuList.some((item) => item.merchantProductNo === sku));
-  if (missingSkus.length > 0) {
-    throw new Error(`The following SKU(s) are not in the order: ${missingSkus.join(', ')}`);
-  }
-
-  // Convert file to base64
-  const fileBuffer = await fs.promises.readFile(file.path);
-  const base64String = fileBuffer.toString('base64');
-  const ext = path.extname(file.originalname).slice(1);
-
-  const payload = {
-    document: base64String,
-    document_type: ext,
-    reference: '',
-  };
-
-  // Aymakan API
-  const result = await createAymakanDocumentId(payload);
-  const documentId = result.data.document_id;
-
-  skuList.forEach((skuItem) => {
-    if (normalizedSkuCodes.includes(skuItem.merchantProductNo)) {
-      skuItem.documentId = documentId;
-      // Invoice upload starts fulfillment at SKU level
-      if ((skuItem.status || '').toUpperCase() === 'NEW' || !skuItem.status) {
-        skuItem.status = 'IN_PROGRESS';
-      }
+    // Check all requested SKUs exist
+    const skuList = order.orderSkuList?.skuList || [];
+    const missingSkus = normalizedSkuCodes.filter((sku) => !skuList.some((item) => item.merchantProductNo === sku));
+    if (missingSkus.length > 0) {
+      throw new Error(`The following SKU(s) are not in the order: ${missingSkus.join(', ')}`);
     }
-  });
 
-  // Invoice upload starts fulfillment → NEW becomes IN_PROGRESS
-  if (order.status === 'NEW') {
-    order.status = 'IN_PROGRESS';
+    // Convert file to base64
+    const fileBuffer = await fs.promises.readFile(file.path);
+    const base64String = fileBuffer.toString('base64');
+    const ext = path.extname(file.originalname).slice(1);
+
+    const payload = {
+      document: base64String,
+      document_type: ext,
+      reference: '',
+    };
+
+    // Aymakan API
+    const result = await createAymakanDocumentId(payload);
+    const documentId = result.data.document_id;
+
+    skuList.forEach((skuItem) => {
+      if (normalizedSkuCodes.includes(skuItem.merchantProductNo)) {
+        skuItem.documentId = documentId;
+        // Invoice upload starts fulfillment at SKU level
+        if ((skuItem.status || '').toUpperCase() === 'NEW' || !skuItem.status) {
+          skuItem.status = 'IN_PROGRESS';
+        }
+      }
+    });
+
+    // Invoice upload starts fulfillment → NEW becomes IN_PROGRESS
+    if (order.status === 'NEW') {
+      order.status = 'IN_PROGRESS';
+    }
+
+    await order.save();
+    await syncSellerOrdersFromOrder(order._id);
+    return documentId;
+  } finally {
+    if (file?.path) {
+      await safeUnlinkTempFile(file.path);
+    }
   }
-
-  await order.save();
-  await syncSellerOrdersFromOrder(order._id);
-  return documentId;
 };
 const getAnalyticsOrders = async (query) => {
   try {

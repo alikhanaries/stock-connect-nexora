@@ -14,6 +14,14 @@ import {
   resetPasswordValidator,
   resetTokenValidator,
 } from '#validations/auth.js';
+import {
+  authMiddleware,
+  authorize,
+  checkLanguage,
+  forgetPasswordRateLimiter,
+  loginRateLimiter,
+  refreshTokenRateLimiter,
+} from '#middleware/index.js';
 import { authMiddleware, authorize, checkLanguage, forgetPasswordRateLimiter } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 const allowedRoles = Object.values(USER_ROLES);
@@ -50,7 +58,7 @@ const router = express.Router();
  *       500:
  *         description: Server error
  */
-router.post('/login', loginValidator, checkLanguage, login);
+router.post('/login', loginRateLimiter, loginValidator, checkLanguage, login);
 
 /**
  * @openapi
@@ -115,7 +123,7 @@ router.post('/register', registerValidator, checkLanguage, authMiddleware, autho
  *       401:
  *         description: Invalid refresh token
  */
-router.post('/refresh-token', checkLanguage, refreshToken);
+router.post('/refresh-token', refreshTokenRateLimiter, checkLanguage, refreshToken);
 
 /**
  * @openapi
