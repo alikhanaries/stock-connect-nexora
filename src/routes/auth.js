@@ -22,7 +22,6 @@ import {
   loginRateLimiter,
   refreshTokenRateLimiter,
 } from '#middleware/index.js';
-import { authMiddleware, authorize, checkLanguage, forgetPasswordRateLimiter } from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 const allowedRoles = Object.values(USER_ROLES);
 
