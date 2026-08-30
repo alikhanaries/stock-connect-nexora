@@ -2,6 +2,7 @@ import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import { entegraConfig } from '#root/src/integrations/erp/entegra/config/config.js';
 import { filterInStockProducts } from '../helpers/filterInStockProducts.js';
+import { filterProductsWithImages } from '../helpers/filterProductsWithImages.js';
 import { mapProductToDB } from '../helpers/formatter.js';
 import { fetchCategories } from './categoryService.js';
 import { getAccessToken } from '../utils/accessTokenGenerator.js';
@@ -74,7 +75,7 @@ export const fetchProductsPage = async (page = 1, AUTH_TOKEN) => {
 /**
  * Fetch all pages & save products
  */
-export const importAllProducts = async (sellerId, isImageUpdate = false) => {
+export const importAllProducts = async (sellerId, isImageUpdate = true) => {
   // Resolve which Entegra brand belongs to this seller (slug-driven mapping)
   const seller = await Seller.findById(sellerId, { slug: 1 }).lean();
   if (!seller?.slug) throw new Error(`Seller ${sellerId} not found or missing slug`);
@@ -107,8 +108,8 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
 
     // Keep only products whose brand maps to this seller's slug
     const brandFiltered = rawList.filter((p) => isBrandForSeller(p?.brand, sellerSlug));
-
-    const list = filterInStockProducts(brandFiltered);
+    const withImages = filterProductsWithImages(brandFiltered);
+    const list = filterInStockProducts(withImages);
 
     let importedThisPage = 0;
 
@@ -135,7 +136,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = false) => {
  * Create Product + Variants (configurable or simple)
  */
 
-export const createOrUpdateProduct = async (sellerId, product, categories, isImageUpdate = false) => {
+export const createOrUpdateProduct = async (sellerId, product, categories, isImageUpdate = true) => {
   const categoryId = product.group; // e.g., '4'
   const categoryTrail = categoryId ? categories.find((cat) => cat.id == categoryId).name : '';
 

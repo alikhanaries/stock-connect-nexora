@@ -44,8 +44,11 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     shippingTime: item.shippingTime || '',
     isFrozen: Boolean(item.isFrozen),
 
-    // Images
+    // Images (only include if images are provided/updated)
     ...(() => {
+      if (!item.primaryImageUrl && !item.imageUrl && (!Array.isArray(item.images) || item.images.length === 0)) {
+        return {};
+      }
       const imgs = pickNamedImageFields({ ...item, images: item.images || [] });
       return {
         primaryImageUrl: imgs.primaryImageUrl || '',

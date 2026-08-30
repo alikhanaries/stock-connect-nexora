@@ -3,34 +3,10 @@ import { canonicalProductMapper } from './canonicalProductMapper.js'; // <-- IMP
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
 import { normalizeAndTranslateVariants } from '#root/src/integrations/erp/entegra/helpers/commonHelper.js';
-import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
 export const collectedColors = new Map();
 
 // MAIN MAPPER
-
-import pLimit from 'p-limit';
-
-const imageLimit = pLimit(5); //  max 5 concurrent image uploads
-const imageCache = new Map();
-
-const safeProcessImages = async (images = [], sellerId) => {
-  if (!images.length) return [];
-
-  const key = images.join('|');
-  if (imageCache.has(key)) return imageCache.get(key);
-
-  try {
-    const uploaded = await imageLimit(() => processProductImages(images, sellerId));
-
-    const safeImages = Array.isArray(uploaded) ? uploaded : [];
-    imageCache.set(key, safeImages);
-    return safeImages;
-  } catch (e) {
-    console.error('Image upload failed:', e.message);
-    return [];
-  }
-};
 
 const attachImages = (target, images) => {
   if (!Array.isArray(images) || images.length === 0) return;
@@ -38,13 +14,89 @@ const attachImages = (target, images) => {
   Object.assign(target, mapErpStyleImageFields(images));
 };
 
-export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = false) => {
+const extractPicturesSafely = (pictures = []) => {
+  if (!Array.isArray(pictures) || !pictures.length) return [];
+
+  // Helper to extract numerical sequence from image filename (e.g. "...-6585.jpg" -> 6585)
+  const getImageSequenceNum = (item) => {
+    const url = typeof item === 'string' ? item : item?.picture || '';
+    const m = url.match(/(\d+)\.(jpg|jpeg|png|webp)/i);
+    return m ? parseInt(m[1], 10) : 99999999;
+  };
+
+  // 1. Check if any picture has explicit order/is_main/sort attributes from Entegra
+  const hasOrderFlags = pictures.some(
+    (p) => p && (p.order != null || p.order_number != null || p.is_main != null || p.main != null || p.sort != null)
+  );
+
+  if (hasOrderFlags) {
+    const sorted = [...pictures].sort((a, b) => {
+      const aIsMain =
+        a?.is_main === true || a?.is_main === 1 || a?.is_main === '1' || a?.main === true || a?.main === 1;
+      const bIsMain =
+        b?.is_main === true || b?.is_main === 1 || b?.is_main === '1' || b?.main === true || b?.main === 1;
+      if (aIsMain && !bIsMain) return -1;
+      if (!aIsMain && bIsMain) return 1;
+
+      const aOrder = Number(a?.order ?? a?.order_number ?? a?.sort);
+      const bOrder = Number(b?.order ?? b?.order_number ?? b?.sort);
+      const safeA = isNaN(aOrder) ? 9999 : aOrder;
+      const safeB = isNaN(bOrder) ? 9999 : bOrder;
+      return safeA - safeB;
+    });
+    return sorted.map((i) => (typeof i === 'string' ? i : i?.picture)).filter(Boolean);
+  }
+
+  // 2. Sort images numerically by ID
+  const sorted = [...pictures]
+    .map((i) => (typeof i === 'string' ? i : i?.picture))
+    .filter(Boolean)
+    .sort((a, b) => getImageSequenceNum(a) - getImageSequenceNum(b));
+
+  if (sorted.length <= 3) return sorted;
+
+  // 3. Group into consecutive photoshoot clusters (ID difference <= 5)
+  const clusters = [];
+  let currentCluster = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prevNum = getImageSequenceNum(sorted[i - 1]);
+    const currNum = getImageSequenceNum(sorted[i]);
+
+    if (currNum - prevNum <= 5) {
+      currentCluster.push(sorted[i]);
+    } else {
+      clusters.push(currentCluster);
+      currentCluster = [sorted[i]];
+    }
+  }
+  if (currentCluster.length) clusters.push(currentCluster);
+
+  // 4. Put the largest studio catalog pack first
+  clusters.sort((a, b) => b.length - a.length);
+
+  return clusters.flat();
+};
+
+export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = true) => {
   const hasVariants = Array.isArray(p.variatios) && p.variatios.length > 0;
 
-  // ================= IMAGES FROM API =================
-  const baseImages = p.pictures?.map((i) => i?.picture).filter(Boolean) || [];
+  // ================= IMAGES FROM API (Direct URLs) =================
+  const grandParentImages = extractPicturesSafely(p.pictures);
 
-  const hasApiImages = baseImages.length > 0;
+  const hasAnyPictures =
+    grandParentImages.length > 0 ||
+    (hasVariants &&
+      p.variatios.some(
+        (v) =>
+          Array.isArray(v?.variation_pictures) &&
+          v.variation_pictures.some((vp) => (typeof vp === 'string' ? vp : vp?.picture))
+      ));
+
+  // Skip formatting / storing if product has no images
+  if (!hasAnyPictures) {
+    return { parents: [], children: [] };
+  }
 
   // ================= META =================
   const grandParentSku = `${convertCodeFormat(p.productCode)}`;
@@ -59,12 +111,6 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   const gpAmazonPrice = await priceConverter(currency, parseFloat(p.amazon_ot) || 0);
   const gpSixthStreetPrice = await priceConverter(currency, parseFloat(p.thstreet6_ot) || 0);
   const gpStyliPrice = await priceConverter(currency, parseFloat(p.styli_ot) || 0);
-
-  let grandParentImages = [];
-
-  if (isImageUpdate === true && hasApiImages === true) {
-    grandParentImages = await safeProcessImages(baseImages, sellerId);
-  }
 
   if (!hasVariants) {
     return { parents: [], children: [] };
@@ -124,22 +170,16 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     };
 
     // ---------- PARENT IMAGES ----------
-    const rawParentImages = colorVariants[0]?.variation_pictures?.map((i) => i?.picture).filter(Boolean) || [];
+    const variantWithPics = colorVariants.find(
+      (v) => Array.isArray(v.variation_pictures) && v.variation_pictures.length > 0
+    );
+    const rawParentImages = extractPicturesSafely(variantWithPics?.variation_pictures || []);
 
-    const hasParentApiImages = rawParentImages.length > 0;
+    const parentImages = rawParentImages.length > 0 ? rawParentImages : grandParentImages;
 
-    let parentImages = [];
-
-    if (isImageUpdate === true && hasParentApiImages === true) {
-      parentImages = await safeProcessImages(rawParentImages, sellerId);
+    if (isImageUpdate && parentImages.length) {
+      attachImages(parentObject, parentImages);
     }
-
-    // fallback ONLY if GP had API images
-    if (!parentImages.length && hasApiImages) {
-      parentImages = grandParentImages;
-    }
-
-    attachImages(parentObject, parentImages);
 
     parents.push(canonicalProductMapper(parentObject, sellerId));
 
@@ -191,8 +231,11 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         styliPrice: childStyliPrice || 0,
       };
 
-      if (isImageUpdate && parentImages.length) {
-        attachImages(childObject, parentImages);
+      const rawChildImages = extractPicturesSafely(v.variation_pictures || []);
+      const childImages = rawChildImages.length > 0 ? rawChildImages : parentImages;
+
+      if (isImageUpdate && childImages.length) {
+        attachImages(childObject, childImages);
       }
 
       children.push(canonicalProductMapper(childObject, sellerId));
