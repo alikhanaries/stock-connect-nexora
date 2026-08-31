@@ -1,3 +1,5 @@
+import { resolveDeliveryPostcode } from './saudiNationalAddress.js';
+
 export const normalizePhone = (phone) => {
   // Strip non-digits and ensure 9-digit KSA style number starting with 5
   if (!phone) return 540000000;
@@ -15,16 +17,22 @@ export const safeNumber = (value, fallback) => {
 
 export const buildDeliveryPayload = (data = {}) => {
   const payload = {};
+  const country = String(data.country || 'SA').toUpperCase();
+  const shortCode = data.nationalAddressShortCode || null;
 
   payload.delivery_name = data.name || 'Customer';
   payload.delivery_email = data.email || '';
   payload.delivery_city = data.city || 'Riyadh';
   payload.delivery_address = data.address || data.city || 'Riyadh';
-  payload.delivery_country = data.country || 'SA';
-  payload.delivery_postcode = safeNumber(data.postcode, 11543);
+  payload.delivery_country = country;
+  payload.delivery_postcode = resolveDeliveryPostcode(data.postcode, 11543);
   payload.delivery_phone = normalizePhone(data.phone);
   payload.delivery_neighbourhood = data.neighbourhood || data.city || 'Riyadh';
   payload.delivery_description = ''; // required by Aymakan schema
+
+  if (country === 'SA' && shortCode) {
+    payload.delivery_national_address = { short_code: shortCode };
+  }
 
   return payload;
 };

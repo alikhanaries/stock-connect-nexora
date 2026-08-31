@@ -90,6 +90,14 @@ export const createShipmentWithAymakan = async (shipmentData) => {
 
     const hasInternationalMetadata = documentId && tax_identification_number && invoice_number && invoice_date;
 
+    if (isAmazonFulfillment && String(deliveryData?.country || '').toUpperCase() === 'SA') {
+      if (!deliveryData?.nationalAddressShortCode) {
+        throw new Error(
+          'Saudi National Address short code is required for Amazon.sa customer delivery but could not be resolved from the order shipping address'
+        );
+      }
+    }
+
     const deliveryFields =
       isAmazonFulfillment && deliveryData
         ? buildDeliveryPayload(deliveryData)
