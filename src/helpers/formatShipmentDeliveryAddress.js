@@ -1,15 +1,22 @@
+import { extractSaudiNationalAddressShortCode } from './saudiNationalAddress.js';
+
 export const formatShipmentDeliveryAddress = (orderShippingAddress, orderCustomer) => {
   try {
     if (!orderShippingAddress || !orderCustomer) {
       throw new Error('Missing address or customer data');
     }
 
-    const { firstName, lastName, city, line1, line2, line3, zipCode, countryIso } = orderShippingAddress;
+    const { firstName, lastName, city, line1, line2, line3, zipCode, countryIso, houseNr, region } =
+      orderShippingAddress;
 
     const { email, phone } = orderCustomer;
+    const country = String(countryIso || '').toUpperCase();
+    const nationalAddressShortCode =
+      country === 'SA' ? extractSaudiNationalAddressShortCode(orderShippingAddress) : null;
 
-    // Basic validation
-    if (!firstName || !lastName || !city || !line1 || !zipCode || !countryIso) {
+    const hasZipOrSaShortCode = Boolean(zipCode) || (country === 'SA' && nationalAddressShortCode);
+
+    if (!firstName || !lastName || !city || !line1 || !countryIso || !hasZipOrSaShortCode) {
       throw new Error('Incomplete shipping address data');
     }
 
@@ -22,6 +29,9 @@ export const formatShipmentDeliveryAddress = (orderShippingAddress, orderCustome
       country: countryIso || '',
       phone: phone || '',
       description: '',
+      houseNr: houseNr || '',
+      region: region || '',
+      nationalAddressShortCode: nationalAddressShortCode || undefined,
     };
   } catch (err) {
     console.error('Error in buildCollectionData:', err.message);
