@@ -7,6 +7,7 @@ import { mapProductToDB } from '../helpers/formatter.js';
 import { fetchCategories } from './categoryService.js';
 import { getAccessToken } from '../utils/accessTokenGenerator.js';
 import { getMappingBySellerSlug, isBrandForSeller } from '../helpers/brandMapping.js';
+import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 const BASE_URL = `${entegraConfig?.ENTEGRA_BASE_URL}product/page=`;
 
 /**
@@ -129,6 +130,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
   }
 
   console.log(` [${displayBrand}] Total products imported: ${totalImported}`);
+  await updateSyncDate(sellerId, 'PRODUCT', totalImported);
   return totalImported;
 };
 
