@@ -49,7 +49,7 @@ const isBlockedHostname = (hostname) => {
   return false;
 };
 
-const parseHttpsUrl = (imageUrl) => {
+const parseHttpOrHttpsUrl = (imageUrl) => {
   let parsed;
   try {
     parsed = new URL(imageUrl);
@@ -57,15 +57,15 @@ const parseHttpsUrl = (imageUrl) => {
     throw new Error('invalid image url');
   }
 
-  if (parsed.protocol !== 'https:') {
-    throw new Error('image url must use https');
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error('image url must use http or https');
   }
 
   if (parsed.username || parsed.password) {
     throw new Error('image url must not contain credentials');
   }
 
-  if (parsed.port && parsed.port !== '443') {
+  if (parsed.port && parsed.port !== '443' && parsed.port !== '80') {
     throw new Error('image url port is not allowed');
   }
 
@@ -77,7 +77,7 @@ const parseHttpsUrl = (imageUrl) => {
 };
 
 export const validateSafeImageUrl = async (imageUrl) => {
-  const parsed = parseHttpsUrl(imageUrl);
+  const parsed = parseHttpOrHttpsUrl(imageUrl);
   const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
 
   if (net.isIP(hostname)) {

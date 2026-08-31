@@ -4,6 +4,7 @@ import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParse
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
 import { normalizeAndTranslateVariants } from '#root/src/integrations/erp/entegra/helpers/commonHelper.js';
 import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
+import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 export const collectedColors = new Map();
 
 // MAIN MAPPER
@@ -177,8 +178,12 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
     const parentImages = rawParentImages.length > 0 ? rawParentImages : grandParentImages;
 
+    let processedParentImages = [];
     if (isImageUpdate && parentImages.length) {
-      attachImages(parentObject, parentImages);
+      processedParentImages = await processProductImages(parentImages, sellerId);
+      if (processedParentImages.length > 0) {
+        attachImages(parentObject, processedParentImages);
+      }
     }
 
     parents.push(canonicalProductMapper(parentObject, sellerId));
@@ -232,10 +237,16 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       };
 
       const rawChildImages = extractPicturesSafely(v.variation_pictures || []);
-      const childImages = rawChildImages.length > 0 ? rawChildImages : parentImages;
 
-      if (isImageUpdate && childImages.length) {
-        attachImages(childObject, childImages);
+      if (isImageUpdate) {
+        if (rawChildImages.length > 0) {
+          const processedChildImages = await processProductImages(rawChildImages, sellerId);
+          if (processedChildImages.length > 0) {
+            attachImages(childObject, processedChildImages);
+          }
+        } else if (processedParentImages.length > 0) {
+          attachImages(childObject, processedParentImages);
+        }
       }
 
       children.push(canonicalProductMapper(childObject, sellerId));
