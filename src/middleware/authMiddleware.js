@@ -20,6 +20,10 @@ export const authMiddleware = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
 
+      if (decoded.type === 'refresh') {
+        return Responses.failResponse(res, 'User unauthorized', 401);
+      }
+
       const user = await User.findById(decoded.id).lean();
       if (!user || user.isDeleted) {
         return Responses.failResponse(res, 'User unauthorized', 403);
