@@ -1,6 +1,7 @@
 import { ROLES_BASED_USER_CREATION, SELLER_TYPE, USER_ROLES } from '#constants/common.js';
 import UserSeller from '#models/UserSeller.js';
 import Seller from '#models/Seller.js';
+import User from '#models/User.js';
 
 const userRoleBasedAccess = (creatorRole, newUserRole) => {
   return ROLES_BASED_USER_CREATION[creatorRole]?.includes(newUserRole) || false;
@@ -79,18 +80,20 @@ const getUserConnectedToThisSellers = async (seller, role, baseSellerId) => {
 const sellerConnectionUpdate = async (userId, sellerIds) => {
   await UserSeller.deleteMany({ userId: userId });
 
-  if (!Array.isArray(sellerIds) || sellerIds.length === 0) {
-    return [];
+  let resSellerIds = [];
+
+  if (Array.isArray(sellerIds) && sellerIds.length > 0) {
+    const connectionsToCreate = sellerIds.map((sId) => ({
+      userId: userId,
+      sellerId: sId,
+    }));
+
+    const connectionUpdate = await UserSeller.insertMany(connectionsToCreate);
+    resSellerIds = connectionUpdate.map((doc) => doc.sellerId);
   }
 
-  const connectionsToCreate = sellerIds.map((sId) => ({
-    userId: userId,
-    sellerId: sId,
-  }));
+  await User.findByIdAndUpdate(userId, { $inc: { tokenVersion: 1 } });
 
-  const connectionUpdate = await UserSeller.insertMany(connectionsToCreate);
-
-  const resSellerIds = connectionUpdate.map((doc) => doc.sellerId);
   return resSellerIds;
 };
 
