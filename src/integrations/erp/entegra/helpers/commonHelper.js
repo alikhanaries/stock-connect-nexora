@@ -1,4 +1,16 @@
 import { mapErpStyleImageFields, EXTRA_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
+import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { ENTEGRA_PRICE_MARKUP } from '../constants/common.js';
+
+export const convertEntegraPrice = async (currencyCode = 'TRY', rawValue = 0) => {
+  const value = parseFloat(rawValue);
+  if (!value || isNaN(value) || value <= 0) return 0;
+
+  const sarPrice = await priceConverter(currencyCode, value);
+  if (!sarPrice || sarPrice <= 0) return 0;
+
+  return Number((sarPrice * ENTEGRA_PRICE_MARKUP).toFixed(2));
+};
 
 export const extractMainImage = (pictures) => {
   if (!Array.isArray(pictures)) return null;
