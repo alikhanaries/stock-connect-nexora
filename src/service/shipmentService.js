@@ -89,7 +89,16 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       invoice_date = shipmentData.taxData?.invoice_date,
     } = shipmentData;
 
-    const hasInternationalMetadata = documentId && tax_identification_number && invoice_number && invoice_date;
+    const hasInternationalTaxFields = documentId && tax_identification_number && invoice_number && invoice_date;
+    const hasAymakanProductLines = Array.isArray(productsData) && productsData.length > 0;
+
+    if (hasInternationalTaxFields && !hasAymakanProductLines) {
+      throw new Error(
+        'Aymakan customs shipment requires product line items with HS codes. Product data could not be included in the shipment payload.'
+      );
+    }
+
+    const hasInternationalMetadata = hasInternationalTaxFields && hasAymakanProductLines;
 
     if (isAmazonFulfillment && String(deliveryData?.country || '').toUpperCase() === 'SA') {
       if (!deliveryData?.nationalAddressShortCode) {
@@ -367,9 +376,27 @@ export const createFullShipmentService = async (shipmentData) => {
       return validation;
     }
 
-    // Step 4: Parse invoice data
+    // Step 4: Build Aymakan product lines (same fields as before; not gated on invoice PDF parse)
     let taxData = null;
-    let productsData = null;
+    const skus = validProducts.map((item) => item.merchantProductNo);
+    const productDocs = await Product.find({ productSkuCode: { $in: skus } })
+      .select('productSkuCode countryOfOrigin description name')
+      .lean();
+    const originMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.countryOfOrigin || '']));
+    const descriptionMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.name || '']));
+    const productsData = await Promise.all(
+      validProducts.map(async (item) => ({
+        sku: item.merchantProductNo,
+        qty: Number(item.quantity || 0),
+        description: descriptionMap[item.merchantProductNo] || '',
+        price: await convertFromSar(AYMAKAN_PRICE_CURRENCY, (item.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR),
+        hs_code: item.hsCode || '1111111',
+        origin_country: originMap[item.merchantProductNo] || '',
+        price_currency: AYMAKAN_PRICE_CURRENCY,
+      }))
+    );
+
+    // Step 4b: Parse invoice PDF for tax metadata only
     const invoiceData = await parseInvoiceData(id);
     if (invoiceData?.success) {
       taxData = {
@@ -377,27 +404,6 @@ export const createFullShipmentService = async (shipmentData) => {
         invoice_number: invoiceData.invoiceData?.invoiceNumber || '',
         invoice_date: invoiceData.invoiceData?.invoiceDate || '',
       };
-
-      const skus = validProducts.map((item) => item.merchantProductNo);
-      const productDocs = await Product.find({ productSkuCode: { $in: skus } })
-        .select('productSkuCode countryOfOrigin description name')
-        .lean();
-      const originMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.countryOfOrigin || '']));
-      const descriptionMap = Object.fromEntries(productDocs.map((p) => [p.productSkuCode, p.name || '']));
-      productsData = await Promise.all(
-        validProducts.map(async (item) => ({
-          sku: item.merchantProductNo,
-          qty: Number(item.quantity || 0),
-          description: descriptionMap[item.merchantProductNo] || '',
-          price: await convertFromSar(
-            AYMAKAN_PRICE_CURRENCY,
-            (item.originalLineTotalInclVat || 0) / AYMAKAN_VAT_DIVISOR
-          ),
-          hs_code: item.hsCode || '1111111',
-          origin_country: originMap[item.merchantProductNo] || '',
-          price_currency: AYMAKAN_PRICE_CURRENCY,
-        }))
-      );
     }
 
     // STEP 5: Existing shipments
