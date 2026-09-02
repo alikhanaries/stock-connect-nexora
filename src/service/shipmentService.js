@@ -29,6 +29,7 @@ import { convertFromSar } from '../integrations/common/helpers/currencyConverter
 import OrderLogs from '#models/OrderLogs.js';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import { buildDeliveryPayload, buildCollectionPayload } from '#helpers/AymakanDataHandler.js';
+import { resolveCountryIsoCode } from '#helpers/countryIso.js';
 import { decreaseStock, increaseStock, validateStockAvailability } from '../helpers/inventoryHandler.js';
 import { runInTransaction } from '#util/mongoTransaction.js';
 import { sendStockBatch } from '../service/InventoryService.js';
@@ -73,7 +74,7 @@ export const createShipmentWithAymakan = async (shipmentData) => {
       [`${prefix}_city`]: data?.city || '',
       [`${prefix}_address`]: data?.address || '',
       [`${prefix}_postcode`]: data?.postcode ?? null,
-      [`${prefix}_country`]: data?.country || '',
+      [`${prefix}_country`]: data?.country ? resolveCountryIsoCode(data.country) : '',
       [`${prefix}_phone`]: data?.phone || '',
     });
     const {

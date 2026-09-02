@@ -1,7 +1,6 @@
-import { safeNumber, convertCodeFormat } from './commonHelper.js';
+import { safeNumber, convertCodeFormat, convertEntegraPrice } from './commonHelper.js';
 import { canonicalProductMapper } from './canonicalProductMapper.js'; // <-- IMPORT CANONICAL MAPPER
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
-import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
 import { normalizeAndTranslateVariants } from '#root/src/integrations/erp/entegra/helpers/commonHelper.js';
 import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
@@ -105,13 +104,13 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   const gender = /Kadın/i.test(p.name) ? 'Female' : /Erkek/i.test(p.name) ? 'Male' : 'Unisex';
 
   // ================= GRAND PARENT =================
-  const gpPrice = await priceConverter(currency, parseFloat(p.namshi_fiyat) || 0);
-  const gpSpecial = await priceConverter(currency, parseFloat(p.site_indirimli_fiyat) || 0);
-  const gpNoonPrice = await priceConverter(currency, parseFloat(p.noon_ot) || 0);
+  const gpPrice = await convertEntegraPrice(currency, p.namshi_fiyat);
+  const gpSpecial = await convertEntegraPrice(currency, p.site_indirimli_fiyat);
+  const gpNoonPrice = await convertEntegraPrice(currency, p.noon_ot);
   const gpNamshiPrice = gpPrice;
-  const gpAmazonPrice = await priceConverter(currency, parseFloat(p.amazon_ot) || 0);
-  const gpSixthStreetPrice = await priceConverter(currency, parseFloat(p.thstreet6_ot) || 0);
-  const gpStyliPrice = await priceConverter(currency, parseFloat(p.styli_ot) || 0);
+  const gpAmazonPrice = await convertEntegraPrice(currency, p.amazon_ot);
+  const gpSixthStreetPrice = await convertEntegraPrice(currency, p.thstreet6_ot);
+  const gpStyliPrice = await convertEntegraPrice(currency, p.styli_ot);
 
   if (!hasVariants) {
     return { parents: [], children: [] };
@@ -192,13 +191,13 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     for (const v of colorVariants) {
       const childSku = convertCodeFormat(v.productCode);
 
-      const childPrice = await priceConverter(currency, parseFloat(v.namshi_fiyat) || 0);
-      const childSpecial = await priceConverter(currency, parseFloat(v.site_indirimli_fiyat) || 0);
-      const childNoonPrice = await priceConverter(currency, parseFloat(v.noon_ot) || 0);
+      const childPrice = await convertEntegraPrice(currency, v.namshi_fiyat);
+      const childSpecial = await convertEntegraPrice(currency, v.site_indirimli_fiyat);
+      const childNoonPrice = await convertEntegraPrice(currency, v.noon_ot);
       const childNamshiPrice = childPrice;
-      const childAmazonPrice = await priceConverter(currency, parseFloat(v.amazon_ot) || 0);
-      const childSixthStreetPrice = await priceConverter(currency, parseFloat(v.thstreet6_ot) || 0);
-      const childStyliPrice = await priceConverter(currency, parseFloat(v.styli_ot) || 0);
+      const childAmazonPrice = await convertEntegraPrice(currency, v.amazon_ot);
+      const childSixthStreetPrice = await convertEntegraPrice(currency, v.thstreet6_ot);
+      const childStyliPrice = await convertEntegraPrice(currency, v.styli_ot);
 
       const childObject = {
         sellerId,

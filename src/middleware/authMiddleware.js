@@ -4,6 +4,7 @@ import { config } from '#config/config.js';
 import Responses from '#helpers/response.js';
 import { USER_ROLES } from '#constants/common.js';
 import crypto from 'crypto';
+import userHelper from '#helpers/User.js';
 
 export const authMiddleware = async (req, res, next) => {
   console.time('authMiddleware');
@@ -19,6 +20,10 @@ export const authMiddleware = async (req, res, next) => {
     try {
       const decoded = jwt.verify(token, config.JWT_SECRET);
 
+      if (decoded.type === 'refresh') {
+        return Responses.failResponse(res, 'User unauthorized', 401);
+      }
+
       const user = await User.findById(decoded.id).lean();
       if (!user || user.isDeleted) {
         return Responses.failResponse(res, 'User unauthorized', 403);
@@ -31,7 +36,7 @@ export const authMiddleware = async (req, res, next) => {
       }
 
       req.user = user;
-      req.sellerIds = decoded.sellerIds;
+      req.sellerIds = (await userHelper.getSellerIds(user._id.toString())) || [];
       next();
     } catch (error) {
       console.log('JWT verification error:', error.message);

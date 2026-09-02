@@ -1,3 +1,4 @@
+import { resolveCountryIsoCode } from './countryIso.js';
 import { resolveDeliveryPostcode } from './saudiNationalAddress.js';
 
 export const normalizePhone = (phone) => {
@@ -17,7 +18,7 @@ export const safeNumber = (value, fallback) => {
 
 export const buildDeliveryPayload = (data = {}) => {
   const payload = {};
-  const country = String(data.country || 'SA').toUpperCase();
+  const country = data.country ? resolveCountryIsoCode(data.country) : 'SA';
   const shortCode = data.nationalAddressShortCode || null;
 
   payload.delivery_name = data.name || 'Customer';
@@ -46,7 +47,7 @@ export const buildCollectionPayload = (data = {}) => {
   payload.collection_email = data.email || '';
   payload.collection_city = data.city || 'Riyadh';
   payload.collection_address = data.address || data.city || 'Riyadh';
-  payload.collection_country = data.country || 'SA';
+  payload.collection_country = data.country ? resolveCountryIsoCode(data.country) : 'SA';
   payload.collection_postcode = safeNumber(data.postcode, 11543);
   payload.collection_phone = normalizePhone(data.phone);
   payload.collection_neighbourhood = data.neighbourhood || data.city || 'Riyadh';

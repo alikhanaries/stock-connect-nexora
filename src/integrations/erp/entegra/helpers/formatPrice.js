@@ -1,5 +1,4 @@
-import { convertCodeFormat } from './commonHelper.js';
-import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { convertCodeFormat, convertEntegraPrice } from './commonHelper.js';
 
 export const formatEntegraPrice = async (products = [], sellerId) => {
   if (!products.length) return { products: [] };
@@ -12,8 +11,8 @@ export const formatEntegraPrice = async (products = [], sellerId) => {
 
     const currency = p.currencyType === 'TRL' ? 'TRY' : p.currencyType || 'USD';
 
-    const parentPrice = await priceConverter(currency, parseFloat(p.namshi_fiyat) || 0);
-    const parentSpecial = await priceConverter(currency, parseFloat(p.site_indirimli_fiyat) || 0);
+    const parentPrice = await convertEntegraPrice(currency, p.namshi_fiyat);
+    const parentSpecial = await convertEntegraPrice(currency, p.site_indirimli_fiyat);
 
     result.push({
       sellerId,
@@ -33,8 +32,8 @@ export const formatEntegraPrice = async (products = [], sellerId) => {
       const childSku = convertCodeFormat(v.productCode);
       if (!childSku) continue;
 
-      const childPrice = await priceConverter(currency, parseFloat(v.namshi_fiyat) || 0);
-      const childSpecial = await priceConverter(currency, parseFloat(v.site_indirimli_fiyat) || 0);
+      const childPrice = await convertEntegraPrice(currency, v.namshi_fiyat);
+      const childSpecial = await convertEntegraPrice(currency, v.site_indirimli_fiyat);
 
       result.push({
         sellerId,
