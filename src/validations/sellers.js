@@ -60,7 +60,7 @@ export const getAllSellerValidator = validate(async (req) => {
   const querySchema = z.object({
     page: z.coerce.number().int().positive().optional(),
     size: z.coerce.number().int().positive().optional(),
-    search: z.string().optional(),
+    search: z.string().max(100).optional(),
   });
 
   await querySchema.parseAsync(req.query);

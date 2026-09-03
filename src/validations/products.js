@@ -127,7 +127,9 @@ export const getProductsValidator = validate(async (req) => {
         .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
         .optional(),
 
-      search: z.string().optional(),
+      search: z.string().max(100).optional(),
+
+      filter: z.union([z.string().max(100), z.array(z.string().max(100))]).optional(),
 
       sortBy: z.string().optional(),
 
@@ -504,7 +506,9 @@ export const getUserChannelProductsValidator = validate(async (req) => {
         .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
         .optional(),
 
-      search: z.string().optional(),
+      search: z.string().max(100).optional(),
+
+      filter: z.union([z.string().max(100), z.array(z.string().max(100))]).optional(),
 
       sortBy: z.string().optional(),
 
@@ -614,7 +618,7 @@ export const getUserUnassignedProductsValidator = validate(async (req) => {
         .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
         .optional(),
 
-      search: z.string().optional(),
+      search: z.string().max(100).optional(),
 
       sortBy: z.string().optional(),
 
@@ -677,7 +681,7 @@ export const exportProductsValidator = validate(async (req) => {
         .refine((val) => val >= 0, { message: 'maxPrice cannot be negative' })
         .optional(),
 
-      search: z.string().optional(),
+      search: z.string().max(100).optional(),
 
       productSkuCode: z.string().optional(),
 
@@ -697,7 +701,7 @@ export const exportProductsValidator = validate(async (req) => {
         .regex(/^[0-9a-fA-F]+$/, 'sellerId must be a hex string')
         .optional(),
 
-      filter: z.union([z.string(), z.array(z.string())]).optional(),
+      filter: z.union([z.string().max(100), z.array(z.string().max(100))]).optional(),
     })
     .passthrough()
     .refine(
@@ -827,7 +831,7 @@ export const getExpressWareHouseProductsValidator = validate(async (req) => {
         })
         .optional(),
 
-      search: z.string().optional(),
+      search: z.string().max(100).optional(),
 
       sortBy: z.string().optional(),
 
@@ -839,7 +843,7 @@ export const getExpressWareHouseProductsValidator = validate(async (req) => {
         })
         .optional(),
 
-      filter: z.union([z.string(), z.array(z.string())]).optional(),
+      filter: z.union([z.string().max(100), z.array(z.string().max(100))]).optional(),
     })
     .refine((data) => !(data.minPrice !== undefined && data.maxPrice !== undefined && data.minPrice > data.maxPrice), {
       message: 'minPrice cannot be greater than maxPrice',

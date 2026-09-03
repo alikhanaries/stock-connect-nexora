@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-const escaped = (str) => str.replace(/[-^$*+?.()|[\]{}]/g, '\\$&');
+import { escapeRegex } from '#util/escapeRegex.js';
 
 export const buildFilter = ({ rawFilters = [], sellerId, search, channelName, buildCondition }) => {
   if (!mongoose.Types.ObjectId.isValid(sellerId)) {
@@ -42,17 +42,23 @@ export const buildFilter = ({ rawFilters = [], sellerId, search, channelName, bu
   }
 
   if (channelName) {
-    finalFilter.marketPlace = {
-      $regex: escaped(channelName),
-      $options: 'i',
-    };
+    const safeChannelName = escapeRegex(channelName);
+    if (safeChannelName !== null) {
+      finalFilter.marketPlace = {
+        $regex: safeChannelName,
+        $options: 'i',
+      };
+    }
   }
 
   if (search) {
-    const regex = new RegExp(escaped(search), 'i');
-    const searchOr = [{ name: regex }, { productSkuCode: regex }];
+    const safeSearch = escapeRegex(search);
+    if (safeSearch !== null) {
+      const regex = new RegExp(safeSearch, 'i');
+      const searchOr = [{ name: regex }, { productSkuCode: regex }];
 
-    finalFilter.$or = finalFilter.$or ? [...finalFilter.$or, ...searchOr] : searchOr;
+      finalFilter.$or = finalFilter.$or ? [...finalFilter.$or, ...searchOr] : searchOr;
+    }
   }
 
   return finalFilter;

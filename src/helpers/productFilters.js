@@ -1,5 +1,54 @@
+import { escapeRegex } from '#util/escapeRegex.js';
+
+const BOOLEAN_FIELDS = ['liquidContents', 'heatSensitive', 'isFrozen'];
+
+const FILTERABLE_PRODUCT_FIELDS = new Set([
+  'name',
+  'nameAr',
+  'brand',
+  'productSkuCode',
+  'description',
+  'descriptionAr',
+  'status',
+  'ean',
+  'color',
+  'size',
+  'gender',
+  'countryOfOrigin',
+  'marketPlace',
+  'categoryTrail',
+  'productType',
+  'source',
+  'vatRateType',
+  'shippingTime',
+  'price',
+  'msrp',
+  'minPrice',
+  'maxPrice',
+  'purchasePrice',
+  'shippingCost',
+  'currentStockCount',
+  'volumetricWeightCm',
+  'numberOfItems',
+  'hsCodeSA',
+  'hsCodeAE',
+  'noonPrice',
+  'namshiPrice',
+  'amazonPrice',
+  'sixthStreetPrice',
+  'styliPrice',
+  'isFrozen',
+  'liquidContents',
+  'heatSensitive',
+]);
+
+const isAllowedField = (field) => {
+  if (!field || typeof field !== 'string' || field.includes('.')) return false;
+  return FILTERABLE_PRODUCT_FIELDS.has(field);
+};
+
 export function buildCondition(field, operator, value) {
-  const BOOLEAN_FIELDS = ['liquidContents', 'heatSensitive', 'isFrozen'];
+  if (!isAllowedField(field)) return null;
 
   // Boolean fields (only equal / not equal )
   if (BOOLEAN_FIELDS.includes(field)) {
@@ -61,11 +110,17 @@ export function buildCondition(field, operator, value) {
       case 'not_equal_to':
         return { [field]: { $ne: value } };
 
-      case 'contains':
-        return { [field]: { $regex: value, $options: 'i' } };
+      case 'contains': {
+        const pattern = escapeRegex(value);
+        if (pattern === null) return null;
+        return { [field]: { $regex: pattern, $options: 'i' } };
+      }
 
-      case 'does_not_contain':
-        return { [field]: { $not: { $regex: value, $options: 'i' } } };
+      case 'does_not_contain': {
+        const pattern = escapeRegex(value);
+        if (pattern === null) return null;
+        return { [field]: { $not: { $regex: pattern, $options: 'i' } } };
+      }
 
       default:
         return null;
