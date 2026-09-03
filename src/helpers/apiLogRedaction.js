@@ -1,8 +1,26 @@
 import { apiLogConfig } from '../config/apiLog.js';
 
-const normalizeKey = (key) => String(key).toLowerCase();
+const SENSITIVE_KEY_SUBSTRINGS = [
+  'password',
+  'token',
+  'secret',
+  'authorization',
+  'credential',
+  'cvv',
+  'ssn',
+  'apikey',
+  'clientsecret',
+];
+
+const normalizeKey = (key) => String(key).toLowerCase().replace(/[_-]/g, '');
+
+const matchesSensitiveSubstring = (key) => {
+  const normalized = normalizeKey(key);
+  return SENSITIVE_KEY_SUBSTRINGS.some((fragment) => normalized.includes(fragment));
+};
 
 const shouldRedactField = (key, redactedFields) =>
+  matchesSensitiveSubstring(key) ||
   redactedFields.some((field) => normalizeKey(field) === normalizeKey(key));
 
 const shouldRedactHeader = (key, redactedHeaders) =>
