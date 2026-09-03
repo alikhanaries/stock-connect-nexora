@@ -1149,7 +1149,8 @@ const acknowledgeOrder = async (orderId, merchantOrderNo) => {
       body: payload,
     });
 
-    if (!response.ok) {
+    // CE 409 = already acknowledged; treat as success so local DB updates and sync stops re-queueing.
+    if (!response.ok && response.status !== 409) {
       const errorData = response.data || {};
       throw new Error(`Failed to acknowledge order: ${errorData.Message || response.status}`);
     }
