@@ -2,14 +2,21 @@ import { Queue, QueueEvents } from 'bullmq';
 import { createRedisConnection, closeSharedRedisConnection } from '#config/redis.js';
 import { config } from '#config/config.js';
 import ChannelEngineQueueJob from '#models/ChannelEngineQueueJob.js';
-import { CHANNEL_ENGINE_QUEUE_NAME } from '#constants/channelEngineQueue.js';
+import {
+  CE_QUEUE_GROUPS,
+  getQueueGroupForOperation,
+  CHANNEL_ENGINE_QUEUE_NAME,
+} from '#constants/channelEngineQueue.js';
 
-let queueInstance = null;
-let queueEventsInstance = null;
+const queues = new Map();
+const queueEvents = new Map();
 
-export function getChannelEngineQueue() {
-  if (!queueInstance) {
-    queueInstance = new Queue(CHANNEL_ENGINE_QUEUE_NAME, {
+/**
+ * Get or create a BullMQ Queue instance for a specific queue group
+ */
+export function getChannelEngineQueue(queueName = CHANNEL_ENGINE_QUEUE_NAME) {
+  if (!queues.has(queueName)) {
+    const q = new Queue(queueName, {
       connection: createRedisConnection(),
       defaultJobOptions: {
         attempts: config.CE_QUEUE_JOB_ATTEMPTS,
@@ -21,28 +28,50 @@ export function getChannelEngineQueue() {
         removeOnFail: { age: 604800, count: 5000 },
       },
     });
+    queues.set(queueName, q);
   }
-  return queueInstance;
+  return queues.get(queueName);
 }
 
-export function getChannelEngineQueueEvents() {
-  if (!queueEventsInstance) {
-    queueEventsInstance = new QueueEvents(CHANNEL_ENGINE_QUEUE_NAME, {
+/**
+ * Get or create a BullMQ QueueEvents instance for a specific queue group
+ */
+export function getChannelEngineQueueEvents(queueName = CHANNEL_ENGINE_QUEUE_NAME) {
+  if (!queueEvents.has(queueName)) {
+    const qe = new QueueEvents(queueName, {
       connection: createRedisConnection(),
     });
+    queueEvents.set(queueName, qe);
   }
-  return queueEventsInstance;
+  return queueEvents.get(queueName);
+}
+
+/**
+ * Get all available queue instances
+ */
+export function getAllChannelEngineQueues() {
+  return Object.values(CE_QUEUE_GROUPS).map((groupName) => getChannelEngineQueue(groupName));
 }
 
 export async function closeChannelEngineQueueConnections() {
-  if (queueEventsInstance) {
-    await queueEventsInstance.close();
-    queueEventsInstance = null;
+  for (const qe of queueEvents.values()) {
+    try {
+      await qe.close();
+    } catch (err) {
+      console.error('Error closing QueueEvents:', err.message);
+    }
   }
-  if (queueInstance) {
-    await queueInstance.close();
-    queueInstance = null;
+  queueEvents.clear();
+
+  for (const q of queues.values()) {
+    try {
+      await q.close();
+    } catch (err) {
+      console.error('Error closing Queue:', err.message);
+    }
   }
+  queues.clear();
+
   await closeSharedRedisConnection();
 }
 
@@ -71,7 +100,9 @@ export async function channelEnginePush({
   awaitResult = true,
   timeoutMs = null,
 }) {
+  const targetQueueName = getQueueGroupForOperation(operationType);
   const maxAttempts = config.CE_QUEUE_JOB_ATTEMPTS;
+
   const tracking = await ChannelEngineQueueJob.create({
     operationType,
     method,
@@ -79,17 +110,18 @@ export async function channelEnginePush({
     sellerId: sellerId || null,
     status: 'queued',
     requestBody: body ?? null,
-    metadata,
+    metadata: { ...metadata, queueName: targetQueueName },
     batchId,
     maxAttempts,
   });
 
-  const queue = getChannelEngineQueue();
+  const queue = getChannelEngineQueue(targetQueueName);
   const job = await queue.add(
     operationType,
     {
       trackingId: tracking._id.toString(),
       operationType,
+      queueName: targetQueueName,
       method,
       url,
       body: body ?? null,
@@ -104,16 +136,21 @@ export async function channelEnginePush({
     return {
       ok: true,
       status: 202,
-      data: { trackingId: tracking._id.toString(), jobId: job.id, status: 'queued' },
+      data: { trackingId: tracking._id.toString(), jobId: job.id, status: 'queued', queueName: targetQueueName },
       rawText: '',
       trackingId: tracking._id.toString(),
       jobId: job.id,
-      json: async () => ({ trackingId: tracking._id.toString(), jobId: job.id, status: 'queued' }),
+      json: async () => ({
+        trackingId: tracking._id.toString(),
+        jobId: job.id,
+        status: 'queued',
+        queueName: targetQueueName,
+      }),
       text: async () => '',
     };
   }
 
-  const events = getChannelEngineQueueEvents();
+  const events = getChannelEngineQueueEvents(targetQueueName);
   const waitMs = timeoutMs || config.CE_QUEUE_JOB_TIMEOUT_MS;
 
   try {
@@ -122,7 +159,7 @@ export async function channelEnginePush({
   } catch (err) {
     const record = await ChannelEngineQueueJob.findById(tracking._id).lean();
     console.error(
-      `❌ [ChannelEngine Queue Error] trackingId: ${tracking._id} | Error:`,
+      `❌ [ChannelEngine Queue Error] [${targetQueueName}] trackingId: ${tracking._id} | Error:`,
       record?.errorMessage || err.message
     );
     if (record?.responseBody || record?.errorDetails) {
