@@ -32,6 +32,9 @@ export async function executeChannelEngineRequest({ method, url, body, headers =
   const ok = response.ok;
   let errorMessage = null;
 
+  const retryAfterHeader = response.headers.get('retry-after');
+  const retryAfterSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : null;
+
   if (!ok) {
     errorMessage =
       (typeof data === 'object' && data !== null && (data.Message || data.message || data.errorMessage)) ||
@@ -40,6 +43,9 @@ export async function executeChannelEngineRequest({ method, url, body, headers =
 
     console.error(`❌ [ChannelEngine API Error] ${method} ${url}`);
     console.error(`   Status Code: ${response.status}`);
+    if (retryAfterSeconds) {
+      console.warn(`   Rate limited by ChannelEngine. Retry after: ${retryAfterSeconds}s`);
+    }
     console.error(`   Request Body:`, typeof body === 'object' ? JSON.stringify(body, null, 2) : body);
     console.error(`   Error Response:`, typeof data === 'object' ? JSON.stringify(data, null, 2) : rawText);
   } else {
@@ -52,5 +58,7 @@ export async function executeChannelEngineRequest({ method, url, body, headers =
     data,
     rawText,
     errorMessage,
+    retryAfter: retryAfterSeconds,
+    headers: Object.fromEntries(response.headers.entries()),
   };
 }

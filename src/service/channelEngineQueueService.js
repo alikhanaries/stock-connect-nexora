@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
 import ChannelEngineQueueJob from '#models/ChannelEngineQueueJob.js';
-import { getChannelEngineQueue } from '#service/channelEngineClient.js';
+import { getAllChannelEngineQueues } from '#service/channelEngineClient.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { CE_QUEUE_STATUSES } from '#constants/channelEngineQueue.js';
+import { config } from '#config/config.js';
 
 export const getQueueJobs = async (query, sellerIdFilter = null) => {
   const page = Math.max(1, Number(query.page) || 1);
@@ -69,15 +70,38 @@ export const getQueueStats = async (sellerIdFilter = null) => {
     { $group: { _id: '$operationType', count: { $sum: 1 } } },
   ]);
 
-  const queue = getChannelEngineQueue();
-  const liveCounts = await queue.getJobCounts(
-    'waiting',
-    'active',
-    'delayed',
-    'completed',
-    'failed',
-    'prioritized',
-    'waiting-children'
+  const queues = getAllChannelEngineQueues();
+  const liveCounts = {
+    waiting: 0,
+    active: 0,
+    delayed: 0,
+    completed: 0,
+    failed: 0,
+    prioritized: 0,
+    'waiting-children': 0,
+  };
+  const liveByQueue = {};
+
+  await Promise.all(
+    queues.map(async (q) => {
+      try {
+        const counts = await q.getJobCounts(
+          'waiting',
+          'active',
+          'delayed',
+          'completed',
+          'failed',
+          'prioritized',
+          'waiting-children'
+        );
+        liveByQueue[q.name] = counts;
+        for (const key of Object.keys(liveCounts)) {
+          liveCounts[key] += counts[key] || 0;
+        }
+      } catch (err) {
+        liveByQueue[q.name] = { error: err.message };
+      }
+    })
   );
 
   const statusMap = {};
@@ -94,9 +118,33 @@ export const getQueueStats = async (sellerIdFilter = null) => {
     persisted: statusMap,
     byOperation: operationMap,
     liveQueue: liveCounts,
+    liveByQueue,
+    rateLimits: {
+      products: {
+        maxRequests: config.CE_LIMIT_PRODUCTS_MAX,
+        windowMinutes: config.CE_LIMIT_PRODUCTS_DURATION_MS / 60000,
+      },
+      stock: {
+        maxRequests: config.CE_LIMIT_STOCK_MAX,
+        windowMinutes: config.CE_LIMIT_STOCK_DURATION_MS / 60000,
+      },
+      price: {
+        maxRequests: config.CE_LIMIT_PRICE_MAX,
+        windowMinutes: config.CE_LIMIT_PRICE_DURATION_MS / 60000,
+      },
+      cancellations: {
+        maxRequests: config.CE_LIMIT_CANCELLATIONS_MAX,
+        windowMinutes: config.CE_LIMIT_CANCELLATIONS_DURATION_MS / 60000,
+      },
+      ordersShipments: {
+        maxRequests: config.CE_LIMIT_ORDERS_SHIPMENTS_MAX,
+        windowMinutes: config.CE_LIMIT_ORDERS_SHIPMENTS_DURATION_MS / 60000,
+      },
+    },
+    // Backwards-compatible rateLimit object
     rateLimit: {
-      maxRequests: Number(process.env.CE_QUEUE_RATE_LIMIT_MAX || 15),
-      windowMinutes: Number(process.env.CE_QUEUE_RATE_LIMIT_WINDOW_MINUTES || 15),
+      maxRequests: config.CE_LIMIT_ORDERS_SHIPMENTS_MAX,
+      windowMinutes: config.CE_LIMIT_ORDERS_SHIPMENTS_DURATION_MS / 60000,
     },
   };
 };
