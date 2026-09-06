@@ -487,12 +487,9 @@ export const backfillMissingSellerOrders = async (sellerId = null) => {
       }
     }
 
-    const rawSkus = [...skuSet];
-    const searchSkus = [
-      ...new Set([...rawSkus, ...rawSkus.map((s) => s.toUpperCase()), ...rawSkus.map((s) => s.toLowerCase())]),
-    ];
-    const products = await Product.find({ productSkuCode: { $in: searchSkus } })
+    const products = await Product.find({ productSkuCode: { $in: [...skuSet] } })
       .select('productSkuCode sellerId')
+      .collation({ locale: 'en', strength: 2 })
       .lean();
     const productSellerMap = new Map(products.map((p) => [normalizeOrderSku(p.productSkuCode), p.sellerId]));
 

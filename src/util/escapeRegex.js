@@ -1,5 +1,6 @@
 export const MAX_REGEX_INPUT_LENGTH = 100;
 
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHAR_RE = /[\x00-\x1F\x7F]/;
 
 export const sanitizeRegexInput = (value) => {

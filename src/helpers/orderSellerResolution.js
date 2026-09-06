@@ -35,43 +35,20 @@ export const buildCeProductSellerMap = (ceProducts = []) => {
   return map;
 };
 
-const ceProductCache = new Map();
-const CE_PRODUCT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-
 /**
- * Batch-fetch CE products for unresolved SKUs (chunked, one round-trip per chunk) with in-memory TTL cache.
+ * Batch-fetch CE products for unresolved SKUs (chunked, one round-trip per chunk).
  */
 export const fetchCeProductSellerMapForSkus = async (skuList = []) => {
   const normalized = [...new Set(skuList.map(normalizeOrderSku).filter(Boolean))];
   if (!normalized.length) return new Map();
 
-  const now = Date.now();
-  const missingFromCache = [];
-  const resultMap = new Map();
-
-  for (const sku of normalized) {
-    const cached = ceProductCache.get(sku);
-    if (cached && now - cached.timestamp < CE_PRODUCT_CACHE_TTL_MS) {
-      if (cached.sellerId) resultMap.set(sku, cached.sellerId);
-    } else {
-      missingFromCache.push(sku);
-    }
+  const ceProducts = [];
+  for (const chunk of chunkArray(normalized, 50)) {
+    const batch = await getExistingProductsBySkuFromCE(chunk);
+    ceProducts.push(...batch);
   }
 
-  if (missingFromCache.length > 0) {
-    const chunks = chunkArray(missingFromCache, 50);
-    const batches = await Promise.all(chunks.map((chunk) => getExistingProductsBySkuFromCE(chunk)));
-    const ceProducts = batches.flat();
-    const fetchedMap = buildCeProductSellerMap(ceProducts);
-
-    for (const sku of missingFromCache) {
-      const sellerId = fetchedMap.get(sku) || null;
-      ceProductCache.set(sku, { sellerId, timestamp: now });
-      if (sellerId) resultMap.set(sku, sellerId);
-    }
-  }
-
-  return resultMap;
+  return buildCeProductSellerMap(ceProducts);
 };
 
 /**
