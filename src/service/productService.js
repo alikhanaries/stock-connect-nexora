@@ -19,6 +19,7 @@ import UserChannelProducts from '#models/UserChannelProducts.js';
 import { uploadProducts, buildBatchesKeepingParentsIntact, groupByParent } from '#service/channel/ocpService.js';
 import { mapRowToProduct } from '#utils/mapRowToProduct.js';
 import { buildFilter, castFilter, remapExprField } from '#utils/buildFilter.js';
+import { escapeRegex } from '#util/escapeRegex.js';
 import csv from 'csv-parser';
 import fs from 'fs';
 import { safeUnlinkTempFile } from '../helpers/tempFileCleanup.js';
@@ -127,8 +128,11 @@ const fetchProducts = async (query, sellerId) => {
 
   // Search filter
   if (search) {
-    const regex = new RegExp(search, 'i');
-    filter.$or = [{ name: regex }, { productSkuCode: regex }];
+    const safeSearch = escapeRegex(search);
+    if (safeSearch !== null) {
+      const regex = new RegExp(safeSearch, 'i');
+      filter.$or = [{ name: regex }, { productSkuCode: regex }];
+    }
   }
   // Sorting
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1, _id: 1 };
@@ -1221,13 +1225,16 @@ export const getUserChannelProducts = async (sellerId, channelId, query) => {
   }
 
   if (search && search.trim() !== '') {
-    const regex = new RegExp(search, 'i');
-    matchProductStage.$or = [
-      { 'productDetails.name': regex },
-      { 'skuList.skuCode': regex },
-      { 'productDetails.productSkuCode': regex },
-    ];
-    appliedFilters.search = search;
+    const safeSearch = escapeRegex(search);
+    if (safeSearch !== null) {
+      const regex = new RegExp(safeSearch, 'i');
+      matchProductStage.$or = [
+        { 'productDetails.name': regex },
+        { 'skuList.skuCode': regex },
+        { 'productDetails.productSkuCode': regex },
+      ];
+      appliedFilters.search = search;
+    }
   }
 
   pipeline.push({ $match: matchProductStage });
@@ -1338,9 +1345,12 @@ const getUserUnassignedProducts = async (sellerId, channelId, query) => {
   }
 
   if (search) {
-    const regex = new RegExp(search, 'i');
-    filter.$or = [{ name: regex }, { productSkuCode: regex }];
-    appliedFilters.search = search;
+    const safeSearch = escapeRegex(search);
+    if (safeSearch !== null) {
+      const regex = new RegExp(safeSearch, 'i');
+      filter.$or = [{ name: regex }, { productSkuCode: regex }];
+      appliedFilters.search = search;
+    }
   }
 
   const sort = { [sortBy]: sortOrder.toLowerCase() === 'asc' ? 1 : -1 };
