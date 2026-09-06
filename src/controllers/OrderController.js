@@ -123,34 +123,23 @@ export const getSyncedOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const userId = req.user._id;
-    const forceFullSync = req.query?.forceFullSync === 'true';
 
-    // 1. Fetch last sync date for incremental sync (captures all statuses modified since last sync)
-    const seller = await Seller.findById(sellerId).select('lastOrderSync').lean();
-    const lastSyncDate = forceFullSync ? null : seller?.lastOrderSync;
-
-    // 2. Fetch new & updated orders from ChannelEngine (fast: only delta fetched with fromUpdatedAtDate)
+    // TODO : Move this to service layer
     let success, data;
     try {
-      ({ success, data } = await orderService.getNewOrders(tag, lastSyncDate));
+      ({ success, data } = await orderService.getNewOrders(tag));
     } catch (err) {
       console.error(`${tag} STEP 2/6 FAILED fetching orders from ChannelEngine:`, err);
       throw err;
     }
-
     if (!success) {
       console.error(`${tag} STEP 2/6 FAILED getNewOrders returned success=false`);
-      return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND || 'No orders found', 200);
+      return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
+    }
+    if (data.length === 0) {
+      return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
     }
 
-    if (!Array.isArray(data) || data.length === 0) {
-      return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE || 'Already up to date', 200, {
-        syncedCount: 0,
-        content: [],
-      });
-    }
-
-    // 3. Process orders & OCP sync in parallel
     const runOcpSync = async () => {
       if (!config.IS_OCP_ORDER_SYNC_ENABLED) {
         return { success: true, message: 'OCP order sync is disabled' };
@@ -175,6 +164,7 @@ export const getSyncedOrders = async (req, res) => {
       console.error(`${tag} STEP 3/6 runOcpSync REJECTED:`, response.reason);
     }
 
+    // Check for rejected promises or failed results
     const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
     const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
 
@@ -201,10 +191,9 @@ export const getSyncedOrders = async (req, res) => {
 
     const message =
       newUpdateCount > 0
-        ? `${newUpdateCount} ${req?.locale?.NEW_ORDERS_SYNCED_SUCCESSFULLY || 'new orders synced successfully'}`
-        : req?.locale?.NO_NEW_ORDERS_FOUND || 'No new orders found';
+        ? `${newUpdateCount} ${req?.locale?.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
+        : req?.locale?.NO_NEW_ORDERS_FOUND;
 
-    // 4. Background tasks (acknowledgment & shipment sync) - run non-blocking without delaying response
     const processedOrderIds = new Set((ceData?.processedOrderIds || []).map(String));
     const newOrdersToAcknowledge = data.filter(
       (order) => (order.Status === 'NEW' || !order.MerchantOrderNo) && processedOrderIds.has(String(order.Id))
@@ -215,14 +204,7 @@ export const getSyncedOrders = async (req, res) => {
     shipmentService?.getChannelEngineShipmentDetailsService(userId).catch((error) => {
       console.error(`${tag} STEP 6/6 ChannelEngine shipment sync failed:`, error);
     });
-
-    console.log(`${tag} Order sync finished in real-time. Total synced/updated: ${newUpdateCount}`);
-
-    // Return 200 OK directly with the sync count so the frontend updates immediately without manual page refresh
-    return Responses.successResponse(res, message, 200, {
-      syncedCount: newUpdateCount,
-      processedOrderIds: ceData?.processedOrderIds || [],
-    });
+    return Responses.successResponse(res, message, 200);
   } catch (error) {
     console.error(`${tag} FAILED:`, error);
     errorLog(error);
