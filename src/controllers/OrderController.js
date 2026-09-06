@@ -123,88 +123,95 @@ export const getSyncedOrders = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const userId = req.user._id;
+    const forceFullSync = req.query?.forceFullSync === 'true';
 
-    // TODO : Move this to service layer
-    let success, data;
-    try {
-      ({ success, data } = await orderService.getNewOrders(tag));
-    } catch (err) {
-      console.error(`${tag} STEP 2/6 FAILED fetching orders from ChannelEngine:`, err);
-      throw err;
-    }
-    if (!success) {
-      console.error(`${tag} STEP 2/6 FAILED getNewOrders returned success=false`);
-      return Responses.errorResponse(res, req?.locale?.NO_ORDERS_FOUND, 200);
-    }
-    if (data.length === 0) {
-      return Responses.successResponse(res, req?.locale?.ALREADY_UP_TO_DATE, 200, []);
-    }
+    // 1. Immediate response to frontend (prevents timeout)
+    Responses.successResponse(res, req?.locale?.SYNC_STARTED || 'Sync started successfully', 202);
 
-    const runOcpSync = async () => {
-      if (!config.IS_OCP_ORDER_SYNC_ENABLED) {
-        return { success: true, message: 'OCP order sync is disabled' };
-      }
+    // 2. Background execution (non-blocking)
+    (async () => {
       try {
-        return await getSyncedOrdersOcp(sellerId);
-      } catch (err) {
-        console.error(`${tag} STEP 3/6 FAILED OCP sync:`, err);
-        throw err;
+        const seller = await Seller.findById(sellerId).select('lastOrderSync').lean();
+        const lastSyncDate = forceFullSync ? null : seller?.lastOrderSync;
+
+        let success, data;
+        try {
+          ({ success, data } = await orderService.getNewOrders(tag, lastSyncDate));
+        } catch (err) {
+          console.error(`${tag} STEP 2/6 FAILED fetching orders from ChannelEngine:`, err);
+          return;
+        }
+
+        if (!success || !Array.isArray(data) || data.length === 0) {
+          console.log(`${tag} Order sync completed: no new or updated orders found`);
+          return;
+        }
+
+        const runOcpSync = async () => {
+          if (!config.IS_OCP_ORDER_SYNC_ENABLED) {
+            return { success: true, message: 'OCP order sync is disabled' };
+          }
+          try {
+            return await getSyncedOrdersOcp(sellerId);
+          } catch (err) {
+            console.error(`${tag} STEP 3/6 FAILED OCP sync:`, err);
+            throw err;
+          }
+        };
+
+        const [dataSavedInDb, response] = await Promise.allSettled([
+          orderService.processOrders(data, sellerId, tag),
+          runOcpSync(),
+        ]);
+
+        if (dataSavedInDb.status === 'rejected') {
+          console.error(`${tag} STEP 3/6 processOrders (ChannelEngine) REJECTED:`, dataSavedInDb.reason);
+        }
+        if (response.status === 'rejected') {
+          console.error(`${tag} STEP 3/6 runOcpSync REJECTED:`, response.reason);
+        }
+
+        const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
+        const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
+
+        if (!isChannelEngineSuccess && !isOcpSuccess) {
+          const errorMessages = [
+            dataSavedInDb.status === 'rejected' ? dataSavedInDb.reason?.message : dataSavedInDb.value?.message,
+            response.status === 'rejected' ? response.reason?.message : response.value?.message,
+          ]
+            .filter(Boolean)
+            .join('; ');
+
+          console.error(`${tag} STEP 3/6 all sync operations failed: ${errorMessages}`);
+          return;
+        }
+
+        const ceData = dataSavedInDb.status === 'fulfilled' ? dataSavedInDb.value?.data : null;
+        const ocpUpserted = (response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0;
+        const sellerSyncCount = (ceData?.sellerOrdersSynced || 0) + (ceData?.sellerOrdersBackfilledForSeller || 0);
+        const globalSyncCount =
+          (ceData?.upsertedCount || 0) + (ceData?.modifiedCount || 0) + (ceData?.sellerOrdersBackfilled || 0);
+        const newUpdateCount = (sellerSyncCount > 0 ? sellerSyncCount : globalSyncCount) + ocpUpserted;
+
+        await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
+
+        const processedOrderIds = new Set((ceData?.processedOrderIds || []).map(String));
+        const newOrdersToAcknowledge = data.filter(
+          (order) => (order.Status === 'NEW' || !order.MerchantOrderNo) && processedOrderIds.has(String(order.Id))
+        );
+        if (newOrdersToAcknowledge.length > 0) {
+          orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge, tag);
+        }
+        shipmentService?.getChannelEngineShipmentDetailsService(userId).catch((error) => {
+          console.error(`${tag} STEP 6/6 ChannelEngine shipment sync failed:`, error);
+        });
+
+        console.log(`${tag} Order sync completed successfully. Synced items count: ${newUpdateCount}`);
+      } catch (bgErr) {
+        console.error(`${tag} Background order sync error:`, bgErr);
+        errorLog(bgErr);
       }
-    };
-
-    const [dataSavedInDb, response] = await Promise.allSettled([
-      orderService.processOrders(data, sellerId, tag),
-      runOcpSync(),
-    ]);
-
-    if (dataSavedInDb.status === 'rejected') {
-      console.error(`${tag} STEP 3/6 processOrders (ChannelEngine) REJECTED:`, dataSavedInDb.reason);
-    }
-    if (response.status === 'rejected') {
-      console.error(`${tag} STEP 3/6 runOcpSync REJECTED:`, response.reason);
-    }
-
-    // Check for rejected promises or failed results
-    const isChannelEngineSuccess = dataSavedInDb.status === 'fulfilled' && dataSavedInDb.value?.success;
-    const isOcpSuccess = response.status === 'fulfilled' && response.value?.success;
-
-    if (!isChannelEngineSuccess && !isOcpSuccess) {
-      const errorMessages = [
-        dataSavedInDb.status === 'rejected' ? dataSavedInDb.reason?.message : dataSavedInDb.value?.message,
-        response.status === 'rejected' ? response.reason?.message : response.value?.message,
-      ]
-        .filter(Boolean)
-        .join('; ');
-
-      console.error(`${tag} STEP 3/6 all sync operations failed: ${errorMessages}`);
-      return Responses.errorResponse(res, errorMessages || 'All sync operations failed', 500);
-    }
-
-    const ceData = dataSavedInDb.status === 'fulfilled' ? dataSavedInDb.value?.data : null;
-    const ocpUpserted = (response.status === 'fulfilled' && response.value?.data?.upsertedCount) || 0;
-    const sellerSyncCount = (ceData?.sellerOrdersSynced || 0) + (ceData?.sellerOrdersBackfilledForSeller || 0);
-    const globalSyncCount =
-      (ceData?.upsertedCount || 0) + (ceData?.modifiedCount || 0) + (ceData?.sellerOrdersBackfilled || 0);
-    const newUpdateCount = (sellerSyncCount > 0 ? sellerSyncCount : globalSyncCount) + ocpUpserted;
-
-    await updateSyncDate(sellerId, 'ORDER', newUpdateCount);
-
-    const message =
-      newUpdateCount > 0
-        ? `${newUpdateCount} ${req?.locale?.NEW_ORDERS_SYNCED_SUCCESSFULLY}`
-        : req?.locale?.NO_NEW_ORDERS_FOUND;
-
-    const processedOrderIds = new Set((ceData?.processedOrderIds || []).map(String));
-    const newOrdersToAcknowledge = data.filter(
-      (order) => (order.Status === 'NEW' || !order.MerchantOrderNo) && processedOrderIds.has(String(order.Id))
-    );
-    if (newOrdersToAcknowledge.length > 0) {
-      orderService.backgroundAcknowledgementOrders(newOrdersToAcknowledge, tag);
-    }
-    shipmentService?.getChannelEngineShipmentDetailsService(userId).catch((error) => {
-      console.error(`${tag} STEP 6/6 ChannelEngine shipment sync failed:`, error);
-    });
-    return Responses.successResponse(res, message, 200);
+    })();
   } catch (error) {
     console.error(`${tag} FAILED:`, error);
     errorLog(error);

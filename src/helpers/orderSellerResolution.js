@@ -42,11 +42,9 @@ export const fetchCeProductSellerMapForSkus = async (skuList = []) => {
   const normalized = [...new Set(skuList.map(normalizeOrderSku).filter(Boolean))];
   if (!normalized.length) return new Map();
 
-  const ceProducts = [];
-  for (const chunk of chunkArray(normalized, 50)) {
-    const batch = await getExistingProductsBySkuFromCE(chunk);
-    ceProducts.push(...batch);
-  }
+  const chunks = chunkArray(normalized, 50);
+  const batches = await Promise.all(chunks.map((chunk) => getExistingProductsBySkuFromCE(chunk)));
+  const ceProducts = batches.flat();
 
   return buildCeProductSellerMap(ceProducts);
 };
