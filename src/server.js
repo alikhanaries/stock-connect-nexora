@@ -5,12 +5,16 @@ import { startChannelEngineWorker, stopChannelEngineWorker } from './queues/chan
 import { closeChannelEngineQueueConnections } from './service/channelEngineClient.js';
 
 const PORT = config.PORT;
+let isShuttingDown = false;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);
   db.connect()
     .then(async () => {
       console.log('MongoDB Connected');
+      if (!config.START_CE_WORKER) {
+        return;
+      }
       try {
         await startChannelEngineWorker();
       } catch (err) {
@@ -22,14 +26,26 @@ app.listen(PORT, () => {
     });
 });
 
-const gracefulShutdown = async () => {
-  console.log('Starting graceful shutdown...');
+const gracefulShutdown = async (source) => {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
+  if (source) {
+    console.log(`Starting graceful shutdown (${source})...`);
+  } else {
+    console.log('Starting graceful shutdown...');
+  }
+
   try {
-    await stopChannelEngineWorker();
+    if (config.START_CE_WORKER) {
+      await stopChannelEngineWorker();
+    }
     await closeChannelEngineQueueConnections();
     await db.disconnect();
     console.log('Mongoose disconnected');
-    app?.close(() => {
+    server.close(() => {
       console.log('Server closed.');
       process.exit(0);
     });
@@ -39,10 +55,20 @@ const gracefulShutdown = async () => {
       process.exit(1);
     }, 5000);
   } catch (error) {
-    console.error('Error disconnecting from Mongoose:', error);
+    console.error('Error during graceful shutdown:', error);
     process.exit(1);
   }
 };
 
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
+const handleFatalProcessError = (label, reason) => {
+  console.error(`${label}:`, reason);
+  if (reason instanceof Error && reason.stack) {
+    console.error(reason.stack);
+  }
+  gracefulShutdown(label);
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('unhandledRejection', (reason) => handleFatalProcessError('unhandledRejection', reason));
+process.on('uncaughtException', (error) => handleFatalProcessError('uncaughtException', error));

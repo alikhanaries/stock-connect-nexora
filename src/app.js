@@ -20,6 +20,7 @@ import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
 import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
+import { errorMiddleware } from './middleware/errorMiddleware.js';
 
 const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
@@ -98,6 +99,8 @@ app.use('/api/erp/meneviskids', meneviskidsRoutes);
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
+
+app.use(errorMiddleware);
 
 // Run cron jobs
 cronJob.scheduledCronJobs();
