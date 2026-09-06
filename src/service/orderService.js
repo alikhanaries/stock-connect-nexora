@@ -960,14 +960,10 @@ export const processOrders = async (orders, sellerId, parentTag) => {
       }
     }
 
-    // Repair CE orders that exist in channelengineorders but never got sellerorders (UI source)
-    let backfill;
-    try {
-      backfill = await backfillMissingSellerOrders(sellerId);
-    } catch (err) {
+    // Repair CE orders that exist in channelengineorders in background without blocking sync
+    backfillMissingSellerOrders(sellerId).catch((err) => {
       console.error(`${tag} STEP 3.6 FAILED backfillMissingSellerOrders:`, err);
-      throw err;
-    }
+    });
 
     return {
       success: true,
@@ -975,8 +971,8 @@ export const processOrders = async (orders, sellerId, parentTag) => {
         ...result,
         insertedOrderIds: upsertedOrderIds,
         processedOrderIds: bulkOps.map((op) => String(op.updateOne.filter.orderId)),
-        sellerOrdersBackfilled: backfill?.repaired || 0,
-        sellerOrdersBackfilledForSeller: backfill?.repairedForSeller || 0,
+        sellerOrdersBackfilled: 0,
+        sellerOrdersBackfilledForSeller: 0,
         sellerOrdersSynced,
       },
     };
@@ -986,18 +982,24 @@ export const processOrders = async (orders, sellerId, parentTag) => {
   }
 };
 
-export async function getNewOrders(parentTag) {
+export async function getNewOrders(parentTag, lastSyncDate = null) {
   const tag = parentTag ? `${parentTag} STEP 2/6` : '[order-sync][getNewOrders]';
   try {
     const pageSize = 100;
     let allOrders = [];
 
+    // Build URL query parameters: if lastSyncDate provided, sync only orders created or updated since then (with 2-hour buffer for safety)
+    let urlParams = `apiKey=${CHANNEL_ENGINE_API_KEY}&pageSize=${pageSize}`;
+    if (lastSyncDate && !isNaN(new Date(lastSyncDate).getTime())) {
+      const bufferMs = 2 * 60 * 60 * 1000; // 2 hours
+      const fromUpdatedAtDate = new Date(new Date(lastSyncDate).getTime() - bufferMs).toISOString();
+      urlParams += `&fromUpdatedAtDate=${encodeURIComponent(fromUpdatedAtDate)}`;
+    }
+
     // 1. Fetch Page 1 to get TotalCount and initial items
     let firstData;
     try {
-      const response = await fetchWithRetry(
-        `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=1&pageSize=${pageSize}`
-      );
+      const response = await fetchWithRetry(`${CHANNEL_ENGINE_BASE_URL}orders?${urlParams}&page=1`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -1017,18 +1019,16 @@ export async function getNewOrders(parentTag) {
     const totalCount = firstData.TotalCount || 0;
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    // 2. Fetch remaining pages concurrently in batches of 5
+    // 2. Fetch remaining pages concurrently in batches of 15
     if (totalPages > 1) {
       const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-      const BATCH_SIZE = 5;
+      const BATCH_SIZE = 15;
 
       for (let i = 0; i < remainingPages.length; i += BATCH_SIZE) {
         const batch = remainingPages.slice(i, i + BATCH_SIZE);
         const pageResults = await Promise.all(
           batch.map(async (p) => {
-            const response = await fetchWithRetry(
-              `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${p}&pageSize=${pageSize}`
-            );
+            const response = await fetchWithRetry(`${CHANNEL_ENGINE_BASE_URL}orders?${urlParams}&page=${p}`);
             if (!response.ok) {
               throw new Error(`HTTP error! Status: ${response.status} on page ${p}`);
             }
