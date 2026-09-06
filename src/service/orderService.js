@@ -821,12 +821,22 @@ export const processOrders = async (orders, sellerId, parentTag) => {
       throw err;
     }
 
-    let result;
+    let result, sellerOrderBatchResult;
     try {
-      result = await Order.bulkWrite(bulkOps, { ordered: false });
+      // Execute Order.bulkWrite and upsertSellerOrdersBatch concurrently in parallel
+      [result, sellerOrderBatchResult] = await Promise.all([
+        Order.bulkWrite(bulkOps, { ordered: false }),
+        upsertSellerOrdersBatch(sellerOrderPayloads),
+      ]);
     } catch (err) {
-      console.error(`${tag} STEP 3.2 FAILED Order.bulkWrite:`, err);
+      console.error(`${tag} STEP 3.2 FAILED bulkWrite:`, err);
       throw err;
+    }
+
+    if (sellerOrderBatchResult?.buildFailures || sellerOrderBatchResult?.writeFailures) {
+      console.error(
+        `${tag} STEP 3.3 buildFailures=${sellerOrderBatchResult.buildFailures} writeFailures=${sellerOrderBatchResult.writeFailures} (ops=${sellerOrderBatchResult.totalOps})`
+      );
     }
 
     const sellerIdStr = sellerId ? String(sellerId) : null;
@@ -836,129 +846,117 @@ export const processOrders = async (orders, sellerId, parentTag) => {
         ).length
       : 0;
 
-    const sellerOrderBatchResult = await upsertSellerOrdersBatch(sellerOrderPayloads);
-    if (sellerOrderBatchResult.buildFailures || sellerOrderBatchResult.writeFailures) {
-      console.error(
-        `${tag} STEP 3.3 buildFailures=${sellerOrderBatchResult.buildFailures} writeFailures=${sellerOrderBatchResult.writeFailures} (ops=${sellerOrderBatchResult.totalOps})`
-      );
-    }
-
-    // Get only newly created (upserted) orders
     const upsertedOrderIds = Object.values(result.upsertedIds || {});
-    const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
 
-    const orderLogs = [];
+    // Offload OrderLogs generation to the background (non-blocking)
+    setImmediate(async () => {
+      try {
+        const upsertedIndexes = Object.keys(result.upsertedIds || {}).map((i) => parseInt(i));
+        const orderLogs = [];
 
-    const latestOrdersList =
-      upsertedOrderIds.length > 0
-        ? await Order.find({ _id: { $in: upsertedOrderIds } }, { _id: 1, orderId: 1, sellerIds: 1 }).lean()
-        : [];
-    const latestOrderMap = new Map(latestOrdersList.map((o) => [String(o._id), o]));
+        const latestOrdersList =
+          upsertedOrderIds.length > 0
+            ? await Order.find({ _id: { $in: upsertedOrderIds } }, { _id: 1, orderId: 1, sellerIds: 1 }).lean()
+            : [];
+        const latestOrderMap = new Map(latestOrdersList.map((o) => [String(o._id), o]));
 
-    for (let i = 0; i < upsertedIndexes.length; i++) {
-      const index = upsertedIndexes[i];
-      const order = orders[index];
-      const orderId = upsertedOrderIds[i];
-      const latestOrderData = latestOrderMap.get(String(orderId));
-      const logDetails = [
-        {
-          status: 'CREATED',
-          description: 'Order Placed',
-          createdAt: new Date(order?.OrderDate || order?.orderDate || Date.now()),
-        },
-      ];
-
-      //  IMPORTANT: create log per seller
-      const sellerIds = latestOrderData?.sellerIds?.length ? latestOrderData.sellerIds : [sellerId]; // fallback if single seller
-
-      for (const sId of sellerIds) {
-        orderLogs.push({
-          orderId,
-          sellerId: sId,
-          details: logDetails,
-        });
-      }
-    }
-
-    const orderLogsBulkOps = [];
-
-    for (const log of orderLogs) {
-      for (const detail of log.details) {
-        orderLogsBulkOps.push({
-          updateOne: {
-            filter: {
-              orderId: log.orderId,
-              sellerId: log.sellerId,
+        for (let i = 0; i < upsertedIndexes.length; i++) {
+          const index = upsertedIndexes[i];
+          const order = orders[index];
+          const orderId = upsertedOrderIds[i];
+          const latestOrderData = latestOrderMap.get(String(orderId));
+          const logDetails = [
+            {
+              status: 'CREATED',
+              description: 'Order Placed',
+              createdAt: new Date(order?.OrderDate || order?.orderDate || Date.now()),
             },
-            update: {
-              $addToSet: {
-                details: {
-                  status: detail.status,
-                  description: detail.description,
-                  createdAt: detail.createdAt,
+          ];
+
+          const sellerIds = latestOrderData?.sellerIds?.length ? latestOrderData.sellerIds : [sellerId];
+
+          for (const sId of sellerIds) {
+            orderLogs.push({
+              orderId,
+              sellerId: sId,
+              details: logDetails,
+            });
+          }
+        }
+
+        const orderLogsBulkOps = [];
+        for (const log of orderLogs) {
+          for (const detail of log.details) {
+            orderLogsBulkOps.push({
+              updateOne: {
+                filter: { orderId: log.orderId, sellerId: log.sellerId },
+                update: {
+                  $addToSet: {
+                    details: {
+                      status: detail.status,
+                      description: detail.description,
+                      createdAt: detail.createdAt,
+                    },
+                  },
+                },
+                upsert: true,
+              },
+            });
+          }
+        }
+
+        if (orderLogsBulkOps.length) {
+          await OrderLogs.bulkWrite(orderLogsBulkOps);
+        }
+
+        if (pendingLogs.length) {
+          const insertedOrders = await Order.find({
+            orderId: { $in: pendingLogs.map((l) => l.orderId) },
+          }).select('_id orderId');
+
+          const orderIdMap = new Map(insertedOrders.map((o) => [String(o.orderId), o._id]));
+          const pendingLogsBulkOps = [];
+
+          for (const log of pendingLogs) {
+            const orderObjectId = orderIdMap.get(String(log.orderId));
+            if (!orderObjectId) continue;
+
+            pendingLogsBulkOps.push({
+              updateOne: {
+                filter: { orderId: orderObjectId, sellerId: log.sellerId },
+                update: { $setOnInsert: { orderId: orderObjectId, sellerId: log.sellerId, details: [] } },
+                upsert: true,
+              },
+            });
+
+            pendingLogsBulkOps.push({
+              updateOne: {
+                filter: {
+                  orderId: orderObjectId,
+                  sellerId: log.sellerId,
+                  details: { $not: { $elemMatch: { status: log.status, description: log.description } } },
+                },
+                update: {
+                  $push: {
+                    details: {
+                      status: log.status,
+                      description: log.description,
+                      createdAt: log.createdAt,
+                    },
+                  },
                 },
               },
-            },
-            upsert: true,
-          },
-        });
+            });
+          }
+
+          if (pendingLogsBulkOps.length) {
+            await OrderLogs.bulkWrite(pendingLogsBulkOps);
+          }
+        }
+      } catch (logErr) {
+        console.error(`${tag} Background OrderLogs error:`, logErr);
       }
-    }
-
-    if (orderLogsBulkOps.length) {
-      await OrderLogs.bulkWrite(orderLogsBulkOps);
-    }
-
-    if (pendingLogs.length) {
-      // 1 Fetch order _ids
-      const insertedOrders = await Order.find({
-        orderId: { $in: pendingLogs.map((l) => l.orderId) },
-      }).select('_id orderId');
-
-      const orderIdMap = new Map(insertedOrders.map((o) => [String(o.orderId), o._id]));
-
-      // 2️ Build bulk ops
-      const orderLogsBulkOps = [];
-
-      for (const log of pendingLogs) {
-        const orderObjectId = orderIdMap.get(String(log.orderId));
-        if (!orderObjectId) continue;
-
-        // ensure the OrderLog doc exists
-        orderLogsBulkOps.push({
-          updateOne: {
-            filter: { orderId: orderObjectId, sellerId: log.sellerId },
-            update: { $setOnInsert: { orderId: orderObjectId, sellerId: log.sellerId, details: [] } },
-            upsert: true,
-          },
-        });
-
-        // push detail only if this exact status+description combo isn't already recorded
-        orderLogsBulkOps.push({
-          updateOne: {
-            filter: {
-              orderId: orderObjectId,
-              sellerId: log.sellerId,
-              details: { $not: { $elemMatch: { status: log.status, description: log.description } } },
-            },
-            update: {
-              $push: {
-                details: {
-                  status: log.status,
-                  description: log.description,
-                  createdAt: log.createdAt,
-                },
-              },
-            },
-          },
-        });
-      }
-
-      // 3️ Execute
-      if (orderLogsBulkOps.length) {
-        await OrderLogs.bulkWrite(orderLogsBulkOps);
-      }
-    }
+    });
 
     // Repair CE orders that exist in channelengineorders in background without blocking sync
     backfillMissingSellerOrders(sellerId).catch((err) => {
