@@ -20,6 +20,7 @@ import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
 import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
+import healthRoutes from './routes/health.js';
 
 const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
@@ -73,6 +74,8 @@ app.use(
 
 app.use(express.json());
 app.use(cors(corsOptions));
+
+app.use('/health', healthRoutes);
 
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
