@@ -85,4 +85,7 @@ export const config = {
   CE_QUEUE_JOB_ATTEMPTS: parseInt(process.env.CE_QUEUE_JOB_ATTEMPTS || '3', 10),
   CE_QUEUE_JOB_BACKOFF_MS: parseInt(process.env.CE_QUEUE_JOB_BACKOFF_MS || '5000', 10),
   CE_QUEUE_JOB_TIMEOUT_MS: parseInt(process.env.CE_QUEUE_JOB_TIMEOUT_MS || '900000', 10),
+  START_CE_WORKER:
+    process.env.START_CE_WORKER === 'true' ||
+    (process.env.NODE_ENV !== 'production' && process.env.START_CE_WORKER !== 'false'),
 };

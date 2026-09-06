@@ -6,3 +6,4 @@ export * from './fileMiddleware.js';
 export * from './errorLogMiddleware.js';
 export * from './verifySellerAccessMiddleware.js';
 export * from './apiLogMiddleware.js';
+export * from './errorMiddleware.js';
