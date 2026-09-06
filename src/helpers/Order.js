@@ -429,13 +429,31 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
     const existingOrdersMap = new Map(existingOrdersDb.map((o) => [o.orderId, o]));
     const productSellerMap = new Map(productsDb.map((p) => [normalizeOrderSku(p.productSkuCode), p.sellerId]));
 
-    const unresolvedSkus = [...skuSet].filter((sku) => !productSellerMap.has(sku));
-    let ceProductSellerMap;
-    try {
-      ceProductSellerMap = await fetchCeProductSellerMapForSkus(unresolvedSkus);
-    } catch (err) {
-      console.error(`${tag}.c FAILED fetchCeProductSellerMapForSkus:`, err);
-      throw err;
+    // Only query CE product API for SKUs that cannot be resolved locally from Product table, line ExtraData, or existing order
+    const unresolvedSkus = [...skuSet].filter((sku) => {
+      if (productSellerMap.has(sku)) return false;
+      for (const order of orders) {
+        const existingOrder = existingOrdersMap.get(String(order.Id));
+        for (const line of order.Lines || []) {
+          if (normalizeOrderSku(line.MerchantProductNo) === sku) {
+            if (getExtraSellerId(line?.ExtraData)) return false;
+            const storedSku = existingOrder?.orderSkuList?.skuList?.find(
+              (s) => normalizeOrderSku(s.merchantProductNo) === sku && s.sellerId
+            );
+            if (storedSku?.sellerId) return false;
+          }
+        }
+      }
+      return true;
+    });
+
+    let ceProductSellerMap = new Map();
+    if (unresolvedSkus.length > 0) {
+      try {
+        ceProductSellerMap = await fetchCeProductSellerMapForSkus(unresolvedSkus);
+      } catch (err) {
+        console.error(`${tag}.c FAILED fetchCeProductSellerMapForSkus:`, err);
+      }
     }
 
     const extraSellerIds = [];
