@@ -410,11 +410,15 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
     // Step 2: fetch existing data
     let existingOrdersDb, productsDb;
     try {
+      const rawSkus = Array.from(skuSet);
+      const searchSkus = [
+        ...new Set([...rawSkus, ...rawSkus.map((s) => s.toUpperCase()), ...rawSkus.map((s) => s.toLowerCase())]),
+      ];
+
       [existingOrdersDb, productsDb] = await Promise.all([
         Order.find({ orderId: { $in: orderIds } }).lean(),
-        Product.find({ productSkuCode: { $in: Array.from(skuSet) } })
+        Product.find({ productSkuCode: { $in: searchSkus } })
           .select('productSkuCode sellerId brand')
-          .collation({ locale: 'en', strength: 2 })
           .lean(),
       ]);
     } catch (err) {
