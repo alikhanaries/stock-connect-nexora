@@ -21,6 +21,7 @@ import swaggerUi from 'swagger-ui-express';
 import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
 import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 import healthRoutes from './routes/health.js';
+import { errorMiddleware } from './middleware/errorMiddleware.js';
 
 const swaggerDocument = loadSwagger();
 const uniSwaggerDocument = loadUniCommerceSwagger();
@@ -102,7 +103,8 @@ app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// Run cron jobs
+app.use(errorMiddleware);
+
 cronJob.scheduledCronJobs();
 
 export default app;

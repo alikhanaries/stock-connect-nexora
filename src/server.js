@@ -51,7 +51,9 @@ const gracefulShutdown = async (source) => {
     await closeHttpServer();
     console.log('Server closed.');
 
-    await stopChannelEngineWorker();
+    if (config.START_CE_WORKER) {
+      await stopChannelEngineWorker();
+    }
     await closeChannelEngineQueueConnections();
     await db.disconnect();
     console.log('Mongoose disconnected');
@@ -65,6 +67,14 @@ const gracefulShutdown = async (source) => {
   }
 };
 
+const handleFatalProcessError = (label, reason) => {
+  console.error(`${label}:`, reason);
+  if (reason instanceof Error && reason.stack) {
+    console.error(reason.stack);
+  }
+  gracefulShutdown(label);
+};
+
 const startServer = async () => {
   validateConfig();
 
@@ -73,12 +83,16 @@ const startServer = async () => {
     setDbReady(true);
     console.log('MongoDB Connected');
 
-    try {
-      await startChannelEngineWorker();
+    if (config.START_CE_WORKER) {
+      try {
+        await startChannelEngineWorker();
+        setQueueReady(true);
+      } catch (err) {
+        console.error('Channel Engine queue worker failed to start:', err.message);
+        setQueueReady(false);
+      }
+    } else {
       setQueueReady(true);
-    } catch (err) {
-      console.error('Channel Engine queue worker failed to start:', err.message);
-      setQueueReady(false);
     }
 
     server = app.listen(PORT, () => {
@@ -97,3 +111,5 @@ startServer();
 
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('unhandledRejection', (reason) => handleFatalProcessError('unhandledRejection', reason));
+process.on('uncaughtException', (error) => handleFatalProcessError('uncaughtException', error));
