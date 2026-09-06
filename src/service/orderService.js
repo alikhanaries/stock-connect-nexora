@@ -994,7 +994,7 @@ export async function getNewOrders(parentTag, lastSyncDate = null) {
       urlParams += `&fromUpdatedAtDate=${encodeURIComponent(fromUpdatedAtDate)}`;
     }
 
-    // 1. Fetch Page 1 to get TotalCount and initial items
+    // 1. Fetch Page 1
     let firstData;
     try {
       const response = await fetchWithRetry(`${CHANNEL_ENGINE_BASE_URL}orders?${urlParams}&page=1`);
@@ -1014,27 +1014,33 @@ export async function getNewOrders(parentTag, lastSyncDate = null) {
 
     allOrders.push(...firstData.Content);
 
-    const totalCount = firstData.TotalCount || 0;
-    const totalPages = Math.ceil(totalCount / pageSize);
+    // If page 1 has fewer items than pageSize, we already received ALL available orders. Stop here!
+    if (firstData.Content.length < pageSize) {
+      return {
+        success: true,
+        data: allOrders,
+      };
+    }
 
-    // 2. Fetch remaining pages concurrently in batches of 15
-    if (totalPages > 1) {
-      const remainingPages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-      const BATCH_SIZE = 15;
+    // 2. If page 1 was full, fetch subsequent pages until a page returns fewer than pageSize items
+    let page = 2;
+    while (true) {
+      try {
+        const response = await fetchWithRetry(`${CHANNEL_ENGINE_BASE_URL}orders?${urlParams}&page=${page}`);
+        if (!response.ok) {
+          console.warn(`${tag} Page ${page} returned status ${response.status}, stopping pagination`);
+          break;
+        }
+        const json = await response.json();
+        const content = json?.Content || [];
+        if (!content.length) break;
 
-      for (let i = 0; i < remainingPages.length; i += BATCH_SIZE) {
-        const batch = remainingPages.slice(i, i + BATCH_SIZE);
-        const pageResults = await Promise.all(
-          batch.map(async (p) => {
-            const response = await fetchWithRetry(`${CHANNEL_ENGINE_BASE_URL}orders?${urlParams}&page=${p}`);
-            if (!response.ok) {
-              throw new Error(`HTTP error! Status: ${response.status} on page ${p}`);
-            }
-            const json = await response.json();
-            return json?.Content || [];
-          })
-        );
-        pageResults.forEach((items) => allOrders.push(...items));
+        allOrders.push(...content);
+        if (content.length < pageSize) break; // Reached last page
+        page++;
+      } catch (err) {
+        console.error(`${tag} Error fetching page ${page}:`, err.message);
+        break;
       }
     }
 
