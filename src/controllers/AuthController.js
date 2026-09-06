@@ -150,7 +150,8 @@ export const refreshToken = async (req, res) => {
       return Response.failResponse(res, req.locale.INVALID_TOKEN, 401);
     }
 
-    const tokenResponse = generateTokenResponse(user, user.role);
+    const sellerIds = (await userHelper.getSellerIds(user._id.toString())) || [];
+    const tokenResponse = generateTokenResponse(user, user.role, sellerIds);
     return Response.successResponse(res, req.locale.REFRESH_TOKEN, 200, tokenResponse);
   } catch (error) {
     errorLog(error);
