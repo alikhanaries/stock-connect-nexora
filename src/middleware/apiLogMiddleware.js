@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
-import { apiLogConfig } from '#config/apiLog.js';
+import { apiLogConfig, isNoBodyLogPath } from '#config/apiLog.js';
 import ApiCallLog from '#models/ApiCallLog.js';
 import { redactHeaders, sanitizePayload } from '#helpers/apiLogRedaction.js';
 import { errorLog } from './errorLogMiddleware.js';
@@ -91,6 +91,7 @@ export const apiLogMiddleware = (req, res, next) => {
 
     const startTime = process.hrtime.bigint();
     const path = resolvePath(req);
+    const skipBodyLogging = isNoBodyLogPath(path);
 
     const requestSnapshot = {
       requestId,
@@ -98,7 +99,8 @@ export const apiLogMiddleware = (req, res, next) => {
       path,
       requestQuery: sanitizeQuery(req.query),
       requestHeaders: redactHeaders(req.headers),
-      requestBody: apiLogConfig.logRequestBody ? sanitizePayload(req.body) : undefined,
+      requestBody:
+        !skipBodyLogging && apiLogConfig.logRequestBody ? sanitizePayload(req.body) : undefined,
       ip: req.ip,
       userAgent: req.get('user-agent') || undefined,
       integration: resolveIntegration(path),
@@ -138,7 +140,7 @@ export const apiLogMiddleware = (req, res, next) => {
           requestQuery: requestSnapshot.requestQuery,
           requestBody: requestSnapshot.requestBody,
           responseBody:
-            apiLogConfig.logResponseBody && capturedResponseBody !== undefined
+            !skipBodyLogging && apiLogConfig.logResponseBody && capturedResponseBody !== undefined
               ? sanitizePayload(parsedResponseBody)
               : undefined,
           errorMessage: extractErrorMessage(statusCode, capturedResponseBody),
