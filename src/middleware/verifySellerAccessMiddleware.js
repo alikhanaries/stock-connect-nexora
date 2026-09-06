@@ -3,6 +3,13 @@ import mongoose from 'mongoose';
 import Responses from '#helpers/response.js';
 import Seller from '#models/Seller.js';
 
+const SELLER_AUTH_FORBIDDEN_MESSAGE = 'You are not authorized to access seller resources';
+
+const rejectInvalidSellerIds = (res) => {
+  console.error('Authorization Error: req.sellerIds was not an array. Check preceding middleware.');
+  return Responses.failResponse(res, SELLER_AUTH_FORBIDDEN_MESSAGE, 403);
+};
+
 export const verifySellerAccess = async (req, res, next) => {
   try {
     const user = req.user;
@@ -26,8 +33,7 @@ export const verifySellerAccess = async (req, res, next) => {
     }
 
     if (!Array.isArray(connectedSellerIds)) {
-      console.error('Authorization Error: req.sellerIds was not an array. Check preceding middleware.');
-      return Responses.errorResponse(res, 'Server configuration error', 500);
+      return rejectInvalidSellerIds(res);
     }
 
     if (ROLES_BASED_USER_FETCHING[user.role]) {
@@ -64,7 +70,10 @@ export const verifyMultipleSellerAccess = async (req, res, next) => {
       }
 
       if (!Array.isArray(connectedSellerIds) || connectedSellerIds.length === 0) {
-        return Responses.errorResponse(res, 'Server configuration error', 500);
+        if (!Array.isArray(connectedSellerIds)) {
+          return rejectInvalidSellerIds(res);
+        }
+        return Responses.failResponse(res, SELLER_AUTH_FORBIDDEN_MESSAGE, 403);
       }
 
       req.sellerId = new mongoose.Types.ObjectId(connectedSellerIds[0]);
@@ -98,8 +107,7 @@ export const verifyMultipleSellerAccess = async (req, res, next) => {
     }
 
     if (!Array.isArray(connectedSellerIds)) {
-      console.error('Authorization Error: req.sellerIds was not an array. Check preceding middleware.');
-      return Responses.errorResponse(res, 'Server configuration error', 500);
+      return rejectInvalidSellerIds(res);
     }
 
     if (ROLES_BASED_USER_FETCHING[user.role]) {
