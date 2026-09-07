@@ -1,10 +1,35 @@
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import Response from '#helpers/response.js';
 
-export const validateInput = (schema) => (req, res, next) => {
+export const objectIdSchema = z
+  .string({ required_error: 'ID is required' })
+  .regex(/^[0-9a-fA-F]{24}$/, 'Invalid ID format');
+
+const isBodySchema = (input) => input && typeof input.parse === 'function';
+
+const resolveSchemas = (input) => {
+  if (isBodySchema(input)) {
+    return { body: input };
+  }
+  return input || {};
+};
+
+export const validateInput = (input) => (req, res, next) => {
   try {
-    const validatedData = schema.parse(req.body);
-    req.body = validatedData;
+    const schemas = resolveSchemas(input);
+
+    if (schemas.body) {
+      req.body = schemas.body.parse(req.body ?? {});
+    }
+
+    if (schemas.query) {
+      req.validatedQuery = schemas.query.parse(req.query ?? {});
+    }
+
+    if (schemas.params) {
+      req.validatedParams = schemas.params.parse(req.params ?? {});
+    }
+
     next();
   } catch (error) {
     if (error instanceof ZodError) {
