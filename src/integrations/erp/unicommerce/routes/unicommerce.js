@@ -17,6 +17,7 @@ import { getCourierDetailsValidator, getLabelsQueryValidator, postLabelsValidato
 import { getCourierDetails, getLabels, postShipmentDetails } from '../controllers/shipmentController.js';
 import { createShipment } from '#root/src/controllers/ShipmentController.js';
 import { createShipmentValidator } from '#validations/shipment.js';
+import { partnerJsonBodyMiddleware } from '../middleware/jsonBodyParser.js';
 
 const UniCommerceRouter = express.Router();
 
@@ -69,7 +70,10 @@ const UniCommerceRouter = express.Router();
  *   post:
  *     tags: [UniCommerce]
  *     summary: Post Authentication
- *     description: Alternate POST variant with credentials in the JSON request body.
+ *     description: |
+ *       Alternate POST variant with credentials in the JSON request body.
+ *       Allowed Content-Type values are application/json, application/*+json, and text/plain.
+ *       Request body must not exceed 64kb.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -99,6 +103,10 @@ const UniCommerceRouter = express.Router();
  *                 maxLength: 128
  *                 example: Test@123
  *                 description: User password
+ *         text/plain:
+ *           schema:
+ *             type: string
+ *             example: '{"username":"seller@example.com","password":"Test@123"}'
  *     responses:
  *       200:
  *         description: Login successful
@@ -120,13 +128,16 @@ const UniCommerceRouter = express.Router();
  *         description: Invalid credentials
  *       404:
  *         description: Account not found
+ *       413:
+ *         description: Request body exceeds 64kb limit
+ *       415:
+ *         description: Unsupported Content-Type
  *       500:
  *         description: Internal server error
  */
 
-const parseJsonAnyContentType = express.json({ type: () => true });
 UniCommerceRouter.get('/authToken', loginQueryValidator, checkLanguage, login);
-UniCommerceRouter.post('/authToken', parseJsonAnyContentType, loginValidator, checkLanguage, login);
+UniCommerceRouter.post('/authToken', ...partnerJsonBodyMiddleware, loginValidator, checkLanguage, login);
 
 /**
  * @openapi
@@ -812,6 +823,8 @@ UniCommerceRouter.post(
  *     description: |
  *       Uniware posts shipment data (box dimensions, invoice/tax per item) before label generation.
  *       Returns acknowledgement per order item. See https://documentation.unicommerce.com/docs/postlabels.html
+ *       Allowed Content-Type values are application/json, application/*+json, and text/plain.
+ *       Request body must not exceed 64kb.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -904,6 +917,10 @@ UniCommerceRouter.post(
  *                         type: string
  *       400:
  *         description: Validation error
+ *       413:
+ *         description: Request body exceeds 64kb limit
+ *       415:
+ *         description: Unsupported Content-Type
  *       500:
  *         description: Internal server error
  */
@@ -917,7 +934,7 @@ UniCommerceRouter.get(
 
 UniCommerceRouter.post(
   '/orders/labels',
-  parseJsonAnyContentType,
+  ...partnerJsonBodyMiddleware,
   postLabelsValidator,
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
