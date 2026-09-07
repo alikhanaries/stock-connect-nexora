@@ -90,4 +90,5 @@ export const config = {
     (process.env.NODE_ENV !== 'production' && process.env.START_CE_WORKER !== 'false'),
   SWAGGER_ENABLED: process.env.SWAGGER_ENABLED === 'true',
   TRUST_PROXY: parseInt(process.env.TRUST_PROXY || '0', 10),
+  LOG_LEVEL: process.env.LOG_LEVEL || 'info',
 };
