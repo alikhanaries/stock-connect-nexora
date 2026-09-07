@@ -14,6 +14,7 @@ import {
   generateSellerInvoice,
   getAnalyticsOrders,
   handleOmnifulOrderWebhook,
+  handleChannelEngineOrderWebhook,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess, omnifulWebHookAuthMiddleware } from '#middleware/index.js';
 import {
@@ -527,4 +528,19 @@ router.post(
  *         description: Invalid webhook authentication
  */
 router.post('/omniful-order-webhook', omnifulWebHookAuthMiddleware, handleOmnifulOrderWebhook);
+
+// CHANNELENGINE WEBHOOK FOR ORDER EVENTS (CREATE / CHANGE)
+/**
+ * @swagger
+ * /orders/channelengine-webhook:
+ *   post:
+ *     tags: [Orders]
+ *     summary: ChannelEngine order event webhook
+ *     description: Receives order create and change events from ChannelEngine.
+ *     responses:
+ *       200:
+ *         description: Webhook received successfully
+ */
+router.post('/channelengine-webhook', handleChannelEngineOrderWebhook);
+
 export default router;
