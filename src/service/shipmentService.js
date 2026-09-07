@@ -3356,12 +3356,31 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
   return 'IN_PROGRESS';
 };
 
+export const resolveAymakanPdfLabelUrl = (shipping) => {
+  if (!shipping) return null;
+
+  if (shipping.pdf_label) {
+    return shipping.pdf_label;
+  }
+
+  const legacyLabel = shipping.pdf_label_base64;
+  if (!legacyLabel) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(legacyLabel)) {
+    return legacyLabel;
+  }
+
+  return legacyLabel;
+};
+
 export const downloadShipmentLabelService = async (shipmentId, sellerId) => {
   const shipment = await Shipment.findOne({ _id: shipmentId, sellerId }).select('extraData').lean();
 
   if (!shipment) return { success: false, message: 'Shipment not found', status: 404 };
 
-  const pdfLabelUrl = shipment.extraData?.aymakan?.shipping?.pdf_label_base64;
+  const pdfLabelUrl = resolveAymakanPdfLabelUrl(shipment.extraData?.aymakan?.shipping);
   if (!pdfLabelUrl) return { success: false, message: 'PDF label not available for this shipment', status: 404 };
 
   return { success: true, data: { url: pdfLabelUrl } };
