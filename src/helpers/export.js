@@ -1,10 +1,18 @@
 import { formatDateTime } from './Common.js';
 
+export const neutraliseCsvFormula = (value) => {
+  const str = String(value);
+  if (/^[\t\r=+\-@]/.test(str)) {
+    return `'${str}`;
+  }
+  return str;
+};
+
 export const escapeCsv = (row) => {
   return row
     .map((field) => {
       if (field === null || field === undefined || field === '') return '';
-      const str = String(field);
+      const str = neutraliseCsvFormula(String(field));
       if (
         str.includes(',') ||
         str.includes('"') ||
@@ -453,6 +461,7 @@ export const SHIPMENT_EXPORT_HEADERS = [
   'Tracking Status History',
 ];
 export default {
+  neutraliseCsvFormula,
   escapeCsv,
   generateCSVFilename,
   validateExportData,
