@@ -535,12 +535,20 @@ router.post('/omniful-order-webhook', omnifulWebHookAuthMiddleware, handleOmnifu
  * /orders/channelengine-webhook:
  *   post:
  *     tags: [Orders]
- *     summary: ChannelEngine order event webhook
+ *     summary: ChannelEngine order event webhook (POST)
  *     description: Receives order create and change events from ChannelEngine.
+ *     responses:
+ *       200:
+ *         description: Webhook received successfully
+ *   get:
+ *     tags: [Orders]
+ *     summary: ChannelEngine order event webhook (GET)
+ *     description: Receives order create and change notification pings from ChannelEngine.
  *     responses:
  *       200:
  *         description: Webhook received successfully
  */
 router.post('/channelengine-webhook', handleChannelEngineOrderWebhook);
+router.get('/channelengine-webhook', handleChannelEngineOrderWebhook);
 
 export default router;
