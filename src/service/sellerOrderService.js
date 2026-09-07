@@ -41,6 +41,47 @@ export const deriveSkuStatusFromFulfillment = ({
   return STATUS.NEW;
 };
 
+export const hasLocalShipmentFulfillment = (existingSku) => {
+  if (!existingSku) return false;
+
+  const shipmentCreated = existingSku?.statusBreakdown?.shipmentCreated || 0;
+  const airWaybillNo = String(existingSku?.airWaybillNo || '').trim();
+
+  return shipmentCreated > 0 || airWaybillNo.length > 0;
+};
+
+export const orderHasLocalShipmentFulfillment = (existingOrder) => {
+  const skus = existingOrder?.orderSkuList?.skuList || [];
+  return skus.some(hasLocalShipmentFulfillment);
+};
+
+const mergeLocalShipmentBreakdown = (breakdown, existingSku, qty) => {
+  if (!hasLocalShipmentFulfillment(existingSku)) {
+    return breakdown;
+  }
+
+  const merged = {
+    confirmed: breakdown?.confirmed ?? 0,
+    shipmentCreated: breakdown?.shipmentCreated ?? 0,
+    shipped: breakdown?.shipped ?? 0,
+    delivered: breakdown?.delivered ?? 0,
+    returned: breakdown?.returned ?? 0,
+    canceled: breakdown?.canceled ?? 0,
+  };
+
+  const prevCreated = existingSku?.statusBreakdown?.shipmentCreated || 0;
+  merged.shipmentCreated = Math.max(merged.shipmentCreated, prevCreated);
+
+  if (merged.shipmentCreated === 0 && existingSku?.airWaybillNo) {
+    merged.shipmentCreated = prevCreated > 0 ? prevCreated : Math.min(qty || 0, 1);
+  }
+
+  const used = merged.shipmentCreated + merged.shipped + merged.delivered + merged.returned + merged.canceled;
+  merged.confirmed = Math.max((qty || 0) - used, 0);
+
+  return merged;
+};
+
 /** Shared CE/OCP stored SKU status — fulfillment rules, not channel marketplace status. */
 export const resolveStoredSkuStatus = ({ breakdown, qty, existingSku, extraDelivered = false }) => {
   if (extraDelivered) return STATUS.DELIVERED;
@@ -50,8 +91,11 @@ export const resolveStoredSkuStatus = ({ breakdown, qty, existingSku, extraDeliv
   if ((existingSku?.status || '').toUpperCase() === STATUS.IN_PROGRESS && existingSku?.documentId) {
     return STATUS.IN_PROGRESS;
   }
+
+  const effectiveBreakdown = mergeLocalShipmentBreakdown(breakdown, existingSku, qty);
+
   return deriveSkuStatusFromFulfillment({
-    breakdown,
+    breakdown: effectiveBreakdown,
     qty,
     honorInvoiceInProgress: Boolean(existingSku?.documentId),
     storedStatus: existingSku?.status,

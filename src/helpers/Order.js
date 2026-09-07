@@ -4,7 +4,11 @@ import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
 import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderService.js';
 import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
-import { resolveStoredSkuStatus, deriveSellerOrderStatusFromSkus } from '#root/src/service/sellerOrderService.js';
+import {
+  resolveStoredSkuStatus,
+  deriveSellerOrderStatusFromSkus,
+  orderHasLocalShipmentFulfillment,
+} from '#root/src/service/sellerOrderService.js';
 import {
   fetchCeProductSellerMapForSkus,
   resolveOrderLineSellerId,
@@ -16,6 +20,31 @@ import {
 } from './orderSellerResolution.js';
 
 export { getExtraSellerId, resolveOrderLineSellerId, normalizeOrderSku } from './orderSellerResolution.js';
+
+const findExistingSku = (existingOrder, line) => {
+  const skuList = existingOrder?.orderSkuList?.skuList || [];
+
+  return (
+    skuList.find((sku) => String(sku.id) === String(line.Id)) ??
+    skuList.find((sku) => normalizeOrderSku(sku.merchantProductNo) === normalizeOrderSku(line.MerchantProductNo))
+  );
+};
+
+const resolveSanitizedOrderStatus = (existingOrder, skuList) => {
+  const preservedStatuses = ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'];
+
+  if (preservedStatuses.includes(existingOrder?.status)) {
+    return existingOrder.status;
+  }
+
+  const derivedStatus = deriveSellerOrderStatusFromSkus(skuList);
+
+  if (derivedStatus === 'NEW' && orderHasLocalShipmentFulfillment(existingOrder)) {
+    return 'IN_PROGRESS';
+  }
+
+  return derivedStatus;
+};
 
 const getPeriodDate = (lowercasedPeriod) => {
   const today = new Date();
@@ -490,7 +519,7 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
       // SKU LIST
       const skuList = Array.isArray(data.Lines)
         ? data.Lines.map((line) => {
-            const existingSku = existingOrder?.orderSkuList?.skuList?.find((s) => String(s.id) === String(line.Id));
+            const existingSku = findExistingSku(existingOrder, line);
 
             const resolution = resolveOrderLineSellerId({
               merchantProductNo: line.MerchantProductNo,
@@ -755,9 +784,7 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
         },
 
         // status derived from fulfillment-resolved SKU statuses (same rules for all channels)
-        status: ['SHIPPED', 'CLOSED', 'RETURNED', 'CANCELED'].includes(existingOrder?.status)
-          ? existingOrder.status
-          : deriveSellerOrderStatusFromSkus(skuList),
+        status: resolveSanitizedOrderStatus(existingOrder, skuList),
       };
 
       //  Prepare SellerOrder payload (NO DB CALL HERE)
