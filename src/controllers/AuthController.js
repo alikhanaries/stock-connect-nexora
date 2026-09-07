@@ -3,11 +3,15 @@ import { generateTokenResponse, decodeToken, generateResetToken } from '#util/to
 import { errorHandler } from '#helpers/ErrorHandler.js';
 import { errorLog, isLoginFailureLockedOut, recordLoginFailure, clearLoginFailures } from '#middleware/index.js';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import Response from '#helpers/response.js';
 import userHelper from '#helpers/User.js';
 import { USER_ROLES } from '#constants/common.js';
 import emailService from '#service/emailService.js';
 import { config } from '#config/config.js';
+
+// Pre-generated bcrypt hash (cost factor 10) for timing equalization when no user exists.
+const DUMMY_BCRYPT_HASH = '$2b$10$sngBkeoc/opXt5Xfc2O8ueQwhN1bh31a/RFft/QcvNdkm10cg7VeS';
 
 export const login = async (req, res) => {
   try {
@@ -23,13 +27,9 @@ export const login = async (req, res) => {
 
     const user = await User.findOne({ email, isDeleted: false, active: true }).select('+password');
 
-    if (!user) {
-      await recordLoginFailure(req);
-      return Response.failResponse(res, req.locale.NO_ACCOUNT, 404);
-    }
+    const isMatch = user ? await user.comparePassword(password) : await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
+    if (!user || !isMatch) {
       await recordLoginFailure(req);
       return Response.failResponse(res, req.locale.INVALID_CREDENTIALS, 401);
     }
