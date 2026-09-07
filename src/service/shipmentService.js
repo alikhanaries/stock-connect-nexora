@@ -39,6 +39,7 @@ import Product from '#models/Product.js';
 import { channelEnginePush } from '#service/channelEngineClient.js';
 import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 import { isAmazonChannelOrder, getAymakanWarehouseDeliveryAddress } from '#helpers/amazonFulfillment.js';
+import { resolveEffectiveShipmentAwb, resolveFirstMileAirWaybillNo } from '#helpers/shipmentAwb.js';
 
 const buildAymakanWarehouseDeliveryFields = (orderCustomer) => ({
   delivery_name: [orderCustomer?.firstName, orderCustomer?.lastName].filter(Boolean).join(' '),
@@ -758,6 +759,7 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
           airWaybillNo: 1,
           sellerId: 1,
           shipmentMethod: 1,
+          omniful: 1,
           shipmentMerchantDetails: 1,
           deliveryCustomer: {
             name: { $ifNull: ['$deliveryInfo.name', 'NA'] },
@@ -783,7 +785,11 @@ export const getAllShipmentsService = async ({ page = 1, size = 10, sellerId, st
     const total = countResult[0]?.total || 0;
 
     return {
-      shipments: shipmentData,
+      shipments: shipmentData.map((shipment) => ({
+        ...shipment,
+        firstMileAirWaybillNo: shipment.airWaybillNo,
+        airWaybillNo: resolveEffectiveShipmentAwb(shipment),
+      })),
       pagination: getPagination(total, currentPage, perPage),
       appliedFilters,
     };
@@ -861,6 +867,8 @@ export const getAllShipmentsAdminService = async ({
         status: 1,
         airWaybillNo: 1,
         sellerId: 1,
+        shipmentMethod: 1,
+        omniful: 1,
         shipmentMerchantDetails: 1,
         deliveryCustomer: {
           name: { $ifNull: ['$deliveryInfo.name', 'NA'] },
@@ -878,7 +886,11 @@ export const getAllShipmentsAdminService = async ({
   const total = await Shipment.countDocuments(matchStage);
 
   return {
-    shipments: shipmentData,
+    shipments: shipmentData.map((shipment) => ({
+      ...shipment,
+      firstMileAirWaybillNo: shipment.airWaybillNo,
+      airWaybillNo: resolveEffectiveShipmentAwb(shipment),
+    })),
     pagination: getPagination(total, currentPage, perPage),
     appliedFilters,
   };
@@ -1343,10 +1355,11 @@ export const getSingleShipmentService = async (id) => {
 
   const formattedShipmentData = transformShipmentResponse(shipment[0]);
 
-  // Fetch tracking info only if we have an AWB number and it's not a MANUAL shipment
+  // Aymakan track API requires the stored first-mile AWB, not the effective courier AWB.
   let trackingData = null;
-  if (formattedShipmentData?.airWaybillNo && shipment[0]?.shipmentMethod === 'AYMAKAN') {
-    trackingData = await trackAymakanShipment(formattedShipmentData.airWaybillNo);
+  const firstMileAirWaybillNo = resolveFirstMileAirWaybillNo(shipment[0]);
+  if (firstMileAirWaybillNo && shipment[0]?.shipmentMethod === 'AYMAKAN') {
+    trackingData = await trackAymakanShipment(firstMileAirWaybillNo);
     formattedShipmentData.trackingInfo = formatShipmentTrackingInfo(trackingData?.trackingInfo);
   }
 
@@ -1415,7 +1428,8 @@ const transformShipmentResponse = (response) => {
       status: p.status,
       hsCode: p.hsCode ?? p.merchantProductNo,
     })),
-    airWaybillNo: data.airWaybillNo,
+    airWaybillNo: resolveEffectiveShipmentAwb(data),
+    firstMileAirWaybillNo: resolveFirstMileAirWaybillNo(data),
     merchantShipmentNo: data.merchantShipmentNo,
     createdAt: data?.createdAt,
     pieces: data.pieces,
