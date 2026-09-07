@@ -73,7 +73,7 @@ app.use(
   swaggerUi.setup(uniSwaggerDocument, swaggerUiOptions)
 );
 
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 app.use(cors(corsOptions));
 
 app.use('/health', healthRoutes);
