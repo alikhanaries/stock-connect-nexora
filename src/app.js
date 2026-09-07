@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import { corsOptions } from './config/cors.js';
+import { config } from './config/config.js';
 import apiRoutes from './routes/api.js';
 import nebimApiRoutes from './integrations/erp/nebim/routes/api.js';
 import kipApiRoutes from './integrations/erp/gurmenKip/routes/api.js';
@@ -23,8 +24,8 @@ import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 import healthRoutes from './routes/health.js';
 import { errorMiddleware } from './middleware/errorMiddleware.js';
 
-const swaggerDocument = loadSwagger();
-const uniSwaggerDocument = loadUniCommerceSwagger();
+const swaggerEnabled = config.NODE_ENV !== 'production' || config.SWAGGER_ENABLED;
+
 const swaggerUiOptions = {
   requestInterceptor: (req) => {
     req.headers['Accept-Language'] = 'en';
@@ -41,37 +42,26 @@ app.use(
   })
 );
 
-function setupSwagger(path, swaggerSpec, options = {}) {
-  app.use(path, swaggerUi.serveFiles(swaggerSpec, {}), swaggerUi.setup(swaggerSpec, options));
+if (swaggerEnabled) {
+  const swaggerDocument = loadSwagger();
+  const uniSwaggerDocument = loadUniCommerceSwagger();
+
+  app.get('/swagger.json', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.json(swaggerDocument);
+  });
+
+  app.use('/api-docs', swaggerUi.serve, (req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    swaggerUi.setup(swaggerDocument, swaggerUiOptions)(req, res, next);
+  });
+
+  app.use(
+    '/unicommerce-docs',
+    swaggerUi.serveFiles(uniSwaggerDocument, {}),
+    swaggerUi.setup(uniSwaggerDocument, swaggerUiOptions)
+  );
 }
-
-app.get('/swagger.json', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.json(swaggerDocument);
-});
-
-setupSwagger('/api-docs', swaggerDocument, {
-  requestInterceptor: (req) => {
-    req.headers['Accept-Language'] = 'en';
-    return req;
-  },
-});
-
-app.get('/swagger.json', (req, res) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  res.json(loadSwagger());
-});
-
-app.use('/api-docs', swaggerUi.serve, (req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-  swaggerUi.setup(loadSwagger(), swaggerUiOptions)(req, res, next);
-});
-
-app.use(
-  '/unicommerce-docs',
-  swaggerUi.serveFiles(uniSwaggerDocument, {}),
-  swaggerUi.setup(uniSwaggerDocument, swaggerUiOptions)
-);
 
 app.use(express.json());
 app.use(cors(corsOptions));
