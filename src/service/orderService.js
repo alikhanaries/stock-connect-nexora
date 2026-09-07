@@ -19,7 +19,7 @@ import Product from '../models/Product.js';
 import SellerOrder from '#models/OrderSchema/SellerOrder.js';
 import { cancelAymakanShipment, createAymakanDocumentId } from '#service/aymakanService.js';
 import { formatShipmentTrackingInfo } from '#service/shipmentService.js';
-import { ORDER_EXPORT_HEADERS, buildExportOrderRow } from '#helpers/export.js';
+import { ORDER_EXPORT_HEADERS, buildExportOrderRow, neutraliseCsvFormula } from '#helpers/export.js';
 import { formatDateTime, truncate, resolveDateRange } from '#helpers/Common.js';
 import { pickChannelIdsFromChannel } from '#root/src/helpers/dashboard.js';
 import OrderLogs from '#models/OrderLogs.js';
@@ -1830,7 +1830,8 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
         const row = headers.map((header) => {
           const value = rowObject?.[header];
-          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+          const rawValue = value === null || value === undefined ? '' : String(value);
+          const safeValue = neutraliseCsvFormula(rawValue).replace(/"/g, '""');
 
           return `"${safeValue}"`;
         });
