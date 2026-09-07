@@ -3375,17 +3375,17 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
 export const resolveAymakanPdfLabelUrl = (shipping) => {
   if (!shipping) return null;
 
+  const legacyLabel = shipping.pdf_label_base64;
+  if (legacyLabel && /^https?:\/\//i.test(String(legacyLabel).trim())) {
+    return String(legacyLabel).trim();
+  }
+
   if (shipping.pdf_label) {
     return shipping.pdf_label;
   }
 
-  const legacyLabel = shipping.pdf_label_base64;
   if (!legacyLabel) {
     return null;
-  }
-
-  if (/^https?:\/\//i.test(legacyLabel)) {
-    return legacyLabel;
   }
 
   return legacyLabel;
