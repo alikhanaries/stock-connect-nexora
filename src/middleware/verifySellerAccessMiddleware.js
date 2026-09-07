@@ -44,6 +44,8 @@ export const verifySellerAccess = async (req, res, next) => {
         return Responses.failResponse(res, 'You do not have access to this seller', 400);
       }
     }
+
+    return Responses.failResponse(res, 'You do not have access to this seller', 403);
   } catch (error) {
     console.error('Error in verifySellerAccess middleware:', error.message);
     return Responses.errorResponse(res, 'An internal server error occurred during authorization.', 500);
