@@ -7,11 +7,33 @@ permissions:
   contents: read
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          yarn install --immutable
+
+      - name: Lint
+        run: yarn eslint src --max-warnings 0
+
+      - name: Syntax check
+        run: |
+          node --check src/app.js
+          node --check src/server.js
+
+      - name: Dependency audit
+        run: yarn npm audit --all --severity critical
+
   deploy:
+    needs: quality
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.5
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -23,7 +45,8 @@ jobs:
             set -euo pipefail
             cd /home/opc/stock-connect-backend
             echo "Before: $(git rev-parse --short HEAD)"
-            git pull --ff-only https://x-access-token:${GH_TOKEN}@github.com/Ollkom/stock-connect-backend.git main
+            git config --local credential.helper '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f'
+            git pull --ff-only origin main
             echo "After:  $(git rev-parse --short HEAD)"
             git log -1 --oneline
             pm2 restart all
