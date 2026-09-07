@@ -30,6 +30,7 @@ import fs from 'fs';
 import path from 'path';
 import { safeUnlinkTempFile } from '../helpers/tempFileCleanup.js';
 import { getWarehouseAvailabilityContext, buildWarehouseAvailabilityFields } from '#service/omnifulInventoryService.js';
+import { resolveEffectiveShipmentAwb } from '#helpers/shipmentAwb.js';
 
 const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null) => {
   let sellerName = '';
@@ -651,12 +652,14 @@ export const getOrderById = async (id, sellerId) => {
 
     shipments.forEach((shipment) => {
       const target = shipment.status === 'DELIVERED' ? deliveredItems : shippedItems;
+      const effectiveAwb = resolveEffectiveShipmentAwb(shipment) || null;
 
       target.push({
         shipmentStatus: shipment.status || 'SHIPMENT_CREATED',
         shipmentId: shipment._id,
-        trackingNumber: shipment.airWaybillNo || null,
+        trackingNumber: effectiveAwb,
         omnifulTrackingNo: shipment?.omniful?.trackingNo || null,
+        firstMileAirWaybillNo: shipment.airWaybillNo || null,
         shipmentMode: shipment.shipmentMethod || 'AYMAKAN',
         documentId: shipment.invoiceDocumentId ?? null,
         lineItems:
@@ -675,8 +678,9 @@ export const getOrderById = async (id, sellerId) => {
               imageUrl: productsMap[p.merchantProductNo]?.image || null,
               quantity: p.quantity,
               status: sku?.status,
-              airWaybillNo: shipment.airWaybillNo,
+              airWaybillNo: effectiveAwb,
               omnifulTrackingNo: shipment?.omniful?.trackingNo || null,
+              firstMileAirWaybillNo: shipment.airWaybillNo || null,
               hsCode: productsMap[p.merchantProductNo]?.hsCode || p.merchantProductNo,
               trackingInfo: formatShipmentTrackingInfo(shipment?.trackingInfo) || [],
               documentId: sku?.documentId,
@@ -1748,8 +1752,9 @@ export const exportOrdersToCSV = async (sellerId, filters = {}, sellerName = '')
 
         if (!airwaybillMap[key]) airwaybillMap[key] = [];
 
-        if (shipment.airWaybillNo) {
-          airwaybillMap[key].push(shipment.airWaybillNo);
+        const effectiveAwb = resolveEffectiveShipmentAwb(shipment);
+        if (effectiveAwb) {
+          airwaybillMap[key].push(effectiveAwb);
         }
       });
     });
