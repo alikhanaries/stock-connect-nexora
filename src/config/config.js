@@ -88,4 +88,5 @@ export const config = {
   START_CE_WORKER:
     process.env.START_CE_WORKER === 'true' ||
     (process.env.NODE_ENV !== 'production' && process.env.START_CE_WORKER !== 'false'),
+  SWAGGER_ENABLED: process.env.SWAGGER_ENABLED === 'true',
 };
