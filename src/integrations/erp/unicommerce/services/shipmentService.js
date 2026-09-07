@@ -1,6 +1,7 @@
 import Shipment from '#root/src/models/Shipment/Shipment.js';
 import Order from '#root/src/models/Orders.js';
 import { Buffer } from 'buffer';
+import { resolveEffectiveShipmentAwb } from '#helpers/shipmentAwb.js';
 
 const SHIPMENT_LOOKUP_METHODS = ['AYMAKAN', 'UNICOMMERCE', 'CHANNEL_ENGINE', 'MANUAL'];
 
@@ -29,7 +30,7 @@ const findShipmentByOrderLineIds = async (sellerId, orderLineIds) => {
 const resolveCourierFromShipment = (shipment) => {
   const shipping = shipment.extraData?.aymakan?.shipping;
   const trackingNumber =
-    shipping?.tracking_number || shipment.airWaybillNo || shipment.trackingInfo?.[0]?.trackingNo || '';
+    resolveEffectiveShipmentAwb(shipment) || shipping?.tracking_number || shipment.trackingInfo?.[0]?.trackingNo || '';
   const courierCode =
     shipping?.courierCode ||
     shipment.method ||

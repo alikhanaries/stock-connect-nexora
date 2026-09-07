@@ -3,6 +3,7 @@ import Return from '../models/Return.js';
 import Channel from '#root/src/models/Channel.js';
 import Product from '#root/src/models/Product.js';
 import { RETURN_STATUS } from '#root/src/constants/common.js';
+import { resolveEffectiveShipmentAwb } from '#helpers/shipmentAwb.js';
 export const isNameOrEmailSearch = (searchTerm) => {
   if (!searchTerm) return false;
 
@@ -255,6 +256,8 @@ export const buildReturnAggregationPipeline = () => {
               _id: 0,
               deliveryId: 1,
               pickUpId: 1,
+              shipmentMethod: 1,
+              omniful: 1,
             },
           },
         ],
@@ -641,7 +644,7 @@ export const formatReturnDetails = (aggregatedResult, imageMap = {}) => {
     tax: parseFloat(tax.toFixed(2)),
     total: parseFloat(total.toFixed(2)),
     shippingFee: parseFloat(shippingFee.toFixed(2)),
-    trackingNumber: returnData?.shipmentData?.airWaybillNo || null,
+    trackingNumber: returnData?.shipmentData ? resolveEffectiveShipmentAwb(returnData.shipmentData) || null : null,
     shipmentStatus: returnData?.shipmentData?.status,
     logsDetails: returnData?.returnLogsData,
     orderLogsData: returnData?.returnLogsData,
