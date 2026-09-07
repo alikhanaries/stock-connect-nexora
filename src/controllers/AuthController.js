@@ -54,7 +54,7 @@ export const login = async (req, res) => {
   } catch (error) {
     console.error('user login Error:', error);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return errorHandler(error, res);
   }
 };
 
@@ -126,7 +126,7 @@ export const register = async (req, res) => {
   } catch (error) {
     console.error('User register ...', error.message);
     errorLog(error);
-    return Response.errorResponse(res, error.message, 500);
+    return errorHandler(error, res);
   }
 };
 
@@ -196,7 +196,7 @@ export const forgotPassword = async (req, res) => {
   } catch (error) {
     console.error('Forget password error', error);
     errorLog(error);
-    return Response.errorResponse(res, error.message, 500);
+    return errorHandler(error, res);
   }
 };
 
@@ -215,7 +215,7 @@ export const validateResetToken = async (req, res) => {
   } catch (error) {
     console.error('reset-token generation error', error);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return errorHandler(error, res);
   }
 };
 
@@ -245,6 +245,6 @@ export const resetPassword = async (req, res) => {
   } catch (error) {
     console.error('reset-password error', error);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return errorHandler(error, res);
   }
 };
