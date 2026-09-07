@@ -35,6 +35,10 @@ const swaggerUiOptions = {
 
 const app = express();
 
+if (config.TRUST_PROXY > 0) {
+  app.set('trust proxy', config.TRUST_PROXY);
+}
+
 app.use(
   helmet({
     contentSecurityPolicy: false,
