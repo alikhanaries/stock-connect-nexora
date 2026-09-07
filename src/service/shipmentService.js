@@ -5,7 +5,7 @@ import { config } from '../config/config.js';
 import Order from '#models/Orders.js';
 import Return from '#models/Return.js';
 import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
-import { SHIPMENT_EXPORT_HEADERS, buildExportShipmentRow } from '#helpers/export.js';
+import { SHIPMENT_EXPORT_HEADERS, buildExportShipmentRow, neutraliseCsvFormula } from '#helpers/export.js';
 import {
   createAymakanShipment,
   trackAymakanShipment,
@@ -3274,7 +3274,8 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
 
         const row = headers.map((header) => {
           const value = rowObject?.[header];
-          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+          const rawValue = value === null || value === undefined ? '' : String(value);
+          const safeValue = neutraliseCsvFormula(rawValue).replace(/"/g, '""');
 
           return `"${safeValue}"`;
         });
@@ -3299,7 +3300,8 @@ export const exportShipmentsToCSVService = async (sellerId, filters = {}, seller
             value = '';
           }
 
-          const safeValue = value === null || value === undefined ? '' : String(value).replace(/"/g, '""');
+          const rawValue = value === null || value === undefined ? '' : String(value);
+          const safeValue = neutraliseCsvFormula(rawValue).replace(/"/g, '""');
 
           return `"${safeValue}"`;
         });

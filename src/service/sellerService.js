@@ -6,6 +6,7 @@ import UserSeller from '#models/UserSeller.js';
 import PickupAddress from '#models/PickUpAddress.js';
 import { formatSellerResponse } from '#helpers/formatSellerResponse.js';
 import { autoAssignAllChannelsToSeller } from './channelService.js';
+import { escapeRegex } from '#util/escapeRegex.js';
 const createSeller = async (sellerData) => {
   try {
     const { name, ocpSlugId, shopifyConfig, taxIdentificationNumber } = sellerData;
@@ -79,8 +80,10 @@ const getAllSeller = async (query, creatorId, creatorRole) => {
     type: 'normal',
   };
   if (search) {
-    const searchRegex = new RegExp(search, 'i');
-    filter.name = searchRegex;
+    const safeSearch = escapeRegex(search);
+    if (safeSearch !== null) {
+      filter.name = new RegExp(safeSearch, 'i');
+    }
   }
 
   if (creatorRole === USER_ROLES.SUPER_ADMIN || creatorRole === USER_ROLES.ADMIN) {

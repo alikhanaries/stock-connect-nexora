@@ -9,8 +9,9 @@ export const verifyUnicommerceSellerAccess = async (req, res, next) => {
     /* -------- VALIDATE SELLER IDS -------- */
 
     if (!Array.isArray(sellerIds)) {
-      return errorResponse(res, 500, {
-        message: 'Server configuration error: sellerIds must be an array',
+      console.error('Authorization Error: req.sellerIds was not an array. Check preceding middleware.');
+      return failResponse(res, 403, {
+        message: 'You are not authorized to access seller resources',
       });
     }
 

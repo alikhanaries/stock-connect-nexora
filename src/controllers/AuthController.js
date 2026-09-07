@@ -3,11 +3,15 @@ import { generateTokenResponse, decodeToken, generateResetToken } from '#util/to
 import { errorHandler } from '#helpers/ErrorHandler.js';
 import { errorLog, isLoginFailureLockedOut, recordLoginFailure, clearLoginFailures } from '#middleware/index.js';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import Response from '#helpers/response.js';
 import userHelper from '#helpers/User.js';
 import { USER_ROLES } from '#constants/common.js';
 import emailService from '#service/emailService.js';
 import { config } from '#config/config.js';
+
+// Pre-generated bcrypt hash (cost factor 10) for timing equalization when no user exists.
+const DUMMY_BCRYPT_HASH = '$2b$10$sngBkeoc/opXt5Xfc2O8ueQwhN1bh31a/RFft/QcvNdkm10cg7VeS';
 
 export const login = async (req, res) => {
   try {
@@ -23,13 +27,9 @@ export const login = async (req, res) => {
 
     const user = await User.findOne({ email, isDeleted: false, active: true }).select('+password');
 
-    if (!user) {
-      await recordLoginFailure(req);
-      return Response.failResponse(res, req.locale.NO_ACCOUNT, 404);
-    }
+    const isMatch = user ? await user.comparePassword(password) : await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
 
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
+    if (!user || !isMatch) {
       await recordLoginFailure(req);
       return Response.failResponse(res, req.locale.INVALID_CREDENTIALS, 401);
     }
@@ -54,7 +54,7 @@ export const login = async (req, res) => {
   } catch (error) {
     console.error('user login Error:', error);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return errorHandler(error, res);
   }
 };
 
@@ -126,7 +126,7 @@ export const register = async (req, res) => {
   } catch (error) {
     console.error('User register ...', error.message);
     errorLog(error);
-    return Response.errorResponse(res, error.message, 500);
+    return errorHandler(error, res);
   }
 };
 
@@ -150,7 +150,8 @@ export const refreshToken = async (req, res) => {
       return Response.failResponse(res, req.locale.INVALID_TOKEN, 401);
     }
 
-    const tokenResponse = generateTokenResponse(user, user.role);
+    const sellerIds = (await userHelper.getSellerIds(user._id.toString())) || [];
+    const tokenResponse = generateTokenResponse(user, user.role, sellerIds);
     return Response.successResponse(res, req.locale.REFRESH_TOKEN, 200, tokenResponse);
   } catch (error) {
     errorLog(error);
@@ -195,7 +196,7 @@ export const forgotPassword = async (req, res) => {
   } catch (error) {
     console.error('Forget password error', error);
     errorLog(error);
-    return Response.errorResponse(res, error.message, 500);
+    return errorHandler(error, res);
   }
 };
 
@@ -214,7 +215,7 @@ export const validateResetToken = async (req, res) => {
   } catch (error) {
     console.error('reset-token generation error', error);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return errorHandler(error, res);
   }
 };
 
@@ -244,6 +245,6 @@ export const resetPassword = async (req, res) => {
   } catch (error) {
     console.error('reset-password error', error);
     errorLog(error);
-    return Response.errorResponse(res, error, 500);
+    return errorHandler(error, res);
   }
 };

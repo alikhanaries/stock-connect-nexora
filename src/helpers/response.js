@@ -19,12 +19,28 @@ export const failResponse = (res, message = 'Request failed', statusCode = 400, 
   });
 };
 
+const GENERIC_SERVER_ERROR_MESSAGE = 'An unexpected error occurred';
+
+const resolveErrorMessage = (errorDesc, statusCode) => {
+  if (statusCode >= 500) {
+    return GENERIC_SERVER_ERROR_MESSAGE;
+  }
+
+  if (errorDesc instanceof Error) {
+    return errorDesc.message || 'Request failed';
+  }
+
+  return errorDesc;
+};
+
 /*FUNC- TO ERROR THE FAIL RESPONSE*/
 export const errorResponse = (res, errorDesc, statusCode = 500) => {
+  const message = resolveErrorMessage(errorDesc, statusCode);
+
   return res.status(statusCode).send({
     error: true,
     success: false,
-    message: errorDesc,
+    message,
     statusCode,
     data: null,
   });

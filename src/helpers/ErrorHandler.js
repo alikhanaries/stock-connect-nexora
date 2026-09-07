@@ -44,6 +44,10 @@ export const errorHandler = (error, res) => {
     return res.status(401).json(formatErrorResponse("Token expired", 401));
   }
 
+  if (error.type === "entity.too.large") {
+    return res.status(413).json(formatErrorResponse("Payload too large", 413));
+  }
+
   // Generic error response
   return res.status(500).json(formatErrorResponse("Server error", 500));
 };

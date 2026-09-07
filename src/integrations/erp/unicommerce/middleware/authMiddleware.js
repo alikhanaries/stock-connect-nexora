@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import User from '#models/User.js';
 import { config } from '#config/config.js';
+import userHelper from '#helpers/User.js';
 import { failResponse, errorResponse } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
 
 export const unicommerceAuthMiddleware = async (req, res, next) => {
@@ -21,7 +22,7 @@ export const unicommerceAuthMiddleware = async (req, res, next) => {
         return failResponse(res, 403, { message: 'User unauthorized' });
       }
       req.user = user;
-      req.sellerIds = decoded.sellerIds;
+      req.sellerIds = (await userHelper.getSellerIds(user._id.toString())) || [];
       return next();
     } catch (error) {
       console.log('JWT verification error:', error.message);

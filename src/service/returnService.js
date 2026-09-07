@@ -21,6 +21,7 @@ import {
   validateExportData,
   generateDynamicHeaders,
   generateDynamicRowData,
+  neutraliseCsvFormula,
 } from '#helpers/export.js';
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
@@ -1054,7 +1055,7 @@ export const exportReturnsToCSV = async (sellerId, filters = {}) => {
 
         const csvLine = fullRowArray
           .map((v) => {
-            const s = simpleFormat(v);
+            const s = neutraliseCsvFormula(simpleFormat(v));
             if (/[,"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
             return s;
           })
