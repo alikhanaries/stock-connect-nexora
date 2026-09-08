@@ -5,14 +5,39 @@ on:
     branches: [develop]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-dev
 
 jobs:
-  deploy:
+  quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          yarn install --immutable
+
+      - name: Lint
+        run: yarn eslint src --max-warnings 0
+
+      - name: Syntax check
+        run: |
+          node --check src/app.js
+          node --check src/server.js
+
+      - name: Dependency audit
+        run: yarn npm audit --all --severity critical
+
+  deploy:
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Deploy
         env:

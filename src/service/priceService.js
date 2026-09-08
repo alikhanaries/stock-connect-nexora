@@ -20,10 +20,9 @@ const DB_WRITE_CONCURRENCY = 4;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
-const BATCH_SIZE = Number(process.env.BATCH_SIZE) || 500;
+const BATCH_SIZE = Number(CHANNEL_ENGINE_BATCH_SIZE || process.env.BATCH_SIZE) || 500;
 const MAX_ERRORS = 1000;
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE } = config;
-const MAX_RETRIES = 3;
 const MAX_TASK_BUFFER = 1000;
 
 export const processImportStream = async (stream, { deleteAfter = false, filePath, locale, sellerId } = {}) => {
@@ -385,9 +384,10 @@ export const importPriceFromCsvFile = async (filePath, locale, sellerId) => {
   }
 };
 
-async function sendPriceBatch(priceUpdates, retries = MAX_RETRIES, sellerId = null, batchId = null) {
+async function sendPriceBatch(priceUpdates, sellerId = null, batchId = null) {
   try {
-    const response = await channelEnginePush({
+    // Fire-and-forget — worker pushes to CE at its own rate limit pace
+    await channelEnginePush({
       operationType: CE_QUEUE_OPERATIONS.OFFER_PRICE,
       method: 'PUT',
       url: `${CHANNEL_ENGINE_BASE_URL}offer?apiKey=${CHANNEL_ENGINE_API_KEY}`,
@@ -395,36 +395,19 @@ async function sendPriceBatch(priceUpdates, retries = MAX_RETRIES, sellerId = nu
       body: priceUpdates,
       sellerId,
       batchId,
+      awaitResult: false,
     });
-
-    const rawText = response.rawText;
-
-    if (!response.ok) {
-      if (response.status >= 400 && response.status < 500) {
-        throw new Error(`Non-retryable HTTP ${response.status}: ${rawText}`);
-      }
-      throw new Error(`HTTP ${response.status}: ${rawText}`);
-    }
-
-    if (!rawText) return { success: true };
-
-    try {
-      return JSON.parse(rawText);
-    } catch {
-      return response.data || { success: true };
-    }
+    return { success: true };
   } catch (err) {
-    if (retries > 0) {
-      await new Promise((r) => setTimeout(r, (MAX_RETRIES - retries + 1) * 1000));
-      return sendPriceBatch(priceUpdates, retries - 1, sellerId, batchId);
-    }
+    console.error('[sendPriceBatch] Failed to enqueue:', err.message);
     throw err;
   }
 }
 
-async function sendExtraDataPriceBatch(mariketPriceUpdates, retries = MAX_RETRIES, sellerId = null, batchId = null) {
+async function sendExtraDataPriceBatch(mariketPriceUpdates, sellerId = null, batchId = null) {
   try {
-    const response = await channelEnginePush({
+    // Fire-and-forget — worker pushes to CE at its own rate limit pace
+    await channelEnginePush({
       operationType: CE_QUEUE_OPERATIONS.PRODUCTS_EXTRA_DATA,
       method: 'PATCH',
       url: `${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`,
@@ -432,42 +415,12 @@ async function sendExtraDataPriceBatch(mariketPriceUpdates, retries = MAX_RETRIE
       body: mariketPriceUpdates,
       sellerId,
       batchId,
+      awaitResult: false,
     });
-
-    const text = response.rawText;
-
-    if (!response.ok) {
-      const err = new Error(`HTTP ${response.status}: ${text}`);
-      err.statusCode = response.status;
-      throw err;
-    }
-
-    if (response.ok && text) {
-      const result = response.data;
-
-      if (result.Content?.RejectedCount > 0 && retries > 0) {
-        const failedProductSku = new Set(result.Content?.ProductMessages.map((r) => r.Reference));
-        const newBatch = mariketPriceUpdates
-          .filter((item) => failedProductSku.has(item.MerchantProductNo))
-          .map((item) => ({
-            ...item,
-            Operations: item.Operations.map((op) => ({ ...op, Op: 'add' })),
-          }));
-        return await sendExtraDataPriceBatch(newBatch, retries - 1, sellerId, batchId);
-      }
-
-      return result;
-    }
-
     return { success: true };
   } catch (err) {
-    if ((err.statusCode >= 400 && err.statusCode < 500) || retries <= 0) {
-      console.error(`Giving up after error:`, err.message);
-      throw err;
-    }
-    const delay = (MAX_RETRIES - retries + 1) * 1000;
-    await new Promise((r) => setTimeout(r, delay));
-    return sendExtraDataPriceBatch(mariketPriceUpdates, retries - 1, sellerId, batchId);
+    console.error('[sendExtraDataPriceBatch] Failed to enqueue:', err.message);
+    throw err;
   }
 }
 
@@ -525,13 +478,13 @@ export const syncPriceToChannelEngine = async (sellerId) => {
           },
         ],
       });
-      if (batch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
+      if (batch.length >= BATCH_SIZE) {
         const payload = batch;
         batch = [];
 
         tasks.push(
           limit(() =>
-            sendPriceBatch(payload, MAX_RETRIES, sellerId, `price-${sellerId}`)
+            sendPriceBatch(payload, sellerId, `price-${sellerId}`)
               .then(() => {
                 totalSynced += payload.length;
               })
@@ -542,13 +495,13 @@ export const syncPriceToChannelEngine = async (sellerId) => {
           )
         );
       }
-      if (extraPriceBatch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
+      if (extraPriceBatch.length >= BATCH_SIZE) {
         const payload = extraPriceBatch;
         extraPriceBatch = [];
 
         tasks.push(
           limit(() =>
-            sendExtraDataPriceBatch(payload, MAX_RETRIES, sellerId, `price-extra-${sellerId}`)
+            sendExtraDataPriceBatch(payload, sellerId, `price-extra-${sellerId}`)
               .then(() => {
                 extraPriceTotalSync += payload.length;
               })
@@ -569,7 +522,7 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     if (batch.length) {
       tasks.push(
         limit(() =>
-          sendPriceBatch(batch, MAX_RETRIES, sellerId, `price-${sellerId}`)
+          sendPriceBatch(batch, sellerId, `price-${sellerId}`)
             .then(() => {
               totalSynced += batch.length;
             })
@@ -584,7 +537,7 @@ export const syncPriceToChannelEngine = async (sellerId) => {
     if (extraPriceBatch.length) {
       tasks.push(
         limit(() =>
-          sendExtraDataPriceBatch(extraPriceBatch, MAX_RETRIES, sellerId, `price-extra-${sellerId}`)
+          sendExtraDataPriceBatch(extraPriceBatch, sellerId, `price-extra-${sellerId}`)
             .then(() => {
               extraPriceTotalSync += extraPriceBatch.length;
             })

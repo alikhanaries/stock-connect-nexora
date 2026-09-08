@@ -25,9 +25,8 @@ const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
   config;
-const MAX_RETRIES = 3;
 const MAX_TASK_BUFFER = 1000;
-const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
+const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || process.env.BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
 const SKU_BATCH_SIZE = 50;
 
@@ -333,39 +332,24 @@ export const updateSingleInventory = async (productId, currentStockCount, locale
   }
 };
 
-export async function sendStockBatch(stockUpdates, retries = MAX_RETRIES, sellerId = null, batchId = null) {
+export async function sendStockBatch(stockUpdates, sellerId = null, batchId = null) {
+  const resolvedSellerId = (typeof sellerId === 'number' || sellerId === undefined) && batchId ? batchId : sellerId;
+  const resolvedBatchId = (typeof sellerId === 'number' || sellerId === undefined) && batchId ? null : batchId;
   try {
-    const response = await channelEnginePush({
+    // Fire-and-forget — worker pushes to CE at its own rate limit pace
+    await channelEnginePush({
       operationType: CE_QUEUE_OPERATIONS.OFFER_STOCK,
       method: 'PUT',
       url: `${CHANNEL_ENGINE_BASE_URL}offer/stock?apiKey=${CHANNEL_ENGINE_API_KEY}`,
       headers: { 'Content-Type': 'application/json' },
       body: stockUpdates,
-      sellerId,
-      batchId,
+      sellerId: resolvedSellerId,
+      batchId: resolvedBatchId,
+      awaitResult: false,
     });
-
-    const rawText = response.rawText;
-
-    if (!response.ok) {
-      if (response.status >= 400 && response.status < 500) {
-        throw new Error(`Non-retryable HTTP ${response.status}: ${rawText}`);
-      }
-      throw new Error(`HTTP ${response.status}: ${rawText}`);
-    }
-
-    if (!rawText) return { success: true };
-
-    try {
-      return JSON.parse(rawText);
-    } catch {
-      return response.data || { success: true };
-    }
+    return { success: true };
   } catch (err) {
-    if (retries > 0) {
-      await new Promise((r) => setTimeout(r, (MAX_RETRIES - retries + 1) * 1000));
-      return sendStockBatch(stockUpdates, retries - 1, sellerId, batchId);
-    }
+    console.error('[sendStockBatch] Failed to enqueue:', err.message);
     throw err;
   }
 }
@@ -405,7 +389,7 @@ export const syncStockToChannelEngine = async (sellerId) => {
         StockLocations: [{ Stock: Number(product.currentStockCount) || 0 }],
       });
 
-      if (batch.length === Number(CHANNEL_ENGINE_BATCH_SIZE)) {
+      if (batch.length >= BATCH_SIZE) {
         const payload = batch;
         batch = [];
 
