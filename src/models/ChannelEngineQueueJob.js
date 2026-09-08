@@ -37,6 +37,8 @@ const channelEngineQueueJobSchema = new mongoose.Schema(
 channelEngineQueueJobSchema.index({ createdAt: -1 });
 channelEngineQueueJobSchema.index({ sellerId: 1, status: 1, createdAt: -1 });
 channelEngineQueueJobSchema.index({ operationType: 1, status: 1, createdAt: -1 });
+channelEngineQueueJobSchema.index({ operationType: 1, 'requestBody.OrderId': 1, status: 1 });
+channelEngineQueueJobSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 
 const ChannelEngineQueueJob = mongoose.model('ChannelEngineQueueJob', channelEngineQueueJobSchema);
 export default ChannelEngineQueueJob;
