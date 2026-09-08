@@ -297,6 +297,30 @@ router.patch('/merchant-cancellation', merchantCancelIdValidator, checkLanguage,
 
 router.get('/export', exportOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, exportOrders);
 
+// CHANNELENGINE WEBHOOK FOR ORDER EVENTS (CREATE / CHANGE)
+// NOTE: These routes MUST be defined before GET /:id to avoid the dynamic route
+// swallowing GET /channelengine-webhook as if it were an order ID.
+/**
+ * @swagger
+ * /orders/channelengine-webhook:
+ *   post:
+ *     tags: [Orders]
+ *     summary: ChannelEngine order event webhook (POST)
+ *     description: Receives order create and change events from ChannelEngine.
+ *     responses:
+ *       200:
+ *         description: Webhook received successfully
+ *   get:
+ *     tags: [Orders]
+ *     summary: ChannelEngine order event webhook (GET)
+ *     description: Receives order create and change notification pings from ChannelEngine.
+ *     responses:
+ *       200:
+ *         description: Webhook received successfully
+ */
+router.post('/channelengine-webhook', handleChannelEngineOrderWebhook);
+router.get('/channelengine-webhook', handleChannelEngineOrderWebhook);
+
 /**
  * @swagger
  * /orders/{id}:
@@ -528,27 +552,5 @@ router.post(
  *         description: Invalid webhook authentication
  */
 router.post('/omniful-order-webhook', omnifulWebHookAuthMiddleware, handleOmnifulOrderWebhook);
-
-// CHANNELENGINE WEBHOOK FOR ORDER EVENTS (CREATE / CHANGE)
-/**
- * @swagger
- * /orders/channelengine-webhook:
- *   post:
- *     tags: [Orders]
- *     summary: ChannelEngine order event webhook (POST)
- *     description: Receives order create and change events from ChannelEngine.
- *     responses:
- *       200:
- *         description: Webhook received successfully
- *   get:
- *     tags: [Orders]
- *     summary: ChannelEngine order event webhook (GET)
- *     description: Receives order create and change notification pings from ChannelEngine.
- *     responses:
- *       200:
- *         description: Webhook received successfully
- */
-router.post('/channelengine-webhook', handleChannelEngineOrderWebhook);
-router.get('/channelengine-webhook', handleChannelEngineOrderWebhook);
 
 export default router;
