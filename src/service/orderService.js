@@ -11,6 +11,7 @@ import orderhelper from '#helpers/Order.js';
 import { config } from '#config/config.js';
 import { channelEnginePush } from '#service/channelEngineClient.js';
 import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import ChannelEngineQueueJob from '#models/ChannelEngineQueueJob.js';
 import { fetchWithRetry } from '#utils/fetchWithRetry.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { randomBytes } from 'node:crypto';
@@ -1138,13 +1139,26 @@ const cancelOrder = async (orderId, reason) => {
 };
 
 const acknowledgeOrder = async (orderId, merchantOrderNo) => {
-  const url = `${CHANNEL_ENGINE_BASE_URL}orders/acknowledge?apiKey=${CHANNEL_ENGINE_API_KEY}`;
-
-  const payload = {
-    MerchantOrderNo: merchantOrderNo,
-    OrderId: orderId,
-  };
   try {
+    // Deduplication check: Do not re-queue if this OrderId is already queued, active, or completed
+    const existing = await ChannelEngineQueueJob.findOne({
+      operationType: CE_QUEUE_OPERATIONS.ORDER_ACKNOWLEDGE,
+      'requestBody.OrderId': orderId,
+      status: { $in: ['queued', 'active', 'completed'] },
+    })
+      .select('_id')
+      .lean();
+
+    if (existing) {
+      return { success: true, skipped: true };
+    }
+
+    const url = `${CHANNEL_ENGINE_BASE_URL}orders/acknowledge?apiKey=${CHANNEL_ENGINE_API_KEY}`;
+    const payload = {
+      MerchantOrderNo: merchantOrderNo,
+      OrderId: orderId,
+    };
+
     // Fire-and-forget — CE just needs to receive the acknowledgement eventually
     channelEnginePush({
       operationType: CE_QUEUE_OPERATIONS.ORDER_ACKNOWLEDGE,
@@ -1152,8 +1166,11 @@ const acknowledgeOrder = async (orderId, merchantOrderNo) => {
       url,
       headers: { 'Content-Type': 'application/json' },
       body: payload,
+      batchId: `ack-${orderId}`,
       awaitResult: false,
     }).catch((err) => console.error(`[ack] Failed to queue acknowledgement for order ${orderId}:`, err.message));
+
+    return { success: true };
   } catch (error) {
     throw new Error(`Failed to acknowledge order ${orderId}: ${error.message}`, { cause: error });
   }
