@@ -343,6 +343,10 @@ router.get(
  *   patch:
  *     tags: [Orders]
  *     summary: Merchant cancels a full order by ID
+ *     description: >
+ *       Cancels the order in Channel Engine and updates StockConnect.
+ *       On success, optionally notifies UniCommerce via outbound POST /uc/v1/order/cancel
+ *       (when UNICOMMERCE_* proxy credentials are configured). OCP orders are excluded.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -441,6 +445,9 @@ router.get('/:id', getOrderByIdValidator, checkLanguage, authMiddleware, verifyS
  *   put:
  *     tags: [Orders]
  *     summary: Cancel full order
+ *     description: >
+ *       Seller-scoped full cancellation. On success, optionally notifies UniCommerce
+ *       outbound POST /uc/v1/order/cancel when configured. OCP orders use OCP adapter instead.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -476,6 +483,9 @@ router.put(
  *   put:
  *     tags: [Orders]
  *     summary: Cancel selected items from an order (partial cancellation)
+ *     description: >
+ *       Item-wise cancellation. On success, optionally notifies UniCommerce with only
+ *       the cancelled SKUs/quantities from this request (outbound POST /uc/v1/order/cancel).
  *     parameters:
  *       - in: header
  *         name: Accept-Language

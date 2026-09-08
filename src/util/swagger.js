@@ -164,7 +164,8 @@ export function loadUniCommerceSwagger() {
       openapi: '3.0.0',
       info: {
         title: 'Stock Connect UniCommerce API',
-        description: 'UniCommerce ERP Integration APIs',
+        description:
+          'UniCommerce ERP Integration APIs (inbound Uniware → StockConnect and outbound Post Cancel to UC).',
         version: '1.0.0',
       },
       servers: [{ url: `${config.BASE_URL}api` }, { url: 'http://localhost:8000/api' }],
