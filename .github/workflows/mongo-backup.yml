@@ -2,8 +2,11 @@ name: MongoDB Daily Backup
 
 on:
   schedule:
-    - cron: '0 2 * * *' # 2 AM UTC daily
+    - cron: '0 2 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   backup:

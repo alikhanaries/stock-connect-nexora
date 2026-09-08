@@ -1,0 +1,32 @@
+name: CI Quality Gate
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          yarn install --immutable
+
+      - name: Lint
+        run: yarn eslint src --max-warnings 0
+
+      - name: Syntax check
+        run: |
+          node --check src/app.js
+          node --check src/server.js
+
+      - name: Dependency audit
+        run: yarn npm audit --all --severity critical
