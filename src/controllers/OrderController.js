@@ -17,6 +17,7 @@ import { config } from '../config/config.js';
 import { generateSellerInvoicePDF } from '#utils/generateInvoicePdf.js';
 import omnifullService from '../service/omnifullService.js';
 import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
+import { createOrderSyncJob, runOrderSyncInBackground, getOrderSyncJob } from '#service/orderSyncJobService.js';
 
 export const getAllOrders = async (req, res) => {
   try {
@@ -526,6 +527,68 @@ export const generateSellerInvoice = async (req, res) => {
     return generateSellerInvoicePDF(res, result);
   } catch (error) {
     console.error('Controller Error: generateSellerInvoice:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+/**
+ * POST /orders/sync-orders
+ * Immediately responds with 202 + jobId, then runs the full order sync in the background.
+ * The frontend polls GET /orders/sync-status/:jobId to track progress.
+ */
+export const startOrderSync = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    const userId = req.user._id;
+
+    const jobId = await createOrderSyncJob(sellerId, userId);
+
+    // Fire the background sync — deliberately NOT awaited
+    runOrderSyncInBackground(jobId, sellerId, userId).catch((err) => {
+      console.error(`[order-sync][job=${jobId}] Unhandled background error:`, err.message);
+      errorLog(err);
+    });
+
+    return Responses.successResponse(res, 'Order sync started successfully', 202, { jobId });
+  } catch (error) {
+    console.error('Controller Error: startOrderSync:', error.message);
+    errorLog(error);
+    return Responses.errorResponse(res, error.message, 500);
+  }
+};
+
+/**
+ * GET /orders/sync-status/:jobId
+ * Returns the current status and progress of a background sync job.
+ */
+export const getOrderSyncStatus = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    if (!jobId || typeof jobId !== 'string' || jobId.trim().length === 0) {
+      return Responses.failResponse(res, 'Invalid jobId', 400);
+    }
+
+    const job = await getOrderSyncJob(jobId.trim());
+
+    if (!job) {
+      return Responses.failResponse(res, 'Sync job not found', 404);
+    }
+
+    return Responses.successResponse(res, 'Sync status fetched successfully', 200, {
+      jobId: job.jobId,
+      status: job.status,
+      progress: job.progress,
+      currentPhase: job.currentPhase,
+      totalItems: job.totalItems,
+      syncedItems: job.syncedItems,
+      errorMessage: job.errorMessage,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+    });
+  } catch (error) {
+    console.error('Controller Error: getOrderSyncStatus:', error.message);
     errorLog(error);
     return Responses.errorResponse(res, error.message, 500);
   }
