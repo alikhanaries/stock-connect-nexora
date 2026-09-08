@@ -15,6 +15,8 @@ import {
   getAnalyticsOrders,
   handleOmnifulOrderWebhook,
   handleChannelEngineOrderWebhook,
+  startOrderSync,
+  getOrderSyncStatus,
 } from '#controllers/OrderController.js';
 import { authMiddleware, checkLanguage, verifySellerAccess, omnifulWebHookAuthMiddleware } from '#middleware/index.js';
 import {
@@ -231,6 +233,75 @@ router.get('/stats', orderStatsValidator, checkLanguage, authMiddleware, verifyS
  *         $ref: "#/components/schemas/SuccessResponse"
  */
 router.get('/sync-orders', syncOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, getSyncedOrders);
+
+/**
+ * @swagger
+ * /orders/sync-orders:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Start a background order sync (non-blocking)
+ *     description: >
+ *       Immediately returns a jobId (202 Accepted) and starts the full order sync
+ *       in the background. Poll GET /orders/sync-status/{jobId} for progress updates.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       202:
+ *         description: Sync started successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     jobId:
+ *                       type: string
+ *                       example: "3f2d1a4c-8b7e-4f5d-9c0e-1a2b3c4d5e6f"
+ */
+router.post('/sync-orders', syncOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, startOrderSync);
+
+/**
+ * @swagger
+ * /orders/sync-status/{jobId}:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Poll the progress of a background order sync
+ *     description: Returns current status, progress percentage, phase label, and counts.
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema: { type: string }
+ *         description: The jobId returned by POST /orders/sync-orders
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sync status returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     jobId: { type: string }
+ *                     status:
+ *                       type: string
+ *                       enum: [pending, running, completed, failed]
+ *                     progress: { type: number, minimum: 0, maximum: 100 }
+ *                     currentPhase: { type: string }
+ *                     totalItems: { type: number }
+ *                     syncedItems: { type: number }
+ *                     errorMessage: { type: string, nullable: true }
+ *       404:
+ *         description: Job not found
+ */
+// NOTE: Must be above GET /:id to prevent route shadowing
+router.get('/sync-status/:jobId', checkLanguage, authMiddleware, verifySellerAccess, getOrderSyncStatus);
 
 /**
  * @swagger
