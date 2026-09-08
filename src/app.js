@@ -67,7 +67,7 @@ if (swaggerEnabled) {
   );
 }
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '5mb' })); // Increased from 100kb — ChannelEngine webhooks can carry large order payloads
 app.use(cors(corsOptions));
 
 app.use('/health', healthRoutes);
