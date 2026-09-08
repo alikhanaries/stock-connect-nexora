@@ -3375,20 +3375,12 @@ const deriveSkuStatusFromBreakdown = (quantity, sb = {}) => {
 export const resolveAymakanPdfLabelUrl = (shipping) => {
   if (!shipping) return null;
 
-  const legacyLabel = shipping.pdf_label_base64;
-  if (legacyLabel && /^https?:\/\//i.test(String(legacyLabel).trim())) {
-    return String(legacyLabel).trim();
-  }
-
-  if (shipping.pdf_label) {
-    return shipping.pdf_label;
-  }
-
-  if (!legacyLabel) {
+  const label = shipping.pdf_label_base64;
+  if (label == null || String(label).trim() === '') {
     return null;
   }
 
-  return legacyLabel;
+  return label;
 };
 
 export const downloadShipmentLabelService = async (shipmentId, sellerId) => {
@@ -3397,7 +3389,13 @@ export const downloadShipmentLabelService = async (shipmentId, sellerId) => {
   if (!shipment) return { success: false, message: 'Shipment not found', status: 404 };
 
   const pdfLabelUrl = resolveAymakanPdfLabelUrl(shipment.extraData?.aymakan?.shipping);
-  if (!pdfLabelUrl) return { success: false, message: 'PDF label not available for this shipment', status: 404 };
+  if (!pdfLabelUrl) {
+    return {
+      success: false,
+      message: 'PDF label not available for this shipment (missing pdf_label_base64)',
+      status: 404,
+    };
+  }
 
   return { success: true, data: { url: pdfLabelUrl } };
 };
