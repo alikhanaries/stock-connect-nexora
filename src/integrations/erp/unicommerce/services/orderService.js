@@ -1,8 +1,8 @@
 import Order from '#root/src/models/Orders.js';
-import Product from '#root/src/models/Product.js';
 import { mapOrderStatus } from '../helpers/mapOrderStatus.js';
 import { ObjectId } from 'mongodb';
 import mapOrderToUniware from '../helpers/mapOrderToUniware.js';
+import { buildProductIdBySku } from '../helpers/buildProductIdBySku.js';
 import { normalizeUniwareDate } from '../utils/normalizeUniwareDate.js';
 import { config } from '#root/src/config/config.js';
 import { randomBytes } from 'node:crypto';
@@ -60,38 +60,6 @@ export const fetchOrderStatus = async (sellerId, pageNumber, pageSize, orderIds)
     console.error('fetchOrderStatus service error:', error);
     throw error;
   }
-};
-
-const buildProductIdBySku = async (sellerId, orders) => {
-  const skus = [
-    ...new Set(orders.flatMap((o) => (o.orderSkuList?.skuList || []).map((i) => i.merchantProductNo).filter(Boolean))),
-  ];
-  const map = new Map();
-  if (!skus.length) return map;
-  const sellerObjectId = ObjectId.isValid(sellerId) ? new ObjectId(sellerId) : sellerId;
-  const skuProducts = await Product.find({
-    sellerId: sellerObjectId,
-    productSkuCode: { $in: skus },
-  })
-    .select('productSkuCode parentProductSkuCode grandParentProductSkuCode')
-    .lean();
-  if (!skuProducts.length) return map;
-  const parentSkus = [
-    ...new Set(skuProducts.map((p) => p.parentProductSkuCode || p.grandParentProductSkuCode || p.productSkuCode)),
-  ];
-  const parents = await Product.find({
-    sellerId: sellerObjectId,
-    productSkuCode: { $in: parentSkus },
-  })
-    .select('productSkuCode')
-    .lean();
-  const parentIdBySku = new Map(parents.map((p) => [p.productSkuCode, p._id]));
-  for (const p of skuProducts) {
-    const parentSku = p.parentProductSkuCode || p.grandParentProductSkuCode || p.productSkuCode;
-    const parentId = parentIdBySku.get(parentSku);
-    if (parentId) map.set(p.productSkuCode, parentId);
-  }
-  return map;
 };
 
 export const fetchOrders = async (sellerId, query = {}) => {

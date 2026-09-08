@@ -668,7 +668,12 @@ UniCommerceRouter.post(
  *   post:
  *     tags: [UniCommerce]
  *     summary: Cancel Order Items
- *     description: Notify marketplace when seller cancels order items in Uniware.
+ *     description: |
+ *       **Inbound (Uniware → StockConnect):** Notify marketplace when seller cancels order items in Uniware.
+ *       Does NOT trigger outbound Post Cancel to UC (no cancellation loop).
+ *
+ *       For outbound marketplace → UniCommerce cancel, see tag **UniCommerce Outbound**
+ *       and StockConnect PUT /orders/cancelFullOrder, PUT /orders/cancelPartialOrder.
  *
  *     parameters:
  *       - in: header

@@ -27,11 +27,18 @@ import OrderLogs from '#models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErrorMessage.js';
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
+import { notifyUniwareOrderCancel } from '#root/src/integrations/erp/unicommerce/services/uniwareCancelService.js';
 import fs from 'fs';
 import path from 'path';
 import { safeUnlinkTempFile } from '../helpers/tempFileCleanup.js';
 import { getWarehouseAvailabilityContext, buildWarehouseAvailabilityFields } from '#service/omnifulInventoryService.js';
 import { resolveEffectiveShipmentAwb } from '#helpers/shipmentAwb.js';
+
+const notifyUniwareOnMarketplaceCancel = (order, cancelledItems, reason, sellerId) => {
+  notifyUniwareOrderCancel({ order, cancelledItems, cancellationReason: reason, sellerId }).catch((err) =>
+    console.error('Uniware cancel notify failed:', err.message)
+  );
+};
 
 const formatOrder = async (order, channelImage, sellerId, preloadedSeller = null) => {
   let sellerName = '';
@@ -1131,6 +1138,19 @@ const cancelOrder = async (orderId, reason) => {
       { new: true }
     );
 
+    const itemsBySeller = {};
+    for (const sku of existenceOfOrder.orderSkuList.skuList) {
+      const cancelQty = Math.max(0, parseInt(sku.quantity) - parseInt(sku.cancellationRequestedQuantity || 0));
+      if (cancelQty <= 0) continue;
+
+      const sid = sku.sellerId.toString();
+      if (!itemsBySeller[sid]) itemsBySeller[sid] = [];
+      itemsBySeller[sid].push({ quantity: cancelQty, merchantProductNo: sku.merchantProductNo });
+    }
+    for (const [sid, items] of Object.entries(itemsBySeller)) {
+      notifyUniwareOnMarketplaceCancel(existenceOfOrder, items, reason, sid);
+    }
+
     return { success: true, data: updateInformation.toObject() };
   } catch (error) {
     console.error(error);
@@ -1437,6 +1457,21 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
       { upsert: true }
     );
     await syncSellerOrdersFromOrder(orderId);
+
+    notifyUniwareOnMarketplaceCancel(
+      order,
+      lines.map((line) => {
+        const sku = sellerSkus.find((s) => s.id.toString() === line.OrderLineId.toString());
+        return {
+          quantity: line.Quantity,
+          merchantProductNo: line.MerchantProductNo,
+          channelProductNo: sku?.channelProductNo,
+        };
+      }),
+      reason,
+      sellerId
+    );
+
     return { success: true, data: updatedOrder.toObject() };
   } catch (error) {
     console.error('cancelFullOrder error:', error);
@@ -1645,6 +1680,18 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
       { upsert: true }
     );
     await syncSellerOrdersFromOrder(orderId);
+
+    const cancelledItems = products.map((p) => {
+      const sku = order.orderSkuList.skuList.find((s) => s.id.toString() === p.orderLineId.toString());
+      return {
+        quantity: p.quantity,
+        merchantProductNo: p.merchantProductNo || sku?.merchantProductNo,
+        channelProductNo: sku?.channelProductNo,
+      };
+    });
+
+    notifyUniwareOnMarketplaceCancel(order, cancelledItems, reason, sellerId);
+
     return { success: true };
   } catch (error) {
     console.error('cancelPartialOrder error:', error);

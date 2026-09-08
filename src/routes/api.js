@@ -14,6 +14,7 @@ import inventoryRoutes from './inventory.js';
 import priceRoutes from './price.js';
 import financeRoutes from './finance.js';
 import apiCallLogRoutes from './apiCallLogs.js';
+import channelEngineQueueRoutes from './channelEngineQueue.js';
 const router = express.Router();
 
 router.use('/auth', authRoutes);
@@ -31,4 +32,5 @@ router.use('/inventory', inventoryRoutes);
 router.use('/price', priceRoutes);
 router.use('/finance', financeRoutes);
 router.use('/api-logs', apiCallLogRoutes);
+router.use('/channel-engine-queue', channelEngineQueueRoutes);
 export default router;
