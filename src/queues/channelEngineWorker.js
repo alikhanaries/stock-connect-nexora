@@ -3,7 +3,7 @@ import { createRedisConnection, waitForRedis } from '#config/redis.js';
 import { config } from '#config/config.js';
 import ChannelEngineQueueJob from '#models/ChannelEngineQueueJob.js';
 import { executeChannelEngineRequest } from '#service/channelEngineExecutor.js';
-import { CE_QUEUE_GROUPS } from '#constants/channelEngineQueue.js';
+import { CE_QUEUE_GROUPS, CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 
 let workerInstances = [];
 const workersByQueue = new Map();
@@ -56,6 +56,20 @@ async function processChannelEngineJob(job) {
 
     // Permanent 4xx client errors (400, 401, 403, 404, 422, etc.)
     if (result.status >= 400 && result.status < 500) {
+      // CE 409 Conflict on ORDER_ACKNOWLEDGE means order is already acknowledged in ChannelEngine
+      if (result.status === 409 && job.data.operationType === CE_QUEUE_OPERATIONS.ORDER_ACKNOWLEDGE) {
+        await ChannelEngineQueueJob.findByIdAndUpdate(trackingId, {
+          status: 'completed',
+          httpStatus: 409,
+          responseBody: result.data,
+          rawResponse: result.rawText,
+          errorMessage: null,
+          errorDetails: null,
+          processedAt: new Date(),
+        });
+        return result;
+      }
+
       const clientErrMsg = result.errorMessage || `Channel Engine client error (${result.status})`;
       await ChannelEngineQueueJob.findByIdAndUpdate(trackingId, {
         status: 'failed',

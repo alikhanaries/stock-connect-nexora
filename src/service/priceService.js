@@ -20,9 +20,9 @@ const DB_WRITE_CONCURRENCY = 4;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
+const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE } = config;
 const BATCH_SIZE = Number(CHANNEL_ENGINE_BATCH_SIZE || process.env.BATCH_SIZE) || 500;
 const MAX_ERRORS = 1000;
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE } = config;
 const MAX_TASK_BUFFER = 1000;
 
 export const processImportStream = async (stream, { deleteAfter = false, filePath, locale, sellerId } = {}) => {
