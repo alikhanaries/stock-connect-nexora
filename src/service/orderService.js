@@ -1145,19 +1145,15 @@ const acknowledgeOrder = async (orderId, merchantOrderNo) => {
     OrderId: orderId,
   };
   try {
-    const response = await channelEnginePush({
+    // Fire-and-forget — CE just needs to receive the acknowledgement eventually
+    channelEnginePush({
       operationType: CE_QUEUE_OPERATIONS.ORDER_ACKNOWLEDGE,
       method: 'POST',
       url,
       headers: { 'Content-Type': 'application/json' },
       body: payload,
-    });
-
-    // CE 409 = already acknowledged; treat as success so local DB updates and sync stops re-queueing.
-    if (!response.ok && response.status !== 409) {
-      const errorData = response.data || {};
-      throw new Error(`Failed to acknowledge order: ${errorData.Message || response.status}`);
-    }
+      awaitResult: false,
+    }).catch((err) => console.error(`[ack] Failed to queue acknowledgement for order ${orderId}:`, err.message));
   } catch (error) {
     throw new Error(`Failed to acknowledge order ${orderId}: ${error.message}`, { cause: error });
   }

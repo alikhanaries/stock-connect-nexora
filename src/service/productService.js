@@ -308,7 +308,7 @@ const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
   }
 };
 
-// Push a single batch to CE
+// Push a single batch to CE — fire-and-forget; worker processes at CE rate limit pace
 export const pushBatch = async (batch, index, sellerId = null, batchId = null) => {
   const response = await channelEnginePush({
     operationType: CE_QUEUE_OPERATIONS.PRODUCTS_PUSH,
@@ -319,9 +319,9 @@ export const pushBatch = async (batch, index, sellerId = null, batchId = null) =
     sellerId,
     batchId,
     metadata: { batchIndex: index },
+    awaitResult: false, // Do NOT wait — queue and return immediately
   });
-  if (!response.ok) throw new Error(`CE API error (Batch ${index + 1}): ${response.status}`);
-  return response.data?.Content;
+  return response?.data?.jobId ?? null;
 };
 
 export const pushBatchToOCP = async (batch, index, sellerId) => {
