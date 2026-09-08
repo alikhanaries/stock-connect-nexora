@@ -45,8 +45,12 @@ jobs:
             set -euo pipefail
             cd /home/opc/stock-connect-backend
             echo "Before: $(git rev-parse --short HEAD)"
-            git config --local credential.helper '!f() { echo "username=x-access-token"; echo "password=${GH_TOKEN}"; }; f'
+            git config --local --unset credential.helper 2>/dev/null || true
+            git remote set-url origin https://github.com/Ollkom/stock-connect-backend.git
+            printf 'machine github.com\nlogin x-access-token\npassword %s\n' "$GH_TOKEN" > ~/.netrc
+            chmod 600 ~/.netrc
             git pull --ff-only origin main
+            rm -f ~/.netrc
             echo "After:  $(git rev-parse --short HEAD)"
             git log -1 --oneline
             pm2 restart all
