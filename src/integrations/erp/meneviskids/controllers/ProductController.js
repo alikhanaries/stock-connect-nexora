@@ -1,15 +1,15 @@
 import { errorResponse, successResponse } from '#root/src/helpers/response.js';
 import { getMeneviskidsProducts } from '../services/productService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncMeneviskidsProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
     const isImageUpdate = req.query.isImageUpdate === 'true';
 
-    setImmediate(() => {
-      getMeneviskidsProducts(sellerId, isImageUpdate).catch((err) =>
-        console.error('Menevis Kids background sync failed:', err)
-      );
+    trackBackgroundSync(sellerId, () => getMeneviskidsProducts(sellerId, isImageUpdate), {
+      label: 'Syncing products',
+      field: 'products',
     });
 
     return successResponse(res, 'Menevis Kids product sync started in background', 202);

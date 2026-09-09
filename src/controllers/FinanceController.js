@@ -1,6 +1,7 @@
 import { getTransactionHistory, getFinanceDashboard, syncFinance } from '#service/financeService.js';
 import Responses from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
+import { completeSyncJob, failSyncJob, startSyncJob } from '#helpers/syncProgress.js';
 
 export const getTransactionHistoryData = async (req, res) => {
   try {
@@ -46,8 +47,20 @@ export const getFinanceDashboardData = async (req, res) => {
 
 export const syncFinanceData = async (req, res) => {
   try {
-    const result = await syncFinance();
-    return Responses.successResponse(res, 'Finance data synced successfully', 200, result);
+    const sellerId = req.query.sellerId || req.sellerId || req.user?._id;
+    startSyncJob(sellerId, { label: 'Syncing finance', field: 'finance' });
+    Responses.successResponse(res, 'Finance sync started in background', 202);
+
+    setImmediate(async () => {
+      try {
+        const result = await syncFinance();
+        completeSyncJob(sellerId, result);
+      } catch (error) {
+        console.error('Error syncing finance data:', error);
+        errorLog(error);
+        failSyncJob(sellerId, error);
+      }
+    });
   } catch (error) {
     console.error('Error syncing finance data:', error);
     errorLog(error);

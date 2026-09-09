@@ -1,6 +1,7 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
 import { fetchAndStoreShopifyExquiseProducts } from '../service/productService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const fetchProducts = async (req, res) => {
   try {
@@ -15,16 +16,11 @@ export const fetchProducts = async (req, res) => {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
-    ///  Accepted for async/background processing
-    successResponse(res, 'Shopify product sync started in background', 202);
-
-    setImmediate(async () => {
-      try {
-        await fetchAndStoreShopifyExquiseProducts(sellerId, shopifyConfig);
-      } catch (err) {
-        console.error('Background sync failed:', err);
-      }
+    trackBackgroundSync(sellerId, () => fetchAndStoreShopifyExquiseProducts(sellerId, shopifyConfig), {
+      label: 'Syncing Shopify products',
+      field: 'products',
     });
+    successResponse(res, 'Shopify product sync started in background', 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

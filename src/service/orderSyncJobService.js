@@ -5,6 +5,7 @@ import shipmentService from '#service/shipmentService.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { config } from '#config/config.js';
 import { getSyncedOrdersOcp } from '../integrations/erp/ocp/services/orderServices.js';
+import { completeSyncJob, failSyncJob, startSyncJob, updateSyncJob } from '#helpers/syncProgress.js';
 
 /**
  * Creates a new SyncJob in MongoDB and returns its jobId.
@@ -25,6 +26,7 @@ export async function createOrderSyncJob(sellerId, userId) {
     progress: 0,
     currentPhase: 'Initialising sync...',
   });
+  startSyncJob(sellerId, { label: 'Syncing orders', field: 'orders' });
   return jobId;
 }
 
@@ -41,12 +43,29 @@ export async function getOrderSyncJob(jobId) {
 /**
  * Helper to update SyncJob progress in a single DB write.
  */
-async function updateProgress(jobId, patch) {
+async function updateProgress(jobId, patch, sellerId) {
   try {
     await SyncJob.findOneAndUpdate({ jobId }, { $set: patch });
   } catch (err) {
     // Non-critical — don't let a progress update failure abort the sync
     console.error(`[sync-job][${jobId}] Failed to update progress:`, err.message);
+  }
+
+  if (!sellerId) return;
+
+  if (typeof patch.progress === 'number' || patch.currentPhase) {
+    updateSyncJob(sellerId, {
+      percentage: patch.progress,
+      completed: patch.syncedItems,
+      total: patch.totalItems,
+      label: patch.currentPhase,
+    });
+  }
+  if (patch.status === 'completed') {
+    completeSyncJob(sellerId, { updated: patch.syncedItems, total: patch.totalItems });
+  }
+  if (patch.status === 'failed') {
+    failSyncJob(sellerId, patch.errorMessage);
   }
 }
 
@@ -68,9 +87,10 @@ async function updateProgress(jobId, patch) {
  */
 export async function runOrderSyncInBackground(jobId, sellerId, userId) {
   const tag = `[order-sync][job=${jobId}]`;
+  const update = (patch) => updateProgress(jobId, patch, sellerId);
 
   // Mark as running
-  await updateProgress(jobId, {
+  await update({
     status: 'running',
     startedAt: new Date(),
     progress: 5,
@@ -79,7 +99,7 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
 
   try {
     // ── PHASE 1 (10%) ── Fetch new/changed orders from ChannelEngine ──────────
-    await updateProgress(jobId, {
+    await update({
       progress: 10,
       currentPhase: 'Fetching orders from ChannelEngine...',
     });
@@ -98,7 +118,7 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
 
     // No new orders — complete immediately
     if (orders.length === 0) {
-      await updateProgress(jobId, {
+      await update({
         status: 'completed',
         progress: 100,
         currentPhase: 'Already up to date — no new orders found.',
@@ -110,14 +130,14 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
       return;
     }
 
-    await updateProgress(jobId, {
+    await update({
       totalItems: orders.length,
       progress: 20,
       currentPhase: `Found ${orders.length} order(s) — processing...`,
     });
 
     // ── PHASE 2 (40%) ── Save/process orders to DB + OCP sync ────────────────
-    await updateProgress(jobId, {
+    await update({
       progress: 40,
       currentPhase: 'Saving orders to database...',
     });
@@ -162,7 +182,7 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
       (ceData?.upsertedCount || 0) + (ceData?.modifiedCount || 0) + (ceData?.sellerOrdersBackfilled || 0);
     const newUpdateCount = (sellerSyncCount > 0 ? sellerSyncCount : globalSyncCount) + ocpUpserted;
 
-    await updateProgress(jobId, {
+    await update({
       syncedItems: newUpdateCount,
       progress: 60,
       currentPhase: `Processed ${newUpdateCount} order(s) — updating sync records...`,
@@ -176,7 +196,7 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
     }
 
     // ── PHASE 4 (80%) ── Acknowledge new orders with ChannelEngine ────────────
-    await updateProgress(jobId, {
+    await update({
       progress: 80,
       currentPhase: 'Acknowledging new orders with ChannelEngine...',
     });
@@ -192,7 +212,7 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
     }
 
     // ── PHASE 5 (95%) ── Sync shipment details ────────────────────────────────
-    await updateProgress(jobId, {
+    await update({
       progress: 95,
       currentPhase: 'Syncing shipment details...',
     });
@@ -204,7 +224,7 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
     // ── DONE (100%) ───────────────────────────────────────────────────────────
     const doneMessage = newUpdateCount > 0 ? `${newUpdateCount} order(s) synced successfully` : 'No new orders found';
 
-    await updateProgress(jobId, {
+    await update({
       status: 'completed',
       progress: 100,
       currentPhase: doneMessage,
@@ -214,7 +234,7 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
     console.log(`${tag} Sync complete — ${doneMessage}`);
   } catch (err) {
     console.error(`${tag} Sync FAILED:`, err.message);
-    await updateProgress(jobId, {
+    await update({
       status: 'failed',
       currentPhase: 'Sync failed',
       errorMessage: err.message || 'An unexpected error occurred during sync',

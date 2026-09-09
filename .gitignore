@@ -34,3 +34,6 @@ logs/
 # Local temp / asset files
 quick-asset-*.json
 scripts/tmp-*.js
+
+        .DS_Store
+        .idea/

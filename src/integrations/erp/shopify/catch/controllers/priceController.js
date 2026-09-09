@@ -1,6 +1,7 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
 import { syncShopifyCatchPrice } from '../service/priceService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const SyncCatchPrice = async (req, res) => {
   try {
@@ -16,15 +17,11 @@ export const SyncCatchPrice = async (req, res) => {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
-    successResponse(res, 'Catch price sync started in background', 202);
-
-    process.nextTick(async () => {
-      try {
-        await syncShopifyCatchPrice(sellerId, shopifyConfig);
-      } catch (err) {
-        console.error('[Catch Price Sync] Background job failed:', err);
-      }
+    trackBackgroundSync(sellerId, () => syncShopifyCatchPrice(sellerId, shopifyConfig), {
+      label: 'Syncing prices',
+      field: 'pricing',
     });
+    successResponse(res, 'Catch price sync started in background', 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

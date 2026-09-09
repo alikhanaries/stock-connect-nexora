@@ -1,17 +1,15 @@
 import { errorResponse, successResponse } from '#root/src/helpers/response.js';
 import { fetchAndStoreNebimProducts } from '../service/productService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const fetchProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
-    successResponse(res, 'Nebim product sync started in background', 202);
-    process.nextTick(async () => {
-      try {
-        await fetchAndStoreNebimProducts(sellerId);
-      } catch (err) {
-        console.error('Background sync failed:', err);
-      }
+    trackBackgroundSync(sellerId, () => fetchAndStoreNebimProducts(sellerId), {
+      label: 'Syncing products',
+      field: 'products',
     });
+    successResponse(res, 'Nebim product sync started in background', 202);
   } catch (error) {
     errorResponse(res, error, 500);
   }

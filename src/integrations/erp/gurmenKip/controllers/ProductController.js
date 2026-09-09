@@ -1,14 +1,14 @@
 import { errorResponse, successResponse } from '#root/src/helpers/response.js';
 import { getGurmanProducts } from '../services/productService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncGurmanProducts = (req, res) => {
   try {
     const sellerId = req.sellerId;
     const isImageUpdate = req.query.isImageUpdate === 'true';
-    process.nextTick(() => {
-      getGurmanProducts(sellerId, isImageUpdate).catch((err) =>
-        console.error('Gürmen Group (KIP) background sync failed:', err)
-      );
+    trackBackgroundSync(sellerId, () => getGurmanProducts(sellerId, isImageUpdate), {
+      label: 'Syncing products',
+      field: 'products',
     });
 
     return successResponse(res, 'Gürmen Group (KIP) product sync started in background', 202);
