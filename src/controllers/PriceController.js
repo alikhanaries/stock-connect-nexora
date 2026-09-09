@@ -3,6 +3,7 @@ import priceService from '#service/priceService.js';
 import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 /* UPLOAD PRICE FROM GOOGLE SHEET */
 export const importPriceFromGoogleSheet = async (req, res) => {
@@ -129,18 +130,11 @@ export const syncPriceToChannelEngine = async (req, res) => {
   try {
     const sellerId = req.sellerId;
 
-    // Immediate response (non-blocking)
+    trackBackgroundSync(sellerId, () => priceService.syncPriceToChannelEngine(sellerId), {
+      label: 'Syncing prices',
+      field: 'pricing',
+    });
     successResponse(res, req.locale.SYNC_STARTED, 202);
-
-    // Background execution (NO await)
-    priceService
-      .syncPriceToChannelEngine(sellerId)
-      .then((result) => {
-        console.log('Price sync completed:', result);
-      })
-      .catch((err) => {
-        console.error('Price sync failed:', err.message);
-      });
   } catch (err) {
     console.error('Controller syncPrice error:', err);
     return errorResponse(res, err.message);

@@ -1,11 +1,13 @@
 import { errorResponse, successResponse } from '#root/src/helpers/response.js';
 import { kipInventorySync } from '../services/inventoryService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncKipInventory = (req, res) => {
   try {
     const sellerId = req.sellerId;
-    process.nextTick(() => {
-      kipInventorySync(sellerId).catch((err) => console.error('[KIP Inventory Sync] Background job failed:', err));
+    trackBackgroundSync(sellerId, () => kipInventorySync(sellerId), {
+      label: 'Syncing inventory',
+      field: 'inventory',
     });
 
     return successResponse(res, 'KIP inventory sync started in background', 202);

@@ -1,5 +1,6 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
 import { syncCasabonyInventory } from '../services/inventoryService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncInventory = async (req, res) => {
   try {
@@ -8,15 +9,11 @@ export const syncInventory = async (req, res) => {
 
     const sellerData = { sellerId };
 
-    successResponse(res, 'Casabony inventory sync started in background', 202);
-
-    process.nextTick(async () => {
-      try {
-        await syncCasabonyInventory(sellerId, sellerData);
-      } catch (err) {
-        console.error('Background inventory sync failed for Casabony:', err);
-      }
+    trackBackgroundSync(sellerId, () => syncCasabonyInventory(sellerId, sellerData), {
+      label: 'Syncing inventory',
+      field: 'inventory',
     });
+    successResponse(res, 'Casabony inventory sync started in background', 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

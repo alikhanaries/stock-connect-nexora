@@ -3,8 +3,9 @@ import { getCategoryMapProgress } from '#helpers/geminiCategoryMap.js';
 import { getValidateFieldProgress } from '#helpers/geminiValidateField.js';
 import { buildTranslateLabel, CATEGORY_MAP_LABEL, buildValidateFieldLabel } from '#helpers/operationLabels.js';
 import { VALIDATE_FIELDS } from '#constants/validateField.js';
+import { getSyncProgress } from '#helpers/syncProgress.js';
 
-export const PROGRESS_TYPES = ['ai-enrich'];
+export const PROGRESS_TYPES = ['ai-enrich', 'sync'];
 const PAUSABLE_STATUSES = new Set(['pending', 'running', 'initializing']);
 const RETRIABLE_STATUSES = new Set(['error', 'cancelled', 'paused', 'done']);
 
@@ -131,7 +132,7 @@ const buildAiEnrichBlock = (sellerId) => {
   };
 };
 
-const buildSyncBlock = () => ({});
+const buildSyncBlock = (sellerId) => getSyncProgress(sellerId);
 
 export const BLOCK_BUILDERS = {
   'ai-enrich': buildAiEnrichBlock,

@@ -3,6 +3,7 @@ import Responses from '#helpers/response.js';
 import { errorLog } from '#middleware/index.js';
 import mongoose from 'mongoose';
 import omnifullService from '#service/omnifullService.js';
+import { completeSyncJob, failSyncJob, startSyncJob } from '#helpers/syncProgress.js';
 
 // Gets all returns stored in the database with pagination and filtering.
 
@@ -60,23 +61,32 @@ export const getAllReturns = async (req, res) => {
 //  Fetches latest returns from ChannelEngine and syncs them to the database.
 export const syncReturns = async (req, res) => {
   try {
-    const result = await returnService.getReturns(req.query);
+    const sellerId = req.sellerId;
+    const query = req.query;
+    const locale = req.locale;
 
-    if (!result.success) {
-      return Responses.failResponse(res, result.message || req.locale.FAILED_TO_SYNC_RETURNS, 400);
-    }
+    startSyncJob(sellerId, { label: 'Syncing returns', field: 'returns' });
+    Responses.successResponse(res, locale?.SYNC_STARTED || 'Return sync started in background', 202);
 
-    const upsertedCount = result.data?.upsertedCount || 0;
+    setImmediate(async () => {
+      try {
+        const result = await returnService.getReturns(query);
 
-    const message =
-      upsertedCount > 0
-        ? `${upsertedCount} ${req.locale.NEW_RETURNS_SYNCED_SUCCESSFULLY || 'new returns synced successfully'}`
-        : req.locale.NO_NEW_RETURNS_FOUND || 'No new returns found';
+        if (!result.success) {
+          throw new Error(result.message || locale.FAILED_TO_SYNC_RETURNS || 'Failed to sync returns');
+        }
 
-    return Responses.successResponse(res, message, 200, result.data);
+        completeSyncJob(sellerId, { updated: result.data?.upsertedCount || 0 });
+      } catch (error) {
+        console.error('Controller Error: syncReturns:', error.message);
+        errorLog(error);
+        failSyncJob(sellerId, error);
+      }
+    });
   } catch (error) {
     console.error('Controller Error: syncReturns:', error.message);
     errorLog(error);
+    if (req.sellerId) failSyncJob(req.sellerId, error);
     return Responses.errorResponse(res, error.message, 500);
   }
 };

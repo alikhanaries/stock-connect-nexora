@@ -1,6 +1,7 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
 import { fetchAndStoreShopifyProducts } from '../service/productService.js';
 import { fetchShopifyCredentials } from '#root/src/integrations/erp/shopify/service/shopifyService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 export const fetchProducts = async (req, res) => {
   try {
     const sellerId = req.sellerId;
@@ -17,15 +18,11 @@ export const fetchProducts = async (req, res) => {
     }
 
     ///  Accepted for async/background processing
-    successResponse(res, 'Shopify product sync started in background', 202);
-
-    process.nextTick(async () => {
-      try {
-        await fetchAndStoreShopifyProducts(sellerId, shopifyConfig);
-      } catch (err) {
-        console.error('Background sync failed:', err);
-      }
+    trackBackgroundSync(sellerId, () => fetchAndStoreShopifyProducts(sellerId, shopifyConfig), {
+      label: 'Syncing Shopify products',
+      field: 'products',
     });
+    successResponse(res, 'Shopify product sync started in background', 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

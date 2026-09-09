@@ -1,5 +1,6 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
 import { fetchAndStoreCasabonyProducts } from '../services/productService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const fetchProducts = async (req, res) => {
   try {
@@ -8,15 +9,11 @@ export const fetchProducts = async (req, res) => {
 
     const isImageUpdate = req.query.isImageUpdate === 'true';
 
-    successResponse(res, 'Casabony product sync started in background', 202);
-
-    process.nextTick(async () => {
-      try {
-        await fetchAndStoreCasabonyProducts(sellerId, isImageUpdate);
-      } catch (err) {
-        console.error('Background sync failed for Casabony:', err);
-      }
+    trackBackgroundSync(sellerId, () => fetchAndStoreCasabonyProducts(sellerId, isImageUpdate), {
+      label: 'Syncing products',
+      field: 'products',
     });
+    successResponse(res, 'Casabony product sync started in background', 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

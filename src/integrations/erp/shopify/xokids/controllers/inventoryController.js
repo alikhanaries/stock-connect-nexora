@@ -2,6 +2,7 @@ import { errorResponse, failResponse, successResponse } from '#root/src/helpers/
 import { syncShopifyXokidsInventory } from '../service/inventoryService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
 import Seller from '#models/Seller.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncXokidsInventory = async (req, res) => {
   try {
@@ -21,16 +22,11 @@ export const syncXokidsInventory = async (req, res) => {
 
     const brandName = seller?.name;
 
-    ///  Accepted for async/background processing
-    successResponse(res, `Shopify inventory sync started in background for ${brandName}`, 202);
-
-    setImmediate(async () => {
-      try {
-        await syncShopifyXokidsInventory(sellerId, shopifyConfig);
-      } catch (err) {
-        console.error('Background inventory sync failed for Xokids:', err);
-      }
+    trackBackgroundSync(sellerId, () => syncShopifyXokidsInventory(sellerId, shopifyConfig), {
+      label: 'Syncing inventory',
+      field: 'inventory',
     });
+    successResponse(res, `Shopify inventory sync started in background for ${brandName}`, 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }
