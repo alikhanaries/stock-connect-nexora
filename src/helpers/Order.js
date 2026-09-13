@@ -4,6 +4,9 @@ import { formatValueForCSV } from './export.js';
 import { formatDateTime } from './Common.js';
 import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderService.js';
 import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
+import { pushSentosOrders } from '../integrations/erp/sentos/services/orderService.js';
+import { isSentosConfigured, sentosConfig } from '../integrations/erp/sentos/config/config.js';
+import Seller from '#models/Seller.js';
 import {
   resolveStoredSkuStatus,
   deriveSellerOrderStatusFromSkus,
@@ -492,6 +495,29 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
         order.Lines.some((line) => entegraSkuSet.has(normalizeOrderSku(line.MerchantProductNo)))
     );
 
+    let sentosSellerId = null;
+    if (isSentosConfigured()) {
+      const sentosSeller = await Seller.findOne({
+        slug: sentosConfig.SENTOS_SELLER_SLUG,
+        isDeleted: false,
+      })
+        .select('_id')
+        .lean();
+      sentosSellerId = sentosSeller?._id ? String(sentosSeller._id) : null;
+    }
+
+    const sentosSkuSet = new Set(
+      productsDb
+        .filter((p) => sentosSellerId && String(p.sellerId) === sentosSellerId)
+        .map((p) => normalizeOrderSku(p.productSkuCode))
+    );
+
+    const sentosOrders = orders.filter(
+      (order) =>
+        Array.isArray(order.Lines) &&
+        order.Lines.some((line) => sentosSkuSet.has(normalizeOrderSku(line.MerchantProductNo)))
+    );
+
     //  final outputs
     const bulkOps = [];
     const sellerOrderPayloads = [];
@@ -804,6 +830,7 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
       bulkOps.push(bulkOp);
     }
     pushEntegraOrders(entegraOrders);
+    pushSentosOrders(sentosOrders);
     return {
       bulkOps,
       sellerOrderPayloads,

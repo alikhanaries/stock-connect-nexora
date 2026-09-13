@@ -8,6 +8,8 @@ import { getShopifyConfig as getExquiseShopifyConfig } from '#root/src/integrati
 import { syncShopifyCatchPrice } from '#root/src/integrations/erp/shopify/catch/service/priceService.js';
 import { getShopifyConfig as getCatchShopifyConfig } from '#root/src/integrations/erp/shopify/catch/service/shopifyService.js';
 import { syncPriceToChannelEngine } from '#service/priceService.js';
+import { sentosPriceSync } from '#root/src/integrations/erp/sentos/services/priceService.js';
+import { isSentosConfigured } from '#root/src/integrations/erp/sentos/config/config.js';
 
 const ERP_PRICE_SYNCS = [
   { name: 'entegra', slugs: ERP_SYNC_BRAND_SLUGS.entegra, sync: entegraPriceSync },
@@ -20,10 +22,21 @@ const ERP_PRICE_SYNCS = [
     getConfig: getExquiseShopifyConfig,
   },
   { name: 'catch', slugs: ERP_SYNC_BRAND_SLUGS.catch, sync: syncShopifyCatchPrice, getConfig: getCatchShopifyConfig },
+  {
+    name: 'sentos',
+    slugs: ERP_SYNC_BRAND_SLUGS.sentos,
+    sync: sentosPriceSync,
+    skipIfNotConfigured: isSentosConfigured,
+  },
 ];
 
-const syncSellerPrice = async (erpName, slug, sync, getConfig) => {
+const syncSellerPrice = async (erpName, slug, sync, getConfig, skipIfNotConfigured) => {
   try {
+    if (skipIfNotConfigured && !skipIfNotConfigured()) {
+      console.warn(`[PriceSync] Skipped ${erpName}: integration not configured`);
+      return;
+    }
+
     const seller = await Seller.findOne({ slug, isDeleted: false }).select('_id slug');
 
     if (!seller) {
@@ -72,7 +85,7 @@ export const runPriceSync = async () => {
     for (const erp of ERP_PRICE_SYNCS) {
       for (const slug of erp.slugs) {
         try {
-          await syncSellerPrice(erp.name, slug, erp.sync, erp.getConfig);
+          await syncSellerPrice(erp.name, slug, erp.sync, erp.getConfig, erp.skipIfNotConfigured);
         } catch (err) {
           console.error(`[PriceSync] ${erp.name} → "${slug}" failed:`, err.message);
         }

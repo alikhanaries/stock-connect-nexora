@@ -9,6 +9,8 @@ import { getShopifyConfig as getExquiseShopifyConfig } from '#root/src/integrati
 import { syncShopifyCatchInventory } from '#root/src/integrations/erp/shopify/catch/service/inventoryService.js';
 import { getShopifyConfig as getCatchShopifyConfig } from '#root/src/integrations/erp/shopify/catch/service/shopifyService.js';
 import { syncStockToChannelEngine } from '#service/InventoryService.js';
+import { sentosInventorySync } from '#root/src/integrations/erp/sentos/services/inventoryService.js';
+import { isSentosConfigured } from '#root/src/integrations/erp/sentos/config/config.js';
 
 const ERP_INVENTORY_SYNCS = [
   { name: 'entegra', slugs: ERP_SYNC_BRAND_SLUGS.entegra, sync: entegraInventorySync },
@@ -27,10 +29,21 @@ const ERP_INVENTORY_SYNCS = [
     sync: syncShopifyCatchInventory,
     getConfig: getCatchShopifyConfig,
   },
+  {
+    name: 'sentos',
+    slugs: ERP_SYNC_BRAND_SLUGS.sentos,
+    sync: sentosInventorySync,
+    skipIfNotConfigured: isSentosConfigured,
+  },
 ];
 
-const syncSellerInventory = async (erpName, slug, sync, getConfig) => {
+const syncSellerInventory = async (erpName, slug, sync, getConfig, skipIfNotConfigured) => {
   try {
+    if (skipIfNotConfigured && !skipIfNotConfigured()) {
+      console.warn(`[InventorySync] Skipped ${erpName}: integration not configured`);
+      return;
+    }
+
     const seller = await Seller.findOne({ slug, isDeleted: false }).select('_id slug');
 
     if (!seller) {
@@ -78,7 +91,7 @@ export const runInventorySync = async () => {
     for (const erp of ERP_INVENTORY_SYNCS) {
       for (const slug of erp.slugs) {
         try {
-          await syncSellerInventory(erp.name, slug, erp.sync, erp.getConfig);
+          await syncSellerInventory(erp.name, slug, erp.sync, erp.getConfig, erp.skipIfNotConfigured);
         } catch (err) {
           console.error(`[InventorySync] ${erp.name} → "${slug}" failed:`, err.message);
         }

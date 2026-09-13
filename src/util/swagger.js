@@ -15,6 +15,10 @@ export function loadSwagger() {
           email: 'support@example.com',
         },
       },
+      servers: [
+        { url: `http://localhost:${config.PORT || 3000}/api` },
+        { url: `${(config.BASE_URL || `http://localhost:${config.PORT || 3000}/`).replace(/\/$/, '')}/api` },
+      ],
       tags: [
         { name: 'Auth', description: 'Authentication' },
         { name: 'Users', description: 'User management' },
@@ -27,6 +31,7 @@ export function loadSwagger() {
         { name: 'Shipments', description: 'Shipment management' },
         { name: 'Invoices', description: 'Invoice management' },
         { name: 'API Logs', description: 'Master-admin API call audit and performance logs' },
+        { name: 'Sentos ERP', description: 'Sentos ERP product, inventory, price, and connection APIs' },
       ],
       components: {
         securitySchemes: {
