@@ -9,8 +9,18 @@ import { login } from '#root/src/integrations/erp/unicommerce/controllers/authCo
 import { loginValidator, loginQueryValidator } from '#root/src/integrations/erp/unicommerce/validations/auth.js';
 import { checkLanguage } from '#middleware/index.js';
 import { getProductCountValidator, getProductsValidator } from '../validations/products.js';
-import { ordersController, orderDispatch, cancelOrder } from '../controllers/orderController.js';
-import { orderCancelValidator, orderDispatchValidator, ordersValidator } from '../validations/orders.js';
+import {
+  ordersController,
+  orderDispatch,
+  cancelOrder,
+  orderStatusNotification,
+} from '../controllers/orderController.js';
+import {
+  orderCancelValidator,
+  orderDispatchValidator,
+  orderStatusNotificationValidator,
+  ordersValidator,
+} from '../validations/orders.js';
 import { updateInventoryValidator } from '../validations/inventory.js';
 import { updateInventory } from '../controllers/inventoryController.js';
 import { getCourierDetailsValidator, getLabelsQueryValidator, postLabelsValidator } from '../validations/shipment.js';
@@ -660,6 +670,93 @@ UniCommerceRouter.post(
   unicommerceAuthMiddleware,
   verifyUnicommerceSellerAccess,
   orderDispatch
+);
+
+/**
+ * @openapi
+ * /erp/unicommerce/order/{orderId}:
+ *   post:
+ *     tags: [UniCommerce]
+ *     summary: Post Status Notification
+ *     description: |
+ *       Uniware notifies StockConnect when shipping package or reverse pickup item status changes.
+ *       Official docs: https://documentation.unicommerce.com/docs/post_status_notification.html
+ *
+ *       `orderId` path param = order `id` from GET /erp/unicommerce/orders (MongoDB `_id` string).
+ *     parameters:
+ *       - in: path
+ *         name: orderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Order id as returned in GET orders (`id` field)
+ *       - in: header
+ *         name: apiKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - orderItems
+ *             properties:
+ *               orderItems:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - orderItemId
+ *                     - status
+ *                     - IsReverse
+ *                     - updated
+ *                   properties:
+ *                     orderItemId:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     IsReverse:
+ *                       type: boolean
+ *                     updated:
+ *                       type: string
+ *                       example: "Mar 8, 2023 7:12:31 PM"
+ *                     courier_status:
+ *                       type: string
+ *                     returnAwb:
+ *                       type: string
+ *     responses:
+ *       200:
+ *         description: Status notification processed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [SUCCESS, FAILED, PARTIAL_SUCCESS]
+ *                 orderItems:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       orderItemId:
+ *                         type: string
+ *                       errorMessage:
+ *                         type: string
+ *                 error:
+ *                   type: string
+ */
+
+UniCommerceRouter.post(
+  '/order/:orderId',
+  orderStatusNotificationValidator,
+  unicommerceAuthMiddleware,
+  verifyUnicommerceSellerAccess,
+  orderStatusNotification
 );
 
 /**

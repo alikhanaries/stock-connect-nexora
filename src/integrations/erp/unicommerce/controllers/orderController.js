@@ -5,6 +5,7 @@ import {
 } from '#root/src/integrations/erp/unicommerce/helpers/response.js';
 import dispatchService from '../services/dispatchService.js';
 import orderService from '../services/orderService.js';
+import { postOrderStatusNotification } from '../services/orderStatusNotificationService.js';
 
 export const ordersController = async (req, res) => {
   try {
@@ -37,6 +38,21 @@ export const orderDispatch = async (req, res) => {
     return successResponse(res, 200, result);
   } catch (error) {
     console.error('orderDispatch error:', error.message, error.stack);
+    return errorResponse(res, 500, { message: error.message });
+  }
+};
+
+export const orderStatusNotification = async (req, res) => {
+  try {
+    const sellerId = req.sellerId;
+    if (!sellerId) {
+      return failResponse(res, 400, { message: 'sellerId is missing' });
+    }
+
+    const result = await postOrderStatusNotification(sellerId, req.params.orderId, req.body);
+    return successResponse(res, 200, result);
+  } catch (error) {
+    console.error('orderStatusNotification error:', error.message, error.stack);
     return errorResponse(res, 500, { message: error.message });
   }
 };

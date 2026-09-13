@@ -114,6 +114,39 @@ export const ordersValidator = async (req, res, next) => {
   }
 };
 
+export const orderStatusNotificationValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+
+  const paramsSchema = z.object({
+    orderId: z.string().min(1, 'orderId is required'),
+  });
+
+  paramsSchema.parse(req.params);
+
+  const orderItemSchema = z
+    .object({
+      orderItemId: z.string().min(1, 'orderItemId is required'),
+      status: z.string().min(1, 'status is required'),
+      IsReverse: z.boolean().optional(),
+      isReverse: z.boolean().optional(),
+      updated: z.string().min(1, 'updated is required'),
+      courier_status: z.string().optional(),
+      reversePickupCourierName: z.string().optional(),
+      reversePickupCourierCode: z.string().optional(),
+      returnAwb: z.string().optional(),
+      returnAWB: z.string().optional(),
+    })
+    .refine((item) => typeof item.IsReverse === 'boolean' || typeof item.isReverse === 'boolean', {
+      message: 'IsReverse is required',
+    });
+
+  const bodySchema = z.object({
+    orderItems: z.array(orderItemSchema).min(1, 'orderItems cannot be empty'),
+  });
+
+  req.body = bodySchema.parse(req.body);
+});
+
 export const orderCancelValidator = validate(async (req) => {
   headerSchema.parse(req.headers);
 
