@@ -16,6 +16,7 @@ import shopifyXokidsRoutes from './integrations/erp/shopify/xokids/routes/api.js
 import unicommerceRoutes from './integrations/erp/unicommerce/routes/api.js';
 import xokidsRoutes from './integrations/erp/xokids/routes/api.js';
 import meneviskidsRoutes from './integrations/erp/meneviskids/routes/api.js';
+import sentosRoutes from './integrations/erp/sentos/routes/api.js';
 import casabonyRoutes from './integrations/erp/casabony/routes/api.js';
 import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
@@ -93,6 +94,7 @@ app.use('/api/erp/unicommerce', unicommerceRoutes);
 app.use('/api/erp/xokids', xokidsRoutes);
 app.use('/api/erp/casabony', casabonyRoutes);
 app.use('/api/erp/meneviskids', meneviskidsRoutes);
+app.use('/api/erp/sentos', sentosRoutes);
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
