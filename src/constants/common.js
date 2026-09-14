@@ -167,6 +167,8 @@ export const PRODUCT_EXPORT_HEADERS = [
   'noonPrice',
   'namshiPrice',
   'amazonPrice',
+  'sixthStreetPrice',
+  'styliPrice',
   'amazonPrimaryImageUrl',
   'amazonImageUrl',
   'amazonExtraImageUrl1',
