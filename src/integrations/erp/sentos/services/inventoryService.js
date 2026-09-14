@@ -7,6 +7,7 @@ import { erpCommonConfig } from '#root/src/integrations/common/config/config.js'
 import { formatSentosInventoryRows } from '../helpers/formatInventory.js';
 import { fetchSentosProductsPage } from './productService.js';
 import { SENTOS_DEFAULT_PAGE_SIZE } from '../constants/common.js';
+import { logSentosError, logSentosInfo } from '../utils/logger.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
@@ -16,12 +17,16 @@ const normalizeSku = (sku) =>
     .toUpperCase();
 
 export const sentosInventorySync = async (sellerId) => {
+  const syncContext = 'Inventory Sync';
+  logSentosInfo('Started', { sellerId, syncContext });
+
   let page = 1;
   let updatedCount = 0;
   const updatedSkus = [];
 
+  try {
   while (true) {
-    const response = await fetchSentosProductsPage(page, SENTOS_DEFAULT_PAGE_SIZE);
+    const response = await fetchSentosProductsPage(page, SENTOS_DEFAULT_PAGE_SIZE, syncContext);
     const list = Array.isArray(response?.data) ? response.data : [];
     if (!list.length) break;
 
@@ -103,5 +108,10 @@ export const sentosInventorySync = async (sellerId) => {
 
   await updateSyncDate(sellerId, 'INVENTORY', updatedCount);
 
+  logSentosInfo('Completed', { sellerId, syncContext, updatedCount });
   return { success: true, updatedCount };
+  } catch (err) {
+    logSentosError('Failed', { sellerId, syncContext, message: err.message, stack: err.stack });
+    throw err;
+  }
 };
