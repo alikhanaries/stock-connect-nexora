@@ -67,14 +67,16 @@
  * /uc/v1/order/cancel:
  *   post:
  *     servers:
- *       - url: https://genericproxy.unicommerce.com
- *         description: UniCommerce Generic Proxy (outbound from StockConnect)
- *     tags: [UniCommerce Outbound]
- *     summary: Post Cancel to UC (outbound)
+ *       - url: https://<generic-proxy-host>
+ *         description: "UNICOMMERCE_GENERIC_PROXY_URL (see config.js; default https://genericproxy.unicommerce.com)"
+ *     tags: [UniCommerce Outbound (External Contract)]
+ *     summary: Post Cancel to UC (external proxy contract)
+ *     x-externalContract: true
  *     description: |
- *       Optional outbound API. StockConnect POSTs to UniCommerce when a seller/customer
- *       cancels on the marketplace. Not exposed as a StockConnect route — invoked internally
- *       by `uniwareCancelService` after successful marketplace cancellation.
+ *       **External contract only — do not call on the StockConnect host.**
+ *       Invoke at {UNICOMMERCE_GENERIC_PROXY_URL}/uc/v1/order/cancel (see operation servers).
+ *       StockConnect POSTs here internally via uniwareCancelService / postToUniwareProxy after
+ *       marketplace cancellation. There is no Express route for this path on StockConnect.
  *
  *       **Field mapping (StockConnect → UniCommerce):**
  *       - saleOrderCode = order.channelOrderNumber || String(order.orderId)
@@ -83,6 +85,7 @@
  *       - quantity = qty cancelled in the current event (not original order qty when partial)
  *
  *       See https://documentation.unicommerce.com/docs/post_cancel_to_uc.html
+ *     security: []
  *     parameters:
  *       - in: header
  *         name: Content-Type

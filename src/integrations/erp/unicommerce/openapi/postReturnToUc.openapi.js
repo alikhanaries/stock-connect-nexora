@@ -66,11 +66,17 @@
  * /uc/v1/returns:
  *   post:
  *     servers:
- *       - url: https://genericproxy.unicommerce.com
- *         description: UniCommerce Generic Proxy (outbound from StockConnect)
- *     tags: [UniCommerce Outbound]
- *     summary: Post Return to UC (outbound)
+ *       - url: https://<generic-proxy-host>
+ *         description: "UNICOMMERCE_GENERIC_PROXY_URL (see config.js; default https://genericproxy.unicommerce.com)"
+ *     tags: [UniCommerce Outbound (External Contract)]
+ *     summary: Post Return to UC (external proxy contract)
+ *     x-externalContract: true
  *     description: |
+ *       **External contract only — do not call on the StockConnect host.**
+ *       Invoke at {UNICOMMERCE_GENERIC_PROXY_URL}/uc/v1/returns (see operation servers).
+ *       StockConnect POSTs here internally via uniwareReturnService / postToUniwareProxy.
+ *       There is no Express route for this path on StockConnect.
+ *
  *       Optional outbound API. StockConnect POSTs to UniCommerce when:
  *       - **CUSTOMER_RETURN** — new CE return saved in StockConnect
  *       - **COURIER_RETURN** — order line marked RETURNED without a customer return record (RTO)
@@ -88,6 +94,7 @@
  *       - IsReverse = true
  *
  *       See https://documentation.unicommerce.com/docs/post_return_to_uc.html
+ *     security: []
  *     parameters:
  *       - in: header
  *         name: Content-Type

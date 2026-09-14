@@ -3,7 +3,7 @@ import path from 'path';
 import { config } from '#config/config.js';
 
 export function loadSwagger() {
-  return swaggerJsdoc({
+  const spec = swaggerJsdoc({
     definition: {
       openapi: '3.0.0',
       info: {
@@ -32,6 +32,21 @@ export function loadSwagger() {
         { name: 'Invoices', description: 'Invoice management' },
         { name: 'API Logs', description: 'Master-admin API call audit and performance logs' },
         { name: 'Sentos ERP', description: 'Sentos ERP product, inventory, price, and connection APIs' },
+        {
+          name: 'UniCommerce',
+          description:
+            'Inbound Uniware OMS → StockConnect (/erp/unicommerce/*). Authenticate via apiKey header (JWT from authToken).',
+        },
+        {
+          name: 'UniCommerce Outbound (External Contract)',
+          description:
+            'Documentation-only contracts for UniCommerce Generic Proxy. Not mounted on this host; auth uses clientid, merchantid, securitykey.',
+        },
+        {
+          name: 'UniCommerce Marketplace Triggers',
+          description:
+            'Marketplace/webhook routes that optionally fire outbound UniCommerce calls when UNICOMMERCE_* env is configured.',
+        },
       ],
       components: {
         securitySchemes: {
@@ -39,6 +54,28 @@ export function loadSwagger() {
             type: 'http',
             scheme: 'bearer',
             bearerFormat: 'JWT',
+          },
+          uniwareApiKey: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'apiKey',
+            description: 'Raw JWT from GET/POST /erp/unicommerce/authToken. Send as-is without a Bearer prefix.',
+          },
+          webhookAuth: {
+            type: 'apiKey',
+            in: 'header',
+            name: 'X-Custom-Auth',
+            description: 'Webhook shared-secret header for returns webhook ingress.',
+          },
+        },
+        responses: {
+          FailResponse: {
+            description: 'Validation or business rule failure',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/FailResponse' },
+              },
+            },
           },
         },
         schemas: {
@@ -161,61 +198,29 @@ export function loadSwagger() {
       path.join(process.cwd(), 'src/integrations/**/*.js'),
     ],
   });
+
+  applyUniCommerceSecurity(spec);
+  return spec;
 }
 
+/** Inbound Uniware routes use apiKey; authToken is public. Outbound/trigger ops define their own security in JSDoc. */
+function applyUniCommerceSecurity(spec) {
+  for (const [routePath, operations] of Object.entries(spec.paths || {})) {
+    if (!routePath.startsWith('/erp/unicommerce')) continue;
+
+    for (const operation of Object.values(operations)) {
+      if (!operation || typeof operation !== 'object' || Array.isArray(operation)) continue;
+
+      if (routePath === '/erp/unicommerce/authToken') {
+        operation.security = [];
+      } else if (operation.security === undefined) {
+        operation.security = [{ uniwareApiKey: [] }];
+      }
+    }
+  }
+}
+
+/** Same spec as loadSwagger — UniCommerce docs live under /api-docs with the rest of Stock Connect. */
 export function loadUniCommerceSwagger() {
-  return swaggerJsdoc({
-    definition: {
-      openapi: '3.0.0',
-      info: {
-        title: 'Stock Connect UniCommerce API',
-        description:
-          'UniCommerce ERP Integration APIs (inbound Uniware → StockConnect including Post Status Notification, and outbound Post Cancel to UC).',
-        version: '1.0.0',
-      },
-      servers: [{ url: `${config.BASE_URL}api` }, { url: 'http://localhost:8000/api' }],
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: 'http',
-            scheme: 'bearer',
-            bearerFormat: 'JWT',
-          },
-        },
-        schemas: {
-          SuccessResponse: {
-            type: 'object',
-            properties: {
-              error: { type: 'boolean', example: false },
-              success: { type: 'boolean', example: true },
-              message: { type: 'string', example: 'Success' },
-              statusCode: { type: 'integer', example: 200 },
-              data: { type: 'object', nullable: true },
-            },
-          },
-          FailResponse: {
-            type: 'object',
-            properties: {
-              error: { type: 'boolean', example: false },
-              success: { type: 'boolean', example: false },
-              message: { type: 'string', example: 'Request failed' },
-              statusCode: { type: 'integer', example: 400 },
-              data: { type: 'object', nullable: true },
-            },
-          },
-          ErrorResponse: {
-            type: 'object',
-            properties: {
-              error: { type: 'boolean', example: true },
-              success: { type: 'boolean', example: false },
-              message: { type: 'string', example: 'Internal error' },
-              statusCode: { type: 'integer', example: 500 },
-              data: { type: 'object', nullable: true },
-            },
-          },
-        },
-      },
-    },
-    apis: [path.join(process.cwd(), 'src/integrations/erp/unicommerce/**/*.js')],
-  });
+  return loadSwagger();
 }

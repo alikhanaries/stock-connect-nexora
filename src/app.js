@@ -20,7 +20,7 @@ import sentosRoutes from './integrations/erp/sentos/routes/api.js';
 import casabonyRoutes from './integrations/erp/casabony/routes/api.js';
 import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
-import { loadSwagger, loadUniCommerceSwagger } from './util/swagger.js';
+import { loadSwagger } from './util/swagger.js';
 import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 import healthRoutes from './routes/health.js';
 import { errorMiddleware } from './middleware/errorMiddleware.js';
@@ -49,7 +49,6 @@ app.use(
 
 if (swaggerEnabled) {
   const swaggerDocument = loadSwagger();
-  const uniSwaggerDocument = loadUniCommerceSwagger();
 
   app.get('/swagger.json', (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -61,11 +60,9 @@ if (swaggerEnabled) {
     swaggerUi.setup(swaggerDocument, swaggerUiOptions)(req, res, next);
   });
 
-  app.use(
-    '/unicommerce-docs',
-    swaggerUi.serveFiles(uniSwaggerDocument, {}),
-    swaggerUi.setup(uniSwaggerDocument, swaggerUiOptions)
-  );
+  app.get('/unicommerce-docs', (req, res) => {
+    res.redirect(302, '/api-docs');
+  });
 }
 
 app.use(express.json({ limit: '5mb' })); // Increased from 100kb — ChannelEngine webhooks can carry large order payloads
