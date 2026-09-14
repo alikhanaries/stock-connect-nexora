@@ -9,4 +9,5 @@ export const uniCommerceConfig = {
   MERCHANT_ID: process.env.UNICOMMERCE_MERCHANT_ID,
   SECURITY_KEY: process.env.UNICOMMERCE_SECURITY_KEY,
   CANCEL_ENDPOINT: '/uc/v1/order/cancel',
+  RETURNS_ENDPOINT: '/uc/v1/returns',
 };

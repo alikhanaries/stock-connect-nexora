@@ -522,6 +522,7 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
     const bulkOps = [];
     const sellerOrderPayloads = [];
     const pendingLogs = [];
+    const pendingCourierReturns = [];
 
     //  LOOP (NO async map)
     for (const data of orders) {
@@ -612,6 +613,18 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
                 description: `SKU ${line.MerchantProductNo} has been returned`,
                 createdAt: new Date(),
                 status: 'RETURNED',
+              });
+            }
+            const isNewlyReturned = skuStatus === 'RETURNED' && !alreadyReturned;
+            if (isNewlyReturned) {
+              pendingCourierReturns.push({
+                orderId: data.Id,
+                channelOrderNo: data.ChannelOrderNo,
+                orderLineId: line.Id,
+                merchantProductNo: line.MerchantProductNo,
+                quantity: qty,
+                sellerId,
+                airWaybillNo: String(existingSku?.airWaybillNo || '').trim(),
               });
             }
             return {
@@ -835,6 +848,7 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
       bulkOps,
       sellerOrderPayloads,
       pendingLogs,
+      pendingCourierReturns,
     };
   } finally {
     // profiling timer removed
