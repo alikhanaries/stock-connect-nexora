@@ -26,7 +26,12 @@ import {
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { RETURN_STATUS } from '#constants/common.js';
 import { syncReturnShipmentStatus } from '#service/shipmentService.js';
+import { notifyUniwareReturn } from '#root/src/integrations/erp/unicommerce/services/uniwareReturnService.js';
 import Channel from '../models/Channel.js';
+
+const notifyUniwareOnMarketplaceReturn = (returnDocument) => {
+  notifyUniwareReturn({ returnDocument }).catch((err) => console.error('Uniware return notify failed:', err.message));
+};
 import { channelEnginePush } from '#service/channelEngineClient.js';
 import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
@@ -70,6 +75,7 @@ export const getReturns = async (queryParams = {}) => {
 
       const bulkOps = [];
       const normalizedReturns = []; //  for order updates
+      const newReturnDocuments = [];
 
       for (const returnData of Content) {
         // Sanitize return data using helper
@@ -80,6 +86,14 @@ export const getReturns = async (queryParams = {}) => {
         }
 
         const simplifiedReturnDocument = sanitizationResult.data;
+
+        const existingReturn = await Return.findOne(
+          { returnId: simplifiedReturnDocument.returnId },
+          { returnId: 1 }
+        ).lean();
+        if (!existingReturn) {
+          newReturnDocuments.push(simplifiedReturnDocument);
+        }
 
         // Add bulk upsert operation
         bulkOps.push({
@@ -119,6 +133,10 @@ export const getReturns = async (queryParams = {}) => {
         //  Update SKU breakdown in Orders
         if (normalizedReturns.length > 0) {
           await applyReturnToOrder(normalizedReturns);
+        }
+
+        for (const newReturnDocument of newReturnDocuments) {
+          notifyUniwareOnMarketplaceReturn(newReturnDocument);
         }
       }
 
@@ -188,6 +206,11 @@ export const saveReturnToDatabase = async (returnData) => {
         setDefaultsOnInsert: true,
       }
     );
+
+    if (!existingReturn) {
+      notifyUniwareOnMarketplaceReturn(simplifiedReturnDocument);
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Error in saveReturnToDatabase:', error.message);
