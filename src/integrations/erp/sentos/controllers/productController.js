@@ -3,6 +3,7 @@ import Seller from '#models/Seller.js';
 import { isSentosConfigured } from '../config/config.js';
 import { isSentosSellerSlug } from '../helpers/sellerHelper.js';
 import { importAllSentosProducts } from '../services/productService.js';
+import { logSentosError, logSentosInfo } from '../utils/logger.js';
 
 export const syncSentosProducts = async (req, res) => {
   try {
@@ -21,15 +22,22 @@ export const syncSentosProducts = async (req, res) => {
       return errorResponse(res, `Seller slug "${seller.slug}" is not configured for Sentos`);
     }
 
+    logSentosInfo('Product sync accepted (HTTP 202)', { sellerId, sellerSlug: seller.slug });
+
     setImmediate(() => {
       importAllSentosProducts(sellerId).catch((err) =>
-        console.error('[Sentos Product Sync] background sync failed:', err.message)
+        logSentosError('Product sync background job failed', {
+          sellerId,
+          message: err.message,
+          name: err.name,
+          stack: err.stack,
+        })
       );
     });
 
     return successResponse(res, 'Sentos product sync started in background', 202);
   } catch (error) {
-    console.error('[Sentos Product Sync] start failed:', error.message);
+    logSentosError('Product sync start failed', { message: error.message, stack: error.stack });
     return errorResponse(res, error.message);
   }
 };
