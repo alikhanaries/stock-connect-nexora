@@ -9,11 +9,11 @@ const orderItemIdsSchema = z
 
 const orderItemTaxFieldsSchema = z.object({
   orderItemId: z.string({ required_error: 'orderItemId is required' }).min(1, 'orderItemId is required'),
-  invoiceNumber: z.string().optional(),
+  invoiceNumber: z.string({ required_error: 'invoiceNumber is required' }).min(1, 'invoiceNumber is required'),
   invoiceDate: z
-    .string()
-    .optional()
-    .refine((date) => !date || !Number.isNaN(Date.parse(date)), 'invoiceDate must be a valid date'),
+    .string({ required_error: 'invoiceDate is required' })
+    .min(1, 'invoiceDate is required')
+    .refine((date) => !Number.isNaN(Date.parse(date)), 'invoiceDate must be a valid date'),
   taxRate: z.number().optional(),
   centralGstPercentage: z.number().optional(),
   compensationCessPercentage: z.number().optional(),
