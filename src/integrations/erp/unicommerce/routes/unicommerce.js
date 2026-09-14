@@ -882,7 +882,8 @@ UniCommerceRouter.post(
  *     tags: [UniCommerce]
  *     summary: Get Labels
  *     description: |
- *       Fetches label or label with channel-invoice/pack-slip as a base64 encoded string.
+ *       Step 3 of the Print Label flow. Fetches the shipping label as a base64 encoded string
+ *       after Post Shipment Details and Get Courier Details succeed.
  *       Required only when orders are shipped by marketplace-allocated logistics.
  *       See https://documentation.unicommerce.com/docs/getlabels.html
  *     parameters:
@@ -923,10 +924,19 @@ UniCommerceRouter.post(
  *     tags: [UniCommerce]
  *     summary: Post Shipment Details
  *     description: |
- *       Uniware posts shipment data (box dimensions, invoice/tax per item) before label generation.
- *       Returns acknowledgement per order item. See https://documentation.unicommerce.com/docs/postlabels.html
+ *       Step 1 of the Print Label flow. Uniware posts shipment data (box dimensions, weight,
+ *       invoice/tax per item) before label generation.
+ *
+ *       StockConnect creates or updates the marketplace shipment (via existing Aymakan flow)
+ *       when no matching shipment exists for the requested order items. Idempotent when the
+ *       same request is sent again. Returns per-order-item acknowledgement.
+ *
+ *       Official docs: https://documentation.unicommerce.com/docs/postlabels.html
  *       Allowed Content-Type values are application/json, application/*+json, and text/plain.
  *       Request body must not exceed 64kb.
+ *
+ *       **Units:** boxHeight/boxLength/boxWidth in mm; weight in grams.
+ *       **Quantity:** the same orderItemId may repeat in orderItems[] for multi-qty lines.
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -945,78 +955,14 @@ UniCommerceRouter.post(
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required:
- *               - orderItems
- *             properties:
- *               boxHeight:
- *                 type: number
- *                 example: 0
- *               boxLength:
- *                 type: number
- *                 example: 0
- *               boxWidth:
- *                 type: number
- *                 example: 0
- *               weight:
- *                 type: number
- *                 example: 0
- *               orderItems:
- *                 type: array
- *                 minItems: 1
- *                 items:
- *                   type: object
- *                   required:
- *                     - orderItemId
- *                   properties:
- *                     orderItemId:
- *                       type: string
- *                       example: "47123"
- *                     invoiceNumber:
- *                       type: string
- *                       example: INV-1001
- *                     invoiceDate:
- *                       type: string
- *                       format: date
- *                       example: 2017-01-02
- *                     taxRate:
- *                       type: number
- *                       example: 0
- *                     centralGstPercentage:
- *                       type: number
- *                       example: 6
- *                     compensationCessPercentage:
- *                       type: number
- *                       example: 0
- *                     integratedGstPercentage:
- *                       type: number
- *                       example: 12
- *                     stateGstPercentage:
- *                       type: number
- *                       example: 6
- *                     unionTerritoryGstPercentage:
- *                       type: number
- *                       example: 0
+ *             $ref: '#/components/schemas/UniwarePostShipmentDetailsRequest'
  *     responses:
  *       200:
  *         description: Shipment details acknowledgement
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 status:
- *                   type: string
- *                   enum: [SUCCESS, FAILED, PARTIAL_SUCCESS]
- *                 orderItems:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       orderItemId:
- *                         type: string
- *                       errorMessage:
- *                         type: string
+ *               $ref: '#/components/schemas/UniwareOrderItemsStatusResponse'
  *       400:
  *         description: Validation error
  *       413:
@@ -1050,9 +996,11 @@ UniCommerceRouter.post(
  *     tags: [UniCommerce]
  *     summary: Get Courier Details
  *     description: |
- *       Fetches the courier details for marketplace-shipped orders.
+ *       Step 2 of the Print Label flow. Fetches courier details for marketplace-shipped orders
+ *       after Post Shipment Details has created/updated the StockConnect shipment.
  *       Returns the shipper name and AWB number (tracking number) used to generate labels in Uniware.
  *       This API is used only when orders are shipped by the marketplace.
+ *       See https://documentation.unicommerce.com/docs/getcourierdetails.html
  *     parameters:
  *       - in: header
  *         name: Accept-Language
@@ -1080,29 +1028,7 @@ UniCommerceRouter.post(
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 awbNo:
- *                   type: string
- *                   description: Airway bill number (shipment tracking number)
- *                   example: IPX509924343
- *                 status:
- *                   type: string
- *                   description: Courier availability status
- *                   enum: [AVAILABLE, SELLER_SHIPPING, COURIER_NOT_ASSIGNED]
- *                   example: AVAILABLE
- *                 courierCode:
- *                   type: string
- *                   description: Code of shipping provider
- *                   example: widect
- *                 courierName:
- *                   type: string
- *                   description: Name of shipping provider
- *                   example: Widect
- *                 additionalInfo:
- *                   type: string
- *                   description: Any additional information
- *                   example: ""
+ *               $ref: '#/components/schemas/UniwareCourierDetailsResponse'
  *       400:
  *         description: Validation error
  *         content:
