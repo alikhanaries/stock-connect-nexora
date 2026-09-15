@@ -47,18 +47,52 @@ export const requirePartnerJsonContentType = (req, res, next) => {
   return failResponse(res, 415, { message: 'Unsupported Content-Type' });
 };
 
-export const parsePartnerJsonBody = express.json({
-  limit: PARTNER_JSON_LIMIT,
-  type: (req) => {
-    if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
-      return false;
-    }
-    return isAllowedPartnerContentType(req);
-  },
-});
+const createParsePartnerJsonBody = (isContentTypeAllowed) =>
+  express.json({
+    limit: PARTNER_JSON_LIMIT,
+    type: (req) => {
+      if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+        return false;
+      }
+      return isContentTypeAllowed(req);
+    },
+  });
+
+export const parsePartnerJsonBody = createParsePartnerJsonBody(isAllowedPartnerContentType);
+
+const createRequirePartnerJsonContentType = (isContentTypeAllowed) => (req, res, next) => {
+  const length = Number(req.headers['content-length'] || 0);
+  if (length === 0) {
+    return next();
+  }
+  if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+    return next();
+  }
+  if (isContentTypeAllowed(req)) {
+    return next();
+  }
+  return failResponse(res, 415, { message: 'Unsupported Content-Type' });
+};
+
+/** UniCommerce POST /authToken may send JSON credentials without a Content-Type header. */
+const isAllowedAuthTokenContentType = (req) => {
+  if (isAllowedPartnerContentType(req)) {
+    return true;
+  }
+  if (!req.headers['content-type'] && Number(req.headers['content-length'] || 0) > 0) {
+    return true;
+  }
+  return false;
+};
 
 export const partnerJsonBodyMiddleware = [
   enforcePartnerBodySizeLimit,
   requirePartnerJsonContentType,
   parsePartnerJsonBody,
+];
+
+export const authTokenPartnerJsonBodyMiddleware = [
+  enforcePartnerBodySizeLimit,
+  createRequirePartnerJsonContentType(isAllowedAuthTokenContentType),
+  createParsePartnerJsonBody(isAllowedAuthTokenContentType),
 ];
