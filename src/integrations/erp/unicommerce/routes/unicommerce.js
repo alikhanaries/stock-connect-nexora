@@ -27,7 +27,7 @@ import { getCourierDetailsValidator, getLabelsQueryValidator, postLabelsValidato
 import { getCourierDetails, getLabels, postShipmentDetails } from '../controllers/shipmentController.js';
 import { createShipment } from '#root/src/controllers/ShipmentController.js';
 import { createShipmentValidator } from '#validations/shipment.js';
-import { partnerJsonBodyMiddleware } from '../middleware/jsonBodyParser.js';
+import { authTokenPartnerJsonBodyMiddleware, partnerJsonBodyMiddleware } from '../middleware/jsonBodyParser.js';
 
 const UniCommerceRouter = express.Router();
 
@@ -147,7 +147,7 @@ const UniCommerceRouter = express.Router();
  */
 
 UniCommerceRouter.get('/authToken', loginQueryValidator, checkLanguage, login);
-UniCommerceRouter.post('/authToken', ...partnerJsonBodyMiddleware, loginValidator, checkLanguage, login);
+UniCommerceRouter.post('/authToken', ...authTokenPartnerJsonBodyMiddleware, loginValidator, checkLanguage, login);
 
 /**
  * @openapi
