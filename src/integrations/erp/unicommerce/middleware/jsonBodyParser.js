@@ -74,12 +74,17 @@ const createRequirePartnerJsonContentType = (isContentTypeAllowed) => (req, res,
   return failResponse(res, 415, { message: 'Unsupported Content-Type' });
 };
 
-/** UniCommerce POST /authToken may send JSON credentials without a Content-Type header. */
+const isMissingContentType = (req) => {
+  const raw = req.headers['content-type'];
+  return !raw || !String(raw).trim();
+};
+
+/** UniCommerce POST /authToken may send JSON credentials with no Content-Type (HEADERS=null). */
 const isAllowedAuthTokenContentType = (req) => {
   if (isAllowedPartnerContentType(req)) {
     return true;
   }
-  if (!req.headers['content-type'] && Number(req.headers['content-length'] || 0) > 0) {
+  if (isMissingContentType(req)) {
     return true;
   }
   return false;
