@@ -87,6 +87,15 @@ const isAllowedAuthTokenContentType = (req) => {
   if (isMissingContentType(req)) {
     return true;
   }
+  const raw = req.headers['content-type'];
+  if (!raw) {
+    return false;
+  }
+  const type = raw.split(';')[0].trim().toLowerCase();
+  // UniCommerce Java HTTP client often labels a JSON body as form-urlencoded or octet-stream.
+  if (type === 'application/x-www-form-urlencoded' || type === 'application/octet-stream') {
+    return true;
+  }
   return false;
 };
 
