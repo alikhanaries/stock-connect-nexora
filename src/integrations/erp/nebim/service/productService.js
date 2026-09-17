@@ -54,9 +54,7 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
 
         // Text
         description: product.description,
-        descriptionAr: product.descriptionAr,
         name: product.name,
-        nameAr: product.nameAr,
       };
 
       //  Insert-only object (remove conflicting fields)
