@@ -26,16 +26,24 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
 
   await processInBatches(rawProducts, batchSize, async (batch) => {
     for (const product of batch) {
-      const { id, title, description, variants = [], category, status, sarPrices } = product;
+      const { id, title, description, variants: rawVariants = [], category, status, sarPrices } = product;
+
+      if (!rawVariants.length) continue;
+
+      // Only keep variants that are actually sellable: in stock, with a real
+      // color and a real size. Anything else is skipped entirely rather than
+      // stored with a placeholder/blank attribute.
+      const variants = rawVariants.filter(
+        (v) => (Number(v.stock) || 0) > 0 && (v.color || '').trim() && (v.size || '').trim()
+      );
 
       if (!variants.length) continue;
 
-      /* ---------------- GRAND PARENT ---------------- */
+      /* ---------------- GRAND PARENT (values only; pushed once a storable color group exists) ---------------- */
       // Derive grandparent SKU from the first variant whose SKU matches the Exquise pattern.
       // Falls back to the Shopify product id when no variant has a parseable SKU.
       const firstParsed = variants.map((v) => parseExquiseSku(v.sku)).find(Boolean);
       const grandParentSku = firstParsed?.base || String(id);
-      const productImages = extractImages(product); // all product images
       const grandParentStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
       const categoryTrail = category?.fullName || '';
 
@@ -44,49 +52,50 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
       const isPriceInactive = Number(basePrice) >= MAX_PRICE;
       const grandParentStatus = isPriceInactive ? 'inactive' : status;
 
-      const grandParentProduct = canonicalProductMapper(
-        {
-          sellerId,
-          grandParentProductSkuCode: null,
-          parentProductSkuCode: null,
-          productSkuCode: grandParentSku,
-          name: title || '',
-          nameAr: '',
-          description: htmlToPlainText(description) || '',
-          descriptionAr: '',
-          brand: 'exquise',
-          color: '',
-          size: '',
-          ean: '',
-          categoryTrail,
-          price: basePrice,
-          minPrice: null,
-          maxPrice: null,
-          msrp: basePrice,
-          purchasePrice: basePrice,
-          shippingCost: 0,
-          shippingTime: 0,
-          currentStockCount: grandParentStock,
-          volumetricWeightCm: 0,
-          hsCodeAE: '1111111',
-          hsCodeSA: '1111111',
-          vatRateType: 'STANDARD',
-          productType: 'configurable',
-          ...productImages,
-          source: 'SHOPIFY',
-          status: grandParentStatus,
-          noonPrice: basePrice,
-          namshiPrice: basePrice,
-        },
-        sellerId
-      );
+      const buildGrandParentProduct = () =>
+        canonicalProductMapper(
+          {
+            sellerId,
+            grandParentProductSkuCode: null,
+            parentProductSkuCode: null,
+            productSkuCode: grandParentSku,
+            name: title || '',
+            nameAr: '',
+            description: htmlToPlainText(description) || '',
+            descriptionAr: '',
+            brand: 'exquise',
+            color: '',
+            size: '',
+            ean: '',
+            categoryTrail,
+            price: basePrice,
+            minPrice: null,
+            maxPrice: null,
+            msrp: basePrice,
+            purchasePrice: basePrice,
+            shippingCost: 0,
+            shippingTime: 0,
+            currentStockCount: grandParentStock,
+            volumetricWeightCm: 0,
+            hsCodeAE: '1111111',
+            hsCodeSA: '1111111',
+            vatRateType: 'STANDARD',
+            productType: 'configurable',
+            ...extractImages(product),
+            source: 'SHOPIFY',
+            status: grandParentStatus,
+            noonPrice: basePrice,
+            namshiPrice: basePrice,
+          },
+          sellerId
+        );
 
-      formattedProducts.push(grandParentProduct);
+      let grandParentPushed = false;
 
       /* ---------------- GROUP VARIANTS BY COLOR ---------------- */
       const groupedByColor = {};
       for (const variant of variants) {
-        const color = variant.color || '';
+        const color = variant.color;
         if (!groupedByColor[color]) groupedByColor[color] = [];
         groupedByColor[color].push(variant);
       }
@@ -110,7 +119,17 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
         // Get color-specific images: primary + unassigned neighbors in both directions
         const colorImages = getColorImages(product.images, colorVariants, allVariantImageIds);
         const parentImages = extractImages(product, null, colorImages);
+
+        // No resolvable image for this color -> don't store this color group at all
+        // (children share the same colorImages, so this covers them too).
+        if (!parentImages.primaryImageUrl) continue;
+
         const parentStock = colorVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+
+        if (!grandParentPushed) {
+          formattedProducts.push(buildGrandParentProduct());
+          grandParentPushed = true;
+        }
 
         const parentProduct = canonicalProductMapper(
           {
