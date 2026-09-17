@@ -59,7 +59,7 @@ export const fetchAndStoreShopifyExquiseProducts = async (sellerId, sellerData) 
 
     for (let i = 0; i < bulkOps.length; i += BULK_CHUNK_SIZE) {
       const data = await Product.bulkWrite(bulkOps.slice(i, i + BULK_CHUNK_SIZE), { ordered: false });
-      upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
+      upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
     }
 
     if (categoryTrails.size > 0) {

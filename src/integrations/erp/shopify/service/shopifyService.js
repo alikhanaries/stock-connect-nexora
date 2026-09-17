@@ -203,7 +203,7 @@ export const fetchProducts = async (sellerData) => {
     return allProducts;
   } catch (err) {
     console.error('Shopify GraphQL fetch error:', err);
-    return [];
+    throw err;
   }
 };
 

@@ -120,7 +120,7 @@ export const fetchAndStoreCasabonyProducts = async (sellerId, isImageUpdate = fa
 
             try {
               const data = await Product.bulkWrite(bulkOps, { ordered: false });
-              upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
+              upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
             } catch (bulkErr) {
               if (bulkErr?.writeErrors?.length) {
                 console.error(`[Batch ${batchId}] bulkWrite had ${bulkErr.writeErrors.length} write errors.`);

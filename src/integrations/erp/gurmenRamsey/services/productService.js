@@ -119,7 +119,7 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
 
             const data = await Product.bulkWrite(bulkOps, { ordered: false });
             console.log(`[Batch ${batchId}] Upserted Products: ${canonical.length}`);
-            upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
+            upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
           }
 
           /**
