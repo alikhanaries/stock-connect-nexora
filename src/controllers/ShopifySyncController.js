@@ -19,10 +19,20 @@ export const startShopifySync = async (req, res) => {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
-    trackBackgroundSync(sellerId, () => fetchAndStoreShopifyProducts(sellerId, { ...shopifyConfig, isImageUpdate }), {
-      label: 'Syncing Shopify products',
-      field: 'products',
-    });
+    trackBackgroundSync(
+      sellerId,
+      () =>
+        fetchAndStoreShopifyProducts(sellerId, {
+          url: shopifyConfig.url,
+          apiVersion: shopifyConfig.apiVersion,
+          accessToken: shopifyConfig.accessToken,
+          isImageUpdate,
+        }),
+      {
+        label: 'Syncing Shopify products',
+        field: 'products',
+      }
+    );
 
     return successResponse(res, 'Shopify product sync started in background', 202);
   } catch (error) {
