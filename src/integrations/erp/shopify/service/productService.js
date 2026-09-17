@@ -5,6 +5,7 @@ import { formatProducts } from '#root/src/integrations/erp/shopify/helpers/forma
 import { fetchProducts } from '#root/src/integrations/erp/shopify/service/shopifyService.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
+import { updateSyncJob } from '#root/src/helpers/syncProgress.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
@@ -12,6 +13,8 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
     const rawResponse = await fetchProducts(sellerData);
 
     let upsertCount = 0;
+    let insertedCount = 0;
+    let modifiedCount = 0;
     const rawProducts = rawResponse;
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
@@ -54,10 +57,17 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
     }));
 
     const BULK_CHUNK_SIZE = 500;
+    const totalOps = bulkOps.length;
+    let processedOps = 0;
 
     for (let i = 0; i < bulkOps.length; i += BULK_CHUNK_SIZE) {
       const data = await Product.bulkWrite(bulkOps.slice(i, i + BULK_CHUNK_SIZE), { ordered: false });
+      insertedCount = calculateUpsertCount(insertedCount, data.upsertedCount);
+      modifiedCount = calculateUpsertCount(modifiedCount, data.modifiedCount);
       upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
+
+      processedOps += Math.min(BULK_CHUNK_SIZE, bulkOps.length - i);
+      updateSyncJob(sellerId, { completed: processedOps, total: totalOps });
     }
 
     if (categoryTrails.size > 0) {
@@ -65,7 +75,7 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
     }
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
 
-    return { success: true, updatedCount: upsertCount };
+    return { success: true, updatedCount: upsertCount, insertedCount, modifiedCount };
   } catch (err) {
     console.error('fetchAndStoreShopifyProducts error:', err);
     throw err;
