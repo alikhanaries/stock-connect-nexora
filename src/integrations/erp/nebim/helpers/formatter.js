@@ -1,6 +1,7 @@
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
+import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) => {
   if (!Array.isArray(raw) || raw.length === 0) return [];
 
@@ -192,12 +193,16 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
   });
 
   // Remove temp fields
-  return sorted.map((p) => {
+  const cleaned = sorted.map((p) => {
     delete p.__sortItemCode;
     delete p.__sortLevel;
     delete p.__sortVariant;
     return p;
   });
+
+  // Nebim has no image pipeline in this formatter, so don't require one here -
+  // stock/color/size are already enforced above, this is just a safety net.
+  return filterValidHierarchyProducts(cleaned, { requirePriceAndImage: false });
 };
 
 export const formatNebimOrders = async (orders = [], batchSize = 500) => {

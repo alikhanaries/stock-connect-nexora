@@ -1,6 +1,7 @@
 import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
 import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
 import { MIN_STOCK, MAX_PRICE } from '#root/src/integrations/erp/gurmenRamsey/constants/common.js';
+import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 const toArray = (value) => (Array.isArray(value) ? value : typeof value === 'string' ? [value] : []);
 const cleanImages = (...imgGroups) => {
   const merged = imgGroups
@@ -161,7 +162,7 @@ export const formatRamseyProduct = async (raw = [], sellerId, isImageUpdate = fa
   }
 
   return {
-    products: formatted,
+    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true }),
     categoryTrails: [...categoryTrails],
   };
 };

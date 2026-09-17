@@ -3,6 +3,7 @@ import { canonicalProductMapper } from '#root/src/integrations/common/helpers/ca
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
 import { extractImages } from '#root/src/integrations/erp/shopify/helpers/common.js';
 import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
+import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 
 export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500) => {
   if (!Array.isArray(rawProducts) || rawProducts.length === 0) return [];
@@ -169,5 +170,5 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
     }
   });
 
-  return formattedProducts.filter(Boolean);
+  return filterValidHierarchyProducts(formattedProducts.filter(Boolean), { requirePriceAndImage: true });
 };

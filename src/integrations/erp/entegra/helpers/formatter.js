@@ -252,5 +252,20 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     }
   }
 
-  return { parents, children };
+  // Entegra only has 2 real levels (parent/color + child/variant, no grandparent),
+  // so filter directly here rather than the 3-level shared helper: drop any child
+  // with no stock, no color, no size, or no image, then drop a parent whose color
+  // group has no surviving children.
+  const hasImage = (p) => Boolean(p.primaryImageUrl || (Array.isArray(p.images) && p.images.length > 0));
+  const isSellableChild = (p) =>
+    (Number(p.currentStockCount) || 0) > 0 &&
+    String(p.color || '').trim() &&
+    String(p.size || '').trim() &&
+    hasImage(p);
+
+  const survivingChildren = children.filter(isSellableChild);
+  const survivingParentSkus = new Set(survivingChildren.map((c) => c.parentProductSkuCode));
+  const survivingParents = parents.filter((p) => survivingParentSkus.has(p.productSkuCode));
+
+  return { parents: survivingParents, children: survivingChildren };
 };

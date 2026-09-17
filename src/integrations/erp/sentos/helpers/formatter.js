@@ -14,8 +14,11 @@ const buildDescription = (item = {}) => {
 const buildVariantRecord = async ({ sellerId, parentSku, variant, parentItem, categoryTrail }) => {
   const stock = getWarehouseStock(variant.stocks);
   if (stock <= 0) return null;
+  if (!String(variant.color || '').trim() || !String(variant.model || '').trim()) return null;
 
   const images = extractImageUrls(variant.images?.length ? variant.images : parentItem.images);
+  if (!images.length) return null;
+
   const priceFields = await buildSentosPriceFields({
     ...parentItem,
     sale_price: variant.sale_price || parentItem.sale_price,
@@ -59,6 +62,8 @@ const buildSimpleRecord = async ({ sellerId, item, categoryTrail }) => {
   if (stock <= 0) return null;
 
   const images = extractImageUrls(item.images);
+  if (!images.length) return null;
+
   const priceFields = await buildSentosPriceFields(item);
 
   return {
