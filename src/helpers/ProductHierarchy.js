@@ -92,6 +92,23 @@ export async function validateHierarchyExistenceBatch(products, sellerId) {
 }
 
 /**
+ * Anything previously active for this seller that isn't in today's sync
+ * feed (e.g. the ERP/Shopify source stopped returning it once it went out
+ * of stock, or it was discontinued) gets marked removed, same as an
+ * explicit 0-stock item would be.
+ */
+export async function markMissingSkusRemoved(sellerId, feedSkuCodes = []) {
+  await Product.updateMany(
+    {
+      sellerId,
+      status: { $ne: 'removed' },
+      productSkuCode: { $nin: feedSkuCodes },
+    },
+    { $set: { status: 'removed', currentStockCount: 0 } }
+  );
+}
+
+/**
  * Automatically resolves product types for all products:
  * - Any SKU referenced as parent or grandparent → configurable
  * - Everything else → simple
@@ -240,13 +257,25 @@ export async function resolveHierarchyStatus(sellerId, affectedSkus = []) {
  * Keeps sellable variants plus their parent / grandparent rows.
  * Drops simple products whose parent row is not present in the batch.
  */
-export function filterValidHierarchyProducts(products, { requirePriceAndImage = true } = {}) {
+export function filterValidHierarchyProducts(
+  products,
+  { requirePriceAndImage = true, requirePrice = false, existingSkus = new Set() } = {}
+) {
   const skuSet = new Set(products.map((p) => p.productSkuCode));
 
   const validSimple = products.filter((p) => {
     if (p.productType !== 'simple') return false;
+    // Never store a variant with no real color or no real size.
+    if (!String(p.color || '').trim() || !String(p.size || '').trim()) return false;
+    if ((Number(p.currentStockCount) || 0) <= 0) {
+      // Brand-new SKU (never synced before) with 0 stock: don't store it at all.
+      if (!existingSkus.has(p.productSkuCode)) return false;
+      // Already-known SKU that's now out of stock: keep it, just flip it inactive.
+      p.status = 'inactive';
+    }
     if (!requirePriceAndImage) return true;
-    return (p.price || 0) > 0 && String(p.primaryImageUrl || '').trim();
+    if (requirePrice && !((p.price || 0) > 0)) return false;
+    return String(p.primaryImageUrl || '').trim();
   });
 
   const parentSkus = new Set(validSimple.map((p) => p.parentProductSkuCode).filter((sku) => sku && skuSet.has(sku)));
@@ -302,13 +331,10 @@ export function sortProductsByHierarchy(products) {
   });
 }
 
-
 export function sortProductsByInterleavedHierarchy(products) {
   const bySku = (a, b) => (a.productSkuCode || '').localeCompare(b.productSkuCode || '');
 
-  const grandparents = products
-    .filter((p) => !p.parentProductSkuCode && !p.grandParentProductSkuCode)
-    .sort(bySku);
+  const grandparents = products.filter((p) => !p.parentProductSkuCode && !p.grandParentProductSkuCode).sort(bySku);
 
   const result = [];
 

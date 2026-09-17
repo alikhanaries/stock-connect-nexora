@@ -6,6 +6,7 @@ import { formatNebimProducts } from '#root/src/integrations/erp/nebim/helpers/fo
 import { handleNebimError } from '#root/src/integrations/erp/nebim/util/handleError.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { NAMED_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
+import { markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 const adapter = createERPAdapter('nebim');
 export const fetchAndStoreNebimProducts = async (sellerId) => {
@@ -13,7 +14,11 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
     const rawProducts = await adapter.fetchProducts();
     if (!rawProducts?.length) return;
 
-    const canonicalProducts = await formatNebimProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
+    const existingSkus = new Set(
+      (await Product.find({ sellerId }, { productSkuCode: 1 }).lean()).map((p) => p.productSkuCode)
+    );
+
+    const canonicalProducts = await formatNebimProducts(rawProducts, sellerId, MAX_BATCH_SIZE, existingSkus);
 
     // SERIALWISE SORTING BEFORE INSERT (SAFE VERSION)
 
@@ -51,12 +56,11 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
 
         // Stock
         currentStockCount: product.currentStockCount,
+        status: product.status,
 
         // Text
         description: product.description,
-        descriptionAr: product.descriptionAr,
         name: product.name,
-        nameAr: product.nameAr,
       };
 
       //  Insert-only object (remove conflicting fields)
@@ -66,6 +70,7 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
         delete insertOnlyProduct[key];
       }
       delete insertOnlyProduct.currentStockCount;
+      delete insertOnlyProduct.status;
       delete insertOnlyProduct.description;
       delete insertOnlyProduct.descriptionAr;
       delete insertOnlyProduct.name;
@@ -94,6 +99,11 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
     if (categoryTrails.size > 0) {
       insertCategoryTrail([...categoryTrails], sellerId);
     }
+
+    await markMissingSkusRemoved(
+      sellerId,
+      canonicalProducts.map((p) => p.productSkuCode)
+    );
 
     await updateSyncDate(sellerId, 'PRODUCT', canonicalProducts.length);
 

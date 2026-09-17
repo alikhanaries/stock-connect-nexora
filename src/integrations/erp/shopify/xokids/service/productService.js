@@ -6,8 +6,11 @@ import { formatXokidsShopifyProducts } from '../helpers/formatter.js';
 import { fetchXokidsShopifyProducts } from '../utils/fetch.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
-import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
+import {
+  resolveHierarchyStatus,
+  markMissingSkusRemoved,
+  filterValidHierarchyProducts,
+} from '#root/src/helpers/ProductHierarchy.js';
 
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
@@ -48,15 +51,14 @@ export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig
     );
 
     let upsertCount = 0;
-    const rawProducts = skipZeroStockProducts(rawResponseFiltered);
-    console.log(`[Xokids Shopify Sync] ${rawProducts.length} products remaining after filtering out zero stock`);
+    const rawProducts = rawResponseFiltered;
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
-      console.log('[Xokids Shopify Sync] No products to sync (zero stock or empty response)');
+      console.log('[Xokids Shopify Sync] No products to sync (empty response)');
       return;
     }
 
-    const canonicalProducts = await formatXokidsShopifyProducts(
+    const rawCanonicalProducts = await formatXokidsShopifyProducts(
       rawProducts,
       sellerId,
       seller.slug,
@@ -64,11 +66,40 @@ export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig
       MAX_BATCH_SIZE
     );
     console.log(
-      `[Xokids Shopify Sync] Generated ${canonicalProducts.length} canonical products (grandparents, parents, children)`
+      `[Xokids Shopify Sync] Generated ${rawCanonicalProducts.length} canonical products (grandparents, parents, children)`
     );
 
-    if (!canonicalProducts.length) {
+    if (!rawCanonicalProducts.length) {
       console.log('[Xokids Shopify Sync] No canonical products mapped');
+      return;
+    }
+
+    const existingSkus = new Set(
+      (
+        await Product.find(
+          { sellerId, productSkuCode: { $in: rawCanonicalProducts.map((p) => p.productSkuCode) } },
+          { productSkuCode: 1 }
+        )
+      ).map((p) => p.productSkuCode)
+    );
+
+    // Stock drives status: in stock -> active, unless merchant-archived
+    // ('removed') already. 0-stock handling (drop if brand-new, mark
+    // 'inactive' if it already existed) happens in the filter below.
+    for (const product of rawCanonicalProducts) {
+      if (product.status === 'removed') continue;
+      if ((Number(product.currentStockCount) || 0) > 0) {
+        product.status = 'active';
+      }
+    }
+
+    const canonicalProducts = filterValidHierarchyProducts(rawCanonicalProducts, {
+      requirePriceAndImage: true,
+      existingSkus,
+    });
+
+    if (!canonicalProducts.length) {
+      console.log('[Xokids Shopify Sync] No sellable canonical products after filtering');
       return;
     }
 
@@ -119,10 +150,9 @@ export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig
     }
 
     console.log('[Xokids Shopify Sync] Resolving hierarchy status');
-    await resolveHierarchyStatus(
-      sellerId,
-      canonicalProducts.map((p) => p.productSkuCode)
-    );
+    const feedSkuCodes = canonicalProducts.map((p) => p.productSkuCode);
+    await resolveHierarchyStatus(sellerId, feedSkuCodes);
+    await markMissingSkusRemoved(sellerId, feedSkuCodes);
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
     console.log(`[Xokids Shopify Sync] Completed successfully. Total products upserted/registered: ${upsertCount}`);

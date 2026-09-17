@@ -3,10 +3,13 @@ import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
+import {
+  resolveHierarchyStatus,
+  markMissingSkusRemoved,
+  filterValidHierarchyProducts,
+} from '#root/src/helpers/ProductHierarchy.js';
 import { fetchCatchProducts } from '../utils/fetch.js';
 import { formatProducts } from '../helpers/formatter.js';
-import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) => {
@@ -14,18 +17,46 @@ export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) =>
     const rawResponse = await fetchCatchProducts(sellerData);
 
     let upsertCount = 0;
-    // Product sync skips zero-stock products
-    const rawProducts = skipZeroStockProducts(rawResponse);
+    const rawProducts = rawResponse;
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
       console.log('No products received from Shopify');
       return;
     }
 
-    const canonicalProducts = await formatProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
+    const rawCanonicalProducts = await formatProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
+
+    if (!rawCanonicalProducts.length) {
+      console.log('No canonical products generated');
+      return;
+    }
+
+    const existingSkus = new Set(
+      (
+        await Product.find(
+          { sellerId, productSkuCode: { $in: rawCanonicalProducts.map((p) => p.productSkuCode) } },
+          { productSkuCode: 1 }
+        )
+      ).map((p) => p.productSkuCode)
+    );
+
+    // Stock drives status: in stock -> active, unless merchant-archived
+    // ('removed') already. 0-stock handling (drop if brand-new, mark
+    // 'inactive' if it already existed) happens in the filter below.
+    for (const product of rawCanonicalProducts) {
+      if (product.status === 'removed') continue;
+      if ((Number(product.currentStockCount) || 0) > 0) {
+        product.status = 'active';
+      }
+    }
+
+    const canonicalProducts = filterValidHierarchyProducts(rawCanonicalProducts, {
+      requirePriceAndImage: true,
+      existingSkus,
+    });
 
     if (!canonicalProducts.length) {
-      console.log('No canonical products generated');
+      console.log('No sellable canonical products after filtering');
       return;
     }
 
@@ -67,10 +98,9 @@ export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) =>
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
 
-    await resolveHierarchyStatus(
-      sellerId,
-      canonicalProducts.map((p) => p.productSkuCode)
-    );
+    const feedSkuCodes = canonicalProducts.map((p) => p.productSkuCode);
+    await resolveHierarchyStatus(sellerId, feedSkuCodes);
+    await markMissingSkusRemoved(sellerId, feedSkuCodes);
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
   } catch (err) {

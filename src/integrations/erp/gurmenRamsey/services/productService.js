@@ -4,6 +4,7 @@ import { erpCommonConfig } from '#root/src/integrations/common/config/config.js'
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { filterInStockSubproducts } from '#root/src/integrations/common/helpers/filterInStockSubproducts.js';
+import { markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { formatRamseyProduct } from '../helpers/formatter.js';
@@ -34,7 +35,7 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
      * - Calls the callback for each batch
      */
 
-    await processInBatches(
+    const allCanonical = await processInBatches(
       fetched,
       MAX_BATCH_SIZE,
       async (batch, batchIndex) => {
@@ -144,6 +145,12 @@ export const getRamseyProducts = async (sellerId, isImageUpdate) => {
       // Number of batches to process in parallel
       BATCH_CONCURRENCY
     );
+
+    const feedSkuCodes = allCanonical.filter(Boolean).map((p) => p.productSkuCode);
+    if (feedSkuCodes.length > 0) {
+      await markMissingSkusRemoved(sellerId, feedSkuCodes);
+    }
+
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
     console.log(`\n[Ramsey Sync] ALL BATCHES COMPLETED SUCCESSFULLY`);
   } catch (error) {

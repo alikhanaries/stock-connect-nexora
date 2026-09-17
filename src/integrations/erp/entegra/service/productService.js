@@ -1,13 +1,13 @@
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import { entegraConfig } from '#root/src/integrations/erp/entegra/config/config.js';
-import { filterInStockProducts } from '../helpers/filterInStockProducts.js';
 import { filterProductsWithImages } from '../helpers/filterProductsWithImages.js';
 import { mapProductToDB } from '../helpers/formatter.js';
 import { fetchCategories } from './categoryService.js';
 import { getAccessToken } from '../utils/accessTokenGenerator.js';
 import { getMappingBySellerSlug, isBrandForSeller } from '../helpers/brandMapping.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
+import { markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 const BASE_URL = `${entegraConfig?.ENTEGRA_BASE_URL}product/page=`;
 
 /**
@@ -89,7 +89,11 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
 
   let page = 1;
   let totalImported = 0;
+  const feedSkuCodes = new Set();
   const categories = await fetchCategories(AUTH_TOKEN);
+  const existingSkus = new Set(
+    (await Product.find({ sellerId }, { productSkuCode: 1 }).lean()).map((p) => p.productSkuCode)
+  );
   while (true) {
     let result;
 
@@ -109,14 +113,14 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
 
     // Keep only products whose brand maps to this seller's slug
     const brandFiltered = rawList.filter((p) => isBrandForSeller(p?.brand, sellerSlug));
-    const withImages = filterProductsWithImages(brandFiltered);
-    const list = filterInStockProducts(withImages);
+    const list = filterProductsWithImages(brandFiltered);
 
     let importedThisPage = 0;
 
     for (const product of list) {
       try {
-        await createOrUpdateProduct(sellerId, product, categories, isImageUpdate);
+        const writtenSkus = await createOrUpdateProduct(sellerId, product, categories, isImageUpdate, existingSkus);
+        writtenSkus.forEach((sku) => feedSkuCodes.add(sku));
         importedThisPage++;
         totalImported++;
       } catch (err) {
@@ -130,6 +134,11 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
   }
 
   console.log(` [${displayBrand}] Total products imported: ${totalImported}`);
+
+  if (feedSkuCodes.size) {
+    await markMissingSkusRemoved(sellerId, [...feedSkuCodes]);
+  }
+
   await updateSyncDate(sellerId, 'PRODUCT', totalImported);
   return totalImported;
 };
@@ -138,14 +147,20 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
  * Create Product + Variants (configurable or simple)
  */
 
-export const createOrUpdateProduct = async (sellerId, product, categories, isImageUpdate = true) => {
+export const createOrUpdateProduct = async (
+  sellerId,
+  product,
+  categories,
+  isImageUpdate = true,
+  existingSkus = new Set()
+) => {
   const categoryId = product.group; // e.g., '4'
   const categoryTrail = categoryId ? categories.find((cat) => cat.id == categoryId).name : '';
 
   // ---------------------------------------------
   // Map product to DB structure
   // ---------------------------------------------
-  const { parents, children } = await mapProductToDB(sellerId, product, categoryTrail, isImageUpdate);
+  const { parents, children } = await mapProductToDB(sellerId, product, categoryTrail, isImageUpdate, existingSkus);
 
   // ---------------------------------------------
   // Upsert parents
@@ -201,5 +216,5 @@ export const createOrUpdateProduct = async (sellerId, product, categories, isIma
     );
   }
 
-  return true;
+  return [...parents, ...children].map((p) => p.productSkuCode);
 };

@@ -11,11 +11,16 @@ const buildDescription = (item = {}) => {
   return htmlToPlainText(raw);
 };
 
-const buildVariantRecord = async ({ sellerId, parentSku, variant, parentItem, categoryTrail }) => {
+const buildVariantRecord = async ({ sellerId, parentSku, variant, parentItem, categoryTrail, existingSkus }) => {
   const stock = getWarehouseStock(variant.stocks);
-  if (stock <= 0) return null;
+  // Brand-new SKU with 0 stock: don't store it at all. Already-known SKU
+  // that's now out of stock: still store it, just marked inactive below.
+  if (stock <= 0 && !existingSkus.has(variant.sku)) return null;
+  if (!String(variant.color || '').trim() || !String(variant.model || '').trim()) return null;
 
   const images = extractImageUrls(variant.images?.length ? variant.images : parentItem.images);
+  if (!images.length) return null;
+
   const priceFields = await buildSentosPriceFields({
     ...parentItem,
     sale_price: variant.sale_price || parentItem.sale_price,
@@ -37,7 +42,7 @@ const buildVariantRecord = async ({ sellerId, parentSku, variant, parentItem, ca
     categoryTrail,
     currentStockCount: stock,
     productType: 'simple',
-    status: 'active',
+    status: stock > 0 ? 'active' : 'inactive',
     source: 'SENTOS',
     vatRateType: Number(parentItem.vat_rate) > 0 ? 'STANDARD' : 'ZERO',
     volumetricWeightCm: parseSentosWeight(parentItem.volumetric_weight),
@@ -54,11 +59,13 @@ const parseSentosWeight = (value) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0.3;
 };
 
-const buildSimpleRecord = async ({ sellerId, item, categoryTrail }) => {
+const buildSimpleRecord = async ({ sellerId, item, categoryTrail, existingSkus }) => {
   const stock = getWarehouseStock(item.stocks);
-  if (stock <= 0) return null;
+  if (stock <= 0 && !existingSkus.has(item.sku)) return null;
 
   const images = extractImageUrls(item.images);
+  if (!images.length) return null;
+
   const priceFields = await buildSentosPriceFields(item);
 
   return {
@@ -75,7 +82,7 @@ const buildSimpleRecord = async ({ sellerId, item, categoryTrail }) => {
     categoryTrail,
     currentStockCount: stock,
     productType: 'simple',
-    status: 'active',
+    status: stock > 0 ? 'active' : 'inactive',
     source: 'SENTOS',
     vatRateType: Number(item.vat_rate) > 0 ? 'STANDARD' : 'ZERO',
     volumetricWeightCm: parseSentosWeight(item.volumetric_weight),
@@ -86,7 +93,7 @@ const buildSimpleRecord = async ({ sellerId, item, categoryTrail }) => {
   };
 };
 
-export const formatSentosProducts = async (items = [], sellerId, categoryMap = new Map()) => {
+export const formatSentosProducts = async (items = [], sellerId, categoryMap = new Map(), existingSkus = new Set()) => {
   const products = [];
   const parentsToDeactivate = [];
 
@@ -104,6 +111,7 @@ export const formatSentosProducts = async (items = [], sellerId, categoryMap = n
           variant,
           parentItem: item,
           categoryTrail,
+          existingSkus,
         });
 
         if (record) {
@@ -119,7 +127,7 @@ export const formatSentosProducts = async (items = [], sellerId, categoryMap = n
       continue;
     }
 
-    const record = await buildSimpleRecord({ sellerId, item, categoryTrail });
+    const record = await buildSimpleRecord({ sellerId, item, categoryTrail, existingSkus });
     if (record) {
       products.push(record);
     } else if (item?.sku) {
