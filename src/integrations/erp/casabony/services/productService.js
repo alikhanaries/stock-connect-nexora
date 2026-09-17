@@ -3,7 +3,7 @@ import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
+import { resolveHierarchyStatus, markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { createCasabonyAdapter } from '../casabonyAdapter.js';
@@ -153,6 +153,7 @@ export const fetchAndStoreCasabonyProducts = async (sellerId, isImageUpdate = fa
 
     if (allProcessedSkus.length > 0) {
       await resolveHierarchyStatus(sellerId, allProcessedSkus);
+      await markMissingSkusRemoved(sellerId, allProcessedSkus);
     }
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);

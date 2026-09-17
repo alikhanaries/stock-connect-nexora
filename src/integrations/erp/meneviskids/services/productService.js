@@ -8,6 +8,7 @@ import Seller from '#root/src/models/Seller.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { createMeneviskidsAdapter } from '../meneviskidsAdapter.js';
 import { formatMeneviskidsProduct, toArray, extractSpecs } from '../helpers/formatter.js';
+import { markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
@@ -127,7 +128,7 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
     let totalGrandparents = 0;
     let totalParents = 0;
 
-    await processInBatches(
+    const allCanonical = await processInBatches(
       fetched,
       MAX_BATCH_SIZE,
       async (batch, batchIndex) => {
@@ -214,6 +215,11 @@ export const getMeneviskidsProducts = async (sellerId, isImageUpdate) => {
       },
       BATCH_CONCURRENCY
     );
+
+    const feedSkuCodes = allCanonical.filter(Boolean).map((p) => p.productSkuCode);
+    if (feedSkuCodes.length > 0) {
+      await markMissingSkusRemoved(sellerId, feedSkuCodes);
+    }
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
     console.log('\n[Menevis Kids Sync] ALL BATCHES COMPLETED SUCCESSFULLY');

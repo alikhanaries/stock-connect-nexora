@@ -3,7 +3,7 @@ import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
+import { resolveHierarchyStatus, markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 import { fetchCatchProducts } from '../utils/fetch.js';
 import { formatProducts } from '../helpers/formatter.js';
 import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
@@ -67,10 +67,9 @@ export const fetchAndStoreShopifyCatchProducts = async (sellerId, sellerData) =>
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
 
-    await resolveHierarchyStatus(
-      sellerId,
-      canonicalProducts.map((p) => p.productSkuCode)
-    );
+    const feedSkuCodes = canonicalProducts.map((p) => p.productSkuCode);
+    await resolveHierarchyStatus(sellerId, feedSkuCodes);
+    await markMissingSkusRemoved(sellerId, feedSkuCodes);
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
   } catch (err) {

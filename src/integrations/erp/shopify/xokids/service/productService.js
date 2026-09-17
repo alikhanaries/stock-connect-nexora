@@ -6,7 +6,7 @@ import { formatXokidsShopifyProducts } from '../helpers/formatter.js';
 import { fetchXokidsShopifyProducts } from '../utils/fetch.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
+import { resolveHierarchyStatus, markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 import { skipZeroStockProducts } from '../helpers/skipZeroStockProducts.js';
 
 const { MAX_BATCH_SIZE } = erpCommonConfig;
@@ -119,10 +119,9 @@ export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig
     }
 
     console.log('[Xokids Shopify Sync] Resolving hierarchy status');
-    await resolveHierarchyStatus(
-      sellerId,
-      canonicalProducts.map((p) => p.productSkuCode)
-    );
+    const feedSkuCodes = canonicalProducts.map((p) => p.productSkuCode);
+    await resolveHierarchyStatus(sellerId, feedSkuCodes);
+    await markMissingSkusRemoved(sellerId, feedSkuCodes);
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
     console.log(`[Xokids Shopify Sync] Completed successfully. Total products upserted/registered: ${upsertCount}`);

@@ -6,6 +6,7 @@ import { formatNebimProducts } from '#root/src/integrations/erp/nebim/helpers/fo
 import { handleNebimError } from '#root/src/integrations/erp/nebim/util/handleError.js';
 import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { NAMED_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
+import { markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 const adapter = createERPAdapter('nebim');
 export const fetchAndStoreNebimProducts = async (sellerId) => {
@@ -92,6 +93,11 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
     if (categoryTrails.size > 0) {
       insertCategoryTrail([...categoryTrails], sellerId);
     }
+
+    await markMissingSkusRemoved(
+      sellerId,
+      canonicalProducts.map((p) => p.productSkuCode)
+    );
 
     await updateSyncDate(sellerId, 'PRODUCT', canonicalProducts.length);
 

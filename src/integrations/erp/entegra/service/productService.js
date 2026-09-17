@@ -8,6 +8,7 @@ import { fetchCategories } from './categoryService.js';
 import { getAccessToken } from '../utils/accessTokenGenerator.js';
 import { getMappingBySellerSlug, isBrandForSeller } from '../helpers/brandMapping.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
+import { markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 const BASE_URL = `${entegraConfig?.ENTEGRA_BASE_URL}product/page=`;
 
 /**
@@ -89,6 +90,7 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
 
   let page = 1;
   let totalImported = 0;
+  const feedSkuCodes = new Set();
   const categories = await fetchCategories(AUTH_TOKEN);
   while (true) {
     let result;
@@ -116,7 +118,8 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
 
     for (const product of list) {
       try {
-        await createOrUpdateProduct(sellerId, product, categories, isImageUpdate);
+        const writtenSkus = await createOrUpdateProduct(sellerId, product, categories, isImageUpdate);
+        writtenSkus.forEach((sku) => feedSkuCodes.add(sku));
         importedThisPage++;
         totalImported++;
       } catch (err) {
@@ -130,6 +133,11 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
   }
 
   console.log(` [${displayBrand}] Total products imported: ${totalImported}`);
+
+  if (feedSkuCodes.size) {
+    await markMissingSkusRemoved(sellerId, [...feedSkuCodes]);
+  }
+
   await updateSyncDate(sellerId, 'PRODUCT', totalImported);
   return totalImported;
 };
@@ -201,5 +209,5 @@ export const createOrUpdateProduct = async (sellerId, product, categories, isIma
     );
   }
 
-  return true;
+  return [...parents, ...children].map((p) => p.productSkuCode);
 };

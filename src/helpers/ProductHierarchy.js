@@ -92,6 +92,23 @@ export async function validateHierarchyExistenceBatch(products, sellerId) {
 }
 
 /**
+ * Anything previously active for this seller that isn't in today's sync
+ * feed (e.g. the ERP/Shopify source stopped returning it once it went out
+ * of stock, or it was discontinued) gets marked removed, same as an
+ * explicit 0-stock item would be.
+ */
+export async function markMissingSkusRemoved(sellerId, feedSkuCodes = []) {
+  await Product.updateMany(
+    {
+      sellerId,
+      status: { $ne: 'removed' },
+      productSkuCode: { $nin: feedSkuCodes },
+    },
+    { $set: { status: 'removed', currentStockCount: 0 } }
+  );
+}
+
+/**
  * Automatically resolves product types for all products:
  * - Any SKU referenced as parent or grandparent → configurable
  * - Everything else → simple

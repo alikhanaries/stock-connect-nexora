@@ -7,6 +7,7 @@ import { erpCommonConfig } from '#root/src/integrations/common/config/config.js'
 import { sentosFetch } from '../utils/fetch.js';
 import { fetchSentosCategories } from './categoryService.js';
 import { formatSentosProducts } from '../helpers/formatter.js';
+import { markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 import { SENTOS_DEFAULT_PAGE_SIZE, SENTOS_FETCH_DELAY_MS } from '../constants/common.js';
 import { logSentosError, logSentosInfo, logSentosWarn } from '../utils/logger.js';
 
@@ -65,6 +66,7 @@ export const importAllSentosProducts = async (sellerId) => {
   let page = 1;
   let upsertCount = 0;
   const deactivateSkus = new Set();
+  const feedSkuCodes = new Set();
 
   while (true) {
     const response = await fetchSentosProductsPage(page, SENTOS_DEFAULT_PAGE_SIZE, syncContext);
@@ -107,6 +109,7 @@ export const importAllSentosProducts = async (sellerId) => {
         MAX_BATCH_SIZE,
         async (batch) => {
           const canonical = batch.map((item) => canonicalProductMapper(item, sellerId)).filter(Boolean);
+          canonical.forEach((p) => feedSkuCodes.add(p.productSkuCode));
 
           if (!canonical.length) {
             logSentosWarn('Batch produced no canonical products after mapping', {
@@ -174,6 +177,10 @@ export const importAllSentosProducts = async (sellerId) => {
       sellerId,
       count: deactivateSkus.size,
     });
+  }
+
+  if (feedSkuCodes.size) {
+    await markMissingSkusRemoved(sellerId, [...feedSkuCodes]);
   }
 
   await updateSyncDate(sellerId, 'PRODUCT', upsertCount);

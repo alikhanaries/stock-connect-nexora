@@ -10,6 +10,7 @@ import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { createXokidsAdapter } from '../xokidsAdapter.js';
 import { getMappingBySellerSlug } from '../helpers/brandMapping.js';
 import { formatXokidsProduct } from '../helpers/formatter.js';
+import { markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
@@ -33,7 +34,7 @@ export const getXokidsProducts = async (sellerId, isImageUpdate) => {
     console.log(`[${displayBrand} Sync] Started — Batch Size: ${MAX_BATCH_SIZE}, Concurrency: ${BATCH_CONCURRENCY}`);
     let upsertCount = 0;
 
-    await processInBatches(
+    const allCanonical = await processInBatches(
       fetched,
       MAX_BATCH_SIZE,
       async (batch, batchIndex) => {
@@ -144,6 +145,11 @@ export const getXokidsProducts = async (sellerId, isImageUpdate) => {
       },
       BATCH_CONCURRENCY
     );
+
+    const feedSkuCodes = allCanonical.filter(Boolean).map((p) => p.productSkuCode);
+    if (feedSkuCodes.length > 0) {
+      await markMissingSkusRemoved(sellerId, feedSkuCodes);
+    }
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
     console.log(`\n[${displayBrand} Sync] ALL BATCHES COMPLETED SUCCESSFULLY`);
