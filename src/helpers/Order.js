@@ -6,6 +6,8 @@ import { pushEntegraOrders } from '../integrations/erp/entegra/service/orderServ
 import { ENTEGRA_BRAND_MAP } from '../integrations/erp/entegra/constants/common.js';
 import { pushSentosOrders } from '../integrations/erp/sentos/services/orderService.js';
 import { isSentosConfigured, sentosConfig } from '../integrations/erp/sentos/config/config.js';
+import { pushRespireOrders } from '../integrations/erp/respire/service/orderService.js';
+import { isRespireConfigured, respireConfig } from '../integrations/erp/respire/config/config.js';
 import Seller from '#models/Seller.js';
 import {
   resolveStoredSkuStatus,
@@ -518,6 +520,29 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
         order.Lines.some((line) => sentosSkuSet.has(normalizeOrderSku(line.MerchantProductNo)))
     );
 
+    let respireSellerId = null;
+    if (isRespireConfigured()) {
+      const respireSeller = await Seller.findOne({
+        slug: respireConfig.RESPIRE_SELLER_SLUG,
+        isDeleted: false,
+      })
+        .select('_id')
+        .lean();
+      respireSellerId = respireSeller?._id ? String(respireSeller._id) : null;
+    }
+
+    const respireSkuSet = new Set(
+      productsDb
+        .filter((p) => respireSellerId && String(p.sellerId) === respireSellerId)
+        .map((p) => normalizeOrderSku(p.productSkuCode))
+    );
+
+    const respireOrders = orders.filter(
+      (order) =>
+        Array.isArray(order.Lines) &&
+        order.Lines.some((line) => respireSkuSet.has(normalizeOrderSku(line.MerchantProductNo)))
+    );
+
     //  final outputs
     const bulkOps = [];
     const sellerOrderPayloads = [];
@@ -844,6 +869,7 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
     }
     pushEntegraOrders(entegraOrders);
     pushSentosOrders(sentosOrders);
+    pushRespireOrders(respireOrders);
     return {
       bulkOps,
       sellerOrderPayloads,

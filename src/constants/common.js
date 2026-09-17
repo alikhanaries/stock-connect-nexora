@@ -306,4 +306,5 @@ export const ERP_SYNC_BRAND_SLUGS = {
   exquise: ['exquise'],
   catch: ['catch'],
   sentos: ['sentos'],
+  respire: ['respire'],
 };
