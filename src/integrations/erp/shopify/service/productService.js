@@ -16,14 +16,14 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
       console.log('No products received from Shopify');
-      return;
+      return { success: true, updatedCount: 0, message: 'No products received from Shopify' };
     }
 
     const canonicalProducts = await formatProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
 
     if (!canonicalProducts.length) {
       console.log('No canonical products generated');
-      return;
+      return { success: true, updatedCount: 0, message: 'No canonical products generated' };
     }
 
     const categoryTrails = new Set();
@@ -57,14 +57,17 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
 
     for (let i = 0; i < bulkOps.length; i += BULK_CHUNK_SIZE) {
       const data = await Product.bulkWrite(bulkOps.slice(i, i + BULK_CHUNK_SIZE), { ordered: false });
-      upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
+      upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
     }
 
     if (categoryTrails.size > 0) {
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
+
+    return { success: true, updatedCount: upsertCount };
   } catch (err) {
     console.error('fetchAndStoreShopifyProducts error:', err);
+    throw err;
   }
 };

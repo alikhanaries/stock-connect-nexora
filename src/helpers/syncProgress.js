@@ -52,17 +52,39 @@ export const updateSyncJob = (sellerId, { completed, total, percentage, label } 
   progress.totalPercentage = op.percentage ?? 0;
 };
 
-export const completeSyncJob = (sellerId, result = {}) => {
+export const completeSyncJob = (sellerId, result) => {
   const progress = progressStore.get(key(sellerId));
   if (!progress) return;
-  const completed =
-    result.updated ??
-    result.upsertedCount ??
-    result.processed ??
-    result.updatedProducts ??
-    progress.updatedProducts ??
-    0;
-  const total = result.total ?? result.totalSku ?? result.totalProducts ?? completed;
+
+  let completed;
+  let total;
+
+  // Sync functions across the various ERP/Shopify/ChannelEngine services return wildly
+  // different shapes (a bare count, {updatedCount}, {totalSynced}, a bare array, a bare
+  // boolean, or nothing at all on their success path) — normalize all of them here
+  // instead of assuming one specific shape.
+  if (typeof result === 'number') {
+    completed = result;
+    total = result;
+  } else if (Array.isArray(result)) {
+    completed = result.length;
+    total = result.length;
+  } else if (result && typeof result === 'object') {
+    completed =
+      result.updated ??
+      result.upsertedCount ??
+      result.processed ??
+      result.updatedProducts ??
+      result.updatedCount ??
+      result.totalSynced ??
+      progress.updatedProducts ??
+      0;
+    total = result.total ?? result.totalSku ?? result.totalProducts ?? result.totalCount ?? completed;
+  } else {
+    completed = progress.updatedProducts ?? 0;
+    total = completed;
+  }
+
   progress.status = 'done';
   progress.totalPercentage = 100;
   progress.completedOperations = progress.totalOperations;

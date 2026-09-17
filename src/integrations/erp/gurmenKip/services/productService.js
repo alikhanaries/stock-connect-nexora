@@ -117,7 +117,7 @@ export const getGurmanProducts = async (sellerId, isImageUpdate) => {
             }));
 
             const data = await Product.bulkWrite(bulkOps, { ordered: false });
-            upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
+            upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
           }
           /**
            * Insert category trails WITHOUT blocking the batch loop

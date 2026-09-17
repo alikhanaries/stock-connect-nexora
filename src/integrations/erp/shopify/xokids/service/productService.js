@@ -107,7 +107,7 @@ export const fetchAndStoreShopifyXokidsProducts = async (sellerId, shopifyConfig
     for (let i = 0; i < bulkOps.length; i += BULK_CHUNK_SIZE) {
       const chunk = bulkOps.slice(i, i + BULK_CHUNK_SIZE);
       const data = await Product.bulkWrite(chunk, { ordered: false });
-      upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
+      upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
       console.log(
         `[Xokids Shopify Sync] Bulk Chunk processed: matched=${data.matchedCount}, modified=${data.modifiedCount}, upserted=${data.upsertedCount}`
       );
