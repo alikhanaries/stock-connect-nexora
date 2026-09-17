@@ -85,6 +85,9 @@ export const completeSyncJob = (sellerId, result) => {
     total = completed;
   }
 
+  const insertedCount = result && typeof result === 'object' ? result.insertedCount : undefined;
+  const modifiedCount = result && typeof result === 'object' ? result.modifiedCount : undefined;
+
   progress.status = 'done';
   progress.totalPercentage = 100;
   progress.completedOperations = progress.totalOperations;
@@ -97,6 +100,8 @@ export const completeSyncJob = (sellerId, result) => {
     completed: completed || op.completed,
     total: total || op.total,
     updated: completed,
+    ...(insertedCount !== undefined ? { inserted: insertedCount } : {}),
+    ...(modifiedCount !== undefined ? { modified: modifiedCount } : {}),
   }));
 };
 
