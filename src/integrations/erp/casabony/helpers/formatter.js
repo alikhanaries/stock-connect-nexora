@@ -167,7 +167,7 @@ export const formatCasabonyProducts = async (raw = [], sellerId, isImageUpdate =
   }
 
   return {
-    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true }),
+    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true, existingSkus }),
     categoryTrails: [...categoryTrails],
   };
 };

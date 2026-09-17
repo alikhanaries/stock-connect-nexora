@@ -257,14 +257,22 @@ export async function resolveHierarchyStatus(sellerId, affectedSkus = []) {
  * Keeps sellable variants plus their parent / grandparent rows.
  * Drops simple products whose parent row is not present in the batch.
  */
-export function filterValidHierarchyProducts(products, { requirePriceAndImage = true, requirePrice = false } = {}) {
+export function filterValidHierarchyProducts(
+  products,
+  { requirePriceAndImage = true, requirePrice = false, existingSkus = new Set() } = {}
+) {
   const skuSet = new Set(products.map((p) => p.productSkuCode));
 
   const validSimple = products.filter((p) => {
     if (p.productType !== 'simple') return false;
-    // Never store a variant with no stock, no real color, or no real size.
-    if ((Number(p.currentStockCount) || 0) <= 0) return false;
+    // Never store a variant with no real color or no real size.
     if (!String(p.color || '').trim() || !String(p.size || '').trim()) return false;
+    if ((Number(p.currentStockCount) || 0) <= 0) {
+      // Brand-new SKU (never synced before) with 0 stock: don't store it at all.
+      if (!existingSkus.has(p.productSkuCode)) return false;
+      // Already-known SKU that's now out of stock: keep it, just flip it inactive.
+      p.status = 'inactive';
+    }
     if (!requirePriceAndImage) return true;
     if (requirePrice && !((p.price || 0) > 0)) return false;
     return String(p.primaryImageUrl || '').trim();

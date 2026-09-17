@@ -63,6 +63,10 @@ export const importAllSentosProducts = async (sellerId) => {
   const categoryMap = await fetchSentosCategories(syncContext);
   logSentosInfo('Categories loaded', { sellerId, categoryCount: categoryMap.size });
 
+  const existingSkus = new Set(
+    (await Product.find({ sellerId, source: 'SENTOS' }, { productSkuCode: 1 }).lean()).map((p) => p.productSkuCode)
+  );
+
   let page = 1;
   let upsertCount = 0;
   const deactivateSkus = new Set();
@@ -89,7 +93,7 @@ export const importAllSentosProducts = async (sellerId) => {
       break;
     }
 
-    const { products, parentsToDeactivate } = await formatSentosProducts(list, sellerId, categoryMap);
+    const { products, parentsToDeactivate } = await formatSentosProducts(list, sellerId, categoryMap, existingSkus);
     parentsToDeactivate.forEach((sku) => deactivateSkus.add(sku));
 
     const skippedOnPage = list.length - products.length;

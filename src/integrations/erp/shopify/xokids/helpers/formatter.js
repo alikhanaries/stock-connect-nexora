@@ -1,7 +1,6 @@
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
-import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 
 const parseXokidsSku = (sku, safeColor) => {
   if (!sku || typeof sku !== 'string') return null;
@@ -386,5 +385,5 @@ export const formatXokidsShopifyProducts = async (
     }
   });
 
-  return filterValidHierarchyProducts(formattedProducts.filter(Boolean), { requirePriceAndImage: true });
+  return formattedProducts.filter(Boolean);
 };

@@ -2,7 +2,6 @@ import { processInBatches } from '#root/src/integrations/common/helpers/batchHel
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
 import { extractImages, getColorImages } from './common.js';
-import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 
 export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500) => {
   if (!Array.isArray(rawProducts) || rawProducts.length === 0) return [];
@@ -199,7 +198,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
     }
   });
 
-  return filterValidHierarchyProducts(formattedProducts.filter(Boolean), { requirePriceAndImage: true });
+  return formattedProducts.filter(Boolean);
 };
 
 export const formatOrdersToShopifyPayloads = (orders = [], skuToVariantId = new Map()) => {

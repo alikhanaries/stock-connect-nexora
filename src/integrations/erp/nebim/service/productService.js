@@ -14,7 +14,11 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
     const rawProducts = await adapter.fetchProducts();
     if (!rawProducts?.length) return;
 
-    const canonicalProducts = await formatNebimProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
+    const existingSkus = new Set(
+      (await Product.find({ sellerId }, { productSkuCode: 1 }).lean()).map((p) => p.productSkuCode)
+    );
+
+    const canonicalProducts = await formatNebimProducts(rawProducts, sellerId, MAX_BATCH_SIZE, existingSkus);
 
     // SERIALWISE SORTING BEFORE INSERT (SAFE VERSION)
 
@@ -52,6 +56,7 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
 
         // Stock
         currentStockCount: product.currentStockCount,
+        status: product.status,
 
         // Text
         description: product.description,
@@ -65,6 +70,7 @@ export const fetchAndStoreNebimProducts = async (sellerId) => {
         delete insertOnlyProduct[key];
       }
       delete insertOnlyProduct.currentStockCount;
+      delete insertOnlyProduct.status;
       delete insertOnlyProduct.description;
       delete insertOnlyProduct.descriptionAr;
       delete insertOnlyProduct.name;

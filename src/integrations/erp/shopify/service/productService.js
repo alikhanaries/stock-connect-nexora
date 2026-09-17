@@ -6,6 +6,7 @@ import { fetchProducts } from '#root/src/integrations/erp/shopify/service/shopif
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
 import { updateSyncJob } from '#root/src/helpers/syncProgress.js';
+import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
 export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
@@ -22,19 +23,41 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
       return { success: true, updatedCount: 0, message: 'No products received from Shopify' };
     }
 
-    const canonicalProducts = await formatProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
+    const rawCanonicalProducts = await formatProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
 
-    if (!canonicalProducts.length) {
+    if (!rawCanonicalProducts.length) {
       console.log('No canonical products generated');
       return { success: true, updatedCount: 0, message: 'No canonical products generated' };
     }
 
-    // Stock drives status: 0 stock -> removed, back in stock -> active.
-    // A merchant-archived product (mapped to 'removed' by Shopify's own status)
-    // is left alone so restocking it doesn't un-archive it.
-    for (const product of canonicalProducts) {
+    const existingSkus = new Set(
+      (
+        await Product.find(
+          { sellerId, productSkuCode: { $in: rawCanonicalProducts.map((p) => p.productSkuCode) } },
+          { productSkuCode: 1 }
+        )
+      ).map((p) => p.productSkuCode)
+    );
+
+    // Stock drives status: in stock -> active, unless the merchant archived it
+    // in Shopify (mapped to 'removed' already) - left alone so restocking it
+    // doesn't un-archive it. The 0-stock side (drop if brand-new, mark
+    // 'inactive' if it already existed) is handled by the filter below.
+    for (const product of rawCanonicalProducts) {
       if (product.status === 'removed') continue;
-      product.status = (Number(product.currentStockCount) || 0) > 0 ? 'active' : 'removed';
+      if ((Number(product.currentStockCount) || 0) > 0) {
+        product.status = 'active';
+      }
+    }
+
+    const canonicalProducts = filterValidHierarchyProducts(rawCanonicalProducts, {
+      requirePriceAndImage: true,
+      existingSkus,
+    });
+
+    if (!canonicalProducts.length) {
+      console.log('No sellable canonical products after filtering');
+      return { success: true, updatedCount: 0, message: 'No sellable canonical products after filtering' };
     }
 
     const categoryTrails = new Set();
@@ -82,9 +105,9 @@ export const fetchAndStoreShopifyProducts = async (sellerId, sellerData) => {
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
 
-    // Anything previously active for this seller's Shopify feed that didn't show up
-    // in today's fetch (e.g. the store stopped returning it once it hit 0 stock)
-    // gets marked removed, same as an explicit 0-stock item above.
+    // Anything previously active for this seller's Shopify feed that isn't in
+    // today's fetch at all (as opposed to being fetched with 0 stock, which
+    // stays 'inactive' via the filter above) gets marked removed.
     const feedSkuCodes = canonicalProducts.map((product) => product.productSkuCode);
     await Product.updateMany(
       {

@@ -179,7 +179,7 @@ export const formatXokidsProduct = async (raw = [], sellerId, isImageUpdate = fa
   }
 
   return {
-    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true }),
+    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true, existingSkus }),
     categoryTrails: [...categoryTrails],
   };
 };

@@ -230,7 +230,7 @@ export const formatMeneviskidsProduct = async (
   }
 
   return {
-    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true, requirePrice: true }),
+    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true, requirePrice: true, existingSkus }),
     categoryTrails: [...categoryTrails],
   };
 };
