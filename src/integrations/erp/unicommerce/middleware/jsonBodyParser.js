@@ -1,5 +1,4 @@
 import express from 'express';
-import { parseXMLFeed } from '#root/src/integrations/common/helpers/xmlParser.js';
 import { failResponse } from '../helpers/response.js';
 
 const PARTNER_JSON_LIMIT = '64kb';
@@ -148,23 +147,14 @@ const credentialsFromObject = (value) => {
   return { username, password };
 };
 
-const parseAuthTokenBodyToCredentials = async (rawBody) => {
+const parseAuthTokenJsonBodyToCredentials = (rawBody) => {
   const trimmed = rawBody.trim();
   if (!trimmed) {
     return null;
   }
 
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    try {
-      return credentialsFromObject(JSON.parse(trimmed));
-    } catch {
-      return null;
-    }
-  }
-
   try {
-    const parsedXml = await parseXMLFeed(trimmed);
-    return credentialsFromObject(parsedXml);
+    return credentialsFromObject(JSON.parse(trimmed));
   } catch {
     return null;
   }
@@ -183,7 +173,7 @@ const authTokenXmlTextParser = express.text({
   },
 });
 
-const parseAuthTokenXmlCredentials = async (req, res, next) => {
+const parseAuthTokenXmlCredentials = (req, res, next) => {
   if (!isAuthTokenRequest(req) || !isXmlContentType(req)) {
     return next();
   }
@@ -196,17 +186,13 @@ const parseAuthTokenXmlCredentials = async (req, res, next) => {
     return failResponse(res, 400, { message: 'Invalid request body' });
   }
 
-  try {
-    const credentials = await parseAuthTokenBodyToCredentials(req.body);
-    if (!credentials) {
-      return failResponse(res, 400, { message: 'Invalid request body' });
-    }
-
-    req.body = credentials;
-    return next();
-  } catch {
+  const credentials = parseAuthTokenJsonBodyToCredentials(req.body);
+  if (!credentials) {
     return failResponse(res, 400, { message: 'Invalid request body' });
   }
+
+  req.body = credentials;
+  return next();
 };
 
 /** UniCommerce POST /authToken may send JSON credentials with no Content-Type (HEADERS=null). */
