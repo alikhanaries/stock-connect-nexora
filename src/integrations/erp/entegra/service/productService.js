@@ -119,7 +119,14 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
 
     for (const product of list) {
       try {
-        const writtenSkus = await createOrUpdateProduct(sellerId, product, categories, isImageUpdate, existingSkus);
+        const writtenSkus = await createOrUpdateProduct(
+          sellerId,
+          product,
+          categories,
+          isImageUpdate,
+          existingSkus,
+          displayBrand
+        );
         writtenSkus.forEach((sku) => feedSkuCodes.add(sku));
         importedThisPage++;
         totalImported++;
@@ -152,7 +159,8 @@ export const createOrUpdateProduct = async (
   product,
   categories,
   isImageUpdate = true,
-  existingSkus = new Set()
+  existingSkus = new Set(),
+  displayBrand
 ) => {
   const categoryId = product.group; // e.g., '4'
   const categoryTrail = categoryId ? categories.find((cat) => cat.id == categoryId).name : '';
@@ -160,7 +168,14 @@ export const createOrUpdateProduct = async (
   // ---------------------------------------------
   // Map product to DB structure
   // ---------------------------------------------
-  const { parents, children } = await mapProductToDB(sellerId, product, categoryTrail, isImageUpdate, existingSkus);
+  const { parents, children } = await mapProductToDB(
+    sellerId,
+    product,
+    categoryTrail,
+    isImageUpdate,
+    existingSkus,
+    displayBrand
+  );
 
   // ---------------------------------------------
   // Upsert parents

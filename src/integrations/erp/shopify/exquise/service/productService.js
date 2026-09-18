@@ -4,7 +4,12 @@ import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { formatProducts } from '../helpers/formatter.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { markMissingSkusRemoved, filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
+import { updateSyncJob } from '#root/src/helpers/syncProgress.js';
+import {
+  resolveHierarchyStatus,
+  markMissingSkusRemoved,
+  filterValidHierarchyProducts,
+} from '#root/src/helpers/ProductHierarchy.js';
 import { fetchExquiseProducts } from '../utils/fetch.js';
 const { MAX_BATCH_SIZE } = erpCommonConfig;
 
@@ -17,14 +22,14 @@ export const fetchAndStoreShopifyExquiseProducts = async (sellerId, sellerData) 
 
     if (!Array.isArray(rawProducts) || rawProducts.length === 0) {
       console.log('No products received from Shopify');
-      return;
+      return { success: true, updatedCount: 0, message: 'No products received from Shopify' };
     }
 
     const rawCanonicalProducts = await formatProducts(rawProducts, sellerId, MAX_BATCH_SIZE);
 
     if (!rawCanonicalProducts.length) {
       console.log('No canonical products generated');
-      return;
+      return { success: true, updatedCount: 0, message: 'No canonical products generated' };
     }
 
     const existingSkus = new Set(
@@ -53,7 +58,7 @@ export const fetchAndStoreShopifyExquiseProducts = async (sellerId, sellerData) 
 
     if (!canonicalProducts.length) {
       console.log('No sellable canonical products after filtering');
-      return;
+      return { success: true, updatedCount: 0, message: 'No sellable canonical products after filtering' };
     }
 
     const categoryTrails = new Set();
@@ -84,23 +89,30 @@ export const fetchAndStoreShopifyExquiseProducts = async (sellerId, sellerData) 
     }));
 
     const BULK_CHUNK_SIZE = 500;
+    const totalOps = bulkOps.length;
+    let processedOps = 0;
 
     for (let i = 0; i < bulkOps.length; i += BULK_CHUNK_SIZE) {
       const data = await Product.bulkWrite(bulkOps.slice(i, i + BULK_CHUNK_SIZE), { ordered: false });
       upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
+
+      processedOps += Math.min(BULK_CHUNK_SIZE, bulkOps.length - i);
+      updateSyncJob(sellerId, { completed: processedOps, total: totalOps });
     }
 
     if (categoryTrails.size > 0) {
       await insertCategoryTrail([...categoryTrails], sellerId);
     }
 
-    await markMissingSkusRemoved(
-      sellerId,
-      canonicalProducts.map((p) => p.productSkuCode)
-    );
+    const feedSkuCodes = canonicalProducts.map((p) => p.productSkuCode);
+    await resolveHierarchyStatus(sellerId, feedSkuCodes);
+    await markMissingSkusRemoved(sellerId, feedSkuCodes);
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);
+
+    return { success: true, updatedCount: upsertCount };
   } catch (err) {
     console.error('fetchAndStoreShopifyExquiseProducts error:', err);
+    throw err;
   }
 };

@@ -37,7 +37,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
     sellerId,
     name: product.UrunAdi || '',
     description: product.Aciklama || '',
-    brand: 'Casabony',
+    brand: 'casabony',
     categoryTrail: product.KategoriTree || '',
     vatRateType: 'STANDARD',
     ...processed,
