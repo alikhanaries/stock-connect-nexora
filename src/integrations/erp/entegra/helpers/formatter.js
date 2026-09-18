@@ -78,7 +78,14 @@ const extractPicturesSafely = (pictures = []) => {
   return clusters.flat();
 };
 
-export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = true, existingSkus = new Set()) => {
+export const mapProductToDB = async (
+  sellerId,
+  p,
+  categoryName,
+  isImageUpdate = true,
+  existingSkus = new Set(),
+  displayBrand
+) => {
   const hasVariants = Array.isArray(p.variatios) && p.variatios.length > 0;
 
   // ================= IMAGES FROM API (Direct URLs) =================
@@ -143,7 +150,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       name: `${p.name}`,
       description: htmlToPlainText(p.description),
       descriptionAr: p.descriptionAr || '',
-      brand: p.brand,
+      brand: displayBrand || p.brand,
 
       price: gpPrice,
       minPrice: gpSpecial,
@@ -208,7 +215,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         name: `${p.name}`,
         description: htmlToPlainText(p.description),
         descriptionAr: p.descriptionAr || '',
-        brand: p.brand,
+        brand: displayBrand || p.brand,
         ean: v.barcode || v.gtin || '',
 
         price: childPrice,
