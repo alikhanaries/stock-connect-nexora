@@ -52,12 +52,17 @@ export const getLabels = async (req, res) => {
 export const postShipmentDetails = async (req, res) => {
   try {
     const sellerId = req.sellerId;
+    const userId = req.user?._id;
 
     if (!sellerId) {
       return failResponse(res, 400, { message: 'sellerId is missing' });
     }
 
-    const result = await postShipmentDetailsService(sellerId, req.body);
+    if (!userId) {
+      return failResponse(res, 400, { message: 'userId is missing' });
+    }
+
+    const result = await postShipmentDetailsService(sellerId, userId, req.body);
 
     return successResponse(res, 200, result);
   } catch (error) {

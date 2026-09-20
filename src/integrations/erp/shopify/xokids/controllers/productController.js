@@ -2,6 +2,7 @@ import { errorResponse, failResponse, successResponse } from '#root/src/helpers/
 import { fetchAndStoreShopifyXokidsProducts } from '../service/productService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
 import Seller from '#models/Seller.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const fetchProducts = async (req, res) => {
   try {
@@ -21,16 +22,11 @@ export const fetchProducts = async (req, res) => {
 
     const brandName = seller?.name;
 
-    /// Accepted for async/background processing
-    successResponse(res, `Shopify product sync started in background for ${brandName}`, 202);
-
-    setImmediate(async () => {
-      try {
-        await fetchAndStoreShopifyXokidsProducts(sellerId, shopifyConfig);
-      } catch (err) {
-        console.error('Background sync failed for Xokids:', err);
-      }
+    trackBackgroundSync(sellerId, () => fetchAndStoreShopifyXokidsProducts(sellerId, shopifyConfig), {
+      label: 'Syncing Shopify products',
+      field: 'products',
     });
+    successResponse(res, `Shopify product sync started in background for ${brandName}`, 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

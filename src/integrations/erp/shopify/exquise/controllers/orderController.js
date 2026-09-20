@@ -1,13 +1,13 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
 import { pushOrdersService } from '../service/orderService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 const syncInProgress = new Set();
 
 export const pushOrders = async (req, res) => {
+  const sellerId = req.sellerId;
   try {
-    const sellerId = req.sellerId;
-
     if (!sellerId) {
       return failResponse(res, 'sellerId is missing', 400);
     }
@@ -23,18 +23,20 @@ export const pushOrders = async (req, res) => {
     }
     syncInProgress.add(sellerId);
 
+    trackBackgroundSync(
+      sellerId,
+      async () => {
+        try {
+          return await pushOrdersService(sellerId);
+        } finally {
+          syncInProgress.delete(sellerId);
+        }
+      },
+      { label: 'Syncing orders', field: 'orders' }
+    );
     successResponse(res, 'Shopify order sync started in background', 202);
-
-    setImmediate(async () => {
-      try {
-        await pushOrdersService(sellerId);
-      } catch (err) {
-        console.error('[ExquiseOrderSync] Background sync failed:', err.message);
-      } finally {
-        syncInProgress.delete(sellerId);
-      }
-    });
   } catch (error) {
+    if (sellerId) syncInProgress.delete(sellerId);
     return errorResponse(res, error, 500);
   }
 };

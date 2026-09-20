@@ -3,7 +3,7 @@ import Product from '#root/src/models/Product.js';
 import { insertCategoryTrail } from '#root/src/service/categoryService.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
 import { calculateUpsertCount } from '#root/src/integrations/common/helpers/calculateUpsertCount.js';
-import { resolveHierarchyStatus } from '#root/src/helpers/ProductHierarchy.js';
+import { resolveHierarchyStatus, markMissingSkusRemoved } from '#root/src/helpers/ProductHierarchy.js';
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { createCasabonyAdapter } from '../casabonyAdapter.js';
@@ -120,7 +120,7 @@ export const fetchAndStoreCasabonyProducts = async (sellerId, isImageUpdate = fa
 
             try {
               const data = await Product.bulkWrite(bulkOps, { ordered: false });
-              upsertCount = calculateUpsertCount(upsertCount, data.upsertedCount);
+              upsertCount = calculateUpsertCount(upsertCount, (data.upsertedCount || 0) + (data.modifiedCount || 0));
             } catch (bulkErr) {
               if (bulkErr?.writeErrors?.length) {
                 console.error(`[Batch ${batchId}] bulkWrite had ${bulkErr.writeErrors.length} write errors.`);
@@ -153,6 +153,7 @@ export const fetchAndStoreCasabonyProducts = async (sellerId, isImageUpdate = fa
 
     if (allProcessedSkus.length > 0) {
       await resolveHierarchyStatus(sellerId, allProcessedSkus);
+      await markMissingSkusRemoved(sellerId, allProcessedSkus);
     }
 
     await updateSyncDate(sellerId, 'PRODUCT', upsertCount);

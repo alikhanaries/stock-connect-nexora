@@ -167,6 +167,8 @@ export const PRODUCT_EXPORT_HEADERS = [
   'noonPrice',
   'namshiPrice',
   'amazonPrice',
+  'sixthStreetPrice',
+  'styliPrice',
   'amazonPrimaryImageUrl',
   'amazonImageUrl',
   'amazonExtraImageUrl1',
@@ -303,4 +305,5 @@ export const ERP_SYNC_BRAND_SLUGS = {
   ramsey: ['ramsey'],
   exquise: ['exquise'],
   catch: ['catch'],
+  sentos: ['sentos'],
 };

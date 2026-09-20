@@ -1,6 +1,7 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
 import { pushOrdersService } from '../service/orderService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const pushOrders = async (req, res) => {
   try {
@@ -16,15 +17,11 @@ export const pushOrders = async (req, res) => {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
-    successResponse(res, 'Shopify order sync started in background', 202);
-
-    setImmediate(async () => {
-      try {
-        await pushOrdersService(sellerId);
-      } catch (err) {
-        console.error('[CatchOrderSync] Background sync failed:', err.message);
-      }
+    trackBackgroundSync(sellerId, () => pushOrdersService(sellerId), {
+      label: 'Syncing orders',
+      field: 'orders',
     });
+    successResponse(res, 'Shopify order sync started in background', 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

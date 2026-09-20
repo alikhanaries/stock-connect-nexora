@@ -1,11 +1,14 @@
 import { processInBatches } from '#root/src/integrations/common/helpers/batchHelper.js';
 import { canonicalProductMapper } from '#root/src/integrations/common/helpers/canonicalProductMapper.js';
 import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
-export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) => {
+import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
+export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500, existingSkus = new Set()) => {
   if (!Array.isArray(raw) || raw.length === 0) return [];
 
   // Helper to extract only Cat02
   const extractCategory = (cat02 = '') => cat02?.trim() || '';
+  const isInStockOrKnown = (it, sku) =>
+    (Number(it?.Qty || 0) > 0 && Number(it?.Price || 0) > 0) || existingSkus.has(sku);
 
   // Group by ItemCode safely
   const groupedByItemCode = raw.reduce((acc, item) => {
@@ -22,9 +25,11 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
   await processInBatches(itemGroups, batchSize, async (batch) => {
     for (const [itemCode, items] of batch) {
       const safeItemCode = itemCode || '';
+      const computeChildSku = (it) => `${safeItemCode}_${it.ColorCode || '0'}_${it.ItemDim1Code || '0'}`;
 
-      // Only stock items WITH price > 0
-      const stockItems = items.filter((it) => Number(it?.Qty || 0) > 0 && Number(it?.Price || 0) > 0);
+      // Keep items that are in stock, or that are already-known SKUs (kept so
+      // they can be flipped inactive below instead of vanishing from the feed).
+      const stockItems = items.filter((it) => isInStockOrKnown(it, computeChildSku(it)));
       if (stockItems.length === 0) continue;
 
       // Must have Color & Size
@@ -61,6 +66,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
           msrp: grandParentPrice,
           purchasePrice: grandParentPrice,
           currentStockCount: Number(first.Qty || 0),
+          status: Number(first.Qty || 0) > 0 ? 'active' : 'inactive',
           hsCodeAE: first.HsCode || '',
           hsCodeSA: first.HsCode || '',
           productType: 'configurable',
@@ -87,8 +93,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
       for (const [colorDesc, colorItems] of Object.entries(groupedByColor)) {
         const safeColorDesc = colorDesc || '';
 
-        // Only stock & price > 0
-        const stockColorItems = colorItems.filter((v) => Number(v?.Qty || 0) > 0 && Number(v?.Price || 0) > 0);
+        const stockColorItems = colorItems.filter((v) => isInStockOrKnown(v, computeChildSku(v)));
         if (stockColorItems.length === 0) continue;
 
         const firstColor = stockColorItems[0];
@@ -121,6 +126,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
             msrp: parentPrice,
             purchasePrice: parentPrice,
             currentStockCount: Number(firstColor.Qty || 0),
+            status: Number(firstColor.Qty || 0) > 0 ? 'active' : 'inactive',
             productType: 'configurable',
             volumetricWeightCm: 0.3,
             __sortItemCode: safeItemCode,
@@ -162,6 +168,7 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
               msrp: childPrice,
               purchasePrice: childPrice,
               currentStockCount: Number(variant.Qty || 0),
+              status: Number(variant.Qty || 0) > 0 ? 'active' : 'inactive',
               productType: 'simple',
               volumetricWeightCm: 0.3,
               __sortItemCode: safeItemCode,
@@ -192,12 +199,17 @@ export const formatNebimProducts = async (raw = [], sellerId, batchSize = 500) =
   });
 
   // Remove temp fields
-  return sorted.map((p) => {
+  const cleaned = sorted.map((p) => {
     delete p.__sortItemCode;
     delete p.__sortLevel;
     delete p.__sortVariant;
     return p;
   });
+
+  // Nebim has no image pipeline in this formatter, so don't require one here -
+  // color/size are already enforced above; this also handles the brand-new
+  // vs already-known distinction for any items that slipped through above.
+  return filterValidHierarchyProducts(cleaned, { requirePriceAndImage: false, existingSkus });
 };
 
 export const formatNebimOrders = async (orders = [], batchSize = 500) => {

@@ -2,6 +2,7 @@ import { errorResponse, successResponse } from '#root/src/helpers/response.js';
 import Seller from '#root/src/models/Seller.js';
 import { getMappingBySellerSlug } from '../helpers/brandMapping.js';
 import { getXokidsProducts } from '../services/productService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncXokidsProducts = async (req, res) => {
   try {
@@ -17,10 +18,9 @@ export const syncXokidsProducts = async (req, res) => {
     const { displayBrand } = mapping;
     if (!displayBrand) return errorResponse(res, `Display brand is missing for seller slug "${seller.slug}"`);
 
-    setImmediate(() => {
-      getXokidsProducts(sellerId, isImageUpdate).catch((err) =>
-        console.error(`${displayBrand} background sync failed:`, err)
-      );
+    trackBackgroundSync(sellerId, () => getXokidsProducts(sellerId, isImageUpdate), {
+      label: 'Syncing products',
+      field: 'products',
     });
 
     return successResponse(res, `${displayBrand} product sync started in background`, 202);

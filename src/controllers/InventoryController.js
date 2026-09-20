@@ -4,6 +4,7 @@ import emailService from '#service/emailService.js';
 import { errorLog } from '#middleware/index.js';
 import { convertGoogleSheetUrlToExport } from '#helpers/googleSheetFormaterHandler.js';
 import { config } from '../config/config.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 /* UPLOAD INVENTORY FROM GOOGLE SHEET */
 export const importInventoryFromGoogleSheet = async (req, res) => {
   try {
@@ -114,18 +115,11 @@ export const syncStockToChannelEngine = async (req, res) => {
   try {
     const sellerId = req.sellerId;
 
-    // Immediate response (non-blocking)
+    trackBackgroundSync(sellerId, () => inventoryService.syncStockToChannelEngine(sellerId), {
+      label: 'Syncing inventory',
+      field: 'inventory',
+    });
     successResponse(res, req.locale.SYNC_STARTED, 202);
-
-    // Background execution (NO await)
-    inventoryService
-      .syncStockToChannelEngine(sellerId)
-      .then((result) => {
-        console.log('Inventory sync completed:', result);
-      })
-      .catch((err) => {
-        console.error('Inventory sync failed:', err.message);
-      });
   } catch (err) {
     console.error('Controller syncInventory error:', err);
     return errorResponse(res, err.message);
@@ -144,26 +138,25 @@ export const importProductsFromExpressWarehouseGoogleSheet = async (req, res) =>
     if (!exportUrl) {
       return failResponse(res, req?.locale?.INVALID_URL, 500);
     }
-    // Send immediate response to client
-    successResponse(res, req?.locale?.RETURNED_PRODUCTS_SYNC_PROCESSING, 200);
-    // Process file in background (async, no await here)
-    inventoryService
-      .importExpressWarehouseProductsFromGoogleSheet(exportUrl, req.locale)
-      .then((result) => {
-        console.log('CSV processing completed:', result);
-        // Send email notification after processing
+    const sellerId = req.sellerId;
+    trackBackgroundSync(
+      sellerId,
+      async () => {
+        const result = await inventoryService.importExpressWarehouseProductsFromGoogleSheet(exportUrl, req.locale);
         emailService.updateExpressWarehouseInventoryMailService({
           to: req?.user?.email,
           userName: req?.user?.firstName,
           importStatus: result?.success ? 'SUCCESS' : 'FAILED',
           errorDetails: result?.errorDetails || [],
         });
-        // Optionally update DB with processing status
-      })
-      .catch((error) => {
-        console.error('Error in background CSV processing:', error.message);
-        // Optionally store error in DB for tracking
-      });
+        if (!result?.success) {
+          throw new Error(result?.message || 'Warehouse sync failed');
+        }
+        return result;
+      },
+      { label: 'Syncing warehouse', field: 'warehouse' }
+    );
+    successResponse(res, req?.locale?.RETURNED_PRODUCTS_SYNC_PROCESSING, 200);
   } catch (error) {
     console.error('Controller error:', error.message, error.stack);
     errorLog(error);

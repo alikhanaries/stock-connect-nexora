@@ -78,7 +78,14 @@ const extractPicturesSafely = (pictures = []) => {
   return clusters.flat();
 };
 
-export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = true) => {
+export const mapProductToDB = async (
+  sellerId,
+  p,
+  categoryName,
+  isImageUpdate = true,
+  existingSkus = new Set(),
+  displayBrand
+) => {
   const hasVariants = Array.isArray(p.variatios) && p.variatios.length > 0;
 
   // ================= IMAGES FROM API (Direct URLs) =================
@@ -143,7 +150,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       name: `${p.name}`,
       description: htmlToPlainText(p.description),
       descriptionAr: p.descriptionAr || '',
-      brand: p.brand,
+      brand: displayBrand || p.brand,
 
       price: gpPrice,
       minPrice: gpSpecial,
@@ -208,7 +215,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         name: `${p.name}`,
         description: htmlToPlainText(p.description),
         descriptionAr: p.descriptionAr || '',
-        brand: p.brand,
+        brand: displayBrand || p.brand,
         ean: v.barcode || v.gtin || '',
 
         price: childPrice,
@@ -252,5 +259,24 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     }
   }
 
-  return { parents, children };
+  // Entegra only has 2 real levels (parent/color + child/variant, no grandparent),
+  // so filter directly here rather than the 3-level shared helper: drop any child
+  // with no color, no size, or no image, then drop a parent whose color group
+  // has no surviving children. A brand-new (never synced) 0-stock child is
+  // dropped entirely; an already-known one is kept but flipped inactive.
+  const hasImage = (p) => Boolean(p.primaryImageUrl || (Array.isArray(p.images) && p.images.length > 0));
+  const isSellableChild = (p) => {
+    if (!String(p.color || '').trim() || !String(p.size || '').trim() || !hasImage(p)) return false;
+    if ((Number(p.currentStockCount) || 0) <= 0) {
+      if (!existingSkus.has(p.productSkuCode)) return false;
+      p.status = 'inactive';
+    }
+    return true;
+  };
+
+  const survivingChildren = children.filter(isSellableChild);
+  const survivingParentSkus = new Set(survivingChildren.map((c) => c.parentProductSkuCode));
+  const survivingParents = parents.filter((p) => survivingParentSkus.has(p.productSkuCode));
+
+  return { parents: survivingParents, children: survivingChildren };
 };

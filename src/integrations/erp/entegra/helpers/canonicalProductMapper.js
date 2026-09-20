@@ -14,9 +14,7 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
 
     // Names & Description
     name: item.name || '',
-    nameAr: item.nameAr || '',
     description: item.description || '',
-    descriptionAr: item.descriptionAr || '',
 
     // Brand & attributes
     brand: item.brand || '',
@@ -63,7 +61,6 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     categoryTrailAmazon: item.categoryTrailAmazon || null,
     categoryTrailNoon: item.categoryTrailNoon || null,
     categoryTrailTrendyol: item.categoryTrailTrendyol || null,
-    marketPlace: item.marketPlace || '',
 
     // Dimensions & weight
     volumetricWeightCm: item.volumetricWeightCm || 0,
@@ -79,8 +76,6 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
     size: item.size || '',
     sizeType: item.sizeType || 'Alpha',
     color: item.color || '',
-    gender: item.gender || 'Unisex',
-    ageRangeDescription: item.ageRangeDescription || 'Adult',
 
     // Apparel details
     apparelSizeBodyType: item.apparelSizeBodyType || 'Regular',
@@ -91,7 +86,6 @@ export const canonicalProductMapper = (item = {}, sellerId) => {
 
     // Extra product information
     productCareInstructions: item.productCareInstructions || '',
-    countryOfOrigin: item.countryOfOrigin || '',
     departmentName: item.departmentName || '',
     fabricType: item.fabricType || '',
     style: item.style || '',

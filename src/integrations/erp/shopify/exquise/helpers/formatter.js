@@ -35,7 +35,6 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
       // Falls back to the Shopify product id when no variant has a parseable SKU.
       const firstParsed = variants.map((v) => parseExquiseSku(v.sku)).find(Boolean);
       const grandParentSku = firstParsed?.base || String(id);
-      const productImages = extractImages(product); // all product images
       const grandParentStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
       const categoryTrail = category?.fullName || '';
 
@@ -72,7 +71,7 @@ export const formatProducts = async (rawProducts = [], sellerId, batchSize = 500
           hsCodeSA: '1111111',
           vatRateType: 'STANDARD',
           productType: 'configurable',
-          ...productImages,
+          ...extractImages(product),
           source: 'SHOPIFY',
           status: grandParentStatus,
           noonPrice: basePrice,

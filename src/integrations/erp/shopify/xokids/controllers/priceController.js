@@ -2,6 +2,7 @@ import { errorResponse, failResponse, successResponse } from '#root/src/helpers/
 import { syncShopifyXokidsPrice } from '../service/priceService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
 import Seller from '#models/Seller.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncXokidsPrice = async (req, res) => {
   try {
@@ -22,15 +23,11 @@ export const syncXokidsPrice = async (req, res) => {
 
     const brandName = seller?.name;
 
-    successResponse(res, `Xokids price sync started in background for ${brandName}`, 202);
-
-    setImmediate(async () => {
-      try {
-        await syncShopifyXokidsPrice(sellerId, shopifyConfig);
-      } catch (err) {
-        console.error('[Xokids Price Sync] Background job failed:', err);
-      }
+    trackBackgroundSync(sellerId, () => syncShopifyXokidsPrice(sellerId, shopifyConfig), {
+      label: 'Syncing prices',
+      field: 'pricing',
     });
+    successResponse(res, `Xokids price sync started in background for ${brandName}`, 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

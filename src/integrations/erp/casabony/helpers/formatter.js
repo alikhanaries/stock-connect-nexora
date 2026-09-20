@@ -1,5 +1,6 @@
 import { MIN_STOCK } from '../constants/common.js';
 import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
+import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 
 const toArray = (value) => (Array.isArray(value) ? value : value ? [value] : []);
 const cleanImages = (...imgGroups) => {
@@ -36,7 +37,7 @@ const formatBaseProduct = async (product, sellerId, subproductImages, uploadImag
     sellerId,
     name: product.UrunAdi || '',
     description: product.Aciklama || '',
-    brand: 'Casabony',
+    brand: 'casabony',
     categoryTrail: product.KategoriTree || '',
     vatRateType: 'STANDARD',
     ...processed,
@@ -166,7 +167,7 @@ export const formatCasabonyProducts = async (raw = [], sellerId, isImageUpdate =
   }
 
   return {
-    products: formatted,
+    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true, existingSkus }),
     categoryTrails: [...categoryTrails],
   };
 };

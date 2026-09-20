@@ -1513,6 +1513,8 @@ export const exportProductsToCSV = async (filters, sellerId, query, res) => {
         product.noonPrice || 0,
         product.namshiPrice || 0,
         product.amazonPrice || 0,
+        product.sixthStreetPrice || 0,
+        product.styliPrice || 0,
         product.amazon?.amazonPrimaryImageUrl || product.amazonPrimaryImageUrl || product.amazon?.primaryImageUrl || '',
         product.amazon?.amazonImageUrl || product.amazonImageUrl || product.amazon?.imageUrl || '',
         ...exportAmazonExtraImageUrlValues(product),

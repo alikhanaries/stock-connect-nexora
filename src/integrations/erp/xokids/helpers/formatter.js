@@ -2,6 +2,7 @@ import { processProductImages } from '#root/src/integrations/common/helpers/uplo
 import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
 import { MIN_STOCK } from '../constants/common.js';
 import { getBrandMapping } from './brandMapping.js';
+import { filterValidHierarchyProducts } from '#root/src/helpers/ProductHierarchy.js';
 
 const toArray = (value) => {
   if (value === null || value === undefined) return [];
@@ -178,7 +179,7 @@ export const formatXokidsProduct = async (raw = [], sellerId, isImageUpdate = fa
   }
 
   return {
-    products: formatted,
+    products: filterValidHierarchyProducts(formatted, { requirePriceAndImage: true, existingSkus }),
     categoryTrails: [...categoryTrails],
   };
 };

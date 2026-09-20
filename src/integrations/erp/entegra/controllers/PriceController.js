@@ -2,6 +2,7 @@ import { errorResponse, successResponse } from '#root/src/helpers/response.js';
 import Seller from '#root/src/models/Seller.js';
 import { getMappingBySellerSlug } from '../helpers/brandMapping.js';
 import { entegraPriceSync } from '../service/priceService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncEntegraPrice = async (req, res) => {
   try {
@@ -16,10 +17,9 @@ export const syncEntegraPrice = async (req, res) => {
     const { displayBrand } = mapping;
     if (!displayBrand) return errorResponse(res, `Display brand is missing for seller slug "${seller.slug}"`);
 
-    process.nextTick(() => {
-      entegraPriceSync(sellerId).catch((err) =>
-        console.error(`[${displayBrand} Price Sync] Background job failed:`, err)
-      );
+    trackBackgroundSync(sellerId, () => entegraPriceSync(sellerId), {
+      label: 'Syncing prices',
+      field: 'pricing',
     });
 
     return successResponse(res, `${displayBrand} price sync started in background`, 202);

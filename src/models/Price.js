@@ -37,6 +37,16 @@ const PriceSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    sixthStreetPrice: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    styliPrice: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     minPrice: {
       type: Number,
     },

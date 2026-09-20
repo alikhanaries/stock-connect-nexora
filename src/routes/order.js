@@ -3,7 +3,6 @@ import {
   getAllOrders,
   getAdminOrders,
   getOrderById,
-  getSyncedOrders,
   getOrderStats,
   getOrderComparison,
   merchantCancelById,
@@ -232,7 +231,7 @@ router.get('/stats', orderStatsValidator, checkLanguage, authMiddleware, verifyS
  *       200:
  *         $ref: "#/components/schemas/SuccessResponse"
  */
-router.get('/sync-orders', syncOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, getSyncedOrders);
+router.get('/sync-orders', syncOrdersValidator, checkLanguage, authMiddleware, verifySellerAccess, startOrderSync);
 
 /**
  * @swagger

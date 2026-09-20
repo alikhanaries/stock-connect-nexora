@@ -1,6 +1,7 @@
 import { errorResponse, failResponse, successResponse } from '#root/src/helpers/response.js';
 import { syncShopifyExquisePrice } from '../service/priceService.js';
 import { getShopifyConfig } from '../service/shopifyService.js';
+import { trackBackgroundSync } from '#helpers/syncProgress.js';
 
 export const syncExquisePrice = async (req, res) => {
   try {
@@ -16,15 +17,11 @@ export const syncExquisePrice = async (req, res) => {
       return failResponse(res, 'Incomplete Shopify credentials (url, apiVersion, accessToken required)', 400);
     }
 
-    successResponse(res, 'Exquise price sync started in background', 202);
-
-    setImmediate(async () => {
-      try {
-        await syncShopifyExquisePrice(sellerId, shopifyConfig);
-      } catch (err) {
-        console.error('[Exquise Price Sync] Background job failed:', err);
-      }
+    trackBackgroundSync(sellerId, () => syncShopifyExquisePrice(sellerId, shopifyConfig), {
+      label: 'Syncing prices',
+      field: 'pricing',
     });
+    successResponse(res, 'Exquise price sync started in background', 202);
   } catch (error) {
     return errorResponse(res, error, 500);
   }

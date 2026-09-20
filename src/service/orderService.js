@@ -28,6 +28,7 @@ import { cancelChanelEngineCustomErrorMessage } from '#helpers/channelEngineErro
 import Channel from '../models/Channel.js';
 import Seller from '../models/Seller.js';
 import { notifyUniwareOrderCancel } from '#root/src/integrations/erp/unicommerce/services/uniwareCancelService.js';
+import { notifyUniwareCourierReturns } from '#root/src/integrations/erp/unicommerce/services/uniwareReturnService.js';
 import fs from 'fs';
 import path from 'path';
 import { safeUnlinkTempFile } from '../helpers/tempFileCleanup.js';
@@ -825,9 +826,13 @@ const getOrderStats = async (sellerId) => {
 export const processOrders = async (orders, sellerId, parentTag) => {
   const tag = parentTag || '[order-sync][processOrders]';
   try {
-    let bulkOps, sellerOrderPayloads, pendingLogs;
+    let bulkOps, sellerOrderPayloads, pendingLogs, pendingCourierReturns;
     try {
-      ({ bulkOps, sellerOrderPayloads, pendingLogs } = await orderhelper.sanitizeOrdersData(orders, sellerId, tag));
+      ({ bulkOps, sellerOrderPayloads, pendingLogs, pendingCourierReturns } = await orderhelper.sanitizeOrdersData(
+        orders,
+        sellerId,
+        tag
+      ));
     } catch (err) {
       console.error(`${tag} STEP 3.1 FAILED sanitizeOrdersData:`, err);
       throw err;
@@ -970,6 +975,12 @@ export const processOrders = async (orders, sellerId, parentTag) => {
       if (orderLogsBulkOps.length) {
         await OrderLogs.bulkWrite(orderLogsBulkOps);
       }
+    }
+
+    if (pendingCourierReturns?.length) {
+      notifyUniwareCourierReturns(pendingCourierReturns).catch((err) =>
+        console.error('Uniware courier return notify failed:', err.message)
+      );
     }
 
     // Repair CE orders that exist in channelengineorders but never got sellerorders (UI source)
