@@ -378,7 +378,6 @@ export const createFullShipmentService = async (shipmentData) => {
     }
 
     // Step 4: Build Aymakan product lines (same fields as before; not gated on invoice PDF parse)
-    let taxData = null;
     const skus = validProducts.map((item) => item.merchantProductNo);
     const productDocs = await Product.find({ productSkuCode: { $in: skus } })
       .select('productSkuCode countryOfOrigin description name')
@@ -399,13 +398,15 @@ export const createFullShipmentService = async (shipmentData) => {
 
     // Step 4b: Parse invoice PDF for tax metadata only
     const invoiceData = await parseInvoiceData(id);
-    if (invoiceData?.success) {
-      taxData = {
-        tax_identification_number: invoiceData.invoiceData?.taxIdentificationNumber || '',
-        invoice_number: invoiceData.invoiceData?.invoiceNumber || '',
-        invoice_date: invoiceData.invoiceData?.invoiceDate || '',
-      };
-    }
+    const parsed = invoiceData?.success ? invoiceData.invoiceData : null;
+
+    const resolvedTax = {
+      tax_identification_number: shipmentData.tax_identification_number || parsed?.taxIdentificationNumber || '',
+
+      invoice_number: shipmentData.invoice_number || parsed?.invoiceNumber || '',
+
+      invoice_date: shipmentData.invoice_date || parsed?.invoiceDate || '',
+    };
 
     // STEP 5: Existing shipments
 
@@ -486,7 +487,7 @@ export const createFullShipmentService = async (shipmentData) => {
     // Step 10: Create shipment via Aymakan (external, before transaction)
     const aymakanResult = await createShipmentWithAymakan({
       ...shipmentData,
-      ...(taxData || {}),
+      ...resolvedTax,
       documentId,
       deliveryData: customerDeliveryData,
       isAmazonFulfillment,
