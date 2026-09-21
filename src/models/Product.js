@@ -79,12 +79,12 @@ const ProductSchema = new mongoose.Schema(
     ageRangeDescription: {
       type: String,
       trim: true,
-      enum: ['Adult', 'Kids', 'Toddler', 'Infant', 'Newborn'],
+      enum: ['Adult', 'Kids', 'Toddler', 'Infant', 'Newborn', 'Baby', 'Tween', 'Little'],
       default: 'Adult',
     },
     gender: {
       type: String,
-      enum: ['Male', 'Female', 'Unisex'],
+      enum: ['Male', 'Female', 'Unisex', 'Girls', 'Boys', 'Kids unisex', 'Baby Boys', 'Baby Girls', 'Women'],
       default: 'Unisex',
       trim: true,
     },
