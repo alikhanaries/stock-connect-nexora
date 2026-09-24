@@ -165,6 +165,10 @@ export const mapProductToChannelEngine = (product) => {
       'closureType',
       'occasion',
       'subtype',
+      'sleeveType',
+      'neck',
+      'material',
+      'pattern',
     ].map((key) => ({
       Key: key,
       Value: product.amazon?.[key] || null,
