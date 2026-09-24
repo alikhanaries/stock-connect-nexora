@@ -153,6 +153,10 @@ export const mapRowToProduct = async (row, index, locale, sellerId, isImageUpdat
     closureType: r.closuretype,
     occasion: r.occasion,
     subtype: r.subtype,
+    sleeveType: r.sleevetype,
+    neck: r.neck,
+    material: r.material,
+    pattern: r.pattern,
   };
   const amazon = {
     ...Object.fromEntries(Object.entries(amazonFieldMap).filter(([, v]) => v)),

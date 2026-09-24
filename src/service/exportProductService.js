@@ -58,6 +58,8 @@ export const exportUserChannelProductsToCSV = async (filters, sellerId, channelI
         product.ean || '',
         ...exportExtraImageUrlValues(product),
         product.gender || '',
+        product.ageRangeDescription || '',
+        product.countryOfOrigin || '',
         product.hsCodeSA || '',
         product.hsCodeAE || '',
         product.imageUrl || '',
@@ -121,6 +123,10 @@ export const exportUserChannelProductsToCSV = async (filters, sellerId, channelI
         product.amazon?.closureType || '',
         product.amazon?.occasion || '',
         product.amazon?.subtype || '',
+        product.amazon?.sleeveType || '',
+        product.amazon?.neck || '',
+        product.amazon?.material || '',
+        product.amazon?.pattern || '',
       ];
 
       if (!res.write(escapeCsv(row) + '\n')) {
@@ -177,6 +183,8 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
         product.ean || '',
         ...exportExtraImageUrlValues(product),
         product.gender || '',
+        product.ageRangeDescription || '',
+        product.countryOfOrigin || '',
         product.hsCodeSA || '',
         product.hsCodeAE || '',
         product.imageUrl || '',
@@ -240,6 +248,10 @@ export const exportUserUnassignedProductsToCSV = async (sellerId, channelId, que
         product.amazon?.closureType || '',
         product.amazon?.occasion || '',
         product.amazon?.subtype || '',
+        product.amazon?.sleeveType || '',
+        product.amazon?.neck || '',
+        product.amazon?.material || '',
+        product.amazon?.pattern || '',
       ];
 
       if (!res.write(escapeCsv(row) + '\n')) {

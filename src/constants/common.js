@@ -148,6 +148,8 @@ export const PRODUCT_EXPORT_HEADERS = [
   'extraImageUrl13',
   'extraImageUrl14',
   'gender',
+  'ageRangeDescription',
+  'countryOfOrigin',
   'hsCodeSA',
   'hsCodeAE',
   'imageUrl',
@@ -224,6 +226,10 @@ export const PRODUCT_EXPORT_HEADERS = [
   'closureType',
   'occasion',
   'subtype',
+  'sleeveType',
+  'neck',
+  'material',
+  'pattern',
 ];
 
 export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
