@@ -98,17 +98,17 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
   });
 
   try {
-    // ── PHASE 1 (10%) ── Fetch new/changed orders from ChannelEngine ──────────
+    // ── PHASE 1 (10%) ── Fetch new/changed orders ────────────────────────────
     await update({
       progress: 10,
-      currentPhase: 'Fetching orders from ChannelEngine...',
+      currentPhase: 'Fetching orders...',
     });
 
     let orders = [];
     try {
       const { success, data } = await orderService.getNewOrders(tag);
       if (!success) {
-        throw new Error('ChannelEngine returned success=false when fetching orders');
+        throw new Error('Failed to fetch orders');
       }
       orders = data || [];
     } catch (err) {
@@ -195,10 +195,10 @@ export async function runOrderSyncInBackground(jobId, sellerId, userId) {
       console.error(`${tag} PHASE 3 updateSyncDate failed (non-fatal):`, err.message);
     }
 
-    // ── PHASE 4 (80%) ── Acknowledge new orders with ChannelEngine ────────────
+    // ── PHASE 4 (80%) ── Acknowledge new orders ──────────────────────────────
     await update({
       progress: 80,
-      currentPhase: 'Acknowledging new orders with ChannelEngine...',
+      currentPhase: 'Acknowledging new orders...',
     });
 
     const processedOrderIds = new Set((ceData?.processedOrderIds || []).map(String));
