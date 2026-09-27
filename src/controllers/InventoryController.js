@@ -115,10 +115,8 @@ export const syncStockToChannelEngine = async (req, res) => {
   try {
     const sellerId = req.sellerId;
 
-    trackBackgroundSync(sellerId, () => inventoryService.syncStockToChannelEngine(sellerId), {
-      label: 'Syncing inventory',
-      field: 'inventory',
-    });
+    inventoryService.syncStockToChannelEngine(sellerId).catch((err) => console.error('Async stock push failed:', err));
+
     successResponse(res, req.locale.SYNC_STARTED, 202);
   } catch (err) {
     console.error('Controller syncInventory error:', err);
