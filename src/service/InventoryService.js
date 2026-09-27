@@ -336,11 +336,8 @@ export async function sendStockBatch(stockUpdates, sellerId = null, batchId = nu
   const resolvedSellerId = (typeof sellerId === 'number' || sellerId === undefined) && batchId ? batchId : sellerId;
   const resolvedBatchId = (typeof sellerId === 'number' || sellerId === undefined) && batchId ? null : batchId;
   try {
-    // Waits for the queued job to actually finish, so a stuck/unreachable
-    // worker surfaces as a real error here instead of silently sitting as
-    // 'queued' with no visibility (matches bulkDeleteProductsFromCE /
-    // syncProductExtraDataToMarketplace in channel/ceService.js).
-    const response = await channelEnginePush({
+    // Fire-and-forget — worker pushes to CE at its own rate limit pace
+    await channelEnginePush({
       operationType: CE_QUEUE_OPERATIONS.OFFER_STOCK,
       method: 'PUT',
       url: `${CHANNEL_ENGINE_BASE_URL}offer/stock?apiKey=${CHANNEL_ENGINE_API_KEY}`,
@@ -348,20 +345,11 @@ export async function sendStockBatch(stockUpdates, sellerId = null, batchId = nu
       body: stockUpdates,
       sellerId: resolvedSellerId,
       batchId: resolvedBatchId,
+      awaitResult: false,
     });
-
-    if (!response.ok) {
-      throw new Error(
-        (typeof response.data === 'object' && response.data?.Message) ||
-          response.rawText ||
-          response.errorMessage ||
-          `Channel Engine stock push failed with status ${response.status}`
-      );
-    }
-
     return { success: true };
   } catch (err) {
-    console.error('[sendStockBatch] Failed:', err.message);
+    console.error('[sendStockBatch] Failed to enqueue:', err.message);
     throw err;
   }
 }
