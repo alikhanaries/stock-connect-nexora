@@ -1,16 +1,30 @@
 import {
   convertCodeFormat,
-  convertRespirePrice,
+  convertRespireChannelPrices,
   normalizeAndTranslateVariants,
   buildSkuHierarchy,
   buildChildSku,
 } from './commonHelper.js';
 
-// Respire has no Namshi/Noon/Amazon/6thStreet/Styli fields (different marketplace set
-// than Entegra) — price comes from Respire's own site price + site discount price,
-// and purchasePrice comes from Respire's actual buying_price (cost) field. Mirrors the
-// same color-grouping / SKU derivation as helpers/formatter.js so price sync targets
-// the exact same SKUs that product sync created.
+const toPriceRecord = (sellerId, productSkuCode, prices) => ({
+  sellerId,
+  productSkuCode,
+  price: prices.price,
+  noonPrice: prices.noonPrice,
+  namshiPrice: prices.namshiPrice,
+  amazonPrice: prices.amazonPrice,
+  sixthStreetPrice: prices.sixthStreetPrice,
+  styliPrice: prices.styliPrice,
+  msrp: prices.price,
+  minPrice: prices.specialPrice || null,
+  maxPrice: prices.price,
+  purchasePrice: prices.purchasePrice,
+});
+
+// Mirrors the same color-grouping / SKU derivation as helpers/formatter.js so price sync
+// targets the exact same SKUs that product sync created. Channel prices (olltek/noon/
+// amazon_sa/sixth_street/styli) live only on the root product, so every parent and child
+// SKU inherits them from the root.
 export const formatRespirePrice = async (products = [], sellerId) => {
   if (!products.length) return { products: [] };
 
@@ -20,28 +34,13 @@ export const formatRespirePrice = async (products = [], sellerId) => {
     const currency = p.currencyType === 'TRL' ? 'TRY' : p.currencyType || 'USD';
     const variations = Array.isArray(p.variatios) ? p.variatios : [];
 
-    const rootPrice = await convertRespirePrice(currency, p.site_fiyati);
-    const rootSpecial = await convertRespirePrice(currency, p.site_indirimli_fiyati);
-    const rootPurchasePrice = (await convertRespirePrice(currency, p.buying_price)) || rootPrice;
+    const rootPrices = await convertRespireChannelPrices(currency, p);
 
     if (!variations.length) {
       const baseSku = convertCodeFormat(p.productCode);
       if (!baseSku) continue;
 
-      result.push({
-        sellerId,
-        productSkuCode: baseSku,
-        price: rootPrice,
-        noonPrice: 0,
-        namshiPrice: 0,
-        amazonPrice: 0,
-        sixthStreetPrice: 0,
-        styliPrice: 0,
-        msrp: rootPrice,
-        minPrice: rootSpecial || null,
-        maxPrice: rootPrice,
-        purchasePrice: rootPurchasePrice,
-      });
+      result.push(toPriceRecord(sellerId, baseSku, rootPrices));
       continue;
     }
 
@@ -56,45 +55,16 @@ export const formatRespirePrice = async (products = [], sellerId) => {
     for (const [color, colorVariants] of Object.entries(variantsByColor)) {
       const { parentSku } = buildSkuHierarchy(p.productCode, colorVariants[0]?.originalColor || color);
 
-      result.push({
-        sellerId,
-        productSkuCode: parentSku,
-        price: rootPrice,
-        noonPrice: 0,
-        namshiPrice: 0,
-        amazonPrice: 0,
-        sixthStreetPrice: 0,
-        styliPrice: 0,
-        msrp: rootPrice,
-        minPrice: rootSpecial || null,
-        maxPrice: rootPrice,
-        purchasePrice: rootPurchasePrice,
-      });
+      result.push(toPriceRecord(sellerId, parentSku, rootPrices));
 
       for (const v of colorVariants) {
         const childSku = buildChildSku(parentSku, v.normalizedSize || v.originalSize);
         if (!childSku) continue;
 
         // Respire never populates per-variant prices (confirmed against live data) —
-        // fall back to the parent/root-level price when the variant's own is 0.
-        const childPrice = (await convertRespirePrice(currency, v.site_fiyati)) || rootPrice;
-        const childSpecial = (await convertRespirePrice(currency, v.site_indirimli_fiyati)) || rootSpecial;
-        const childPurchasePrice = (await convertRespirePrice(currency, v.buying_price)) || rootPurchasePrice;
-
-        result.push({
-          sellerId,
-          productSkuCode: childSku,
-          price: childPrice,
-          noonPrice: 0,
-          namshiPrice: 0,
-          amazonPrice: 0,
-          sixthStreetPrice: 0,
-          styliPrice: 0,
-          msrp: childPrice,
-          minPrice: childSpecial || null,
-          maxPrice: childPrice,
-          purchasePrice: childPurchasePrice,
-        });
+        // each price falls back to the parent's when the variant's own is 0.
+        const childPrices = await convertRespireChannelPrices(currency, v, rootPrices);
+        result.push(toPriceRecord(sellerId, childSku, childPrices));
       }
     }
   }

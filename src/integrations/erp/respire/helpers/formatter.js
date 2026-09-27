@@ -1,4 +1,4 @@
-import { safeNumber, convertRespirePrice, buildSkuHierarchy, buildChildSku } from './commonHelper.js';
+import { safeNumber, convertRespireChannelPrices, buildSkuHierarchy, buildChildSku } from './commonHelper.js';
 import { canonicalProductMapper } from './canonicalProductMapper.js'; // <-- IMPORT CANONICAL MAPPER
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
 import { normalizeAndTranslateVariants } from '#root/src/integrations/erp/respire/helpers/commonHelper.js';
@@ -103,10 +103,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   const gender = /Kadın/i.test(p.name) ? 'Female' : /Erkek/i.test(p.name) ? 'Male' : 'Unisex';
 
   // ================= GRAND PARENT =================
-  // Respire has no Namshi/Noon/Amazon/6thStreet/Styli fields (different marketplace set
-  // than Entegra) — price comes from Respire's own site price + site discount price.
-  const gpPrice = await convertRespirePrice(currency, p.site_fiyati);
-  const gpSpecial = await convertRespirePrice(currency, p.site_indirimli_fiyati);
+  const gpPrices = await convertRespireChannelPrices(currency, p);
 
   if (!hasVariants) {
     return { parents: [], children: [] };
@@ -141,10 +138,10 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       descriptionAr: p.descriptionAr || '',
       brand: p.brand,
 
-      price: gpPrice,
-      minPrice: gpSpecial,
-      maxPrice: gpPrice,
-      msrp: gpPrice,
+      price: gpPrices.price,
+      minPrice: gpPrices.specialPrice,
+      maxPrice: gpPrices.price,
+      msrp: gpPrices.price,
 
       status: p.status === '1' ? 'active' : 'inactive',
 
@@ -158,12 +155,11 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       modelName: p.mpn || '',
 
       currentStockCount: safeNumber(p.quantity),
-      // Not applicable to Respire (different marketplace set than Entegra) — left unused.
-      noonPrice: 0,
-      namshiPrice: 0,
-      amazonPrice: 0,
-      sixthStreetPrice: 0,
-      styliPrice: 0,
+      noonPrice: gpPrices.noonPrice,
+      namshiPrice: gpPrices.namshiPrice,
+      amazonPrice: gpPrices.amazonPrice,
+      sixthStreetPrice: gpPrices.sixthStreetPrice,
+      styliPrice: gpPrices.styliPrice,
     };
 
     // ---------- PARENT IMAGES ----------
@@ -189,9 +185,8 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       const childSku = buildChildSku(parentSku, v.normalizedSize || v.originalSize);
 
       // Respire never populates per-variant prices (confirmed against live data) —
-      // fall back to the parent/root-level price when the variant's own is 0.
-      const childPrice = (await convertRespirePrice(currency, v.site_fiyati)) || gpPrice;
-      const childSpecial = (await convertRespirePrice(currency, v.site_indirimli_fiyati)) || gpSpecial;
+      // each price falls back to the parent's when the variant's own is 0.
+      const childPrices = await convertRespireChannelPrices(currency, v, gpPrices);
 
       const childObject = {
         sellerId,
@@ -206,10 +201,10 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         brand: p.brand,
         ean: v.barcode || v.gtin || '',
 
-        price: childPrice,
-        minPrice: childSpecial,
-        maxPrice: childPrice,
-        msrp: childPrice,
+        price: childPrices.price,
+        minPrice: childPrices.specialPrice,
+        maxPrice: childPrices.price,
+        msrp: childPrices.price,
 
         status: p.status === '1' ? 'active' : 'inactive',
         currentStockCount: safeNumber(v.quantity),
@@ -223,11 +218,11 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         categoryTrail: categoryName,
         gender,
         modelName: p.mpn || '',
-        noonPrice: 0,
-        namshiPrice: 0,
-        amazonPrice: 0,
-        sixthStreetPrice: 0,
-        styliPrice: 0,
+        noonPrice: childPrices.noonPrice,
+        namshiPrice: childPrices.namshiPrice,
+        amazonPrice: childPrices.amazonPrice,
+        sixthStreetPrice: childPrices.sixthStreetPrice,
+        styliPrice: childPrices.styliPrice,
       };
 
       const rawChildImages = extractPicturesSafely(v.variation_pictures || []);
