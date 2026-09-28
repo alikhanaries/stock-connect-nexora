@@ -753,3 +753,7 @@ export const cancelStatusValidator = validate(async (req) => {
 
   querySchema.parse(req.query);
 });
+
+export const downloadActiveProductsValidator = validate(async (req) => {
+  headerSchema.parse(req.headers);
+});
