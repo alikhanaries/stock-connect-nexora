@@ -42,6 +42,11 @@ const AddressSchema = new mongoose.Schema(
       required: [true, 'Country ISO code is required'],
       trim: true,
     },
+    nationalAddressShortCode: {
+      type: String,
+      trim: true,
+      default: undefined,
+    },
   },
   { _id: false }
 );

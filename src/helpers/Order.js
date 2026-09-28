@@ -21,6 +21,7 @@ import {
   validateResolvedSellerId,
   logUnresolvedSellerLine,
 } from './orderSellerResolution.js';
+import { resolveNationalAddressShortCodeFromChannelEngineShipping } from './saudiNationalAddress.js';
 
 export { getExtraSellerId, resolveOrderLineSellerId, normalizeOrderSku } from './orderSellerResolution.js';
 
@@ -713,6 +714,9 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
         continue;
       }
       const orderSellerIds = Array.from(sellerIdSet);
+      const ceNationalAddressShortCode = resolveNationalAddressShortCodeFromChannelEngineShipping(
+        data?.ShippingAddress
+      );
       const updatePayload = {
         orderId: data.Id?.toString(),
         channelOrderNumber: data.ChannelOrderNo,
@@ -802,6 +806,7 @@ export const sanitizeOrdersData = async (orders, _sellerId, parentTag) => {
           city: data?.ShippingAddress?.City ?? 'NA',
           region: data?.ShippingAddress?.Region ?? 'NA',
           countryIso: data?.ShippingAddress?.CountryIso ?? 'SA',
+          ...(ceNationalAddressShortCode ? { nationalAddressShortCode: ceNationalAddressShortCode } : {}),
         },
 
         // BILLING ADDRESS
