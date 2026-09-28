@@ -30,6 +30,7 @@ export function loadSwagger() {
         { name: 'Returns', description: 'Return management' },
         { name: 'Shipments', description: 'Shipment management' },
         { name: 'Invoices', description: 'Invoice management' },
+        { name: 'Dashboard', description: 'Dashboard analytics and master-admin exports' },
         { name: 'API Logs', description: 'Master-admin API call audit and performance logs' },
         { name: 'Sentos ERP', description: 'Sentos ERP product, inventory, price, and connection APIs' },
         {

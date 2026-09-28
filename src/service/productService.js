@@ -34,6 +34,7 @@ import {
   exportExtraImageUrlValues,
   exportAmazonExtraImageUrlValues,
 } from '#helpers/productImageFields.js';
+import { buildActivePlatformProductExportCsvRow } from '#helpers/productExportRow.js';
 import { upsertPricesForProducts } from '../service/priceService.js';
 import {
   chunkArray,
@@ -1462,6 +1463,40 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
+export const exportAllActiveProductsToCSV = async (res) => {
+  let cursor = null;
+  const sellerCache = new Map();
+
+  try {
+    cursor = Product.find({ status: 'active' })
+      .sort({ sellerId: 1, productSkuCode: 1 })
+      .lean()
+      .cursor();
+
+    for await (const product of cursor) {
+      const sellerKey = String(product.sellerId || '');
+      let sellerName = sellerCache.get(sellerKey);
+      if (sellerName === undefined) {
+        const seller = sellerKey ? await Seller.findById(product.sellerId).select('name').lean() : null;
+        sellerName = seller?.name || '';
+        sellerCache.set(sellerKey, sellerName);
+      }
+
+      const row = buildActivePlatformProductExportCsvRow(product, sellerName);
+      if (!res.write(escapeCsv(row) + '\n')) {
+        await new Promise((resolve) => res.once('drain', resolve));
+      }
+    }
+  } catch (error) {
+    console.error('Error in exportAllActiveProductsToCSV:', error);
+    throw error;
+  } finally {
+    if (cursor) {
+      await cursor.close();
+    }
+  }
+};
+
 export const exportProductsToCSV = async (filters, sellerId, query, res) => {
   let cursor = null;
 
@@ -1638,6 +1673,7 @@ export default {
   pushActiveProductsToChannel,
   pushInActiveProductsToChannel,
   exportProductsToCSV,
+  exportAllActiveProductsToCSV,
   getProductById,
   searchProuctsByFilter,
   syncFreezeOrUnfreezeToChannelEngine,
