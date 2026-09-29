@@ -26,11 +26,31 @@ const extractFromText = (text) => {
 };
 
 /**
- * Resolve customer SPL short code from CE/Amazon shipping address fields.
- * Priority: zipCode (when it matches the pattern), then line1/streetName prefix, then other lines.
+ * Preserve upstream Saudi SPL from ChannelEngine ShippingAddress when the code is supplied
+ * as a literal on documented CE fields (Merchant API has no dedicated short-code property).
+ * Production Amazon.sa orders may place the code on ZipCode; Original may hold the literal code.
+ */
+export const resolveNationalAddressShortCodeFromChannelEngineShipping = (shippingAddress = {}) => {
+  const country = String(shippingAddress.CountryIso ?? shippingAddress.countryIso ?? '').toUpperCase();
+  if (country && country !== 'SA') return undefined;
+
+  for (const value of [shippingAddress.ZipCode, shippingAddress.Original]) {
+    const normalized = normalizeSaudiNationalAddressShortCode(value);
+    if (normalized) return normalized;
+  }
+
+  return undefined;
+};
+
+/**
+ * Resolve customer SPL short code from normalized shipping address fields.
+ * Priority: nationalAddressShortCode, zipCode, then line1/streetName/line2/line3.
  */
 export const extractSaudiNationalAddressShortCode = (address = {}) => {
-  const { zipCode, line1, line2, line3, streetName } = address;
+  const { nationalAddressShortCode, zipCode, line1, line2, line3, streetName } = address;
+
+  const fromDedicated = normalizeSaudiNationalAddressShortCode(nationalAddressShortCode);
+  if (fromDedicated) return fromDedicated;
 
   const fromZip = normalizeSaudiNationalAddressShortCode(zipCode);
   if (fromZip) return fromZip;
