@@ -16,8 +16,14 @@ export function loadSwagger() {
         },
       },
       servers: [
-        { url: `http://localhost:${config.PORT || 3000}/api` },
-        { url: `${(config.BASE_URL || `http://localhost:${config.PORT || 3000}/`).replace(/\/$/, '')}/api` },
+        {
+          url: `http://localhost:${config.PORT || 3000}/api`,
+          description: 'Local development',
+        },
+        {
+          url: `${(config.BASE_URL || `http://localhost:${config.PORT || 3000}/`).replace(/\/$/, '')}/api`,
+          description: 'BASE_URL from server environment (.env)',
+        },
       ],
       tags: [
         { name: 'Auth', description: 'Authentication' },
@@ -47,6 +53,11 @@ export function loadSwagger() {
           name: 'UniCommerce Marketplace Triggers',
           description:
             'Marketplace/webhook routes that optionally fire outbound UniCommerce calls when UNICOMMERCE_* env is configured.',
+        },
+        {
+          name: 'UniCommerce Integration Catalog',
+          description:
+            'Full UniCommerce marketplace partner checklist vs StockConnect implementation. See openapi/integrationCatalog.openapi.js.',
         },
       ],
       components: {
@@ -224,4 +235,24 @@ function applyUniCommerceSecurity(spec) {
 /** Same spec as loadSwagger — UniCommerce docs live under /api-docs with the rest of Stock Connect. */
 export function loadUniCommerceSwagger() {
   return loadSwagger();
+}
+
+/**
+ * Clone spec and prepend the request host as the first server (dev/staging/prod Try it out).
+ * Open Swagger at http://145.241.153.208/api-docs → server becomes http://145.241.153.208/api.
+ */
+export function withRequestServer(spec, req) {
+  if (!req?.get) return spec;
+
+  const host = req.get('host');
+  if (!host) return spec;
+
+  const protoHeader = req.get('x-forwarded-proto');
+  const proto = protoHeader ? protoHeader.split(',')[0].trim() : req.protocol || 'http';
+  const currentUrl = `${proto}://${host}/api`;
+
+  const clone = structuredClone(spec);
+  const rest = (clone.servers || []).filter((s) => s.url !== currentUrl);
+  clone.servers = [{ url: currentUrl, description: 'Current host (use this on dev/staging/prod)' }, ...rest];
+  return clone;
 }
