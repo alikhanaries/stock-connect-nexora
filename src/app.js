@@ -20,7 +20,7 @@ import sentosRoutes from './integrations/erp/sentos/routes/api.js';
 import casabonyRoutes from './integrations/erp/casabony/routes/api.js';
 import cronJob from './cronJobs/index.js';
 import swaggerUi from 'swagger-ui-express';
-import { loadSwagger } from './util/swagger.js';
+import { loadSwagger, withRequestServer } from './util/swagger.js';
 import { apiLogMiddleware } from './middleware/apiLogMiddleware.js';
 import healthRoutes from './routes/health.js';
 import { errorMiddleware } from './middleware/errorMiddleware.js';
@@ -52,12 +52,12 @@ if (swaggerEnabled) {
 
   app.get('/swagger.json', (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.json(swaggerDocument);
+    res.json(withRequestServer(swaggerDocument, req));
   });
 
   app.use('/api-docs', swaggerUi.serve, (req, res, next) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    swaggerUi.setup(swaggerDocument, swaggerUiOptions)(req, res, next);
+    swaggerUi.setup(withRequestServer(swaggerDocument, req), swaggerUiOptions)(req, res, next);
   });
 
   app.get('/unicommerce-docs', (req, res) => {

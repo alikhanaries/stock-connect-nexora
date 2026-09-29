@@ -1,3 +1,4 @@
+import { ObjectId } from 'mongodb';
 import { convetDateToUTC } from '#root/src/helpers/Common.js';
 import OrderLogs from '#root/src/models/OrderLogs.js';
 import Order from '#root/src/models/Orders.js';
@@ -8,12 +9,142 @@ import {
   getPickUpAddress,
   saveDeliveryAddress,
 } from '#root/src/service/shipmentService.js';
+import { syncSellerOrdersFromOrder } from '#root/src/service/sellerOrderService.js';
+import { deriveOrderStatusFromSkus } from '../helpers/mapUniwareNotificationStatus.js';
+
+const buildDispatchResponse = (responseItems, orderItems) => {
+  const successCount = responseItems.filter((i) => i.errorMessage === '').length;
+  let status = 'FAILED';
+
+  if (successCount === orderItems.length) {
+    status = 'SUCCESS';
+  } else if (successCount > 0) {
+    status = 'PARTIAL_SUCCESS';
+  }
+
+  return { status, orderItems: responseItems };
+};
+
+const findOrderForDispatch = async (sellerId, lineIds) => {
+  const sellerObjectId = ObjectId.isValid(sellerId) ? new ObjectId(sellerId) : sellerId;
+
+  return Order.findOne({
+    $and: [
+      { $or: [{ sellerId: sellerObjectId }, { sellerIds: sellerObjectId }] },
+      { 'orderSkuList.skuList.id': { $in: lineIds } },
+    ],
+  });
+};
+
+/** Marketplace logistics (thirdPartyShipping): Uniware dispatch with orderItems only — no new AWB from UC. */
+const applyMarketplaceDispatchQty = (sku, dispatchQty) => {
+  const availableQty = Math.max(0, (sku.quantity || 0) - (sku.cancellationRequestedQuantity || 0));
+  const sb = sku.statusBreakdown || {
+    confirmed: availableQty,
+    shipped: 0,
+    delivered: 0,
+    returned: 0,
+    canceled: 0,
+    shipmentCreated: 0,
+  };
+
+  const alreadyShipped = sb.shipped || 0;
+  const remaining = availableQty - alreadyShipped;
+
+  if (remaining <= 0) {
+    return 'All quantity already dispatched for this order item';
+  }
+
+  if (dispatchQty > remaining) {
+    return `Cannot dispatch ${dispatchQty}. Only ${remaining} remaining`;
+  }
+
+  sb.shipped = alreadyShipped + dispatchQty;
+  sb.shipmentCreated = Math.max(0, (sb.shipmentCreated || 0) - dispatchQty);
+  sku.statusBreakdown = sb;
+  sku.status = sb.shipped >= availableQty ? 'SHIPPED' : 'IN_PROGRESS';
+  return null;
+};
+
+export const orderDispatchMarketplace = async (sellerId, payload) => {
+  const { orderItems = [] } = payload;
+  const responseItems = [];
+  const lineIds = orderItems.map((i) => Number(i.orderItemId));
+
+  const order = await findOrderForDispatch(sellerId, lineIds);
+  if (!order) {
+    return {
+      status: 'FAILED',
+      orderItems: orderItems.map((item) => ({
+        orderItemId: item.orderItemId,
+        errorMessage: 'Order not found',
+      })),
+    };
+  }
+
+  const skuList = order.orderSkuList?.skuList || [];
+  let anyUpdated = false;
+
+  for (const item of orderItems) {
+    const lineId = Number(item.orderItemId);
+    const sku = skuList.find((s) => Number(s.id) === lineId);
+    if (!sku) {
+      responseItems.push({
+        orderItemId: String(item.orderItemId),
+        errorMessage: 'Order item not found',
+      });
+      continue;
+    }
+
+    const errorMessage = applyMarketplaceDispatchQty(sku, item.quantity);
+    if (errorMessage) {
+      responseItems.push({
+        orderItemId: String(item.orderItemId),
+        errorMessage,
+      });
+      continue;
+    }
+
+    anyUpdated = true;
+    responseItems.push({
+      orderItemId: String(item.orderItemId),
+      errorMessage: '',
+    });
+  }
+
+  const result = buildDispatchResponse(responseItems, orderItems);
+
+  if (anyUpdated && result.status !== 'FAILED') {
+    order.orderSkuList.skuList = skuList;
+    order.status = deriveOrderStatusFromSkus(skuList);
+    order.markModified('orderSkuList');
+    await order.save();
+
+    await OrderLogs.updateOne(
+      { orderId: order._id },
+      {
+        $push: {
+          details: {
+            status: order.status,
+            description: 'UniCommerce marketplace dispatch (orderItems only)',
+            createdAt: convetDateToUTC(new Date()),
+          },
+        },
+      },
+      { upsert: true }
+    );
+
+    await syncSellerOrdersFromOrder(order._id);
+  }
+
+  return result;
+};
 
 export const orderDispatch = async (sellerId, userId, payload) => {
   const responseItems = [];
 
   try {
-    const { orderItems = [], selfShipping = {} } = payload;
+    const { orderItems = [], selfShipping } = payload;
 
     if (!orderItems.length) {
       return {
@@ -22,21 +153,20 @@ export const orderDispatch = async (sellerId, userId, payload) => {
       };
     }
 
-    const { deliveryPartner, dispatchDate, invoiceNumber, trackingId } = selfShipping;
+    const trackingId = selfShipping?.trackingId?.trim();
 
+    /* Marketplace ships (thirdPartyShipping on Get Orders) — orderItems only per UniCommerce contract */
     if (!trackingId) {
-      throw new Error('trackingId is required');
+      return orderDispatchMarketplace(sellerId, payload);
     }
 
-    /* ----------- FIND ORDER ----------- */
+    const { deliveryPartner, dispatchDate, invoiceNumber } = selfShipping;
+
+    /* ----------- FIND ORDER (seller self-ship) ----------- */
 
     const lineIds = orderItems.map((i) => Number(i.orderItemId));
 
-    const order = await Order.findOne({
-      sellerId,
-      'orderSkuList.skuList.id': { $in: lineIds },
-    }).lean();
-
+    const order = await findOrderForDispatch(sellerId, lineIds);
     if (!order) {
       return {
         status: 'FAILED',
@@ -47,11 +177,13 @@ export const orderDispatch = async (sellerId, userId, payload) => {
       };
     }
 
+    const orderLean = order.toObject();
+
     /* ----------- PROCESS EACH ITEM ----------- */
 
     const products = [];
     const shippableOrderItemIds = [];
-    const skuList = order?.orderSkuList?.skuList || [];
+    const skuList = orderLean?.orderSkuList?.skuList || [];
     const skuMap = new Map(skuList.map((sku) => [String(sku.id), sku]));
 
     for (const item of orderItems) {
@@ -72,7 +204,7 @@ export const orderDispatch = async (sellerId, userId, payload) => {
     }
     if (products.length) {
       const shipmentData = {
-        orderId: order._id,
+        orderId: orderLean._id,
         sellerId,
         userId,
         airWaybillNo: trackingId,
@@ -101,21 +233,7 @@ export const orderDispatch = async (sellerId, userId, payload) => {
       }
     }
 
-    /* ----------- FINAL STATUS ----------- */
-
-    const successCount = responseItems.filter((i) => i.errorMessage === '').length;
-    let status = 'FAILED';
-
-    if (successCount === orderItems.length) {
-      status = 'SUCCESS';
-    } else if (successCount > 0) {
-      status = 'PARTIAL_SUCCESS';
-    }
-
-    return {
-      status,
-      orderItems: responseItems,
-    };
+    return buildDispatchResponse(responseItems, orderItems);
   } catch (error) {
     console.error('orderDispatch error:', error);
 
