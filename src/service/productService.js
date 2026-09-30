@@ -10,6 +10,11 @@ import {
 } from '#helpers/ProductHierarchy.js';
 import { mapProductToChannelEngine } from '#helpers/ProductMapper.js';
 import { escapeCsv } from '#helpers/export.js';
+import {
+  ACTIVE_INVENTORY_PRICE_EXPORT_PROJECTION,
+  ACTIVE_INVENTORY_PRICE_EXPORT_QUERY,
+  buildActiveInventoryPriceCsvRow,
+} from '#helpers/activeInventoryPriceExport.js';
 import Channel from '#models/Channel.js';
 import Order from '#models/Orders.js';
 import Product from '#models/Product.js';
@@ -1463,15 +1468,38 @@ export const removeSkuFromUserChannelProducts = async (sellerId, productIds) => 
   }
 };
 
+export const exportAllActiveInventoryPriceToCSV = async (res) => {
+  let cursor = null;
+
+  try {
+    cursor = Product.find(ACTIVE_INVENTORY_PRICE_EXPORT_QUERY)
+      .select(ACTIVE_INVENTORY_PRICE_EXPORT_PROJECTION)
+      .sort({ brand: 1, productSkuCode: 1 })
+      .lean()
+      .cursor();
+
+    for await (const product of cursor) {
+      const row = buildActiveInventoryPriceCsvRow(product);
+      if (!res.write(escapeCsv(row) + '\n')) {
+        await new Promise((resolve) => res.once('drain', resolve));
+      }
+    }
+  } catch (error) {
+    console.error('Error in exportAllActiveInventoryPriceToCSV:', error);
+    throw error;
+  } finally {
+    if (cursor) {
+      await cursor.close();
+    }
+  }
+};
+
 export const exportAllActiveProductsToCSV = async (res) => {
   let cursor = null;
   const sellerCache = new Map();
 
   try {
-    cursor = Product.find({ status: 'active' })
-      .sort({ sellerId: 1, productSkuCode: 1 })
-      .lean()
-      .cursor();
+    cursor = Product.find({ status: 'active' }).sort({ sellerId: 1, productSkuCode: 1 }).lean().cursor();
 
     for await (const product of cursor) {
       const sellerKey = String(product.sellerId || '');
@@ -1680,6 +1708,7 @@ export default {
   pushInActiveProductsToChannel,
   exportProductsToCSV,
   exportAllActiveProductsToCSV,
+  exportAllActiveInventoryPriceToCSV,
   getProductById,
   searchProuctsByFilter,
   syncFreezeOrUnfreezeToChannelEngine,

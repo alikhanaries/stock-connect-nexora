@@ -3,6 +3,7 @@ import dashboardService from '#service/dashboardService.js';
 import productService from '#service/productService.js';
 import { errorLog } from '#middleware/index.js';
 import { ACTIVE_PLATFORM_PRODUCT_EXPORT_HEADERS } from '#constants/common.js';
+import { ACTIVE_INVENTORY_PRICE_EXPORT_HEADERS } from '#helpers/activeInventoryPriceExport.js';
 
 export const getOrderFlow = async (req, res) => {
   try {
@@ -232,6 +233,32 @@ export const getCancelOrdersOverview = async (req, res) => {
   } catch (error) {
     errorLog(error);
     return Responses.errorResponse(res, error, 500);
+  }
+};
+
+export const downloadActiveInventoryPrice = async (req, res) => {
+  try {
+    const exportDate = new Date().toISOString().split('T')[0];
+    const filename = `StockConnect_ActiveInventoryPrice_${exportDate}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    res.write('\uFEFF');
+    res.write(ACTIVE_INVENTORY_PRICE_EXPORT_HEADERS.join(',') + '\n');
+
+    await productService.exportAllActiveInventoryPriceToCSV(res);
+
+    return res.end();
+  } catch (error) {
+    console.error('Controller Error: downloadActiveInventoryPrice:', error.message);
+    errorLog(error);
+    if (!res.headersSent) {
+      return errorResponse(res, error.message, 500);
+    }
+    res.end();
   }
 };
 
