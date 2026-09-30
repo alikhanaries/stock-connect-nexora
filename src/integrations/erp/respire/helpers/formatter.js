@@ -3,7 +3,7 @@ import { canonicalProductMapper } from './canonicalProductMapper.js'; // <-- IMP
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
 import { normalizeAndTranslateVariants } from '#root/src/integrations/erp/respire/helpers/commonHelper.js';
 import { mapErpStyleImageFields } from '#helpers/productImageFields.js';
-import { processProductImages } from '#root/src/integrations/common/helpers/uploadProductImages.js';
+import { storeRespireImages } from './storeProductImages.js';
 export const collectedColors = new Map();
 
 // MAIN MAPPER
@@ -95,7 +95,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
   // Skip formatting / storing if product has no images
   if (!hasAnyPictures) {
-    return { parents: [], children: [] };
+    return { grandParents: [], parents: [], children: [] };
   }
 
   // ================= META =================
@@ -106,7 +106,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   const gpPrices = await convertRespireChannelPrices(currency, p);
 
   if (!hasVariants) {
-    return { parents: [], children: [] };
+    return { grandParents: [], parents: [], children: [] };
   }
 
   // ================= NORMALIZE VARIANTS =================
@@ -120,12 +120,66 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     return acc;
   }, {});
 
+  const grandParents = new Map();
   const parents = [];
   const children = [];
+
+  // Product-level images are stored once and shared by the grandparent and every color
+  // parent that has no pictures of its own, instead of being stored again per level.
+  const processedGrandParentImages =
+    isImageUpdate && grandParentImages.length ? await storeRespireImages(grandParentImages, sellerId) : [];
 
   // ================= PARENTS & CHILDREN =================
   for (const [color, colorVariants] of Object.entries(variantsByColor)) {
     const { grandParentSku, parentSku } = buildSkuHierarchy(p.productCode, colorVariants[0]?.originalColor || color);
+    const colorStock = colorVariants.reduce((sum, v) => sum + safeNumber(v.quantity), 0);
+
+    // ---------- GRAND PARENT ----------
+    // Same shape as the other ERP modules: configurable, no parent/grandparent link.
+    // Stock is the total across every color of this Respire product.
+    if (!grandParents.has(grandParentSku)) {
+      const grandParentObject = {
+        sellerId,
+        productType: 'configurable',
+        productSkuCode: grandParentSku,
+        parentProductSkuCode: null,
+        grandParentProductSkuCode: null,
+
+        name: `${p.name}`,
+        description: htmlToPlainText(p.description),
+        descriptionAr: p.descriptionAr || '',
+        brand: p.brand,
+
+        price: gpPrices.price,
+        minPrice: gpPrices.specialPrice,
+        maxPrice: gpPrices.price,
+        msrp: gpPrices.price,
+        purchasePrice: gpPrices.purchasePrice,
+
+        status: p.status === '1' ? 'active' : 'inactive',
+
+        volumetricWeightCm: safeNumber(p.desi, 1),
+        hsCodeAE: '6403',
+        hsCodeSA: '6403',
+
+        categoryTrail: categoryName,
+        gender,
+        modelName: p.mpn || '',
+
+        currentStockCount: normalizedVariants.reduce((sum, v) => sum + safeNumber(v.quantity), 0),
+        noonPrice: gpPrices.noonPrice,
+        namshiPrice: gpPrices.namshiPrice,
+        amazonPrice: gpPrices.amazonPrice,
+        sixthStreetPrice: gpPrices.sixthStreetPrice,
+        styliPrice: gpPrices.styliPrice,
+      };
+
+      if (processedGrandParentImages.length > 0) {
+        attachImages(grandParentObject, processedGrandParentImages);
+      }
+
+      grandParents.set(grandParentSku, canonicalProductMapper(grandParentObject, sellerId));
+    }
 
     const parentObject = {
       sellerId,
@@ -142,6 +196,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       minPrice: gpPrices.specialPrice,
       maxPrice: gpPrices.price,
       msrp: gpPrices.price,
+      purchasePrice: gpPrices.purchasePrice,
 
       status: p.status === '1' ? 'active' : 'inactive',
 
@@ -154,7 +209,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       gender,
       modelName: p.mpn || '',
 
-      currentStockCount: safeNumber(p.quantity),
+      currentStockCount: colorStock,
       noonPrice: gpPrices.noonPrice,
       namshiPrice: gpPrices.namshiPrice,
       amazonPrice: gpPrices.amazonPrice,
@@ -168,11 +223,11 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     );
     const rawParentImages = extractPicturesSafely(variantWithPics?.variation_pictures || []);
 
-    const parentImages = rawParentImages.length > 0 ? rawParentImages : grandParentImages;
-
     let processedParentImages = [];
-    if (isImageUpdate && parentImages.length) {
-      processedParentImages = await processProductImages(parentImages, sellerId);
+    if (isImageUpdate) {
+      processedParentImages = rawParentImages.length
+        ? await storeRespireImages(rawParentImages, sellerId)
+        : processedGrandParentImages;
       if (processedParentImages.length > 0) {
         attachImages(parentObject, processedParentImages);
       }
@@ -193,7 +248,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         productType: 'simple',
         productSkuCode: childSku,
         parentProductSkuCode: parentSku,
-        grandParentProductSkuCode: grandParentSku,
+        grandParentProductSkuCode: null,
 
         name: `${p.name}`,
         description: htmlToPlainText(p.description),
@@ -205,6 +260,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         minPrice: childPrices.specialPrice,
         maxPrice: childPrices.price,
         msrp: childPrices.price,
+        purchasePrice: childPrices.purchasePrice,
 
         status: p.status === '1' ? 'active' : 'inactive',
         currentStockCount: safeNumber(v.quantity),
@@ -229,7 +285,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
       if (isImageUpdate) {
         if (rawChildImages.length > 0) {
-          const processedChildImages = await processProductImages(rawChildImages, sellerId);
+          const processedChildImages = await storeRespireImages(rawChildImages, sellerId);
           if (processedChildImages.length > 0) {
             attachImages(childObject, processedChildImages);
           }
@@ -242,5 +298,5 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
     }
   }
 
-  return { parents, children };
+  return { grandParents: [...grandParents.values()], parents, children };
 };

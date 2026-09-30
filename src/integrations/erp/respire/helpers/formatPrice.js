@@ -1,5 +1,4 @@
 import {
-  convertCodeFormat,
   convertRespireChannelPrices,
   normalizeAndTranslateVariants,
   buildSkuHierarchy,
@@ -37,7 +36,7 @@ export const formatRespirePrice = async (products = [], sellerId) => {
     const rootPrices = await convertRespireChannelPrices(currency, p);
 
     if (!variations.length) {
-      const baseSku = convertCodeFormat(p.productCode);
+      const baseSku = p.productCode;
       if (!baseSku) continue;
 
       result.push(toPriceRecord(sellerId, baseSku, rootPrices));
@@ -52,8 +51,15 @@ export const formatRespirePrice = async (products = [], sellerId) => {
       return acc;
     }, {});
 
+    const grandParentSkus = new Set();
+
     for (const [color, colorVariants] of Object.entries(variantsByColor)) {
-      const { parentSku } = buildSkuHierarchy(p.productCode, colorVariants[0]?.originalColor || color);
+      const { grandParentSku, parentSku } = buildSkuHierarchy(p.productCode, colorVariants[0]?.originalColor || color);
+
+      if (!grandParentSkus.has(grandParentSku)) {
+        grandParentSkus.add(grandParentSku);
+        result.push(toPriceRecord(sellerId, grandParentSku, rootPrices));
+      }
 
       result.push(toPriceRecord(sellerId, parentSku, rootPrices));
 

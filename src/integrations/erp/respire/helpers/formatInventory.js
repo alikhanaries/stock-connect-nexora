@@ -1,10 +1,4 @@
-import {
-  safeNumber,
-  convertCodeFormat,
-  normalizeAndTranslateVariants,
-  buildSkuHierarchy,
-  buildChildSku,
-} from './commonHelper.js';
+import { safeNumber, normalizeAndTranslateVariants, buildSkuHierarchy, buildChildSku } from './commonHelper.js';
 
 // Mirrors the same color-grouping / SKU derivation as helpers/formatter.js so
 // inventory sync targets the exact same SKUs that product sync created.
@@ -17,7 +11,7 @@ export const formatRespireInventory = async (products = [], sellerId) => {
     const variations = Array.isArray(p.variatios) ? p.variatios : [];
 
     if (!variations.length) {
-      const baseSku = convertCodeFormat(p.productCode);
+      const baseSku = p.productCode;
       if (!baseSku) continue;
 
       const stock = safeNumber(p.quantity);
@@ -57,7 +51,7 @@ export const formatRespireInventory = async (products = [], sellerId) => {
           sellerId,
           productSkuCode: childSku,
           parentProductSkuCode: parentSku,
-          grandParentProductSkuCode: grandParentSku,
+          grandParentProductSkuCode: null,
           productType: 'simple',
           currentStockCount: stock,
           status: stock > 0 ? 'active' : 'inactive',

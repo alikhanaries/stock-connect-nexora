@@ -44,7 +44,7 @@ export const respirePriceSync = async (sellerId) => {
 
           if (!products.length) return;
 
-          const skuList = products.map((p) => normalize(p.productSkuCode));
+          const skuList = products.map((p) => p.productSkuCode);
 
           const existingProducts = await Product.find(
             { sellerId, productSkuCode: { $in: skuList } },

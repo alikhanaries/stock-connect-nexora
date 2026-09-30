@@ -13,6 +13,7 @@ import { formatRespireInventory } from '../helpers/formatInventory.js';
 
 import { convertCodeFormat } from '../helpers/commonHelper.js';
 import { fetchProductsPage } from './productService.js';
+import { rollUpGrandParentStock } from '../helpers/rollUpGrandParentStock.js';
 
 const { MAX_BATCH_SIZE, BATCH_CONCURRENCY } = erpCommonConfig;
 
@@ -49,7 +50,7 @@ export const respireInventorySync = async (sellerId) => {
 
           if (!products.length) return;
 
-          const skuList = products.map((p) => normalize(p.productSkuCode));
+          const skuList = products.map((p) => p.productSkuCode);
 
           const existingProducts = await Product.find(
             {
@@ -126,6 +127,11 @@ export const respireInventorySync = async (sellerId) => {
             });
 
             updatedCount += result.matchedCount;
+
+            await rollUpGrandParentStock(
+              sellerId,
+              products.map((p) => p.grandParentProductSkuCode)
+            );
 
             console.log(`[Batch ${batchId}] Updated: ${result.modifiedCount}`);
 

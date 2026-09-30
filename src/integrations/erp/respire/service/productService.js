@@ -1,9 +1,9 @@
 import Product from '#models/Product.js';
 import Seller from '#models/Seller.js';
 import { respireConfig } from '#root/src/integrations/erp/respire/config/config.js';
-import { filterInStockProducts } from '../helpers/filterInStockProducts.js';
-import { filterProductsWithImages } from '../helpers/filterProductsWithImages.js';
+import { filterSyncableProducts } from '../helpers/filterSyncableProducts.js';
 import { mapProductToDB } from '../helpers/formatter.js';
+import { rollUpGrandParentStock } from '../helpers/rollUpGrandParentStock.js';
 import { fetchCategories } from './categoryService.js';
 import { getAccessToken } from '../utils/accessTokenGenerator.js';
 import { updateSyncDate } from '#root/src/helpers/updateSyncDate.js';
@@ -102,8 +102,13 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
     }
 
     // Single-tenant account: every product returned belongs to this seller
-    const withImages = filterProductsWithImages(rawList);
-    const list = filterInStockProducts(withImages);
+    // Skip whole products with no working image, and variants without stock/color/size
+    const { products: list, skipped } = await filterSyncableProducts(rawList);
+    console.log(
+      ` [Respire] Page ${page}: ${list.length}/${rawList.length} products to sync | skipped -> ` +
+        `no working image: ${skipped.noWorkingImage}, no stock/color/size: ${skipped.noStockColorSize}, ` +
+        `no variants: ${skipped.noVariants}`
+    );
 
     let importedThisPage = 0;
 
@@ -127,72 +132,74 @@ export const importAllProducts = async (sellerId, isImageUpdate = true) => {
   return totalImported;
 };
 
+const upsertProducts = (items = []) =>
+  Promise.all(
+    items.map((item) =>
+      Product.findOneAndUpdate(
+        { productSkuCode: item.productSkuCode },
+        {
+          $set: {
+            ...item,
+            updatedAt: new Date(), // always update
+          },
+          $setOnInsert: {
+            createdAt: new Date(), // only on insert
+          },
+        },
+        {
+          upsert: true,
+          new: true,
+          setDefaultsOnInsert: true,
+        }
+      )
+    )
+  );
+
+// True when every SKU already has images saved, so a sync with isImageUpdate=false can
+// safely skip them. New products (or ones whose images never got stored) return false.
+const allHaveStoredImages = async (sellerId, skus = []) => {
+  if (!skus.length) return true;
+  const withImages = await Product.countDocuments({
+    sellerId,
+    productSkuCode: { $in: skus },
+    'images.0': { $exists: true },
+  });
+  return withImages === skus.length;
+};
+
 /**
- * Create Product + Variants (configurable or simple)
+ * Create Product + Variants (grandparent -> color parent -> size child)
  */
 
 export const createOrUpdateProduct = async (sellerId, product, categories, isImageUpdate = true) => {
   const categoryId = product.group; // e.g., '4'
-  const categoryTrail = categoryId ? categories.find((cat) => cat.id == categoryId).name : '';
+  const categoryTrail = categoryId ? categories.find((cat) => cat.id == categoryId)?.name || '' : '';
 
   // ---------------------------------------------
   // Map product to DB structure
   // ---------------------------------------------
-  const { parents, children } = await mapProductToDB(sellerId, product, categoryTrail, isImageUpdate);
+  let mapped = await mapProductToDB(sellerId, product, categoryTrail, isImageUpdate);
 
-  // ---------------------------------------------
-  // Upsert parents
-  // ---------------------------------------------
-  if (parents.length > 0) {
-    await Promise.all(
-      parents.map((p) =>
-        Product.findOneAndUpdate(
-          { productSkuCode: p.productSkuCode },
-          {
-            $set: {
-              ...p,
-              updatedAt: new Date(), // always update
-            },
-            $setOnInsert: {
-              createdAt: new Date(), // only on insert
-            },
-          },
-          {
-            upsert: true,
-            new: true,
-            setDefaultsOnInsert: true,
-          }
-        )
-      )
-    );
+  // isImageUpdate=false only means "don't re-store images we already have" — products
+  // that have no images yet still get them on this sync.
+  if (!isImageUpdate) {
+    const skus = [...mapped.grandParents, ...mapped.parents, ...mapped.children].map((p) => p.productSkuCode);
+    if (!(await allHaveStoredImages(sellerId, skus))) {
+      mapped = await mapProductToDB(sellerId, product, categoryTrail, true);
+    }
   }
 
-  // ---------------------------------------------
-  // Upsert children
-  // ---------------------------------------------
-  if (children.length > 0) {
-    await Promise.all(
-      children.map((c) =>
-        Product.findOneAndUpdate(
-          { productSkuCode: c.productSkuCode },
-          {
-            $set: {
-              ...c,
-              updatedAt: new Date(), // always update
-            },
-            $setOnInsert: {
-              createdAt: new Date(), // only on insert
-            },
-          },
-          {
-            upsert: true,
-            new: true,
-            setDefaultsOnInsert: true,
-          }
-        )
-      )
-    );
-  }
+  const { grandParents, parents, children } = mapped;
+
+  // Upsert top-down so every level's link target exists first
+  await upsertProducts(grandParents);
+  await upsertProducts(parents);
+  await upsertProducts(children);
+
+  await rollUpGrandParentStock(
+    sellerId,
+    grandParents.map((gp) => gp.productSkuCode)
+  );
 
   return true;
 };

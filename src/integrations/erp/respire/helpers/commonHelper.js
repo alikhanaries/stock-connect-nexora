@@ -129,20 +129,37 @@ export const convertCodeFormat = (value = '') => {
 // Strip the matched color suffix to recover the true grandparent code; when no match
 // is found (the bare-code case) the color is appended instead, so the parent SKU is
 // always unique per color.
+// SKU format: base_Color_Size, e.g. "21073K.Mavi" + size 30 -> "21073" / "21073_KMavi" /
+// "21073_KMavi_30". The base keeps Respire's own characters ("R-1131"); the color part
+// drops dots/spaces/dashes ("K.Mavi" -> "KMavi").
+const compactColor = (value = '') => String(value).replace(/[\s.\-_]+/g, '');
+
+// Length of the part at the end of `code` that is the color, or 0. Tries the exact color,
+// its space-less form ("Bebe Mavi" -> "BebeMavi"), then a code ending that is only the
+// start ("21073BuzMavi" / "Buz Mavisi") or end ("R-5010Melanj" / "Gri Melanj") of it.
+const findColorSuffixLength = (code, colorText) => {
+  const lowerCode = code.toLowerCase();
+  const exact = [colorText, colorText.replace(/\s+/g, '')].find((c) => c && lowerCode.endsWith(c.toLowerCase()));
+  if (exact) return exact.length;
+
+  const lowerColor = colorText.replace(/\s+/g, '').toLowerCase();
+  for (let len = Math.min(code.length - 1, lowerColor.length - 1); len >= 3; len--) {
+    const ending = lowerCode.slice(-len);
+    if (lowerColor.startsWith(ending) || lowerColor.endsWith(ending)) return len;
+  }
+  return 0;
+};
+
 export const buildSkuHierarchy = (productCode = '', color = '') => {
   const code = String(productCode || '');
-  const colorText = String(color || '');
-  let base = code;
-  let matched = false;
+  const colorText = String(color || '').trim();
 
-  if (colorText && code.toLowerCase().endsWith(colorText.toLowerCase())) {
-    base = code.slice(0, code.length - colorText.length).replace(/[.\-_]+$/, '');
-    matched = true;
-  }
+  const suffixLength = colorText ? findColorSuffixLength(code, colorText) : 0;
+  const base = code.slice(0, code.length - suffixLength).replace(/[\s.\-_]+$/, '') || code;
+  const colorPart = compactColor(suffixLength ? code.slice(code.length - suffixLength) : colorText);
 
-  const grandParentSku = convertCodeFormat(base || code);
-  const parentRaw = matched ? code : `${code}${colorText.replace(/\s+/g, '')}`;
-  const parentSku = convertCodeFormat(parentRaw);
+  const grandParentSku = base;
+  const parentSku = colorPart ? `${base}_${colorPart}` : base;
 
   return { grandParentSku, parentSku };
 };
@@ -150,7 +167,7 @@ export const buildSkuHierarchy = (productCode = '', color = '') => {
 export const buildChildSku = (parentSku, sizeToken = '') => {
   const cleanSize = String(sizeToken || '').replace(/\s+/g, '');
   if (!cleanSize) return parentSku;
-  return convertCodeFormat(`${parentSku}_${cleanSize}`);
+  return `${parentSku}_${cleanSize}`;
 };
 
 // RSP_195_02_001 → RSP.195.02-001
