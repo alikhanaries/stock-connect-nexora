@@ -67,6 +67,18 @@ export const authorize = (roles) => {
   };
 };
 
+export const requireMasterAdmin = (req, res, next) => {
+  try {
+    if (req.user?.role !== USER_ROLES.MASTER_ADMIN) {
+      return Responses.errorResponse(res, `User role ${req.user?.role} is not authorized to access this route`, 403);
+    }
+    next();
+  } catch (error) {
+    console.log('requireMasterAdmin middleware error:', error.message);
+    return Responses.errorResponse(res, 'Server error', 500);
+  }
+};
+
 export const createWebhookAuthMiddleware = ({ secret, headerName, secretLabel }) => {
   return async (req, res, next) => {
     console.time('webHookAuthMiddleware');

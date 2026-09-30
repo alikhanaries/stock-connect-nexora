@@ -12,8 +12,15 @@ import {
   getReturnsOverview,
   getCancelOrdersOverview,
   downloadActiveProducts,
+  downloadActiveInventoryPrice,
 } from '#controllers/DashboardController.js';
-import { authMiddleware, authorize, checkLanguage, verifyMultipleSellerAccess } from '#middleware/index.js';
+import {
+  authMiddleware,
+  authorize,
+  requireMasterAdmin,
+  checkLanguage,
+  verifyMultipleSellerAccess,
+} from '#middleware/index.js';
 import { USER_ROLES } from '#constants/common.js';
 import {
   orderFlowStatusValidator,
@@ -28,6 +35,7 @@ import {
   returnStatusValidator,
   cancelStatusValidator,
   downloadActiveProductsValidator,
+  downloadActiveInventoryPriceValidator,
 } from '#validations/dashboard.js';
 const dashboardRoutes = express.Router();
 
@@ -171,6 +179,49 @@ dashboardRoutes.get(
   authMiddleware,
   authorize(USER_ROLES.MASTER_ADMIN),
   downloadActiveProducts
+);
+
+/**
+ * @openapi
+ * /dashboard/download-active-inventory-price:
+ *   get:
+ *     tags: [Dashboard]
+ *     summary: Download active inventory and price (Master Admin)
+ *     description: >
+ *       Streams a CSV with Brand Name, SKU, Inventory, and Price for every active simple variant
+ *       across all brands. Latest values from the database on each request. Master Admin only.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: header
+ *         name: Accept-Language
+ *         schema: { type: string, enum: [en, ar, zh-CN, tr] }
+ *       - in: header
+ *         name: Authorization
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: CSV file download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       401:
+ *         $ref: "#/components/schemas/FailResponse"
+ *       403:
+ *         $ref: "#/components/schemas/FailResponse"
+ *       500:
+ *         $ref: "#/components/schemas/ErrorResponse"
+ */
+dashboardRoutes.get(
+  '/download-active-inventory-price',
+  downloadActiveInventoryPriceValidator,
+  checkLanguage,
+  authMiddleware,
+  requireMasterAdmin,
+  downloadActiveInventoryPrice
 );
 
 export default dashboardRoutes;
