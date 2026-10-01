@@ -232,6 +232,21 @@ export const PRODUCT_EXPORT_HEADERS = [
   'pattern',
 ];
 
+export const ACTIVE_PLATFORM_PRODUCT_EXPORT_HEADERS = [
+  'sellerName',
+  'sellerId',
+  ...PRODUCT_EXPORT_HEADERS,
+  'status',
+  'marketPlace',
+  'source',
+  'productType',
+  'countryOfOrigin',
+  'isFrozen',
+  'syncedAt',
+  'createdAt',
+  'updatedAt',
+];
+
 export const ORDER_EXPORT_EXCLUDED_COLUMNS = [
   'sellerId',
   'channelId',

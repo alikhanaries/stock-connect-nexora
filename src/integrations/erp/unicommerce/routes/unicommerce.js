@@ -546,7 +546,14 @@ UniCommerceRouter.get(
  *   post:
  *     tags: [UniCommerce]
  *     summary: Dispatch Order Items
- *     description: Mark order items as dispatched and create shipment for Uniware OMS.
+ *     description: |
+ *       Uniware notifies the marketplace that order lines were dispatched from the warehouse.
+ *       Official docs: https://documentation.unicommerce.com/docs/post-orders-dispatch.html
+ *
+ *       **Marketplace shipping (`thirdPartyShipping: true` on Get Orders):** send `orderItems` only.
+ *       StockConnect updates dispatched quantities on the order; AWB/labels come from the marketplace label flow.
+ *
+ *       **Seller self-ship:** include `selfShipping.trackingId` (AWB) to create a manual shipment on StockConnect.
  *
  *     parameters:
  *       - in: header
@@ -572,7 +579,6 @@ UniCommerceRouter.get(
  *             type: object
  *             required:
  *               - orderItems
- *               - selfShipping
  *             properties:
  *               orderItems:
  *                 type: array
@@ -595,8 +601,7 @@ UniCommerceRouter.get(
  *
  *               selfShipping:
  *                 type: object
- *                 required:
- *                   - trackingId
+ *                 description: Required only for seller self-ship (not when marketplace handles logistics)
  *                 properties:
  *                   deliveryPartner:
  *                     type: string
