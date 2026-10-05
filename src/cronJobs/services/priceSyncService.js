@@ -1,6 +1,8 @@
 import { ERP_SYNC_BRAND_SLUGS } from '#constants/common.js';
 import Seller from '#models/Seller.js';
 import { entegraPriceSync } from '#root/src/integrations/erp/entegra/service/priceService.js';
+import { respirePriceSync } from '#root/src/integrations/erp/respire/service/priceService.js';
+import { isRespireConfigured } from '#root/src/integrations/erp/respire/config/config.js';
 import { kipPriceSync } from '#root/src/integrations/erp/gurmenKip/services/priceService.js';
 import { ramseyPriceSync } from '#root/src/integrations/erp/gurmenRamsey/services/priceService.js';
 import { syncShopifyExquisePrice } from '#root/src/integrations/erp/shopify/exquise/service/priceService.js';
@@ -27,6 +29,12 @@ const ERP_PRICE_SYNCS = [
     slugs: ERP_SYNC_BRAND_SLUGS.sentos,
     sync: sentosPriceSync,
     skipIfNotConfigured: isSentosConfigured,
+  },
+  {
+    name: 'respire',
+    slugs: ERP_SYNC_BRAND_SLUGS.respire,
+    sync: respirePriceSync,
+    skipIfNotConfigured: isRespireConfigured,
   },
 ];
 
