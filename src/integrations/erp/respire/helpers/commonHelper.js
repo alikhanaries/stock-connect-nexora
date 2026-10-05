@@ -1,34 +1,30 @@
 import { mapErpStyleImageFields, EXTRA_IMAGE_URL_KEYS } from '#helpers/productImageFields.js';
-import { priceConverter } from '#root/src/integrations/common/helpers/currencyConverter.js';
-
-export const convertRespirePrice = async (currencyCode = 'TRY', rawValue = 0) => {
+// Respire prices are used as sent — no currency conversion.
+export const parseRespirePrice = (rawValue = 0) => {
   const value = parseFloat(rawValue);
   if (!value || isNaN(value) || value <= 0) return 0;
 
-  const sarPrice = await priceConverter(currencyCode, value);
-  if (!sarPrice || sarPrice <= 0) return 0;
-
-  return Number(sarPrice.toFixed(2));
+  return Number(value.toFixed(2));
 };
 
 // Respire's channel price columns: olltek (main Ollkom price, also used as namshiPrice
 // like Entegra's namshi_fiyat), noon, amazon_sa, sixth_street, styli. Respire only fills
 // these on the root product (variants are always 0), so pass the parent's result as
-// `fallback` when converting a variant to inherit any price the variant doesn't carry.
-export const convertRespireChannelPrices = async (currencyCode, src = {}, fallback = {}) => {
-  const convert = async (rawValue, key) => (await convertRespirePrice(currencyCode, rawValue)) || fallback[key] || 0;
+// `fallback` when mapping a variant to inherit any price the variant doesn't carry.
+export const mapRespireChannelPrices = (src = {}, fallback = {}) => {
+  const pick = (rawValue, key) => parseRespirePrice(rawValue) || fallback[key] || 0;
 
-  const price = await convert(src.olltek, 'price');
+  const price = pick(src.olltek, 'price');
 
   return {
     price,
-    specialPrice: await convert(src.site_indirimli_fiyati, 'specialPrice'),
-    purchasePrice: (await convert(src.buying_price, 'purchasePrice')) || price,
-    noonPrice: await convert(src.noon, 'noonPrice'),
+    specialPrice: pick(src.site_indirimli_fiyati, 'specialPrice'),
+    purchasePrice: pick(src.buying_price, 'purchasePrice') || price,
+    noonPrice: pick(src.noon, 'noonPrice'),
     namshiPrice: price,
-    amazonPrice: await convert(src.amazon_sa, 'amazonPrice'),
-    sixthStreetPrice: await convert(src.sixth_street, 'sixthStreetPrice'),
-    styliPrice: await convert(src.styli, 'styliPrice'),
+    amazonPrice: pick(src.amazon_sa, 'amazonPrice'),
+    sixthStreetPrice: pick(src.sixth_street, 'sixthStreetPrice'),
+    styliPrice: pick(src.styli, 'styliPrice'),
   };
 };
 

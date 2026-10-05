@@ -1,5 +1,5 @@
 import {
-  convertRespireChannelPrices,
+  mapRespireChannelPrices,
   normalizeAndTranslateVariants,
   buildSkuHierarchy,
   buildChildSku,
@@ -30,10 +30,9 @@ export const formatRespirePrice = async (products = [], sellerId) => {
   const result = [];
 
   for (const p of products) {
-    const currency = p.currencyType === 'TRL' ? 'TRY' : p.currencyType || 'USD';
     const variations = Array.isArray(p.variatios) ? p.variatios : [];
 
-    const rootPrices = await convertRespireChannelPrices(currency, p);
+    const rootPrices = mapRespireChannelPrices(p);
 
     if (!variations.length) {
       const baseSku = p.productCode;
@@ -69,7 +68,7 @@ export const formatRespirePrice = async (products = [], sellerId) => {
 
         // Respire never populates per-variant prices (confirmed against live data) —
         // each price falls back to the parent's when the variant's own is 0.
-        const childPrices = await convertRespireChannelPrices(currency, v, rootPrices);
+        const childPrices = mapRespireChannelPrices(v, rootPrices);
         result.push(toPriceRecord(sellerId, childSku, childPrices));
       }
     }

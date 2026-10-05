@@ -1,4 +1,4 @@
-import { safeNumber, convertRespireChannelPrices, buildSkuHierarchy, buildChildSku } from './commonHelper.js';
+import { safeNumber, mapRespireChannelPrices, buildSkuHierarchy, buildChildSku } from './commonHelper.js';
 import { canonicalProductMapper } from './canonicalProductMapper.js'; // <-- IMPORT CANONICAL MAPPER
 import { htmlToPlainText } from '#root/src/integrations/common/helpers/htmlParserToString.js';
 import { normalizeAndTranslateVariants } from '#root/src/integrations/erp/respire/helpers/commonHelper.js';
@@ -99,11 +99,10 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
   }
 
   // ================= META =================
-  const currency = p.currencyType === 'TRL' ? 'TRY' : p.currencyType || 'USD';
   const gender = /Kadın/i.test(p.name) ? 'Female' : /Erkek/i.test(p.name) ? 'Male' : 'Unisex';
 
   // ================= GRAND PARENT =================
-  const gpPrices = await convertRespireChannelPrices(currency, p);
+  const gpPrices = mapRespireChannelPrices(p);
 
   if (!hasVariants) {
     return { grandParents: [], parents: [], children: [] };
@@ -148,7 +147,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         name: `${p.name}`,
         description: htmlToPlainText(p.description),
         descriptionAr: p.descriptionAr || '',
-        brand: p.brand,
+        brand: 'respire',
 
         price: gpPrices.price,
         minPrice: gpPrices.specialPrice,
@@ -190,7 +189,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
       name: `${p.name}`,
       description: htmlToPlainText(p.description),
       descriptionAr: p.descriptionAr || '',
-      brand: p.brand,
+      brand: 'respire',
 
       price: gpPrices.price,
       minPrice: gpPrices.specialPrice,
@@ -241,7 +240,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
 
       // Respire never populates per-variant prices (confirmed against live data) —
       // each price falls back to the parent's when the variant's own is 0.
-      const childPrices = await convertRespireChannelPrices(currency, v, gpPrices);
+      const childPrices = mapRespireChannelPrices(v, gpPrices);
 
       const childObject = {
         sellerId,
@@ -253,7 +252,7 @@ export const mapProductToDB = async (sellerId, p, categoryName, isImageUpdate = 
         name: `${p.name}`,
         description: htmlToPlainText(p.description),
         descriptionAr: p.descriptionAr || '',
-        brand: p.brand,
+        brand: 'respire',
         ean: v.barcode || v.gtin || '',
 
         price: childPrices.price,
