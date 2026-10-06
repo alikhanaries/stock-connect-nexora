@@ -1,6 +1,8 @@
 import { ERP_SYNC_BRAND_SLUGS } from '#constants/common.js';
 import Seller from '#models/Seller.js';
 import { entegraInventorySync } from '#root/src/integrations/erp/entegra/service/inventoryService.js';
+import { respireInventorySync } from '#root/src/integrations/erp/respire/service/inventoryService.js';
+import { isRespireConfigured } from '#root/src/integrations/erp/respire/config/config.js';
 import { kipInventorySync } from '#root/src/integrations/erp/gurmenKip/services/inventoryService.js';
 import { RamseyInventorySync } from '#root/src/integrations/erp/gurmenRamsey/services/inventoryService.js';
 import { xokidsInventorySync } from '#root/src/integrations/erp/xokids/services/inventoryService.js';
@@ -34,6 +36,12 @@ const ERP_INVENTORY_SYNCS = [
     slugs: ERP_SYNC_BRAND_SLUGS.sentos,
     sync: sentosInventorySync,
     skipIfNotConfigured: isSentosConfigured,
+  },
+  {
+    name: 'respire',
+    slugs: ERP_SYNC_BRAND_SLUGS.respire,
+    sync: respireInventorySync,
+    skipIfNotConfigured: isRespireConfigured,
   },
 ];
 
