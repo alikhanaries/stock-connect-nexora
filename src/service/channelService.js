@@ -1,7 +1,6 @@
 import { getPagination } from '#helpers/PaginationHandler.js';
 import UserChannelProducts from '#models/UserChannelProducts.js';
 import mongoose from 'mongoose';
-import { config } from '../config/config.js';
 import Channel from '../models/Channel.js';
 import User from '../models/User.js';
 import UserChannels from '../models/UserChannels.js';
@@ -11,12 +10,13 @@ import Product from '#models/Product.js';
 import { buildExtraDataPayload, syncProductExtraDataToMarketplace } from './channel/ceService.js';
 // Access ObjectId from mongoose
 const ObjectId = mongoose.Types.ObjectId;
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
+
 /** FUNC - GET ALL CHANNEL LIST FROM CHANNEL PARTNER AND SAVE */
 const getAllChannelsFromChannelPartner = async () => {
   try {
     // GET THE LIST FROM CHANELPARTNER API
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}channels?apiKey=${CHANNEL_ENGINE_API_KEY}`);
+    const response = await getCommerceProvider().fetchChannels();
     if (!response.ok) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }

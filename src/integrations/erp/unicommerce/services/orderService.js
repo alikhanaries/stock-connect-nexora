@@ -4,15 +4,12 @@ import { ObjectId } from 'mongodb';
 import mapOrderToUniware from '../helpers/mapOrderToUniware.js';
 import { buildProductIdBySku } from '../helpers/buildProductIdBySku.js';
 import { normalizeUniwareDate } from '../utils/normalizeUniwareDate.js';
-import { config } from '#root/src/config/config.js';
 import { randomBytes } from 'node:crypto';
 import { BLOCKED_STATUSES, ORDER_STATUS_MAP } from '#root/src/constants/common.js';
 import Shipment from '#root/src/models/Shipment/Shipment.js';
 import OrderLogs from '#root/src/models/OrderLogs.js';
 import { cancelChanelEngineCustomErrorMessage } from '#root/src/helpers/channelEngineErrorMessage.js';
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 
 export const fetchOrderStatus = async (sellerId, pageNumber, pageSize, orderIds) => {
   try {
@@ -222,12 +219,8 @@ export const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') =
     }
 
     // Call ChannelEngine
-    const res = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.ORDER_CANCELLATION,
-      method: 'POST',
-      url: `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${CHANNEL_ENGINE_API_KEY}`,
+    const res = await getCommerceProvider().postOrderCancellation(cancelPayload, {
       headers: { 'Content-Type': 'application/json' },
-      body: cancelPayload,
       sellerId,
     });
 

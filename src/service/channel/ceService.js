@@ -1,34 +1,7 @@
-import { config } from '#root/src/config/config.js';
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
-import { fetchWithRetry } from '#utils/fetchWithRetry.js';
-
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 
 export const getExistingProductsBySkuFromCE = async (skuList = []) => {
-  if (!skuList.length) return [];
-  try {
-    const params = new URLSearchParams({
-      apiKey: CHANNEL_ENGINE_API_KEY,
-    });
-    skuList.forEach((sku) => {
-      params.append('merchantProductNoList', sku);
-    });
-
-    const response = await fetchWithRetry(`${CHANNEL_ENGINE_BASE_URL}products?${params.toString()}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!response.ok) {
-      throw new Error(`ChannelEngine GET failed with status ${response.status}`);
-    }
-    const data = await response.json();
-    return data?.Content || [];
-  } catch (err) {
-    console.error('Error fetching from ChannelEngine:', err);
-    return [];
-  }
+  return getCommerceProvider().getProductsByMerchantSkuList(skuList);
 };
 
 export const chunkArray = (arr, size = 50) => {
@@ -43,13 +16,7 @@ export const removeProductsFromCE = async (skuCodes) => {
   if (!skuCodes?.length) return { success: true, message: 'No SKUs provided' };
 
   try {
-    const response = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.PRODUCTS_BULK_DELETE,
-      method: 'POST',
-      url: `${CHANNEL_ENGINE_BASE_URL}products/bulkdelete?apiKey=${CHANNEL_ENGINE_API_KEY}`,
-      headers: { 'Content-Type': 'application/json' },
-      body: skuCodes,
-    });
+    const response = await getCommerceProvider().postProductsBulkDelete(skuCodes);
 
     if (!response.ok) {
       const errorText = response.rawText || JSON.stringify(response.data);
@@ -66,13 +33,7 @@ export const removeProductsFromCE = async (skuCodes) => {
 
 export const syncProductExtraDataToMarketplace = async (bulkPayload = []) => {
   if (!bulkPayload.length) return [];
-  const response = await channelEnginePush({
-    operationType: CE_QUEUE_OPERATIONS.PRODUCTS_EXTRA_DATA,
-    method: 'PATCH',
-    url: `${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`,
-    headers: { 'Content-Type': 'application/json' },
-    body: bulkPayload,
-  });
+  const response = await getCommerceProvider().patchProductsExtraDataBulk(bulkPayload);
   if (!response.ok) {
     throw new Error(`Marketplace PATCH failed: ${response.status}`);
   }

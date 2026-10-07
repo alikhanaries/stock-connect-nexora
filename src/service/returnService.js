@@ -1,4 +1,3 @@
-import { config } from '#config/config.js';
 import Order from '../models/Orders.js';
 import Return from '../models/Return.js';
 import Seller from '#root/src/models/Seller.js';
@@ -32,9 +31,7 @@ import Channel from '../models/Channel.js';
 const notifyUniwareOnMarketplaceReturn = (returnDocument) => {
   notifyUniwareReturn({ returnDocument }).catch((err) => console.error('Uniware return notify failed:', err.message));
 };
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 
 //Fetches returns from ChannelEngine and saves them to the database.
 
@@ -51,12 +48,11 @@ export const getReturns = async (queryParams = {}) => {
     while (hasMore) {
       const params = new URLSearchParams({
         ...queryParams,
-        apikey: CHANNEL_ENGINE_API_KEY,
         page,
         pageSize,
       });
 
-      const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
+      const response = await getCommerceProvider().fetchReturns(params);
 
       if (!response.ok) {
         return {
@@ -507,16 +503,7 @@ export const getReturnStats = async (query = {}) => {
 //Creates a return in ChannelEngine.
 export const createReturn = async (returnData) => {
   try {
-    const response = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.RETURN_MERCHANT_CREATE,
-      method: 'POST',
-      url: `${CHANNEL_ENGINE_BASE_URL}returns/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: returnData,
-    });
+    const response = await getCommerceProvider().postReturnMerchant(returnData);
 
     const responseData = response.data || {};
 
@@ -554,15 +541,11 @@ export const createReturn = async (returnData) => {
 //Sends an acknowledgement for a merchant return to ChannelEngine.
 export const acknowledgeReturn = async (ackData) => {
   try {
-    const response = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.RETURN_MERCHANT_ACKNOWLEDGE,
-      method: 'POST',
-      url: `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`,
+    const response = await getCommerceProvider().postReturnMerchantAcknowledge(ackData, {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: ackData,
     });
 
     const responseData = response.data || {};
@@ -588,16 +571,7 @@ export const acknowledgeReturn = async (ackData) => {
 
 export const acceptOrRejectReturn = async (returnData) => {
   try {
-    const response = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.RETURN_ACCEPT_REJECT,
-      method: 'PUT',
-      url: `${CHANNEL_ENGINE_BASE_URL}returns?apikey=${CHANNEL_ENGINE_API_KEY}`,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: returnData,
-    });
+    const response = await getCommerceProvider().putReturnAcceptReject(returnData);
 
     const responseData = response.data || {};
 
@@ -1108,10 +1082,9 @@ export const getReturnsForWebhook = async (queryParams = {}) => {
   try {
     const params = new URLSearchParams({
       ...queryParams,
-      apikey: `${CHANNEL_ENGINE_API_KEY}`,
     });
 
-    const response = await fetch(`${CHANNEL_ENGINE_BASE_URL}returns?${params.toString()}`);
+    const response = await getCommerceProvider().fetchReturns(params);
     const responseData = await response.json();
     if (!response.ok) {
       return {

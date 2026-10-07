@@ -18,7 +18,6 @@ import {
 } from '../helpers/formatShipmentDeliveryAddress.js';
 import PickupAddress from '../models/PickUpAddress.js';
 import DeliveryAddress from '../models/Shipment/DeliveryAdress.js';
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { AYMAKAN_STATUS, AYMAKAN_INFO } from '#util/ayMakanData.js';
 import { validateFullShipmentProducts } from '#util/validateShipmentProductQuantity.js';
@@ -36,8 +35,7 @@ import { sendStockBatch } from '../service/InventoryService.js';
 import Seller from '#models/Seller.js';
 import forwardShipmentService from './forwardShipmentService.js';
 import Product from '#models/Product.js';
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 import { isAmazonChannelOrder, getAymakanWarehouseDeliveryAddress } from '#helpers/amazonFulfillment.js';
 import { resolveEffectiveShipmentAwb, resolveFirstMileAirWaybillNo } from '#helpers/shipmentAwb.js';
 
@@ -212,14 +210,8 @@ export const createShipmentWithChannelEngine = async ({
       AirWaybillNo: airWaybillNo,
     };
 
-    const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
-
-    const response = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.SHIPMENT_CREATE,
-      method: 'POST',
-      url: ceUrl,
+    const response = await getCommerceProvider().postShipment(payload, {
       headers: { 'Content-Type': 'application/json' },
-      body: payload,
     });
 
     // Handle failed response
@@ -259,15 +251,7 @@ export const updateShipmentDeliveryStateChannelEngine = async (status, deliveryD
       DeliveredAt: deliveryDate || new Date(),
     };
 
-    const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/${merchantShipmentNo}/delivery-state?apikey=${CHANNEL_ENGINE_API_KEY}`;
-
-    const response = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.SHIPMENT_DELIVERY_STATE,
-      method: 'PUT',
-      url: ceUrl,
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-    });
+    const response = await getCommerceProvider().putShipmentDeliveryState(merchantShipmentNo, payload);
 
     if (!response.ok) {
       let errorMessage = `Failed to update delivery state for ${merchantShipmentNo} (${response.status})`;
@@ -2107,18 +2091,13 @@ export const createReverseShipmentService = async (shipmentData, sellerId) => {
     const newShipmentData = await shipmentDocument.save();
 
     // Step 11: Acknowledge Channel Engine
-    const ceUrl = `${CHANNEL_ENGINE_BASE_URL}returns/merchant/acknowledge?apikey=${CHANNEL_ENGINE_API_KEY}`;
-    await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.RETURN_MERCHANT_ACKNOWLEDGE,
-      method: 'POST',
-      url: ceUrl,
-      headers: { 'Content-Type': 'application/json' },
-      body: {
+    await getCommerceProvider().postReturnMerchantAcknowledge(
+      {
         ReturnId: returnData?.returnId,
         MerchantReturnNo: returnData?.merchantReturnNo,
       },
-      sellerId,
-    });
+      { headers: { 'Content-Type': 'application/json' }, sellerId }
+    );
 
     // UPDATE RETURN STATUS AS APPROVED
     await Return.findOneAndUpdate(
@@ -2567,9 +2546,6 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
   const MAX_PAGES_PER_RUN = 5; // rate-limit safe
   const DELAY_MS = 300;
 
-  const baseUrl = `${CHANNEL_ENGINE_BASE_URL}shipments/merchant?apikey=${CHANNEL_ENGINE_API_KEY}`;
-  const headers = { accept: 'application/json' };
-
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const handleRateLimit = (response) => {
@@ -2582,9 +2558,11 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
     };
   };
 
-  const safeFetch = async (url) => {
+  const commerceProvider = getCommerceProvider();
+
+  const safeFetch = async (page) => {
     try {
-      const response = await fetch(url, { method: 'GET', headers });
+      const response = await commerceProvider.fetchMerchantShipmentsPage(page, pageSize);
 
       if (response.status === 429) {
         return handleRateLimit(response);
@@ -2604,7 +2582,7 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
   };
 
   // ---- 1️ First call: get total count
-  const firstResult = await safeFetch(`${baseUrl}&page=1&pageSize=${pageSize}`);
+  const firstResult = await safeFetch(1);
 
   if (!firstResult) {
     console.warn('Initial shipment fetch failed');
@@ -2627,7 +2605,7 @@ export const getChannelEngineShipmentDetailsService = async (userId) => {
 
   // ---- 2️ Fetch pages from last to first
   for (let page = totalPages; page >= startPage; page--) {
-    const result = await safeFetch(`${baseUrl}&page=${page}&pageSize=${pageSize}`);
+    const result = await safeFetch(page);
 
     if (!result) {
       console.warn(`Skipping page ${page} due to fetch error`);
