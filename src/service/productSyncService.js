@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import UserChannelProducts from '#models/UserChannelProducts.js';
-import { config } from '#config/config.js';
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function fetchChannelStatusMap({ channelId }) {
   const pageSize = 250;
@@ -10,14 +10,10 @@ async function fetchChannelStatusMap({ channelId }) {
   let retryCount = 0;
 
   const map = new Map();
+  const commerceProvider = getCommerceProvider();
 
   while ((page - 1) * pageSize < total) {
-    const url =
-      `${CHANNEL_ENGINE_BASE_URL}channels/${channelId}/products` +
-      `?apiKey=${encodeURIComponent(CHANNEL_ENGINE_API_KEY)}` +
-      `&page=${page}&pageSize=${pageSize}`;
-
-    const res = await fetch(url);
+    const res = await commerceProvider.fetchChannelProductsPage(channelId, page, pageSize);
 
     // Rate limit handling
     if (res.status === 429) {

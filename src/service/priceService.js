@@ -12,15 +12,14 @@ import { ObjectId } from 'mongodb';
 import { ALLOWEDMARKETPLACES } from '#constants/common.js';
 import { updateSyncDate } from '../helpers/updateSyncDate.js';
 import { resolveHierarchyStatus } from '../helpers/ProductHierarchy.js';
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 
 const ROW_CONCURRENCY = 50;
 const DB_WRITE_CONCURRENCY = 4;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE } = config;
+const { CHANNEL_ENGINE_BATCH_SIZE } = config;
 const BATCH_SIZE = Number(CHANNEL_ENGINE_BATCH_SIZE || process.env.BATCH_SIZE) || 500;
 const MAX_ERRORS = 1000;
 const MAX_TASK_BUFFER = 1000;
@@ -387,12 +386,7 @@ export const importPriceFromCsvFile = async (filePath, locale, sellerId) => {
 async function sendPriceBatch(priceUpdates, sellerId = null, batchId = null) {
   try {
     // Fire-and-forget — worker pushes to CE at its own rate limit pace
-    await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.OFFER_PRICE,
-      method: 'PUT',
-      url: `${CHANNEL_ENGINE_BASE_URL}offer?apiKey=${CHANNEL_ENGINE_API_KEY}`,
-      headers: { 'Content-Type': 'application/json' },
-      body: priceUpdates,
+    await getCommerceProvider().putOfferPrice(priceUpdates, {
       sellerId,
       batchId,
       awaitResult: false,
@@ -407,12 +401,7 @@ async function sendPriceBatch(priceUpdates, sellerId = null, batchId = null) {
 async function sendExtraDataPriceBatch(mariketPriceUpdates, sellerId = null, batchId = null) {
   try {
     // Fire-and-forget — worker pushes to CE at its own rate limit pace
-    await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.PRODUCTS_EXTRA_DATA,
-      method: 'PATCH',
-      url: `${CHANNEL_ENGINE_BASE_URL}products/extra-data/bulk?apiKey=${CHANNEL_ENGINE_API_KEY}`,
-      headers: { 'Content-Type': 'application/json-patch+json' },
-      body: mariketPriceUpdates,
+    await getCommerceProvider().patchProductsExtraDataBulkForPrice(mariketPriceUpdates, {
       sellerId,
       batchId,
       awaitResult: false,

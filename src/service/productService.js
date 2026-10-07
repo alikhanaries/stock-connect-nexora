@@ -48,17 +48,9 @@ import {
   buildExtraDataPayload,
   syncProductExtraDataToMarketplace,
 } from './channel/ceService.js';
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 
-const {
-  CHANNEL_ENGINE_BASE_URL,
-  CHANNEL_ENGINE_API_KEY,
-  CHANNEL_ENGINE_BATCH_SIZE,
-  CHANNEL_ENGINE_MAX_CONCURRENT,
-  OCP_URL,
-  OCP_API_KEY,
-} = config;
+const { CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT, OCP_URL, OCP_API_KEY } = config;
 
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
@@ -249,16 +241,7 @@ export const syncFreezeOrUnfreezeToChannelEngine = async ({ skuCodes, isFrozen }
   }));
 
   try {
-    const response = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.PRODUCTS_FREEZE,
-      method: 'POST',
-      url: `${CHANNEL_ENGINE_BASE_URL}products/freeze`,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CE-KEY': CHANNEL_ENGINE_API_KEY,
-      },
-      body: payload,
-    });
+    const response = await getCommerceProvider().postProductsFreeze(payload);
 
     let result = null;
     try {
@@ -316,12 +299,7 @@ const withRetry = async (fn, retries = MAX_RETRIES, delay = 1000) => {
 
 // Push a single batch to CE — fire-and-forget; worker processes at CE rate limit pace
 export const pushBatch = async (batch, index, sellerId = null, batchId = null) => {
-  const response = await channelEnginePush({
-    operationType: CE_QUEUE_OPERATIONS.PRODUCTS_PUSH,
-    method: 'POST',
-    url: `${CHANNEL_ENGINE_BASE_URL}products?apiKey=${CHANNEL_ENGINE_API_KEY}`,
-    headers: { 'Content-Type': 'application/json' },
-    body: batch,
+  const response = await getCommerceProvider().postProducts(batch, {
     sellerId,
     batchId,
     metadata: { batchIndex: index },

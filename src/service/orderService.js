@@ -8,12 +8,9 @@ import {
 import { getPagination } from '#helpers/PaginationHandler.js';
 import { ORDER_STATUS_MAP, SELECTED_FIELDS, BLOCKED_STATUSES } from '#constants/common.js';
 import orderhelper from '#helpers/Order.js';
-import { config } from '#config/config.js';
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 import ChannelEngineQueueJob from '#models/ChannelEngineQueueJob.js';
-import { fetchWithRetry } from '#utils/fetchWithRetry.js';
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } = config;
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
+import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
 import { randomBytes } from 'node:crypto';
 import Shipment from '../models/Shipment/Shipment.js';
 import Product from '../models/Product.js';
@@ -1018,9 +1015,7 @@ export async function getNewOrders(parentTag) {
     // 1. Fetch Page 1 to get TotalCount and initial items
     let firstData;
     try {
-      const response = await fetchWithRetry(
-        `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=1&pageSize=${pageSize}`
-      );
+      const response = await getCommerceProvider().fetchOrdersPage(1, pageSize);
 
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
@@ -1049,9 +1044,7 @@ export async function getNewOrders(parentTag) {
         const batch = remainingPages.slice(i, i + BATCH_SIZE);
         const pageResults = await Promise.all(
           batch.map(async (p) => {
-            const response = await fetchWithRetry(
-              `${CHANNEL_ENGINE_BASE_URL}orders?apiKey=${CHANNEL_ENGINE_API_KEY}&page=${p}&pageSize=${pageSize}`
-            );
+            const response = await getCommerceProvider().fetchOrdersPage(p, pageSize);
             if (!response.ok) {
               throw new Error(`HTTP error! Status: ${response.status} on page ${p}`);
             }
@@ -1125,12 +1118,7 @@ const cancelOrder = async (orderId, reason) => {
       return { success: false, error: { message: BLOCKED_STATUSES[existenceOfOrder.status], status: 400 } };
     }
 
-    const markingCancelled = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.ORDER_CANCELLATION,
-      method: 'POST',
-      url: `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${CHANNEL_ENGINE_API_KEY}`,
-      body: info,
-    });
+    const markingCancelled = await getCommerceProvider().postOrderCancellation(info);
 
     const markingCancelledObject = markingCancelled.data;
 
@@ -1184,22 +1172,19 @@ const acknowledgeOrder = async (orderId, merchantOrderNo) => {
       return { success: true, skipped: true };
     }
 
-    const url = `${CHANNEL_ENGINE_BASE_URL}orders/acknowledge?apiKey=${CHANNEL_ENGINE_API_KEY}`;
     const payload = {
       MerchantOrderNo: merchantOrderNo,
       OrderId: orderId,
     };
 
     // Fire-and-forget — CE just needs to receive the acknowledgement eventually
-    channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.ORDER_ACKNOWLEDGE,
-      method: 'POST',
-      url,
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-      batchId: `ack-${orderId}`,
-      awaitResult: false,
-    }).catch((err) => console.error(`[ack] Failed to queue acknowledgement for order ${orderId}:`, err.message));
+    getCommerceProvider()
+      .postOrderAcknowledge(payload, {
+        headers: { 'Content-Type': 'application/json' },
+        batchId: `ack-${orderId}`,
+        awaitResult: false,
+      })
+      .catch((err) => console.error(`[ack] Failed to queue acknowledgement for order ${orderId}:`, err.message));
 
     return { success: true };
   } catch (error) {
@@ -1385,12 +1370,8 @@ const cancelFullOrder = async (orderId, order, sellerId, reason = 'NA') => {
     }
 
     // CANCEL ORDER IN CHANNEL ENGINE
-    const res = await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.ORDER_CANCELLATION,
-      method: 'POST',
-      url: `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${CHANNEL_ENGINE_API_KEY}`,
+    const res = await getCommerceProvider().postOrderCancellation(cancelPayload, {
       headers: { 'Content-Type': 'application/json' },
-      body: cancelPayload,
       sellerId,
     });
 
@@ -1594,15 +1575,13 @@ export const cancelPartialOrder = async (orderId, products, reason = 'NA', selle
       IsMerchantCreator: true,
     };
 
-    channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.ORDER_CANCELLATION,
-      method: 'POST',
-      url: `${CHANNEL_ENGINE_BASE_URL}cancellations?apikey=${CHANNEL_ENGINE_API_KEY}`,
-      headers: { 'Content-Type': 'application/json' },
-      body: cancelPayload,
-      sellerId,
-      awaitResult: false,
-    }).catch((err) => console.error('ChannelEngine cancel failed (ignored):', err.message));
+    getCommerceProvider()
+      .postOrderCancellation(cancelPayload, {
+        headers: { 'Content-Type': 'application/json' },
+        sellerId,
+        awaitResult: false,
+      })
+      .catch((err) => console.error('ChannelEngine cancel failed (ignored):', err.message));
 
     // REBUILD SKU LIST (SOURCE OF TRUTH)
 

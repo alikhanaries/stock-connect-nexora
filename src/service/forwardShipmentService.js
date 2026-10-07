@@ -8,11 +8,9 @@ import {
   isOmnifulApiError,
   explainOmnifulAuthError,
 } from '../helpers/omnifulApiClient.js';
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 
-const { OMNIFUL_API_URL, OMNIFUL_HUB_CODE, OMNIFUL_SUPPLIER_CODE, CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY } =
-  config;
+const { OMNIFUL_API_URL, OMNIFUL_HUB_CODE, OMNIFUL_SUPPLIER_CODE } = config;
 
 export { getReportToken, upsertToken, getToken };
 
@@ -211,13 +209,8 @@ export const createShipmentwithCE = async (shipmentData) => {
     AirWaybillNo: shipmentData?.omniful?.trackingNo || '',
   };
 
-  const ceUrl = `${CHANNEL_ENGINE_BASE_URL}shipments?apikey=${CHANNEL_ENGINE_API_KEY}`;
-  await channelEnginePush({
-    operationType: CE_QUEUE_OPERATIONS.SHIPMENT_CREATE,
-    method: 'POST',
-    url: ceUrl,
+  await getCommerceProvider().postShipment(CEPayload, {
     headers: { 'Content-Type': 'application/json' },
-    body: CEPayload,
     awaitResult: false,
   });
 };

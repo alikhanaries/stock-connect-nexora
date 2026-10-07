@@ -2,6 +2,7 @@ import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createRequire } from 'module';
 import { pathToFileURL } from 'url';
 import Order from '#models/Orders.js';
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 
 const require = createRequire(import.meta.url);
 
@@ -16,10 +17,12 @@ export const parseInvoiceData = async (orderId) => {
     if (!orderData) return { success: false, message: 'No order found for this order id' };
 
     const { merchantOrderNo } = orderData;
-    const url = `${process.env.CHANNEL_ENGINE_BASE_URL}orders/${merchantOrderNo}/invoice?apiKey=${process.env.CHANNEL_ENGINE_API_KEY}`;
-
     // 2️ Fetch PDF from ChannelEngine
-    const response = await fetch(url, { headers: { Accept: 'application/pdf' } });
+    const response = await getCommerceProvider().fetchOrderInvoice(
+      merchantOrderNo,
+      { headers: { Accept: 'application/pdf' } },
+      { apiKeyQueryName: 'apiKey' }
+    );
     if (!response.ok) throw new Error(`Failed to fetch invoice: ${response.statusText}`);
 
     const arrayBuffer = await response.arrayBuffer();
@@ -125,11 +128,11 @@ export const parseInvoiceDataForGenerateSellerInvoice = async (orderId, sellerId
     let invoiceDate = null;
 
     try {
-      const url = `${process.env.CHANNEL_ENGINE_BASE_URL}orders/${merchantOrderNo}/invoice?apiKey=${process.env.CHANNEL_ENGINE_API_KEY}`;
-
-      const response = await fetch(url, {
-        headers: { Accept: 'application/pdf' },
-      });
+      const response = await getCommerceProvider().fetchOrderInvoice(
+        merchantOrderNo,
+        { headers: { Accept: 'application/pdf' } },
+        { apiKeyQueryName: 'apiKey' }
+      );
 
       if (response.ok) {
         const arrayBuffer = await response.arrayBuffer();

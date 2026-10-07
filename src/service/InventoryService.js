@@ -13,8 +13,7 @@ import { updateSyncDate } from '#helpers/updateSyncDate.js';
 import { pushBatch, pushInActiveProductsToChannel } from './productService.js';
 import { mapProductToChannelEngine } from '../helpers/ProductMapper.js';
 import { chunkArray, getExistingProductsBySkuFromCE } from './channel/ceService.js';
-import { channelEnginePush } from '#service/channelEngineClient.js';
-import { CE_QUEUE_OPERATIONS } from '#constants/channelEngineQueue.js';
+import { getCommerceProvider } from '#service/commerce/commerceProviderFactory.js';
 import Seller from '#models/Seller.js';
 import ExpressWarehouseInventory from '#models/ExpressWarehouseInventory.js';
 
@@ -23,8 +22,7 @@ const DB_WRITE_CONCURRENCY = 4;
 const limit = pLimit(ROW_CONCURRENCY);
 const writeLimit = pLimit(DB_WRITE_CONCURRENCY);
 const MAX_ROWS = Number(process.env.MAX_IMPORT_ROWS) || 50000;
-const { CHANNEL_ENGINE_BASE_URL, CHANNEL_ENGINE_API_KEY, CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } =
-  config;
+const { CHANNEL_ENGINE_BATCH_SIZE, CHANNEL_ENGINE_MAX_CONCURRENT } = config;
 const MAX_TASK_BUFFER = 1000;
 const BATCH_SIZE = parseInt(CHANNEL_ENGINE_BATCH_SIZE || process.env.BATCH_SIZE || '500', 10);
 const MAX_CONCURRENT = parseInt(CHANNEL_ENGINE_MAX_CONCURRENT || '5', 10);
@@ -337,12 +335,7 @@ export async function sendStockBatch(stockUpdates, sellerId = null, batchId = nu
   const resolvedBatchId = (typeof sellerId === 'number' || sellerId === undefined) && batchId ? null : batchId;
   try {
     // Fire-and-forget — worker pushes to CE at its own rate limit pace
-    await channelEnginePush({
-      operationType: CE_QUEUE_OPERATIONS.OFFER_STOCK,
-      method: 'PUT',
-      url: `${CHANNEL_ENGINE_BASE_URL}offer/stock?apiKey=${CHANNEL_ENGINE_API_KEY}`,
-      headers: { 'Content-Type': 'application/json' },
-      body: stockUpdates,
+    await getCommerceProvider().putOfferStock(stockUpdates, {
       sellerId: resolvedSellerId,
       batchId: resolvedBatchId,
       awaitResult: false,
